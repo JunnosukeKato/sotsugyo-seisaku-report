@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>管理案2 設定と見本を並べる型</title>
+<script type="module" src="./fonts.ts"></script>
+<style>
+  :root {
+    --bg: #eef0f3;
+    --panel: #fff;
+    --line: #dde1e7;
+    --ink: #1f2430;
+    --muted: #687080;
+    --accent: #1e3a8a;
+    --accent-soft: #e8edf9;
+    --ok: #2f7d4f;
+    --ok-soft: #e5f3ea;
+    --warn: #a86400;
+    --warn-soft: #fff4e0;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'BIZ UDPGothic', sans-serif; color: var(--ink); background: var(--bg); height: 100vh; display: grid; grid-template-rows: 56px 1fr; }
+  header { display: flex; align-items: center; gap: 12px; padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  header b { font-size: 15px; }
+  .sel { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; font-size: 13px; }
+  .badge { font-size: 11px; border-radius: 999px; padding: 3px 9px; font-weight: 700; }
+  .badge.pub { background: var(--ok-soft); color: var(--ok); }
+  .badge.warn { background: var(--warn-soft); color: var(--warn); }
+  .spacer { flex: 1; }
+  .link { font-size: 13px; color: var(--accent); }
+  .btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 13px; color: var(--ink); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+
+  main { display: grid; grid-template-columns: 460px 1fr; min-height: 0; }
+  .form { background: var(--panel); border-right: 1px solid var(--line); overflow: auto; padding: 18px 20px 30px; }
+  .form h2 { font-size: 13px; color: var(--muted); font-weight: 400; margin: 18px 0 8px; letter-spacing: .04em; }
+  .form h2:first-child { margin-top: 0; }
+  .f { margin-bottom: 12px; }
+  .f label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 4px; }
+  .in { border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; font-size: 14px; }
+  .in.focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .course { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 10px; }
+  .course.on { border-color: var(--accent); }
+  .course .top { display: flex; justify-content: space-between; align-items: center; font-weight: 700; font-size: 14px; margin-bottom: 8px; }
+  .course .row { display: flex; gap: 8px; }
+  .course .row .f { flex: 1; margin-bottom: 8px; }
+  .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+  .tags span { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 3px 10px; font-size: 12px; }
+  .tags span.add { background: #fff; border: 1px dashed #aab6d6; }
+  .add { font-size: 13px; color: var(--accent); }
+
+  .stage { overflow: auto; padding: 20px; display: flex; flex-direction: column; gap: 10px; }
+  .stage .caption { display: flex; gap: 10px; align-items: center; font-size: 12px; color: var(--muted); }
+  .stage .caption .tab { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 4px 12px; color: var(--ink); }
+  .stage .caption .tab.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .pages { display: flex; gap: 20px; align-items: flex-start; }
+  .page-wrap { width: calc(210mm * .5); height: calc(297mm * .5); flex: none; }
+  .page { width: 210mm; height: 297mm; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.15); transform: scale(.5); transform-origin: top left; position: relative; }
+  .cover { padding: 25mm; font-family: 'BIZ UDPGothic', sans-serif; }
+  .cover .frame { position: absolute; inset: 25mm; border: 1px solid #000; }
+  .cover .y { position: absolute; top: 45mm; left: 0; right: 0; text-align: center; font-size: 16pt; letter-spacing: .3em; }
+  .cover .big { position: absolute; top: 62mm; left: 0; right: 0; text-align: center; font-size: 48pt; letter-spacing: .3em; }
+  .cover .lbl { position: absolute; top: 102mm; left: 34mm; font-size: 14pt; }
+  .cover .t { position: absolute; top: 116mm; left: 40mm; right: 40mm; text-align: center; font-size: 18pt; border-bottom: 1px solid #000; padding-bottom: 4mm; }
+  .cover .t.hl { background: #fff3b0; }
+  .cover .st { position: absolute; top: 134mm; left: 40mm; right: 40mm; text-align: center; font-size: 16pt; border-bottom: 1px solid #000; padding-bottom: 4mm; color: #9aa1ad; }
+  .cover .dep { position: absolute; top: 168mm; left: 40mm; font-size: 14pt; }
+  .cover .crs { position: absolute; top: 180mm; right: 40mm; font-size: 14pt; }
+  .cover .crs.hl { background: #fff3b0; }
+  .cover .id { position: absolute; top: 198mm; right: 40mm; font-size: 11pt; color: #9aa1ad; }
+  .cover .nm { position: absolute; top: 216mm; left: 46mm; font-size: 16pt; color: #9aa1ad; }
+  .cover .univ { position: absolute; top: 248mm; left: 40mm; right: 40mm; text-align: center; font-size: 18pt; letter-spacing: .5em; border-top: 2px solid #000; padding-top: 5mm; }
+  .abs { padding: 25mm 25mm 25mm 35mm; font-family: 'BIZ UDMincho', serif; font-size: 10.5pt; line-height: 23pt; }
+  .abs .h { text-align: center; font-size: 12pt; }
+  .abs .u { border-bottom: 1px solid #000; display: flex; justify-content: space-between; }
+  .abs .adv { text-align: right; border-bottom: 1px solid #000; }
+  .abs .adv.hl { background: #fff3b0; }
+  .abs .tt { font-size: 14pt; margin-top: 4pt; }
+  .abs .sub { font-size: 12pt; color: #9aa1ad; }
+  .abs .body { margin-top: 23pt; color: #b0b6c0; text-indent: 1em; }
+  .note { font-size: 12px; color: var(--muted); }
+</style>
+</head>
+<body>
+<header>
+  <b>管理ページ</b>
+  <span class="sel">2026年度 ▾</span>
+  <span class="badge pub">公開中</span>
+  <span class="badge warn">未公開の変更 2件</span>
+  <span class="spacer"></span>
+  <span class="link">変更履歴</span>
+  <span class="link">管理者</span>
+  <button class="btn">新年度を作成</button>
+  <button class="btn primary">学生に公開</button>
+</header>
+<main>
+  <section class="form">
+    <h2>毎年設定する項目</h2>
+    <div class="f"><label>共通の題目</label><div class="in focus">卒業イベント「シンドバッド」について</div></div>
+    <div class="f"><label>最終締切</label><div class="in">2027年1月20日（水）</div></div>
+    <div class="f"><label>学生へのお知らせ</label><div class="in">途中点検の日程は各コースの指示に従ってください。</div></div>
+
+    <h2>コースと指導教員</h2>
+    <div class="course on">
+      <div class="top"><span>映画・舞台衣装デザイナー</span><span class="add">表示中</span></div>
+      <div class="row"><div class="f"><label>サブタイトルの形式</label><div class="in">―{入力}の衣装制作―</div></div></div>
+      <label style="font-size:12px;color:var(--muted)">指導教員（抄録に表示）</label>
+      <div class="tags" style="margin-top:4px"><span>文化 太郎 ×</span><span>学園 花子 ×</span><span>国際 次郎 ×</span><span class="add">＋ 追加</span></div>
+    </div>
+    <div class="course">
+      <div class="top"><span>（例）〇〇コース</span><span class="add">表示中</span></div>
+      <div class="tags"><span>文化 一郎 ×</span><span class="add">＋ 追加</span></div>
+    </div>
+    <div class="add">＋ コースを追加</div>
+
+    <h2>詳細設定</h2>
+    <div class="note">名称・文字数・ページ数などの基準（手順書が改訂されたときだけ変更）　開く ▸</div>
+  </section>
+
+  <section class="stage">
+    <div class="caption"><span>見本（入力するとすぐ反映されます）</span><span class="tab on">表紙と抄録</span><span class="tab">学生の入力画面</span><span class="spacer"></span><span>黄色＝この年度の設定から入る部分　灰色＝学生が入力する部分</span></div>
+    <div class="pages">
+      <div class="page-wrap"><div class="page cover">
+        <div class="frame"></div>
+        <div class="y">２０２６年度</div>
+        <div class="big">卒業制作</div>
+        <div class="lbl">制作題目</div>
+        <div class="t hl">卒業イベント「シンドバッド」について</div>
+        <div class="st">―（学生の入力）の衣装制作―</div>
+        <div class="dep">国際文化学部・国際ファッション文化学科</div>
+        <div class="crs hl">映画・舞台衣装デザイナー コース</div>
+        <div class="id">学籍番号　（学生の入力）</div>
+        <div class="nm">氏　名：（学生の入力）</div>
+        <div class="univ">文化学園大学</div>
+      </div></div>
+      <div class="page-wrap"><div class="page abs">
+        <div class="h">2026年度　卒業制作　抄録</div>
+        <div class="u"><span>国際文化学部　国際ファッション文化学科</span><span>映画・舞台衣装デザイナー コース</span></div>
+        <div class="u"><span>学籍番号　（学生）　氏名　（学生）</span></div>
+        <div class="adv hl">（指導教員　文化 太郎、学園 花子、国際 次郎　）</div>
+        <div class="tt">卒業イベント「シンドバッド」について</div>
+        <div class="sub">―（学生の入力）の衣装制作―</div>
+        <div class="body">本制作報告書は、……（学生が入力する抄録の本文）</div>
+      </div></div>
+    </div>
+  </section>
+</main>
+</body>
+</html>

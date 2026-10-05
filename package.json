@@ -1,0 +1,42 @@
+{
+  "name": "sotsugyo-seisaku-report",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "e2e": "node scripts/e2e/smoke.mjs",
+    "build:gas": "node scripts/build-gas.mjs",
+    "deploy:gas": "node scripts/deploy-gas.mjs"
+  },
+  "dependencies": {
+    "@fontsource/biz-udmincho": "^5.3.0",
+    "@fontsource/biz-udpgothic": "^5.3.0",
+    "@tiptap/pm": "^3.31.4",
+    "@tiptap/react": "^3.31.4",
+    "@tiptap/starter-kit": "^3.31.4",
+    "@vivliostyle/core": "^2.45.2",
+    "pdfjs-dist": "^6.4.299",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@google/clasp": "^3.4.1",
+    "@types/node": "^24.13.3",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "fake-indexeddb": "^6.2.5",
+    "oxlint": "^1.81.0",
+    "puppeteer-core": "^25.12.0",
+    "typescript": "~6.0.2",
+    "vite": "^8.3.0",
+    "vite-plugin-singlefile": "^2.3.3",
+    "vitest": "^5.0.3"
+  }
+}

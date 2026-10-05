@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案C ステップで進める型</title>
+<script type="module" src="./fonts.ts"></script>
+<style>
+  :root {
+    --bg: #faf7f3;
+    --panel: #ffffff;
+    --line: #ebe3da;
+    --ink: #2b2522;
+    --muted: #7a6f68;
+    --accent: #b4533a;
+    --accent-soft: #f8e9e3;
+    --done: #4f8a63;
+    --done-soft: #e7f2ea;
+    --error: #c0392b;
+    --error-soft: #fbecea;
+    --warn: #a86a12;
+    --warn-soft: #fbf1df;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'BIZ UDPGothic', sans-serif; color: var(--ink); background: var(--bg); min-height: 100vh; }
+
+  header { display: flex; align-items: center; gap: 16px; padding: 14px 32px; }
+  .brand { font-weight: 700; font-size: 16px; }
+  .brand small { font-weight: 400; color: var(--muted); font-size: 12px; margin-left: 8px; }
+  .spacer { flex: 1; }
+  .saved { font-size: 12px; color: var(--muted); }
+  .link { font-size: 13px; color: var(--accent); }
+
+  .steps { display: flex; gap: 0; margin: 4px 32px 0; background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 14px 18px; }
+  .step { flex: 1; display: flex; align-items: center; gap: 10px; font-size: 13px; color: var(--muted); position: relative; }
+  .step:not(:last-child)::after { content: ''; flex: 1; height: 2px; background: var(--line); margin: 0 10px; }
+  .step .n { width: 30px; height: 30px; border-radius: 50%; border: 2px solid var(--line); display: grid; place-items: center; font-weight: 700; flex: none; background: #fff; }
+  .step.done { color: var(--done); }
+  .step.done .n { background: var(--done); border-color: var(--done); color: #fff; }
+  .step.done::after { background: var(--done); }
+  .step.now { color: var(--accent); font-weight: 700; }
+  .step.now .n { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+  .step small { display: block; font-weight: 400; font-size: 11px; }
+
+  .wrap { display: grid; grid-template-columns: 1fr 340px; gap: 24px; padding: 20px 32px 32px; }
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 22px 24px; }
+  .card h1 { margin: 0 0 4px; font-size: 20px; }
+  .card .lead { margin: 0 0 18px; color: var(--muted); font-size: 13px; line-height: 1.7; }
+  .outline { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+  .outline span { font-size: 12px; padding: 5px 10px; border-radius: 999px; background: var(--bg); border: 1px solid var(--line); }
+  .outline span.on { background: var(--accent-soft); border-color: #e9c3b6; color: var(--accent); font-weight: 700; }
+  .sec-title { font-weight: 700; margin: 4px 0 8px; display: flex; align-items: baseline; gap: 8px; }
+  .sec-title .num { color: var(--accent); }
+  .sec-title small { color: var(--muted); font-weight: 400; font-size: 12px; }
+  .editor { border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; font-size: 15px; line-height: 2; min-height: 180px; }
+  .editor.focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .err { text-decoration: underline wavy var(--error); text-underline-offset: 4px; background: var(--error-soft); }
+  .warn { text-decoration: underline wavy var(--warn); text-underline-offset: 4px; background: var(--warn-soft); }
+  .ref { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 3px; font-weight: 700; }
+  .tools { display: flex; gap: 8px; margin-top: 10px; }
+  .tools span { font-size: 13px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 12px; background: #fff; }
+  .nav { display: flex; justify-content: space-between; margin-top: 22px; }
+  .btn { border: 1px solid var(--line); background: #fff; border-radius: 10px; padding: 10px 18px; font: inherit; font-size: 14px; color: var(--ink); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+
+  .side { display: flex; flex-direction: column; gap: 16px; }
+  .side h2 { font-size: 14px; margin: 0 0 10px; }
+  .progress { display: grid; gap: 10px; }
+  .meter { font-size: 12px; }
+  .meter .row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+  .meter .bar { height: 8px; border-radius: 4px; background: var(--bg); overflow: hidden; }
+  .meter .bar i { display: block; height: 100%; border-radius: 4px; background: var(--accent); }
+  .rule { border-radius: 10px; padding: 10px 12px; font-size: 12px; line-height: 1.7; margin-bottom: 8px; }
+  .rule.e { background: var(--error-soft); }
+  .rule.w { background: var(--warn-soft); }
+  .rule b { display: block; font-size: 13px; }
+  .rule .ex { display: flex; gap: 6px; margin-top: 4px; }
+  .rule .ng { color: var(--error); }
+  .rule .ok { color: var(--done); font-weight: 700; }
+  .guide li { font-size: 12px; line-height: 1.8; color: var(--ink); }
+  .guide ul { margin: 0; padding-left: 18px; }
+  .preview-btn { display: flex; align-items: center; gap: 12px; }
+  .mini { width: 54px; height: 76px; border: 1px solid var(--line); border-radius: 3px; background: #fff; position: relative; flex: none; }
+  .mini::after { content: ''; position: absolute; inset: 9px 7px; background: repeating-linear-gradient(#d8d0c8 0 1px, transparent 1px 5px); }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">卒業制作報告書をつくる<small>2026年度・最終締切 1月20日（水）まで あと107日</small></div>
+  <div class="spacer"></div>
+  <span class="saved">✓ 自動保存しました（14:32）</span>
+  <span class="link">バックアップを保存</span>
+  <span class="link">書き方の手順書</span>
+</header>
+
+<div class="steps">
+  <div class="step done"><span class="n">✓</span><span>基本情報<small>表紙・抄録に反映</small></span></div>
+  <div class="step done"><span class="n">✓</span><span>抄録<small>642字</small></span></div>
+  <div class="step now"><span class="n">3</span><span>本文<small>3.2 / 5ページ</small></span></div>
+  <div class="step"><span class="n">4</span><span>参考文献<small>なくても可</small></span></div>
+  <div class="step"><span class="n">5</span><span>作品写真<small>6枚まで</small></span></div>
+  <div class="step"><span class="n">6</span><span>確認と書き出し<small>PDF</small></span></div>
+</div>
+
+<div class="wrap">
+  <section class="card">
+    <h1>3. 本文を書く</h1>
+    <p class="lead">見出しは番号が自動で付きます。段落の書き出しの1字下げも自動です。図を入れたら、本文のどこかで「図を参照」を使って（図1）のように書きましょう。</p>
+    <div class="outline">
+      <span>Ⅰ．企画・立案</span><span>ⅰ．担当衣装のキャラクター</span><span class="on">ⅱ．デザイン説明</span><span>ⅲ．使用素材</span><span>Ⅱ．制作過程</span><span>Ⅲ．まとめ</span><span>＋ 見出しを追加</span>
+    </div>
+    <div class="sec-title"><span class="num">ⅱ．</span>デザイン説明<small>Ⅰ．企画・立案 の中</small></div>
+    <div class="editor focus"><span class="err">１５</span>世紀ごろの中東の装いをもとに、航海の力強さと冒険心を表すデザインを考えた<span class="ref">（図1）</span>。キーワードは自由、勇気、海である。袖は風をはらむように大きく膨らませ、腰には幅の広い帯を巻いた。帯には波の模様を刺繍で入れ、<span class="warn">海の青と砂の金</span>。</div>
+    <div class="tools"><span>＋ 段落</span><span>＋ 図（写真）</span><span>＋ 素材表</span><span>図を参照（図n）</span></div>
+    <div class="nav"><button class="btn">← 抄録にもどる</button><button class="btn primary">次の見出しへ →</button></div>
+  </section>
+
+  <aside class="side">
+    <section class="card">
+      <h2>このページで直すところ</h2>
+      <div class="rule e"><b>数字は半角で書く</b><div class="ex"><span class="ng">全角の「１５世紀」</span>→<span class="ok">半角の「15世紀」</span></div></div>
+      <div class="rule w"><b>体言止めを使わない</b><div class="ex"><span class="ng">…砂の金。</span>→<span class="ok">…砂の金を合わせた。</span></div></div>
+    </section>
+    <section class="card">
+      <h2>本文の書き方（手順書より）</h2>
+      <div class="guide"><ul>
+        <li>「である」調で書く（です・ますは使わない）</li>
+        <li>一人称は「筆者」</li>
+        <li>「制作」で統一（「製作」は使わない）</li>
+        <li>人名に敬称（さん・氏・先生）を付けない</li>
+        <li>文末の図は「〜した（図1）。」</li>
+      </ul></div>
+    </section>
+    <section class="card">
+      <div class="preview-btn"><span class="mini"></span><div><b style="font-size:14px">仕上がりを見る</b><div style="font-size:12px;color:var(--muted);margin-top:4px">提出PDFと同じ見た目のプレビューを開きます</div></div></div>
+    </section>
+  </aside>
+</div>
+</body>
+</html>

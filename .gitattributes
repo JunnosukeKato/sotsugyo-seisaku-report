@@ -1,0 +1,4 @@
+# 改行は LF にそろえる（Windows・Mac・GitHub Actions で同じにする）
+* text=auto eol=lf
+*.png binary
+*.pdf binary

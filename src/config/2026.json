@@ -1,0 +1,37 @@
+{
+  "fiscalYear": 2026,
+  "reportName": "卒業制作報告書",
+  "deadline": "2027-01-20",
+  "university": "文化学園大学",
+  "faculty": "国際文化学部",
+  "department": "国際ファッション文化学科",
+  "commonTitle": "卒業イベント「シンドバッド」について",
+  "cover": {
+    "heading": "卒業制作",
+    "titleLabel": "制作題目"
+  },
+  "abstract": {
+    "heading": "卒業制作　抄録",
+    "openingExample": "本制作報告書は、",
+    "minChars": 600,
+    "maxChars": 900,
+    "minLines": 15,
+    "maxLines": 23
+  },
+  "body": {
+    "minPages": 5,
+    "imagesPerPageGuide": 2
+  },
+  "workPhotos": {
+    "maxImages": 6
+  },
+  "studentIdPattern": null,
+  "courses": [
+    {
+      "id": "film-stage-costume",
+      "name": "映画・舞台衣装デザイナー",
+      "advisors": ["梶田　貴子", "佐藤　綾", "加藤　淳之介"],
+      "subtitleTemplate": "―{input}の衣装制作―"
+    }
+  ]
+}

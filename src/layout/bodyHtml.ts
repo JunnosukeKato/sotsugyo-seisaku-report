@@ -1,0 +1,150 @@
+import type { BodyBlock, Chapter, Figure, MaterialTableBlock } from '../model/types'
+import { reportCss } from './reportCss'
+
+const CHAPTER_NUMERALS = ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ']
+const SUBHEADING_NUMERALS = ['ⅰ', 'ⅱ', 'ⅲ', 'ⅳ', 'ⅴ', 'ⅵ', 'ⅶ', 'ⅷ', 'ⅸ', 'ⅹ']
+
+/** 大見出しの番号（Ⅰ．Ⅱ．…）。全角ピリオドはテンプレートどおり */
+export function chapterLabel(index: number): string {
+  return `${CHAPTER_NUMERALS[index] ?? String(index + 1)}．`
+}
+
+/** 小見出しの番号（ⅰ．ⅱ．…）。章ごとに振り直す */
+export function subheadingLabel(index: number): string {
+  return `${SUBHEADING_NUMERALS[index] ?? String(index + 1)}．`
+}
+
+/** 図表のタイトル。手順書の形式「図1.デザイン画」 */
+export function figureCaption(kind: '図' | '表', number: number, name: string): string {
+  return `${kind}${number}.${name}`
+}
+
+export interface FigureSize {
+  widthMm: number
+  heightMm: number
+}
+
+export interface BodyRenderOptions {
+  /** 画像 ID から表示用 URL を得る */
+  imageSrc: (imageId: string) => string
+  /** 図の表示サイズ */
+  figureSize: (figure: Figure) => FigureSize
+  /** 素材表の生地見本のサイズ */
+  swatchSize?: FigureSize
+}
+
+/** 図・表の番号を本文の出現順に振る。参照（図n）の解決にも使う */
+export function numberFiguresAndTables(chapters: Chapter[]): Map<string, number> {
+  const numbers = new Map<string, number>()
+  let figure = 0
+  let table = 0
+  for (const chapter of chapters) {
+    for (const block of chapter.blocks) {
+      if (block.type === 'figureRow') {
+        for (const f of block.figures) numbers.set(f.id, ++figure)
+      } else if (block.type === 'materialTable') {
+        numbers.set(block.id, ++table)
+      }
+    }
+  }
+  return numbers
+}
+
+export function escapeHtml(text: string): string {
+  return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
+}
+
+function renderBlock(block: BodyBlock, numbers: Map<string, number>, tableIds: Set<string>, options: BodyRenderOptions): string {
+  switch (block.type) {
+    case 'subheading':
+      return '' // 番号付けのため renderChapter で処理する
+    case 'paragraph': {
+      const text = block.content
+        .map((node) => {
+          if (node.type === 'text') return escapeHtml(node.text)
+          const label = `${tableIds.has(node.targetId) ? '表' : '図'}${numbers.get(node.targetId) ?? '?'}`
+          return node.withParens ? `（${label}）` : label
+        })
+        .join('')
+      return `<p data-block-id="${escapeHtml(block.id)}" data-placeholder="（クリックして文章を入力）">${text}</p>`
+    }
+    case 'figureRow': {
+      const figures = block.figures
+        .map((f) => {
+          const size = options.figureSize(f)
+          return `<figure data-figure-id="${escapeHtml(f.id)}"><img src="${escapeHtml(options.imageSrc(f.imageId))}" style="width:${size.widthMm}mm;height:${size.heightMm}mm" alt=""><figcaption>${captionHtml('図', numbers.get(f.id)!, f.caption, f.id)}</figcaption></figure>`
+        })
+        .join('')
+      return `<div class="figure-row">${figures}</div>`
+    }
+    case 'materialTable':
+      return renderMaterialTable(block, numbers.get(block.id)!, options)
+  }
+}
+
+function renderMaterialTable(block: MaterialTableBlock, number: number, options: BodyRenderOptions): string {
+  const swatch = options.swatchSize ?? { widthMm: 35, heightMm: 32 }
+  const rows = block.rows
+    .map((row) => {
+      const img = row.swatchImageId
+        ? `<img src="${escapeHtml(options.imageSrc(row.swatchImageId))}" style="width:${swatch.widthMm}mm;height:${swatch.heightMm}mm" alt="">`
+        : ''
+      const id = escapeHtml(row.id)
+      return `<tr><td><span data-block-id="${id}:name" data-placeholder="（名称）">${escapeHtml(row.name)}</span></td><td><span data-block-id="${id}:usage" data-placeholder="（使用箇所）">${escapeHtml(row.usage)}</span></td><td class="swatch" data-swatch-row="${id}">${img}</td></tr>`
+    })
+    .join('')
+  return `<div class="material-table"><p class="table-caption">${captionHtml('表', number, block.caption, block.id)}</p><table><thead><tr><th>名称</th><th>使用箇所</th><th>生地見本</th></tr></thead><tbody>${rows}</tbody></table></div>`
+}
+
+/**
+ * 番号（自動）と、学生が入力した部分を分けて出力する。
+ * 入力部分には data-block-id を付け、紙面上で編集する箇所を特定できるようにする。
+ */
+function labeledHtml(label: string, text: string, blockId: string): string {
+  return `<span class="num">${escapeHtml(label)}</span><span data-block-id="${escapeHtml(blockId)}" data-placeholder="（クリックして入力）">${escapeHtml(text)}</span>`
+}
+
+function captionHtml(kind: '図' | '表', number: number, name: string, blockId: string): string {
+  const full = figureCaption(kind, number, name)
+  return labeledHtml(full.slice(0, full.length - name.length), name, blockId)
+}
+
+function renderChapter(chapter: Chapter, index: number, numbers: Map<string, number>, tableIds: Set<string>, options: BodyRenderOptions): string {
+  let subIndex = 0
+  const blocks = chapter.blocks
+    .map((block) =>
+      block.type === 'subheading'
+        ? `<h2 class="subheading">${labeledHtml(subheadingLabel(subIndex++), block.title, block.id)}</h2>`
+        : renderBlock(block, numbers, tableIds, options),
+    )
+    .join('\n')
+  return `<h1 class="chapter" id="${chapterAnchor(chapter.id)}">${labeledHtml(chapterLabel(index), chapter.title, chapter.id)}</h1>\n${blocks}`
+}
+
+/** 目次からページ番号を参照するための、大見出しの id */
+export function chapterAnchor(chapterId: string): string {
+  return `ch-${chapterId.replace(/[^A-Za-z0-9_-]/g, '_')}`
+}
+
+/** 本文（大見出し以下）の HTML。報告書全体の文書にも、本文だけの文書にも使う */
+export function bodyContentHtml(chapters: Chapter[], options: BodyRenderOptions): string {
+  const numbers = numberFiguresAndTables(chapters)
+  const tableIds = new Set(chapters.flatMap((c) => c.blocks).filter((b) => b.type === 'materialTable').map((b) => b.id))
+  return chapters.map((c, i) => renderChapter(c, i, numbers, tableIds, options)).join('\n')
+}
+
+/** 本文ページだけの HTML 文書（組版エンジンに渡す）を作る */
+export function buildBodyDocument(chapters: Chapter[], options: BodyRenderOptions): string {
+  const body = bodyContentHtml(chapters, options)
+  return `<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>本文</title>
+<style>${reportCss}</style>
+</head>
+<body>
+${body}
+</body>
+</html>`
+}

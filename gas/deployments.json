@@ -1,0 +1,18 @@
+{
+  "spreadsheet": {
+    "id": "18NQcsnxpOngagiJmms23CSd1c4V_jJZJHGKC7ycCcOA",
+    "url": "https://docs.google.com/spreadsheets/d/18NQcsnxpOngagiJmms23CSd1c4V_jJZJHGKC7ycCcOA/edit"
+  },
+  "admin": {
+    "title": "卒業制作報告書_管理",
+    "scriptId": "1-43P16RjMb3XO-lX5FI1MKRnuZJYEtQtM_Dl_FNsgFkbuacOxL_GeJmK",
+    "deploymentId": "AKfycbyXJr_dyRKAGYWBGmV1HLYNHWurAaYZtiG_86hasP_23a-SmvIAgklpAPqszYO8ffygtw",
+    "url": "https://script.google.com/macros/s/AKfycbyXJr_dyRKAGYWBGmV1HLYNHWurAaYZtiG_86hasP_23a-SmvIAgklpAPqszYO8ffygtw/exec"
+  },
+  "api": {
+    "title": "卒業制作報告書_配信",
+    "scriptId": "1VJVjqNPcYkwvH21gWwqztUqVskc0HvuBXIwvcABAYiA4MpI35NLzv_Zo",
+    "deploymentId": "AKfycbxQnwygZE6gDD2gp9w3ZP7TUdDnVnChE3uAZlWDxYlreaMJD7Sp1Tx2H6PF_CmAsqO1uQ",
+    "url": "https://script.google.com/macros/s/AKfycbxQnwygZE6gDD2gp9w3ZP7TUdDnVnChE3uAZlWDxYlreaMJD7Sp1Tx2H6PF_CmAsqO1uQ/exec"
+  }
+}

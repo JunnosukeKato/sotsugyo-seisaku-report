@@ -1,0 +1,318 @@
+import type { BasicInfo, BodyBlock, Chapter, InlineNode, ParagraphBlock, Report } from '../model/types'
+
+/**
+ * 報告書データの操作。いずれも元のデータを変えず、新しいデータを返す（元に戻す機能のため）。
+ *
+ * 紙面上で編集できる文字列（Editable）と、その ID：
+ * - 表紙の項目      basic:studentId / basic:name / basic:subtitleInput
+ * - 抄録の段落      段落の ID
+ * - 大見出し        章の ID
+ * - 小見出し・段落  ブロックの ID
+ * - 図・表のタイトル 図の ID ／ 表の ID
+ * - 素材表のセル    {行の ID}:name ／ {行の ID}:usage
+ *
+ * 段落の中の図表の参照（（図1）など）は、図表へのリンクとして持つ。
+ * 編集するときは「（図1）」という文字列にし、確定したときにリンクへ戻す。図を追加・削除すると番号は自動で振り直される。
+ */
+
+export type EditableKind = 'field' | 'abstractParagraph' | 'chapter' | 'subheading' | 'paragraph' | 'figureCaption' | 'tableCaption' | 'tableCell'
+
+export interface Editable {
+  id: string
+  kind: EditableKind
+  text: string
+}
+
+const FIELD_PREFIX = 'basic:'
+const EDITABLE_FIELDS = ['studentId', 'name', 'subtitleInput'] as const
+type EditableField = (typeof EDITABLE_FIELDS)[number]
+
+let counter = 0
+export function newId(prefix: string): string {
+  counter += 1
+  return `${prefix}-${Date.now().toString(36)}-${counter}`
+}
+
+// ---- 図表の番号と参照 ----
+
+export interface Numbering {
+  /** 図・表の ID → 番号（図と表は別々に数える） */
+  numbers: Map<string, number>
+  tableIds: Set<string>
+  /** 番号 → ID */
+  figureByNumber: Map<number, string>
+  tableByNumber: Map<number, string>
+}
+
+export function numbering(report: Pick<Report, 'body'>): Numbering {
+  const numbers = new Map<string, number>()
+  const tableIds = new Set<string>()
+  const figureByNumber = new Map<number, string>()
+  const tableByNumber = new Map<number, string>()
+  for (const block of report.body.flatMap((c) => c.blocks)) {
+    if (block.type === 'figureRow') {
+      for (const f of block.figures) {
+        const n = figureByNumber.size + 1
+        numbers.set(f.id, n)
+        figureByNumber.set(n, f.id)
+      }
+    } else if (block.type === 'materialTable') {
+      const n = tableByNumber.size + 1
+      numbers.set(block.id, n)
+      tableIds.add(block.id)
+      tableByNumber.set(n, block.id)
+    }
+  }
+  return { numbers, tableIds, figureByNumber, tableByNumber }
+}
+
+/** 段落の中身を、編集・チェック用の文字列にする（参照は「（図1）」などになる） */
+export function contentToText(content: InlineNode[], num: Numbering): string {
+  return content
+    .map((node) => {
+      if (node.type === 'text') return node.text
+      const label = `${num.tableIds.has(node.targetId) ? '表' : '図'}${num.numbers.get(node.targetId) ?? '?'}`
+      return node.withParens ? `（${label}）` : label
+    })
+    .join('')
+}
+
+/** 文字列中の「（図1）」「図1」などを、存在する図表へのリンクに戻す。存在しない番号は文字のまま残す */
+export function textToContent(text: string, num: Numbering): InlineNode[] {
+  const nodes: InlineNode[] = []
+  let last = 0
+  // 括弧なしの「図1」は、「設計図1枚」のような語の一部を拾わないよう、直前が漢字でないときだけ
+  const re = /[（(]([図表])\s*(\d+)[）)]|(?<![㐀-鿿々])([図表])(\d+)/g
+  for (const m of text.matchAll(re)) {
+    const kind = m[1] ?? m[3]
+    const n = Number(m[2] ?? m[4])
+    const targetId = (kind === '表' ? num.tableByNumber : num.figureByNumber).get(n)
+    if (!targetId) continue
+    if (m.index > last) nodes.push({ type: 'text', text: text.slice(last, m.index) })
+    nodes.push({ type: 'ref', targetId, withParens: m[1] !== undefined })
+    last = m.index + m[0].length
+  }
+  if (last < text.length) nodes.push({ type: 'text', text: text.slice(last) })
+  return nodes.length ? nodes : [{ type: 'text', text: '' }]
+}
+
+/** 段落の書き出しの1字下げは自動で付くため、入力された先頭の空白と改行は取り除く */
+export function normalizeParagraph(text: string): string {
+  return text.replace(/[\r\n]/g, '').replace(/^[\s　]+/, '')
+}
+
+function paragraph(id: string, text: string, num?: Numbering): ParagraphBlock {
+  const normalized = normalizeParagraph(text)
+  return { type: 'paragraph', id, content: num ? textToContent(normalized, num) : [{ type: 'text', text: normalized }] }
+}
+
+// ---- 編集できる文字列の一覧 ----
+
+export function editables(report: Report): Editable[] {
+  const num = numbering(report)
+  return [
+    ...EDITABLE_FIELDS.map((f) => ({ id: FIELD_PREFIX + f, kind: 'field' as const, text: report.basicInfo[f] })),
+    ...report.abstract.paragraphs.map((p) => ({ id: p.id, kind: 'abstractParagraph' as const, text: contentToText(p.content, num) })),
+    ...report.body.flatMap((c) => [
+      { id: c.id, kind: 'chapter' as const, text: c.title },
+      ...c.blocks.flatMap((b): Editable[] => {
+        switch (b.type) {
+          case 'subheading':
+            return [{ id: b.id, kind: 'subheading', text: b.title }]
+          case 'paragraph':
+            return [{ id: b.id, kind: 'paragraph', text: contentToText(b.content, num) }]
+          case 'figureRow':
+            return b.figures.map((f) => ({ id: f.id, kind: 'figureCaption' as const, text: f.caption }))
+          case 'materialTable':
+            return [
+              { id: b.id, kind: 'tableCaption', text: b.caption },
+              ...b.rows.flatMap((r) => [
+                { id: `${r.id}:name`, kind: 'tableCell' as const, text: r.name },
+                { id: `${r.id}:usage`, kind: 'tableCell' as const, text: r.usage },
+              ]),
+            ]
+        }
+      }),
+    ]),
+  ]
+}
+
+export function findEditable(report: Report, id: string): Editable | undefined {
+  return editables(report).find((e) => e.id === id)
+}
+
+/** 前後の編集箇所（↑↓での移動用）。表紙の項目と表のセルは移動の対象にしない */
+export function neighbor(report: Report, id: string, direction: 'prev' | 'next'): Editable | undefined {
+  const list = editables(report).filter((e) => e.kind !== 'field' && e.kind !== 'tableCell')
+  const i = list.findIndex((e) => e.id === id)
+  return i < 0 ? undefined : list[direction === 'prev' ? i - 1 : i + 1]
+}
+
+// ---- 書き換え ----
+
+function mapBody(report: Report, fn: (block: BodyBlock) => BodyBlock | BodyBlock[]): Report {
+  return { ...report, body: report.body.map((c) => ({ ...c, blocks: c.blocks.flatMap((b) => fn(b)) })) }
+}
+
+export function setText(report: Report, id: string, text: string): Report {
+  if (id.startsWith(FIELD_PREFIX)) {
+    const key = id.slice(FIELD_PREFIX.length) as EditableField
+    if (!EDITABLE_FIELDS.includes(key)) return report
+    const basicInfo: BasicInfo = { ...report.basicInfo, [key]: text.replace(/[\r\n]/g, '').trim() }
+    return { ...report, basicInfo }
+  }
+  if (report.abstract.paragraphs.some((p) => p.id === id)) {
+    return { ...report, abstract: { paragraphs: report.abstract.paragraphs.map((p) => (p.id === id ? paragraph(id, text) : p)) } }
+  }
+  const num = numbering(report)
+  const withChapter = { ...report, body: report.body.map((c) => (c.id === id ? { ...c, title: text.replace(/[\r\n]/g, '') } : c)) }
+  const [rowId, column] = id.split(':')
+  return mapBody(withChapter, (b): BodyBlock => {
+    if (b.type === 'subheading' && b.id === id) return { ...b, title: text.replace(/[\r\n]/g, '') }
+    if (b.type === 'paragraph' && b.id === id) return paragraph(id, text, num)
+    if (b.type === 'materialTable' && b.id === id) return { ...b, caption: text.replace(/[\r\n]/g, '') }
+    if (b.type === 'materialTable' && (column === 'name' || column === 'usage') && b.rows.some((r) => r.id === rowId))
+      return { ...b, rows: b.rows.map((r) => (r.id === rowId ? { ...r, [column]: text.trim() } : r)) }
+    if (b.type === 'figureRow' && b.figures.some((f) => f.id === id))
+      return { ...b, figures: b.figures.map((f) => (f.id === id ? { ...f, caption: text.replace(/[\r\n]/g, '') } : f)) }
+    return b
+  })
+}
+
+export function setCourse(report: Report, courseId: string): Report {
+  return { ...report, basicInfo: { ...report.basicInfo, courseId } }
+}
+
+// ---- 段落の分割・結合・貼り付け ----
+
+/** Enter：段落を2つに分ける。見出しで Enter を押した場合は、その後ろに空の段落を作る */
+export function split(report: Report, id: string, before: string, after: string): { report: Report; newId: string } {
+  const created = newId('p')
+  const abstract = report.abstract.paragraphs
+  const ai = abstract.findIndex((p) => p.id === id)
+  if (ai >= 0) {
+    const paragraphs = [...abstract]
+    paragraphs.splice(ai, 1, paragraph(id, before), paragraph(created, after))
+    return { report: { ...report, abstract: { paragraphs } }, newId: created }
+  }
+  const num = numbering(report)
+  if (report.body.some((c) => c.id === id)) {
+    return {
+      report: { ...report, body: report.body.map((c) => (c.id === id ? { ...c, title: before + after, blocks: [paragraph(created, ''), ...c.blocks] } : c)) },
+      newId: created,
+    }
+  }
+  return {
+    report: mapBody(report, (b) => {
+      if (b.id !== id) return b
+      if (b.type === 'paragraph') return [paragraph(b.id, before, num), paragraph(created, after, num)]
+      if (b.type === 'subheading') return [{ ...b, title: before + after }, paragraph(created, '')]
+      return b
+    }),
+    newId: created,
+  }
+}
+
+/** 段落の先頭で Backspace：前の段落とつなげる。前が段落でなければ null */
+export function mergeBackward(report: Report, id: string, text: string): { report: Report; targetId: string; caret: number } | null {
+  const num = numbering(report)
+  const abstract = report.abstract.paragraphs
+  const ai = abstract.findIndex((p) => p.id === id)
+  if (ai > 0) {
+    const prev = abstract[ai - 1]
+    const prevText = contentToText(prev.content, num)
+    const paragraphs = [...abstract]
+    paragraphs.splice(ai - 1, 2, paragraph(prev.id, prevText + text))
+    return { report: { ...report, abstract: { paragraphs } }, targetId: prev.id, caret: prevText.length }
+  }
+  if (ai === 0) return null
+  for (const c of report.body) {
+    const i = c.blocks.findIndex((b) => b.id === id)
+    if (i <= 0) continue
+    const prev = c.blocks[i - 1]
+    if (prev.type !== 'paragraph') return null
+    const prevText = contentToText(prev.content, num)
+    const blocks = [...c.blocks]
+    blocks.splice(i - 1, 2, paragraph(prev.id, prevText + text, num))
+    return { report: { ...report, body: report.body.map((x) => (x === c ? { ...c, blocks } : x)) }, targetId: prev.id, caret: prevText.length }
+  }
+  return null
+}
+
+/** 複数行の貼り付け：1行目で今の段落を置き換え、残りを新しい段落として後ろに入れる */
+export function replaceWithParagraphs(report: Report, id: string, texts: string[]): { report: Report; lastId: string } {
+  const ids = texts.map((_, i) => (i === 0 ? id : newId('p')))
+  const lastId = ids[ids.length - 1]
+  if (report.abstract.paragraphs.some((p) => p.id === id)) {
+    const paragraphs = report.abstract.paragraphs.flatMap((p) => (p.id === id ? texts.map((t, i) => paragraph(ids[i], t)) : [p]))
+    return { report: { ...report, abstract: { paragraphs } }, lastId }
+  }
+  const num = numbering(report)
+  return {
+    report: mapBody(report, (b) => (b.id === id && b.type === 'paragraph' ? texts.map((t, i) => paragraph(ids[i], t, num)) : b)),
+    lastId,
+  }
+}
+
+// ---- ブロックの追加・削除 ----
+
+/** ID からブロックの位置を探す（図の ID・表のセルの ID でもよい） */
+function blockIndex(chapter: Chapter, id: string): number {
+  const rowId = id.split(':')[0]
+  return chapter.blocks.findIndex(
+    (b) =>
+      b.id === id ||
+      (b.type === 'figureRow' && b.figures.some((f) => f.id === id)) ||
+      (b.type === 'materialTable' && b.rows.some((r) => r.id === rowId)),
+  )
+}
+
+/** 指定した位置の後ろに本文のブロックを入れる。章の ID なら章の先頭、見つからなければ最後の章の末尾 */
+export function insertAfter(report: Report, afterId: string | null, block: BodyBlock): Report {
+  if (afterId && report.body.some((c) => c.id === afterId)) {
+    return { ...report, body: report.body.map((c) => (c.id === afterId ? { ...c, blocks: [block, ...c.blocks] } : c)) }
+  }
+  const containing = afterId ? report.body.find((c) => blockIndex(c, afterId) >= 0) : undefined
+  const target = containing ?? report.body[report.body.length - 1]
+  return {
+    ...report,
+    body: report.body.map((c) => {
+      if (c !== target) return c
+      const blocks = [...c.blocks]
+      blocks.splice(containing ? blockIndex(c, afterId!) + 1 : blocks.length, 0, block)
+      return { ...c, blocks }
+    }),
+  }
+}
+
+/** 大見出し（章）を指定した章の後ろに追加する */
+export function insertChapterAfter(report: Report, afterId: string | null, chapter: Chapter): Report {
+  const i = afterId ? report.body.findIndex((c) => c.id === afterId || blockIndex(c, afterId) >= 0) : -1
+  const body = [...report.body]
+  body.splice(i >= 0 ? i + 1 : body.length, 0, chapter)
+  return { ...report, body }
+}
+
+/**
+ * ブロックを削除する。図の ID を渡すと、その図だけを除く（並びが空になれば並びごと消す）。
+ * 抄録の段落も消せる（最後の1段落は残す）。
+ */
+export function removeBlock(report: Report, id: string): Report {
+  const abstract = report.abstract.paragraphs
+  if (abstract.some((p) => p.id === id)) {
+    return abstract.length > 1 ? { ...report, abstract: { paragraphs: abstract.filter((p) => p.id !== id) } } : report
+  }
+  return mapBody(report, (b) => {
+    if (b.id === id) return []
+    if (b.type === 'figureRow' && b.figures.some((f) => f.id === id)) {
+      const figures = b.figures.filter((f) => f.id !== id)
+      return figures.length ? { ...b, figures } : []
+    }
+    return b
+  })
+}
+
+/** 章を削除する（中のブロックごと） */
+export function removeChapter(report: Report, id: string): Report {
+  return { ...report, body: report.body.filter((c) => c.id !== id) }
+}

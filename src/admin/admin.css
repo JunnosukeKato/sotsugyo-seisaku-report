@@ -1,0 +1,99 @@
+/* 管理ページ（案2）。デザインは mockups/admin-2.html */
+:root {
+  --bg: #eef0f3;
+  --panel: #fff;
+  --line: #dde1e7;
+  --ink: #1f2430;
+  --muted: #687080;
+  --accent: #1e3a8a;
+  --accent-soft: #e8edf9;
+  --ok: #2f7d4f;
+  --ok-soft: #e5f3ea;
+  --warn: #a86400;
+  --warn-soft: #fff4e0;
+  --error: #c62828;
+  --error-soft: #fdecec;
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body { font-family: 'BIZ UDPGothic', sans-serif; color: var(--ink); background: var(--bg); }
+button { font: inherit; cursor: pointer; }
+button:disabled { opacity: 0.45; cursor: default; }
+.spacer { flex: 1; }
+
+.admin-loading { height: 100%; display: grid; place-items: center; text-align: center; line-height: 2; color: var(--muted); }
+.admin { height: 100%; display: grid; grid-template-rows: 56px 1fr; }
+
+.admin-header { display: flex; align-items: center; gap: 10px; padding: 0 18px; background: var(--panel); border-bottom: 1px solid var(--line); white-space: nowrap; }
+.admin-header b { font-size: 15px; }
+.sel { font: inherit; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: #fff; }
+.badge { font-size: 11px; border-radius: 999px; padding: 3px 9px; font-weight: 700; }
+.badge.pub { background: var(--ok-soft); color: var(--ok); }
+.badge.draft, .badge.warn { background: var(--warn-soft); color: var(--warn); }
+.badge.old { background: var(--bg); color: var(--muted); font-weight: 400; }
+.user { font-size: 12px; color: var(--muted); }
+.link { border: 0; background: none; color: var(--accent); font-size: 13px; }
+.btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px 14px; font-size: 13px; color: var(--ink); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+
+.admin-main { display: grid; grid-template-columns: 480px 1fr; min-height: 0; }
+.form { background: var(--panel); border-right: 1px solid var(--line); overflow: auto; padding: 16px 20px 40px; }
+.form h2 { font-size: 13px; color: var(--muted); font-weight: 400; margin: 20px 0 10px; letter-spacing: 0.04em; }
+.message { border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 10px; }
+.message.ok { background: var(--ok-soft); color: var(--ok); }
+.message.ng { background: var(--error-soft); color: var(--error); }
+.problems { display: grid; gap: 4px; font-size: 12px; margin-bottom: 6px; }
+.problems .error { color: var(--error); }
+.problems .warning { color: var(--warn); }
+
+.f { display: grid; gap: 4px; margin-bottom: 12px; }
+.f .l, .course .l { font-size: 12px; color: var(--muted); }
+.hint { font-size: 11px; color: var(--muted); }
+.in { font: inherit; font-size: 14px; color: var(--ink); border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; background: #fff; width: 100%; }
+.in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+textarea.in { resize: vertical; }
+.in.num { width: 90px; }
+.range { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+
+.course { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 10px; display: grid; gap: 6px; }
+.course.on { border-color: var(--accent); }
+.course.hidden-course { background: #f7f8fa; }
+.course .top { display: flex; gap: 10px; align-items: center; }
+.course .name { font-weight: 700; }
+.toggle-label { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+.template { display: flex; align-items: center; gap: 6px; }
+.template .slot { flex: none; font-size: 12px; color: var(--muted); background: var(--bg); border-radius: 6px; padding: 6px 8px; }
+.tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+.tag { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 3px 4px 3px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 2px; }
+.tag button { border: 0; background: none; color: inherit; padding: 0 4px; }
+.tag-input { width: 170px; padding: 4px 8px; font-size: 12px; }
+.course-actions { display: flex; gap: 6px; align-items: center; }
+.course-actions button { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 3px 10px; font-size: 12px; }
+.danger { color: var(--error) !important; }
+.add { border: 1px dashed #aab6d6; background: #fff; color: var(--accent); border-radius: 8px; padding: 8px; width: 100%; font-size: 13px; }
+
+.details { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 10px; }
+.details summary { font-size: 13px; color: var(--muted); cursor: pointer; margin-bottom: 10px; }
+.details .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+
+.stage { display: grid; grid-template-rows: auto 1fr; min-height: 0; min-width: 0; }
+.stage .caption { display: flex; align-items: center; gap: 10px; padding: 12px 18px; font-size: 12px; color: var(--muted); }
+.legend i { display: inline-block; width: 12px; height: 12px; vertical-align: -2px; margin: 0 4px 0 10px; border-radius: 2px; }
+.legend i.y { background: #fff3b0; border: 1px solid #e8d77a; }
+.legend i.g { background: #fff; border: 1px solid #9aa1ad; }
+.preview { min-height: 0; overflow: hidden; }
+.preview iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+.modal-backdrop { position: fixed; inset: 0; background: rgba(20, 22, 30, 0.35); display: grid; place-items: center; z-index: 50; }
+.modal { background: #fff; border-radius: 12px; width: min(560px, calc(100vw - 32px)); max-height: calc(100vh - 48px); overflow: auto; padding: 18px 22px 20px; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25); font-size: 14px; }
+.modal header { display: flex; align-items: center; margin-bottom: 8px; }
+.modal h2 { font-size: 17px; margin: 0; flex: 1; }
+.modal .close { border: 0; background: none; font-size: 22px; color: var(--muted); }
+.modal .lead { line-height: 1.8; margin: 4px 0 14px; }
+.modal button { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 7px 14px; font-size: 13px; }
+.modal button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.row-buttons { display: flex; gap: 8px; align-items: center; margin-top: 16px; }
+.history { list-style: none; padding: 0; margin: 0; }
+.history li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px; }
+.history small { display: block; color: var(--muted); }

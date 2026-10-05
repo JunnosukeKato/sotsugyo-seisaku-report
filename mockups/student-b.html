@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案B 入力欄＋プレビュー型</title>
+<script type="module" src="./fonts.ts"></script>
+<style>
+  :root {
+    --bg: #f3f5f7;
+    --panel: #ffffff;
+    --line: #e1e6eb;
+    --ink: #1f2933;
+    --muted: #66727f;
+    --accent: #0f766e;
+    --accent-soft: #e3f3f1;
+    --error: #d32f2f;
+    --error-soft: #fdeeee;
+    --warn: #b86e00;
+    --warn-soft: #fff5e3;
+    --ok: #2f855a;
+    --ok-soft: #e6f4ec;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'BIZ UDPGothic', sans-serif; color: var(--ink); background: var(--bg); height: 100vh; display: grid; grid-template-rows: 56px 44px 1fr 40px; }
+
+  header { display: flex; align-items: center; gap: 14px; padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .logo { width: 28px; height: 28px; border-radius: 7px; background: var(--accent); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 14px; }
+  .title { font-weight: 700; }
+  .title small { display: block; font-weight: 400; font-size: 11px; color: var(--muted); }
+  .spacer { flex: 1; }
+  .chip { font-size: 12px; padding: 5px 10px; border-radius: 999px; background: var(--bg); color: var(--muted); }
+  .chip.e { background: var(--error-soft); color: var(--error); font-weight: 700; }
+  .chip.w { background: var(--warn-soft); color: var(--warn); font-weight: 700; }
+  .btn { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 8px 14px; font: inherit; font-size: 13px; color: var(--ink); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+
+  .tabs { display: flex; gap: 2px; padding: 0 20px; background: var(--panel); border-bottom: 1px solid var(--line); align-items: flex-end; }
+  .tab { padding: 10px 16px 11px; font-size: 13px; color: var(--muted); border-bottom: 3px solid transparent; display: flex; gap: 6px; align-items: center; }
+  .tab.on { color: var(--accent); border-bottom-color: var(--accent); font-weight: 700; }
+  .tab .dot { width: 18px; height: 18px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; color: #fff; background: var(--error); }
+  .tab .done { color: var(--ok); }
+
+  main { display: grid; grid-template-columns: 1fr 1fr; min-height: 0; }
+  .editor { overflow: auto; padding: 20px 24px 40px; display: flex; flex-direction: column; gap: 10px; }
+  .editor h2 { font-size: 13px; color: var(--muted); font-weight: 400; margin: 6px 0 0; }
+  .block { background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; position: relative; }
+  .block .kind { position: absolute; top: -9px; left: 12px; background: var(--panel); padding: 0 6px; font-size: 11px; color: var(--muted); }
+  .block.h1 { font-weight: 700; font-size: 16px; border-left: 4px solid var(--accent); }
+  .block.h2 { font-weight: 700; }
+  .num { color: var(--accent); margin-right: 4px; }
+  .block.p { font-size: 14px; line-height: 1.9; }
+  .block.focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .err { text-decoration: underline wavy var(--error); text-underline-offset: 3px; background: var(--error-soft); }
+  .warn { text-decoration: underline wavy var(--warn); text-underline-offset: 3px; background: var(--warn-soft); }
+  .ref { background: var(--accent-soft); color: var(--accent); border-radius: 4px; padding: 0 3px; font-weight: 700; }
+  .note { margin-top: 8px; border-radius: 8px; padding: 8px 10px; font-size: 12px; display: flex; gap: 8px; align-items: center; }
+  .note.e { background: var(--error-soft); color: var(--error); }
+  .note.w { background: var(--warn-soft); color: var(--warn); }
+  .note .fix { margin-left: auto; background: #fff; border: 1px solid currentColor; border-radius: 6px; padding: 3px 8px; font-weight: 700; }
+  .fig { display: grid; grid-template-columns: 96px 1fr; gap: 12px; align-items: center; }
+  .fig .img { height: 96px; border-radius: 6px; background: repeating-linear-gradient(45deg, #eef1f3 0 8px, #e4e8eb 8px 16px); display: grid; place-items: center; font-size: 11px; color: var(--muted); }
+  .field { font-size: 12px; color: var(--muted); }
+  .input { margin-top: 4px; border: 1px solid var(--line); border-radius: 6px; padding: 7px 9px; font-size: 13px; color: var(--ink); }
+  .input .pre { color: var(--muted); }
+  .adder { display: flex; gap: 6px; justify-content: center; }
+  .adder span { font-size: 12px; color: var(--accent); border: 1px dashed #9fd3cd; border-radius: 999px; padding: 4px 10px; background: #fff; }
+
+  .preview { border-left: 1px solid var(--line); background: #dfe3e7; overflow: auto; padding: 20px; display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .preview .label { align-self: stretch; display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+  .page-wrap { width: calc(210mm * .62); height: calc(297mm * .62); flex: none; }
+  .page { width: 210mm; height: 297mm; padding: 25mm 25mm 25mm 35mm; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.15); transform: scale(.62); transform-origin: top left; font-family: 'BIZ UDMincho', serif; font-size: 11pt; line-height: 18.4pt; letter-spacing: .189pt; text-align: justify; line-break: strict; position: relative; }
+  .page h1, .page h2 { font: inherit; margin: 0; }
+  .page h2 { margin-top: 18.4pt; }
+  .page h1 + h2 { margin-top: 0; }
+  .page p { margin: 0; text-indent: 1em; }
+  .page .hl { background: #fff3b0; }
+  .page figure { margin: 18.4pt 0; text-align: center; }
+  .page .ph { width: 52mm; height: 62mm; margin: 0 auto; background: repeating-linear-gradient(45deg, #eee 0 8px, #e4e4e4 8px 16px); }
+  .page figcaption { margin-top: 9pt; }
+  .page .pno { position: absolute; bottom: 12mm; left: 0; right: 0; text-align: center; }
+
+  footer { display: flex; gap: 22px; align-items: center; padding: 0 20px; background: var(--panel); border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); }
+  footer b { color: var(--ink); }
+  footer .ok { color: var(--ok); }
+  footer .ng { color: var(--error); }
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">卒</div>
+  <div class="title">卒業制作報告書 作成ツール<small>2026年度　卒業イベント「シンドバッド」について</small></div>
+  <div class="spacer"></div>
+  <span class="chip">自動保存 14:32</span>
+  <span class="chip e">エラー 3</span>
+  <span class="chip w">警告 1</span>
+  <button class="btn">バックアップ</button>
+  <button class="btn primary">PDFを書き出す</button>
+</header>
+<nav class="tabs">
+  <div class="tab"><span class="done">✓</span>基本情報</div>
+  <div class="tab"><span class="done">✓</span>抄録</div>
+  <div class="tab on">本文<span class="dot">3</span></div>
+  <div class="tab">引用・参考文献</div>
+  <div class="tab">作品写真</div>
+  <div class="tab">目次（自動）</div>
+</nav>
+<main>
+  <section class="editor">
+    <div class="block h1"><span class="kind">大見出し</span><span class="num">Ⅰ．</span>企画・立案</div>
+    <div class="block h2"><span class="kind">小見出し</span><span class="num">ⅰ．</span>担当衣装のキャラクター</div>
+    <div class="block p"><span class="kind">段落</span>筆者が担当したのは、物語の主人公である船乗りシンドバッドの衣装である。七つの航海を経て成長していく人物であり、場面ごとに異なる表情を見せる。<span class="err">私は</span>、旅立ちの場面の若々しさと、帰還の場面の頼もしさの両方を衣装で表したいと考えた。
+      <div class="note e">エラー：一人称は「筆者」にする（手順書）　「私は」→「筆者は」<span class="fix">修正する</span></div>
+    </div>
+    <div class="block h2"><span class="kind">小見出し</span><span class="num">ⅱ．</span>デザイン説明</div>
+    <div class="block p focus"><span class="kind">段落</span><span class="err">１５</span>世紀ごろの中東の装いをもとに、航海の力強さと冒険心を表すデザインを考えた<span class="ref">（図1）</span>。キーワードは自由、勇気、海である。袖は風をはらむように大きく膨らませ、腰には幅の広い帯を巻いた。帯には波の模様を刺繍で入れ、<span class="warn">海の青と砂の金</span>。
+      <div class="note e">エラー：数字は半角で書く（手順書）　全角の「１５」→ 半角の「15」<span class="fix">修正する</span></div>
+      <div class="note w">警告：体言止めになっていないか確認（手順書）<span class="fix">確認した</span></div>
+    </div>
+    <div class="block fig"><span class="kind">図</span>
+      <div class="img">写真を選ぶ</div>
+      <div><div class="field">図のタイトル（番号は自動）</div><div class="input"><span class="pre">図1.</span>デザイン画</div><div class="field" style="margin-top:6px">大きさ：自動（100mm以内）　並べ方：1枚</div></div>
+    </div>
+    <div class="adder"><span>＋ 段落</span><span>＋ 小見出し</span><span>＋ 図</span><span>＋ 素材表</span></div>
+  </section>
+
+  <section class="preview">
+    <div class="label"><span>プレビュー（提出PDFと同じ見た目）</span><span>本文 1 / 4ページ</span></div>
+    <div class="page-wrap">
+      <div class="page">
+        <h1>Ⅰ．企画・立案</h1>
+        <h2>ⅰ．担当衣装のキャラクター</h2>
+        <p>筆者が担当したのは、物語の主人公である船乗りシンドバッドの衣装である。七つの航海を経て成長していく人物であり、場面ごとに異なる表情を見せる。私は、旅立ちの場面の若々しさと、帰還の場面の頼もしさの両方を衣装で表したいと考えた。</p>
+        <h2>ⅱ．デザイン説明</h2>
+        <p class="hl">１５世紀ごろの中東の装いをもとに、航海の力強さと冒険心を表すデザインを考えた（図1）。キーワードは自由、勇気、海である。袖は風をはらむように大きく膨らませ、腰には幅の広い帯を巻いた。帯には波の模様を刺繍で入れ、海の青と砂の金。</p>
+        <figure><div class="ph"></div><figcaption>図1.デザイン画</figcaption></figure>
+        <div class="pno">1</div>
+      </div>
+    </div>
+  </section>
+</main>
+<footer>
+  <span>本文 <b>3.2</b> / 5ページ以上 <span class="ng">あと約2ページ</span></span>
+  <span>抄録 <b>642字</b> / 600〜900字 <span class="ok">✓</span></span>
+  <span>抄録 <b>18行</b> / 15〜23行 <span class="ok">✓</span></span>
+  <span>画像 <b>4枚</b>（目安 2枚／ページ）<span class="ok">✓</span></span>
+  <span class="spacer"></span>
+  <span>最終締切 1月20日（水）まで <b>あと107日</b></span>
+</footer>
+</body>
+</html>

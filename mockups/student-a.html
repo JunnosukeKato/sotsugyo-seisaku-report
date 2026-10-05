@@ -1,0 +1,160 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案A 紙面に直接書く型</title>
+<script type="module" src="./fonts.ts"></script>
+<style>
+  :root {
+    --bg: #e9e7e3;
+    --panel: #f7f6f3;
+    --line: #d9d6d0;
+    --ink: #23262b;
+    --muted: #6b6f76;
+    --accent: #3446a8;
+    --accent-soft: #e6e9f7;
+    --error: #c62828;
+    --error-soft: #fdecec;
+    --warn: #a86400;
+    --warn-soft: #fff4e0;
+    --ok: #2e7d4f;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; font-family: 'BIZ UDPGothic', sans-serif; color: var(--ink); background: var(--bg); height: 100vh; display: grid; grid-template-rows: 52px 1fr; }
+
+  header { display: flex; align-items: center; gap: 16px; padding: 0 16px; background: #fff; border-bottom: 1px solid var(--line); }
+  .brand { font-weight: 700; font-size: 15px; }
+  .brand small { font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .saved { font-size: 12px; color: var(--muted); }
+  .spacer { flex: 1; }
+  .deadline { font-size: 12px; color: var(--muted); }
+  .deadline b { color: var(--ink); }
+  .btn { border: 1px solid var(--line); background: #fff; border-radius: 6px; padding: 7px 12px; font: inherit; font-size: 13px; color: var(--ink); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+
+  main { display: grid; grid-template-columns: 200px 1fr 300px; min-height: 0; }
+
+  nav { background: var(--panel); border-right: 1px solid var(--line); padding: 12px 10px; overflow: auto; }
+  nav h3 { font-size: 11px; color: var(--muted); margin: 8px 6px; font-weight: 400; letter-spacing: .05em; }
+  .thumb { display: flex; align-items: center; gap: 10px; padding: 6px; border-radius: 6px; font-size: 13px; }
+  .thumb .mini { width: 34px; height: 48px; background: #fff; border: 1px solid var(--line); border-radius: 2px; position: relative; flex: none; }
+  .thumb .mini::after { content: ''; position: absolute; inset: 7px 5px; background: repeating-linear-gradient(#d0d0d0 0 1px, transparent 1px 4px); }
+  .thumb.active { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+  .thumb .badge { margin-left: auto; font-size: 11px; background: var(--error); color: #fff; border-radius: 9px; padding: 0 6px; }
+  .thumb .auto { margin-left: auto; font-size: 10px; color: var(--muted); }
+
+  .canvas { overflow: auto; padding: 24px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .toolbar { position: sticky; top: 0; z-index: 2; display: flex; gap: 6px; background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 6px; box-shadow: 0 2px 8px rgba(0,0,0,.08); }
+  .toolbar button { border: 0; background: transparent; font: inherit; font-size: 13px; padding: 6px 10px; border-radius: 6px; color: var(--ink); }
+  .toolbar button:hover, .toolbar button.on { background: var(--accent-soft); color: var(--accent); }
+  .toolbar .sep { width: 1px; background: var(--line); margin: 4px 2px; }
+
+  .page-wrap { width: calc(210mm * .72); height: calc(297mm * .72); flex: none; }
+  .page { width: 210mm; height: 297mm; padding: 25mm 25mm 25mm 35mm; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.15); transform: scale(.72); transform-origin: top left; font-family: 'BIZ UDMincho', serif; font-size: 11pt; line-height: 18.4pt; letter-spacing: .189pt; text-align: justify; line-break: strict; position: relative; }
+  .page h1, .page h2 { font: inherit; margin: 0; }
+  .page h2 { margin-top: 18.4pt; }
+  .page h1 + h2 { margin-top: 0; }
+  .page p { margin: 0; text-indent: 1em; }
+  .page .editing { outline: 2px solid var(--accent); outline-offset: 3px; border-radius: 1px; }
+  .page .caret { display: inline-block; width: 1px; height: 13pt; background: var(--accent); vertical-align: -2pt; }
+  .page figure { margin: 18.4pt 0; text-align: center; }
+  .page .ph { width: 52mm; height: 62mm; margin: 0 auto; background: repeating-linear-gradient(45deg, #eee 0 8px, #e4e4e4 8px 16px); display: grid; place-items: center; font-family: 'BIZ UDPGothic'; font-size: 9pt; color: #999; }
+  .page figcaption { margin-top: 9pt; }
+  .page .pno { position: absolute; bottom: 12mm; left: 0; right: 0; text-align: center; }
+  .err { text-decoration: underline wavy var(--error); text-decoration-thickness: 1.5px; text-underline-offset: 3px; background: var(--error-soft); }
+  .warn { text-decoration: underline wavy var(--warn); text-decoration-thickness: 1.5px; text-underline-offset: 3px; background: var(--warn-soft); }
+  .pop { position: absolute; left: 70mm; top: 92mm; width: 92mm; background: #fff; border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 6px 20px rgba(0,0,0,.18); padding: 10px 12px; font-family: 'BIZ UDPGothic'; font-size: 9.5pt; line-height: 1.6; letter-spacing: 0; text-indent: 0; z-index: 3; }
+  .pop .tag { display: inline-block; background: var(--error); color: #fff; font-size: 8pt; border-radius: 3px; padding: 0 5px; margin-right: 4px; }
+  .pop .ex { margin: 6px 0; padding: 6px 8px; background: var(--panel); border-radius: 4px; font-size: 9pt; }
+  .pop .acts { display: flex; gap: 6px; justify-content: flex-end; }
+  .pop .acts span { padding: 3px 8px; border-radius: 4px; border: 1px solid var(--line); font-size: 9pt; }
+  .pop .acts span.go { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  aside { background: var(--panel); border-left: 1px solid var(--line); padding: 14px; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+  aside h2 { font-size: 14px; margin: 0; }
+  .meters { display: grid; gap: 8px; }
+  .meter { background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; font-size: 12px; }
+  .meter .row { display: flex; justify-content: space-between; }
+  .meter .bar { height: 6px; background: #eceae6; border-radius: 3px; margin-top: 6px; overflow: hidden; }
+  .meter .bar i { display: block; height: 100%; background: var(--accent); border-radius: 3px; }
+  .counts { display: flex; gap: 6px; }
+  .count { flex: 1; text-align: center; border-radius: 8px; padding: 6px 0; font-size: 12px; }
+  .count b { display: block; font-size: 18px; }
+  .count.e { background: var(--error-soft); color: var(--error); }
+  .count.w { background: var(--warn-soft); color: var(--warn); }
+  .count.h { background: var(--accent-soft); color: var(--accent); }
+  .issue { background: #fff; border: 1px solid var(--line); border-left: 4px solid var(--error); border-radius: 6px; padding: 8px 10px; font-size: 12px; line-height: 1.6; }
+  .issue.w { border-left-color: var(--warn); }
+  .issue .where { color: var(--muted); font-size: 11px; }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand">卒業制作報告書<small>2026年度</small></div>
+  <div class="saved">✓ 自動保存しました（14:32）</div>
+  <div class="spacer"></div>
+  <div class="deadline">最終締切 1月20日（水）まで <b>あと107日</b></div>
+  <button class="btn">バックアップを保存</button>
+  <button class="btn">プレビュー</button>
+  <button class="btn primary">PDFを書き出す</button>
+</header>
+<main>
+  <nav>
+    <h3>ページ</h3>
+    <div class="thumb"><span class="mini"></span>表紙</div>
+    <div class="thumb"><span class="mini"></span>抄録</div>
+    <div class="thumb"><span class="mini"></span>目次<span class="auto">自動</span></div>
+    <div class="thumb active"><span class="mini"></span>本文 1<span class="badge">3</span></div>
+    <div class="thumb"><span class="mini"></span>本文 2</div>
+    <div class="thumb"><span class="mini"></span>本文 3<span class="badge">1</span></div>
+    <div class="thumb"><span class="mini"></span>引用・参考文献</div>
+    <div class="thumb"><span class="mini"></span>作品写真</div>
+  </nav>
+
+  <section class="canvas">
+    <div class="toolbar">
+      <button>大見出し</button><button>小見出し</button><button class="on">段落</button>
+      <span class="sep"></span>
+      <button>図を入れる</button><button>図を参照（図n）</button><button>素材表</button>
+      <span class="sep"></span>
+      <button>元に戻す</button>
+    </div>
+    <div class="page-wrap">
+      <div class="page">
+        <h1>Ⅰ．企画・立案</h1>
+        <h2>ⅰ．担当衣装のキャラクター</h2>
+        <p>筆者が担当したのは、物語の主人公である船乗りシンドバッドの衣装である。七つの航海を経て成長していく人物であり、場面ごとに異なる表情を見せる。<span class="err">私は</span>、旅立ちの場面の若々しさと、帰還の場面の頼もしさの両方を衣装で表したいと考えた。</p>
+        <h2>ⅱ．デザイン説明</h2>
+        <p class="editing"><span class="err">１５</span>世紀ごろの中東の装いをもとに、航海の力強さと冒険心を表すデザインを考えた（図1）。キーワードは自由、勇気、海である。袖は風をはらむように大きく膨らませ、腰には幅の広い帯を巻いた。帯には波の模様を刺繍で入れ、<span class="warn">海の青と砂の金</span>。<span class="caret"></span></p>
+        <figure><div class="ph">図の画像</div><figcaption>図1.デザイン画</figcaption></figure>
+        <div class="pno">1</div>
+        <div class="pop">
+          <span class="tag">エラー</span><b>数字は半角で書く</b>（手順書）
+          <div class="ex">全角の「１５世紀」→ 半角の「15世紀」</div>
+          <div class="acts"><span>くわしく</span><span class="go">修正する</span></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <aside>
+    <h2>セルフチェック</h2>
+    <div class="counts">
+      <div class="count e"><b>3</b>エラー</div>
+      <div class="count w"><b>1</b>警告</div>
+      <div class="count h"><b>0</b>ヒント</div>
+    </div>
+    <div class="meters">
+      <div class="meter"><div class="row"><span>本文のページ数</span><b>3.2 / 5ページ以上</b></div><div class="bar"><i style="width:64%"></i></div></div>
+      <div class="meter"><div class="row"><span>抄録の文字数</span><b>642字（600〜900）</b></div><div class="bar"><i style="width:71%;background:var(--ok)"></i></div></div>
+      <div class="meter"><div class="row"><span>画像の枚数</span><b>4枚（目安 2枚／ページ）</b></div><div class="bar"><i style="width:40%;background:var(--ok)"></i></div></div>
+    </div>
+    <div class="issue"><b>一人称は「筆者」にする</b><div class="where">本文 1ページ ⅰ．担当衣装のキャラクター</div>「私は」→「筆者は」</div>
+    <div class="issue"><b>数字は半角で書く</b><div class="where">本文 1ページ ⅱ．デザイン説明</div>全角の「１５」→ 半角の「15」</div>
+    <div class="issue"><b>「です・ます」ではなく「である」調にする</b><div class="where">本文 3ページ ⅱ．シャツ</div>「縫い付けました。」→「縫い付けた。」</div>
+    <div class="issue w"><b>体言止めになっていないか確認</b><div class="where">本文 1ページ ⅱ．デザイン説明</div>「…砂の金。」</div>
+  </aside>
+</main>
+</body>
+</html>
