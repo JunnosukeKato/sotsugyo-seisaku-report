@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>v7 スマホ版の見本（並べて表示）</title>
+<style>
+  body { margin: 0; padding: 24px 28px 28px; background: #e4e1dc; font-family: 'BIZ UDPGothic', sans-serif; color: #23262b; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  p.lead { margin: 0 0 18px; font-size: 13px; color: #6b6f76; }
+  .row { display: flex; gap: 32px; }
+  figure { margin: 0; }
+  figcaption { font-size: 14px; font-weight: 700; margin-bottom: 10px; }
+  figcaption span { font-weight: 400; color: #6b6f76; margin-left: 8px; font-size: 12px; }
+  iframe { width: 390px; height: 844px; border: 10px solid #1d1e21; border-radius: 40px; background: #fff; box-shadow: 0 18px 40px rgba(0,0,0,.22); display: block; }
+</style>
+</head>
+<body>
+<div id="board"></div>
+<script type="module">
+  import '../fonts.ts'
+  const opt = new URLSearchParams(location.search).get('opt') ?? '1'
+  const BOARDS = {
+    1: { title: '案1　紙面に直接書く', lead: 'PCと同じように、紙面をタップしてその場で書く。書くときは本文の幅が画面いっぱいになるよう拡大する', frames: [['phone-1.html?state=view', '見るとき', '左右にはらうとページがめくれる'], ['phone-1.html?state=edit', '書くとき', '道具はキーボードのすぐ上']] },
+    2: { title: '案2　下から書く欄が出る', lead: '紙面の段落をタップすると、下から大きな文字の書く欄が出る。紙面は上に見えたまま', frames: [['phone-2.html?state=view', '見るとき', '左右にはらうとページがめくれる'], ['phone-2.html?state=edit', '書くとき', '文字は16pxで書ける']] },
+    3: { title: '案3　「書く」と「紙面」を切り替える', lead: '書くときは読みやすい文章の画面、仕上がりは「紙面」で確認する', frames: [['phone-3.html?state=view', '紙面', 'ページをめくって仕上がりを見る'], ['phone-3.html?state=edit', '書く', '文章の画面で書く']] },
+    check: { title: 'セルフチェック（3案共通）', lead: '下のタブの「チェック」で、下から出てくる', frames: [['phone-2.html?state=check', 'チェック', '指摘をタップするとその場所へ']] },
+  }
+  const b = BOARDS[opt]
+  document.getElementById('board').innerHTML = `<h1>${b.title}</h1><p class="lead">${b.lead}</p><div class="row">${b.frames.map(([src, cap, sub]) => `<figure><figcaption>${cap}<span>${sub}</span></figcaption><iframe src="${src}"></iframe></figure>`).join('')}</div>`
+</script>
+</body>
+</html>

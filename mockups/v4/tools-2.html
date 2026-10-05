@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v4 案2 道具が書いている所の横についてくる</title>
+<link rel="stylesheet" href="../v2/common.css">
+<link rel="stylesheet" href="../v3/v3.css">
+<link rel="stylesheet" href="./v4.css">
+</head>
+<body>
+<div class="app">
+  <section class="stage" id="stage">
+    <div class="book" id="book"></div>
+    <div class="palette vertical follow" id="tools"></div>
+    <button class="nav-arrow prev" id="prev" aria-label="前のページ">←</button>
+    <button class="nav-arrow next" id="next" aria-label="次のページ">→</button>
+  </section>
+  <aside class="side" id="side"></aside>
+</div>
+<script type="module">
+  import '../fonts.ts'
+  import { startV4 } from './v4.js'
+  const stage = document.getElementById('stage')
+  const palette = document.getElementById('tools')
+  // 道具を、書いている段落の高さにそろえる（紙面からはみ出さない範囲で）
+  const place = () => {
+    const pageTop = parseFloat(stage.style.getPropertyValue('--page-top')) || 0
+    const pageH = parseFloat(stage.style.getPropertyValue('--page-h')) || 0
+    const editing = document.querySelector('.page.current .editing')
+    let top = pageTop
+    if (editing) top = editing.getBoundingClientRect().top - stage.getBoundingClientRect().top - 8
+    palette.style.top = `${Math.max(pageTop, Math.min(top, pageTop + pageH - palette.offsetHeight))}px`
+  }
+  startV4({ top: 16, bottom: 16, side: 170 }, place)
+</script>
+</body>
+</html>

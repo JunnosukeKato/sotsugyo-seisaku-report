@@ -1,0 +1,40 @@
+/* デザイン2「ギャラリー」：暗い展示室に紙面を飾るような画面。白い紙面がいちばん目立つ。差し色はシャンパンゴールド */
+:root {
+  --stage-bg: radial-gradient(ellipse 70% 60% at 50% 45%, #3b3c41 0%, #26272b 65%, #1f2023 100%);
+  --app-bg: #1f2023;
+  --panel-bg: #19191c;
+  --line: #2c2d31;
+  --ink: #eceae5;
+  --muted: #94959b;
+  --accent: #c9aa6c;
+  --accent-strong: #d9bd85;
+  --accent-ink: #1b1b1e;
+  --error: #f08a7c;
+  --error-soft: rgba(240, 138, 124, 0.12);
+  --warn: #e9c46a;
+  --warn-soft: rgba(233, 196, 106, 0.1);
+  --ok: #7cc79a;
+  --chip-bg: #232427;
+  --btn-bg: #1f2023;
+  --palette-bg: rgba(28, 29, 32, 0.88);
+  --palette-line: #34353a;
+  --palette-ink: #cfcdc7;
+  --palette-hover: rgba(255, 255, 255, 0.07);
+  --arrow-bg: rgba(255, 255, 255, 0.06);
+  --arrow-ink: #cfcdc7;
+  --arrow-hover-bg: rgba(255, 255, 255, 0.12);
+  --thumb-line: #3a3b40;
+  --r-lg: 12px;
+  --r-md: 6px;
+  --float-shadow: 0 12px 32px rgba(0, 0, 0, 0.35);
+  --page-shadow: 0 24px 70px rgba(0, 0, 0, 0.55), 0 2px 6px rgba(0, 0, 0, 0.3);
+  --mark-bg: transparent;
+  --mark-ink: var(--accent);
+}
+.side { border-left-color: #111113; }
+.mark { border: 1px solid var(--accent); border-radius: 50%; font-family: 'BIZ UDMincho', serif; font-weight: 400; }
+.brand-name { font-family: 'BIZ UDMincho', serif; font-weight: 400; font-size: 16px; letter-spacing: 0.14em; }
+.sec-h > span:first-child { font-family: 'BIZ UDMincho', serif; color: var(--accent); letter-spacing: 0.18em; }
+.chip b { color: var(--accent-strong); }
+.export { letter-spacing: 0.14em; border-radius: 4px; }
+.issue2 .fix { border-radius: 4px; }

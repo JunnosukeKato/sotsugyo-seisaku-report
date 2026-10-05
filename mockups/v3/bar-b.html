@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v3 案B 上のバーの中身を左の欄へ</title>
+<link rel="stylesheet" href="../v2/common.css">
+<link rel="stylesheet" href="./v3.css">
+<style>
+  .app { grid-template-columns: 84px 1fr 300px; }
+  .rail { background: #fff; border-right: 1px solid var(--line); display: flex; flex-direction: column; min-height: 0; }
+  .rail .logo { padding: 10px 4px 8px; text-align: center; border-bottom: 1px solid var(--line); font-size: 11px; line-height: 1.35; }
+  .rail .logo b { display: block; font-size: 12px; }
+  .rail .logo .ok { display: block; margin-top: 4px; color: #2e7d32; font-size: 10px; }
+  .rail .toolbox { border: 0; flex: 1; }
+  .rail .bottom { padding: 6px; border-top: 1px solid var(--line); display: flex; flex-direction: column; gap: 4px; }
+  .rail .tool.pdf { background: var(--accent); color: #fff; font-weight: 700; line-height: 1.3; }
+  .rail .tool.pdf:hover { background: #26358a; color: #fff; }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="rail">
+    <div class="logo"><b>卒業制作<br>報告書</b>2026年度<span class="ok">✓ 保存済み</span></div>
+    <div class="toolbox" id="tools"></div>
+    <div class="bottom" id="bottom"></div>
+  </div>
+  <section class="stage" id="stage">
+    <div class="book" id="book"></div>
+    <button class="nav-arrow prev" id="prev" aria-label="前のページ">←</button>
+    <button class="nav-arrow next" id="next" aria-label="次のページ">→</button>
+  </section>
+  <aside class="side" id="side"></aside>
+</div>
+<script type="module">
+  import '../fonts.ts'
+  import { ICONS, PAGES_BOX, CHECK_BOX, start } from './v3.js'
+  document.getElementById('bottom').innerHTML = `
+    <button class="tool">${ICONS.handbook}<span>手順書</span></button>
+    <button class="tool">${ICONS.backup}<span>バックアップ</span></button>
+    <button class="tool pdf">${ICONS.pdf}<span>PDFを<br>書き出す</span></button>`
+  document.getElementById('side').innerHTML = `
+    <section><div class="deadline-line">最終締切 1月20日（水）まで <b>あと107日</b></div></section>
+    ${PAGES_BOX}
+    ${CHECK_BOX}`
+  start({ top: 16, bottom: 16, side: 75 })
+</script>
+</body>
+</html>

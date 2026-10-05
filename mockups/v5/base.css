@@ -1,0 +1,83 @@
+/* デザイン案（v5）の骨組み。色・形の値は theme-*.css の変数で決める */
+body { background: var(--app-bg, var(--stage-bg)); color: var(--ink); -webkit-font-smoothing: antialiased; }
+.app { height: 100%; display: grid; grid-template-columns: 1fr 312px; }
+
+/* 紙面 */
+.stage { position: relative; overflow: hidden; background: var(--stage-bg); }
+.stage .page { box-shadow: var(--page-shadow); color: #000; }
+
+/* 道具（紙面の左わき） */
+.palette { position: absolute; z-index: 10; left: calc(50% - var(--page-w) / 2 - 96px); top: var(--page-top); width: 76px; display: flex; flex-direction: column; padding: 6px; background: var(--palette-bg); border: 1px solid var(--palette-line); border-radius: var(--r-lg); box-shadow: var(--float-shadow); backdrop-filter: blur(12px); }
+.palette .group { display: flex; flex-direction: column; gap: 1px; }
+.palette .group + .group { border-top: 1px solid var(--palette-line); margin-top: 5px; padding-top: 5px; }
+.tb { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%; padding: 8px 0 7px; border: 0; background: none; color: var(--palette-ink); border-radius: var(--r-md); font-size: 10.5px; letter-spacing: 0.02em; transition: background 0.15s, color 0.15s; }
+.tb svg { width: 22px; height: 22px; }
+.tb:hover { background: var(--palette-hover); color: var(--accent-strong, var(--accent)); }
+.tb.danger { color: var(--error); }
+
+/* ←→ */
+.arrow { position: absolute; z-index: 10; top: 50%; translate: 0 -50%; width: 48px; height: 48px; display: grid; place-items: center; border-radius: 50%; border: var(--arrow-border, 0); background: var(--arrow-bg); color: var(--arrow-ink); box-shadow: var(--arrow-shadow, none); transition: background 0.15s, color 0.15s, opacity 0.15s; }
+.arrow svg { width: 24px; height: 24px; }
+.arrow:hover:not(:disabled) { background: var(--arrow-hover-bg); color: var(--accent-strong, var(--accent)); }
+.arrow:disabled { opacity: 0.25; cursor: default; }
+.arrow.prev { left: calc(50% - var(--page-w) / 2 - 96px - 64px); }
+.arrow.next { left: calc(50% + var(--page-w) / 2 + 16px); }
+
+/* 右の欄 */
+.side { display: flex; flex-direction: column; min-height: 0; background: var(--panel-bg); border-left: 1px solid var(--line); }
+.side-head { padding: 20px 20px 16px; }
+.brand-row { display: flex; align-items: center; gap: 11px; }
+.mark { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 9px; background: var(--mark-bg, var(--accent)); color: var(--mark-ink, var(--accent-ink)); font-size: 16px; font-weight: 700; }
+.brand-name { font-size: 15px; font-weight: 700; letter-spacing: 0.06em; }
+.brand-sub { font-size: 11px; color: var(--muted); margin-top: 1px; letter-spacing: 0.04em; }
+.meta { display: flex; gap: 6px; margin-top: 14px; flex-wrap: wrap; }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 4px 10px; border-radius: 999px; background: var(--chip-bg); color: var(--muted); }
+.chip b { color: var(--ink); font-size: 13px; }
+.chip.saved .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
+.links { display: flex; gap: 8px; margin-top: 12px; }
+.link-btn { flex: 1; display: flex; align-items: center; justify-content: center; gap: 6px; padding: 7px 0; border-radius: var(--r-md); border: 1px solid var(--line); background: var(--btn-bg); color: var(--ink); font-size: 12.5px; transition: border-color 0.15s, color 0.15s; }
+.link-btn svg { width: 16px; height: 16px; color: var(--muted); }
+.link-btn:hover { border-color: var(--accent); color: var(--accent-strong, var(--accent)); }
+
+.sec { padding: 14px 20px 16px; border-top: 1px solid var(--line); }
+.sec-h { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; font-size: 11.5px; color: var(--muted); letter-spacing: 0.08em; }
+.sec-h .pcount { letter-spacing: 0.02em; }
+.sec-h .pcount b { color: var(--ink); font-size: 14px; }
+
+/* ページ一覧（紙面を縮小した本物の見た目） */
+.thumb-list { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px 8px; }
+.thumb-list .t { border: 0; background: none; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 9.5px; white-space: nowrap; color: var(--muted); }
+.mini { color: #000; position: relative; width: 36px; height: 51px; background: #fff; border-radius: 2px; overflow: hidden; box-shadow: 0 0 0 1px var(--thumb-line, var(--line)); transition: box-shadow 0.15s; }
+.mini .mini-page { display: block !important; position: absolute; inset: auto; left: 0; top: 0; width: 794px; height: 1123px; transform: scale(0.04534); transform-origin: 0 0; box-shadow: none !important; animation: none !important; }
+.mini .mini-page.photos { display: grid !important; }
+.thumb-list .t:hover .mini { box-shadow: 0 0 0 1px var(--accent); }
+.thumb-list .t.on { color: var(--accent-strong, var(--accent)); font-weight: 700; }
+.thumb-list .t.on .mini { box-shadow: 0 0 0 2px var(--accent); }
+.thumb-list .t { position: relative; }
+.thumb-list .t.has-error::after { content: ''; position: absolute; top: -3px; right: 2px; width: 8px; height: 8px; border-radius: 50%; background: var(--error); box-shadow: 0 0 0 2px var(--panel-bg); }
+
+/* セルフチェック */
+.check { flex: 1; overflow: auto; }
+.summary { display: flex; gap: 8px; margin-bottom: 6px; }
+.stat { flex: 1; display: flex; align-items: baseline; justify-content: center; gap: 6px; padding: 8px 0; border-radius: var(--r-md); font-size: 12px; }
+.stat b { font-size: 20px; line-height: 1; }
+.stat.err { background: var(--error-soft); color: var(--error); }
+.stat.warn { background: var(--warn-soft); color: var(--warn); }
+.issues { list-style: none; margin: 0; padding: 0; }
+.issue2 { display: grid; grid-template-columns: 8px 1fr auto; gap: 10px; align-items: start; padding: 12px 0; border-bottom: 1px solid var(--line); }
+.issue2 .dot { width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--error); }
+.issue2 .ttl { font-size: 13px; font-weight: 700; }
+.issue2 .where { font-size: 11.5px; color: var(--muted); margin-top: 3px; }
+.issue2 .sug { font-size: 12px; margin-top: 1px; }
+.issue2 .fix { align-self: center; border: 1px solid var(--accent); background: transparent; color: var(--accent-strong, var(--accent)); border-radius: 999px; padding: 3px 12px; font-size: 11.5px; }
+.issue2 .fix:hover { background: var(--accent); color: var(--accent-ink); }
+
+/* 書き出し */
+.side-foot { padding: 14px 20px 18px; border-top: 1px solid var(--line); }
+.export { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 0; border: 0; border-radius: var(--r-md); background: var(--accent); color: var(--accent-ink); font-size: 14px; font-weight: 700; letter-spacing: 0.06em; box-shadow: var(--export-shadow, none); transition: filter 0.15s; }
+.export svg { width: 18px; height: 18px; }
+.export:hover { filter: brightness(1.08); }
+.side-foot p { margin: 8px 0 0; font-size: 11px; color: var(--muted); text-align: center; }
+
+/* 書いている所の枠 */
+.stage .page .editing { outline-color: var(--accent); }

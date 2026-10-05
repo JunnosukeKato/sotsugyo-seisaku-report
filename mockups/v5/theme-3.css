@@ -1,0 +1,45 @@
+/* デザイン3「やわらか」：丸みのある、親しみやすい画面。右の欄も浮かんだカードにする。差し色はすみれ色 */
+:root {
+  --stage-bg: transparent;
+  --app-bg: linear-gradient(150deg, #eceef8 0%, #f3eff6 55%, #f7f1ee 100%);
+  --panel-bg: #fff;
+  --line: #eeedf3;
+  --ink: #26263a;
+  --muted: #8a8a9c;
+  --accent: #5b5bd6;
+  --accent-ink: #fff;
+  --error: #e0484f;
+  --error-soft: #fdeff0;
+  --warn: #c27c0e;
+  --warn-soft: #fdf4e4;
+  --ok: #31a36b;
+  --chip-bg: #f3f3f9;
+  --btn-bg: #f6f6fb;
+  --palette-bg: rgba(255, 255, 255, 0.92);
+  --palette-line: transparent;
+  --palette-ink: #4b4b63;
+  --palette-hover: #efeffc;
+  --arrow-bg: #fff;
+  --arrow-ink: #5b5bd6;
+  --arrow-hover-bg: #efeffc;
+  --arrow-shadow: 0 6px 18px rgba(70, 70, 140, 0.14);
+  --r-lg: 20px;
+  --r-md: 12px;
+  --float-shadow: 0 10px 30px rgba(70, 70, 140, 0.14);
+  --page-shadow: 0 18px 50px rgba(70, 70, 140, 0.16);
+  --mark-bg: linear-gradient(135deg, #7b6cf0, #e58fb3);
+  --export-shadow: 0 8px 20px rgba(91, 91, 214, 0.32);
+}
+.app { padding: 0; }
+.side { margin: 14px 14px 14px 0; border: 0; border-radius: 22px; box-shadow: 0 10px 34px rgba(70, 70, 140, 0.12); overflow: hidden; }
+.palette .group + .group { border-top: 1px solid #ececf4; }
+.mark { border-radius: 50%; }
+.link-btn { border-color: transparent; }
+.sec { border-top: 0; padding-top: 10px; }
+.sec-h > span:first-child { font-weight: 700; color: var(--ink); letter-spacing: 0.04em; font-size: 12.5px; }
+.mini { border-radius: 4px; }
+.issue2 { background: var(--error-soft); border: 0; border-radius: 14px; padding: 11px 12px; margin-top: 8px; }
+.issue2 .fix { background: #fff; border-color: transparent; box-shadow: 0 2px 6px rgba(70, 70, 140, 0.12); }
+.stat { border-radius: 14px; }
+.side-foot { border-top: 0; }
+.export { border-radius: 14px; background: linear-gradient(135deg, #6a5ae0, #5b5bd6); }

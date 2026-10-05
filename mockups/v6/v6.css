@@ -1,0 +1,56 @@
+/* デザイン案（v6）：デザイン1「紙と墨」（../v5/base.css・theme-1.css）に足す部品 */
+
+/* 道具：ページの種類と選んでいる物に合わせて入れ替わる */
+.palette { width: 86px; left: calc(50% - var(--page-w) / 2 - 104px); }
+.arrow.prev { left: calc(50% - var(--page-w) / 2 - 104px - 64px); }
+.palette .group[hidden] { display: none; }
+.p-head { padding: 6px 4px 8px; text-align: center; border-bottom: 1px solid var(--palette-line); margin-bottom: 4px; }
+.p-head b { display: block; font-size: 12px; letter-spacing: 0.1em; color: var(--ink); }
+.p-head span { display: block; margin-top: 3px; font-size: 10px; line-height: 1.4; color: var(--muted); }
+.palette .group.ctx { background: var(--accent-soft, #e8ebf5); border-radius: 10px; border-top: 0; margin-top: 6px; padding: 4px 0 2px; }
+.palette .group.ctx + .group { margin-top: 6px; }
+.ctx-label { font-size: 10px; text-align: center; color: var(--accent); font-weight: 700; letter-spacing: 0.08em; padding: 3px 0 1px; }
+.palette .group.ctx .tb:hover { background: rgba(255, 255, 255, 0.7); }
+.layouts { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 4px; }
+.lay { border: 1px solid transparent; background: #fff; border-radius: 6px; font-size: 11px; padding: 5px 0; color: var(--ink); }
+.lay.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+
+/* どこに入るかを示す線 */
+.page .insert-preview::after { content: 'ここに入ります'; display: block; margin: 6px 0 -10px; padding-bottom: 2px; border-bottom: 3px solid var(--accent); text-align: right; text-indent: 0; font: 700 13px 'BIZ UDPGothic', sans-serif; color: var(--accent); }
+.page figure.selected, .page .ph.selected { outline: 3px solid var(--accent); outline-offset: 6px; }
+.page .editing { outline: 2px solid var(--accent); outline-offset: 3px; }
+.page .err.flash { animation: flash 1.2s ease 2; }
+@keyframes flash { 50% { background: #ffd54f; box-shadow: 0 0 0 4px #ffd54f; } }
+
+/* 全体／拡大 */
+.zoom { position: absolute; z-index: 10; right: 16px; bottom: 16px; display: flex; padding: 3px; gap: 2px; background: rgba(255, 255, 255, 0.85); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--float-shadow); }
+.zoom button { display: flex; align-items: center; gap: 4px; border: 0; background: none; border-radius: 7px; padding: 5px 10px 5px 7px; font-size: 12px; color: var(--muted); }
+.zoom button svg { width: 16px; height: 16px; }
+.zoom button.on { background: var(--accent-soft, #e8ebf5); color: var(--accent); font-weight: 700; }
+
+/* 右の欄 */
+:root { --accent-soft: #e8ebf5; }
+.notice2 { margin: 0 20px 14px; padding: 9px 12px; border-radius: 8px; background: var(--accent-soft); font-size: 11.5px; line-height: 1.6; color: var(--ink); }
+.notice2 b { display: block; font-size: 11px; color: var(--accent); letter-spacing: 0.06em; }
+.tally { font-size: 11.5px; letter-spacing: 0; }
+.tally b { font-size: 15px; }
+.tally b.e { color: var(--error); }
+.tally b.w { color: var(--warn); }
+.meters2 { display: flex; flex-direction: column; gap: 9px; padding: 2px 0 12px; border-bottom: 1px solid var(--line); }
+.meter2 .row { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); }
+.meter2 .row b { font-size: 11.5px; color: var(--ok); }
+.meter2 .row b.ng { color: var(--error); }
+.meter2 .bar { height: 4px; margin-top: 4px; border-radius: 2px; background: var(--chip-bg); overflow: hidden; }
+.meter2 .bar i { display: block; height: 100%; border-radius: 2px; background: var(--ok); }
+.meter2 .bar i.ng { background: var(--error); }
+.igroup { margin-top: 12px; }
+.ig-h { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; color: var(--ink); letter-spacing: 0.08em; }
+.ig-h span { font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.issue2 { cursor: pointer; border-radius: 6px; padding: 10px 4px; margin: 0 -4px; }
+.issue2:hover { background: var(--chip-bg); }
+.issue2 .src { margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: var(--chip-bg); font-size: 9.5px; font-weight: 400; color: var(--muted); vertical-align: 1px; }
+.side-foot .src-link { display: block; margin-top: 6px; font-size: 10px; color: var(--muted); text-align: center; }
+
+/* 見本の作品写真（2枚）は上下に並べる */
+.page.photos.current, .page.photos.under, .page.photos.turn-in, .mini .mini-page.photos { grid-template-columns: 1fr !important; grid-template-rows: 1fr 1fr; }
+.page.photos .ph { height: auto; margin: 0; }

@@ -1,0 +1,21 @@
+/* デザイン案（v4）共通：案A（上のバーの中身を右の欄へ）＋道具を紙面のすぐそばに置く */
+.app { grid-template-columns: 1fr 300px; }
+.head { display: flex; flex-direction: column; gap: 4px; }
+.head .links { display: flex; gap: 6px; margin-top: 4px; }
+.foot { padding: 12px 14px; border-top: 1px solid var(--line); background: #fff; }
+.foot small { display: block; margin-top: 6px; font-size: 11px; color: var(--muted); text-align: center; }
+
+/* 道具（紙面のそばに浮かべる） */
+.palette { position: absolute; z-index: 10; display: flex; gap: 2px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.12); padding: 6px 4px; }
+.palette.vertical { flex-direction: column; width: 80px; left: calc(50% - var(--page-w) / 2 - 92px); top: var(--page-top); }
+.palette.horizontal { flex-direction: row; left: 50%; transform: translateX(-50%); top: calc(var(--page-top) - 68px); padding: 4px 6px; }
+.palette.horizontal .tool { padding: 4px 8px; white-space: nowrap; }
+.palette.follow { transition: top 0.25s ease; }
+
+/* ←→ は紙面のすぐ横に置く */
+.nav-arrow.prev { left: calc(50% - var(--page-w) / 2 - 70px); }
+.nav-arrow.next { right: auto; left: calc(50% + var(--page-w) / 2 + 18px); }
+.palette.vertical ~ .nav-arrow.prev { left: calc(50% - var(--page-w) / 2 - 92px - 70px); }
+
+/* 見本：紙面の段落をクリックすると「書いている所」になる */
+.page.current p, .page.current h2, .page.current figure, .page.current .abs-body { cursor: text; }

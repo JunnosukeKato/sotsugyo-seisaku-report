@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v3 案C 上のバーの中身を紙面のすみへ</title>
+<link rel="stylesheet" href="../v2/common.css">
+<link rel="stylesheet" href="./v3.css">
+<style>
+  .corner { position: absolute; z-index: 10; top: 14px; }
+  .corner.left { left: 16px; display: flex; flex-direction: column; gap: 2px; }
+  .corner.right { right: 16px; display: flex; flex-direction: column; gap: 6px; width: 150px; }
+  .corner.right .btn { text-align: left; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="toolbox" id="tools"></div>
+  <section class="stage" id="stage">
+    <div class="book" id="book"></div>
+    <div class="corner left"><div class="brand">卒業制作報告書<small>2026年度</small></div><span class="status">✓ 自動保存しました（14:32）</span></div>
+    <div class="corner right" id="corner"></div>
+    <button class="nav-arrow prev" id="prev" aria-label="前のページ">←</button>
+    <button class="nav-arrow next" id="next" aria-label="次のページ">→</button>
+  </section>
+  <aside class="side" id="side"></aside>
+</div>
+<script type="module">
+  import '../fonts.ts'
+  import { ICONS, PAGES_BOX, CHECK_BOX, start } from './v3.js'
+  document.getElementById('corner').innerHTML = `
+    <button class="btn primary">${ICONS.pdf}PDFを書き出す</button>
+    <button class="btn">${ICONS.backup}バックアップ</button>
+    <button class="btn">${ICONS.handbook}手順書</button>`
+  document.getElementById('side').innerHTML = `
+    <section><div class="deadline-line">最終締切 1月20日（水）まで <b>あと107日</b></div></section>
+    ${PAGES_BOX}
+    ${CHECK_BOX}`
+  // 右上のボタンと紙面が重ならないよう、左右を広めに空ける
+  start({ top: 16, bottom: 16, side: 180 })
+</script>
+</body>
+</html>
