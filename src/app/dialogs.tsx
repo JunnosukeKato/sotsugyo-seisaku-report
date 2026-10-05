@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { YearConfig } from '../config'
 import type { ReportFinding } from '../checker/reportChecks'
 import type { ReportEditor } from '../editor/reportEditor'
@@ -25,11 +25,23 @@ export function Modal({ title, onClose, children, wide }: { title: string; onClo
 }
 
 // ---- コースの選択（表紙のコース欄をクリックしたとき） ----
+// PC はコース欄のすぐ下（画面からはみ出すときは内側へずらす）、スマホは画面の下から出す（CSS）
 
 export function CourseMenu({ config, rect, current, onSelect, onClose }: { config: YearConfig; rect: DOMRect; current: string; onSelect: (id: string) => void; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const margin = 8
+    const left = Math.max(margin, Math.min(rect.left, window.innerWidth - el.offsetWidth - margin))
+    const below = rect.bottom + 6
+    const top = below + el.offsetHeight > window.innerHeight - margin ? Math.max(margin, rect.top - el.offsetHeight - 6) : below
+    el.style.left = `${left}px`
+    el.style.top = `${top}px`
+  }, [rect])
   return (
     <div className="popover-backdrop" onMouseDown={onClose}>
-      <div className="popover" style={{ left: rect.left, top: rect.bottom + 6 }} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="popover course-menu" ref={ref} style={{ left: rect.left, top: rect.bottom + 6 }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="popover-title">コースを選ぶ</div>
         {config.courses.filter((c) => !c.hidden || c.id === current).map((c) => (
           <button

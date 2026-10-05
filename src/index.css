@@ -265,9 +265,9 @@ button:disabled { cursor: default; opacity: 0.4; }
 .field input { font: inherit; font-size: 14px; color: var(--ink); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
 .ref-preview { margin-top: 8px; font-family: 'BIZ UDMincho', serif; font-size: 13px; background: var(--panel-bg); border-radius: 6px; padding: 6px 8px; }
 .popover-backdrop { position: fixed; inset: 0; z-index: 40; }
-.popover { position: fixed; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(30, 25, 20, 0.18); padding: 6px; display: grid; min-width: 240px; }
+.popover { position: fixed; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(30, 25, 20, 0.18); padding: 6px; display: grid; min-width: 240px; max-width: calc(100vw - 16px); }
 .popover-title { font-size: 11px; color: var(--muted); padding: 4px 8px; }
-.popover button { border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: 6px; font-size: 14px; }
+.popover button { border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: 6px; font-size: 14px; color: var(--ink); word-break: keep-all; overflow-wrap: anywhere; }
 .popover button:hover, .popover button.on { background: var(--accent-soft); color: var(--accent); }
 
 /* ---- スマホ版（mockups/v7 案2「下から書く欄が出る」）。画面の幅が狭いとき App が .phone を付ける ---- */
@@ -353,6 +353,12 @@ button:disabled { cursor: default; opacity: 0.4; }
 .add-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .add-grid .tb { padding: 14px 0 12px; border: 1px solid var(--line); background: #fff; border-radius: 12px; font-size: 12px; }
 .add-grid .tb svg { width: 26px; height: 26px; }
+
+/* スマホ：コースの選択は、画面の下から出す */
+.app.phone .popover-backdrop { background: rgba(20, 20, 25, 0.28); }
+.app.phone .popover.course-menu { left: 8px !important; right: 8px !important; top: auto !important; bottom: calc(8px + env(safe-area-inset-bottom)) !important; min-width: 0; padding: 8px; border-radius: 16px; box-shadow: 0 -8px 30px rgba(30, 25, 20, 0.2); animation: sheet-up 0.2s ease; }
+.app.phone .popover.course-menu .popover-title { padding: 6px 10px 8px; font-size: 12px; }
+.app.phone .popover.course-menu button { padding: 14px 12px; font-size: 15px; }
 
 /* ---- 印刷（PDFに保存）：紙面だけを、すべてのページを順に出す ---- */
 @media print {

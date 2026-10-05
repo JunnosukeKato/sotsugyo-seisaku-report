@@ -32,6 +32,26 @@ await withEdge(async (browser) => {
   check('紙面が画面の幅いっぱいに表示される', pageWidth > 330, `${Math.round(pageWidth)}px`)
   await shot('1-cover')
 
+  // 表紙のコース欄をタップすると、コースの一覧が画面の中（下から）に出る
+  const courseAt = await page.evaluate(() => {
+    const el = document.querySelector('.page-viewport.front [data-block-id="basic:course"]')
+    const r = el.getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })
+  await page.touchscreen.tap(courseAt.x, courseAt.y)
+  await page.waitForSelector('.popover.course-menu')
+  await wait(300)
+  await shot('1b-course')
+  const menu = await page.evaluate(() => {
+    const r = document.querySelector('.popover.course-menu').getBoundingClientRect()
+    const cut = [...document.querySelectorAll('.popover.course-menu button')].some((b) => b.scrollWidth > b.clientWidth + 1)
+    return { left: Math.round(r.left), right: Math.round(r.right), width: innerWidth, cut }
+  })
+  check('コースの一覧が画面からはみ出さず、名前が切れない', menu.left >= 0 && menu.right <= menu.width && !menu.cut, JSON.stringify(menu))
+  await page.evaluate(() => document.querySelector('.popover.course-menu button').click())
+  await ready()
+  check('コースの一覧から選べる', !!(await snap()).report.basicInfo.courseId)
+
 
   // 本文の段落をタップすると、下から書く欄が出る
   const pid = await page.evaluate(() => window.__editor.getSnapshot().report.body[0].blocks.find((b) => b.type === 'paragraph').id)
