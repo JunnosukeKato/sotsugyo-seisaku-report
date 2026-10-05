@@ -1,18 +1,27 @@
 import { currentConfig, type YearConfig } from '../config'
-import type { AdminServer, AdminState, HistoryRow, YearRow } from './server'
+import type { AdminServer, AdminState, HistoryRow, Member, YearRow } from './server'
 
 /**
  * 開発用の試験サーバー（ブラウザ内だけで動く）。本番の gas/admin-project/Code.js と同じ振る舞いをまねる。
  * 年度設定はこのブラウザの localStorage に保存する。
+ * admin.html?as=teacher で開くと、先生（ひな形だけ編集できる）として振る舞う。
  */
 
 const KEY = 'sotsugyo-admin-mock'
-const USER = 'admin@example.ac.jp'
+const ADMIN = 'admin@example.ac.jp'
+const TEACHER = 'sensei@example.ac.jp'
+const USER = new URLSearchParams(location.search).get('as') === 'teacher' ? TEACHER : ADMIN
 
 interface Store {
   years: YearRow[]
   history: HistoryRow[]
+  members?: Member[]
 }
+
+const DEFAULT_MEMBERS: Member[] = [
+  { email: ADMIN, memo: '試験用の管理者', role: '管理者' },
+  { email: TEACHER, memo: '試験用の先生', role: '先生' },
+]
 
 function load(): Store {
   try {
@@ -32,7 +41,15 @@ const wait = () => new Promise((r) => setTimeout(r, 200))
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v))
 
 export function createMockServer(): AdminServer {
-  const state = (store: Store): AdminState => ({ user: USER, isAdmin: true, years: clone(store.years).sort((a, b) => b.year - a.year) })
+  const members = (store: Store) => store.members ?? DEFAULT_MEMBERS
+  const roleOf = (store: Store) => members(store).find((m) => m.email === USER)?.role ?? null
+  const state = (store: Store): AdminState => {
+    const role = roleOf(store)
+    return { user: USER, isAdmin: role === '管理者', role: role === '管理者' ? 'admin' : role === '先生' ? 'teacher' : null, years: role ? clone(store.years).sort((a, b) => b.year - a.year) : [] }
+  }
+  const requireAdmin = (store: Store) => {
+    if (roleOf(store) !== '管理者') throw new Error(`管理者だけが変更できます（ログイン中：${USER}）`)
+  }
   const record = (store: Store, year: number, action: string, config: YearConfig) =>
     store.history.push({ at: new Date().toISOString(), user: USER, year, action, config: clone(config) })
 
@@ -44,6 +61,7 @@ export function createMockServer(): AdminServer {
     async saveYear(config) {
       await wait()
       const store = load()
+      requireAdmin(store)
       const row = store.years.find((y) => y.year === config.fiscalYear)
       if (row) Object.assign(row, { config, updatedAt: new Date().toISOString(), updatedBy: USER })
       else store.years.push({ year: config.fiscalYear, status: '準備中', config, updatedAt: new Date().toISOString(), updatedBy: USER })
@@ -79,6 +97,51 @@ export function createMockServer(): AdminServer {
       return load()
         .history.filter((h) => h.year === year)
         .reverse()
+    },
+    async saveTemplates(year, templates) {
+      await wait()
+      const store = load()
+      if (!roleOf(store)) throw new Error('登録された先生だけが使えます')
+      const row = store.years.find((y) => y.year === year)!
+      const names: string[] = []
+      for (const course of row.config.courses) {
+        const t = templates[course.id]
+        if (!t) continue
+        course.template = t.template
+        course.abstractExample = t.abstractExample
+        names.push(course.name)
+      }
+      Object.assign(row, { updatedAt: new Date().toISOString(), updatedBy: USER })
+      record(store, year, `下書きのひな形を保存（${names.join('・')}）`, row.config)
+      save(store)
+      return state(store)
+    },
+    async getMembers() {
+      await wait()
+      const store = load()
+      requireAdmin(store)
+      return clone(members(store))
+    },
+    async addMember(email, role, memo) {
+      await wait()
+      const store = load()
+      requireAdmin(store)
+      const list = clone(members(store))
+      const found = list.find((m) => m.email.toLowerCase() === email.trim().toLowerCase())
+      if (found) Object.assign(found, { role, memo: memo || found.memo })
+      else list.push({ email: email.trim(), role, memo })
+      store.members = list
+      save(store)
+      return clone(list)
+    },
+    async removeMember(email) {
+      await wait()
+      const store = load()
+      requireAdmin(store)
+      if (email.toLowerCase() === USER) throw new Error('自分の登録は外せません')
+      store.members = members(store).filter((m) => m.email.toLowerCase() !== email.toLowerCase())
+      save(store)
+      return clone(store.members)
     },
   }
 }

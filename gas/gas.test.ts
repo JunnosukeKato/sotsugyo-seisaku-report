@@ -10,6 +10,7 @@ class FakeSheet {
   constructor(public name: string) {}
   getLastRow = () => this.rows.length
   appendRow = (row: Cell[]) => void this.rows.push([...row])
+  deleteRow = (row: number) => void this.rows.splice(row - 1, 1)
   setFrozenRows = () => {}
   getDataRange = () => ({ getValues: () => this.rows.map((r) => [...r]) })
   getRange = (row: number, col: number, numRows = 1, numCols = 1) => ({
@@ -99,6 +100,46 @@ describe('管理ページ（admin-project）', () => {
 
     const history = gas.getHistory(2026)
     expect(history.map((h: { action: string }) => h.action)).toEqual(['保存', '初期設定'])
+  })
+
+  it('先生を登録すると、下書きのひな形だけを保存できる（ほかの設定は変えられない）', () => {
+    const gas = load('admin-project')
+    gas.setup()
+    const members = gas.addMember('sensei@example.ac.jp', '先生', '衣装の先生')
+    expect(members.map((m: { email: string; role: string }) => `${m.email}:${m.role}`)).toEqual(['kato@example.ac.jp:管理者', 'sensei@example.ac.jp:先生'])
+
+    user = 'sensei@example.ac.jp'
+    const state = gas.getState()
+    expect(state).toMatchObject({ isAdmin: false, role: 'teacher' })
+    expect(state.years).toHaveLength(1)
+    expect(() => gas.saveYear({ ...initialConfig, commonTitle: '先生が変えた題目' })).toThrow(/管理者だけ/)
+    expect(() => gas.addMember('x@example.ac.jp', '先生')).toThrow(/管理者だけ/)
+
+    const template = [{ type: 'chapter', title: '概要' }, { type: 'paragraph', hint: '概要を書く' }]
+    const saved = gas.saveTemplates(2026, { 'film-stage-costume': { template, abstractExample: '本制作報告書は、' }, 'no-such-course': { template } })
+    const course = saved.years[0].config.courses[0]
+    expect(course).toMatchObject({ template, abstractExample: '本制作報告書は、' })
+    expect(saved.years[0].config.commonTitle).toBe(initialConfig.commonTitle)
+    expect(gas.getHistory(2026)[0].action).toContain('下書きのひな形を保存')
+  })
+
+  it('登録していない人はひな形を保存できない。自分の登録は外せない', () => {
+    const gas = load('admin-project')
+    gas.setup()
+    gas.addMember('sensei@example.ac.jp', '先生')
+    expect(() => gas.removeMember('kato@example.ac.jp')).toThrow(/外せません/)
+    expect(gas.removeMember('sensei@example.ac.jp')).toHaveLength(1)
+    user = 'student@example.ac.jp'
+    expect(gas.getState()).toMatchObject({ role: null, years: [] })
+    expect(() => gas.saveTemplates(2026, {})).toThrow(/登録された先生だけ/)
+  })
+
+  it('役割の列がない古い管理者シートは、管理者として扱う', () => {
+    const gas = load('admin-project')
+    gas.setup()
+    const sheet = spreadsheet.getSheetByName('管理者')!
+    sheet.rows = [['メールアドレス', 'メモ'], ['kato@example.ac.jp', '']]
+    expect(gas.getState()).toMatchObject({ isAdmin: true, role: 'admin' })
   })
 })
 

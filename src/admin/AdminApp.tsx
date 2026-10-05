@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import type { Course, YearConfig } from '../config'
 import { validateConfig } from '../config/validate'
+import { MembersDialog } from './Members'
 import { Preview } from './Preview'
-import { isMockServer, server, type AdminState, type HistoryRow, type YearRow } from './server'
+import { isMockServer, roleOf, server, type AdminState, type HistoryRow, type TemplateSet, type YearRow } from './server'
+import { TemplateEditor } from './TemplateEditor'
+import { templateSummary } from './templateText'
 
 /**
  * 管理ページ（案2：設定と見本を並べる型）。デザインは mockups/admin-2.html。
  * 毎年変わる設定（共通の題目、コース、指導教員、締切など）を編集し、学生のツールに公開する。
+ * コースごとの「下書きのひな形」は、コースのカードの「編集する」から編集する（mockups/v8 案1）。
+ * 「先生」として登録された人には、ひな形だけを編集できる画面（TeacherView）を出す。
  */
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
@@ -45,6 +50,7 @@ function CourseCard({
   onRemove,
   onFocus,
   focused,
+  onEditTemplate,
 }: {
   course: Course
   index: number
@@ -55,6 +61,7 @@ function CourseCard({
   onRemove: () => void
   onFocus: () => void
   focused: boolean
+  onEditTemplate: () => void
 }) {
   const [before, after] = splitTemplate(course.subtitleTemplate)
   const [advisor, setAdvisor] = useState('')
@@ -104,6 +111,7 @@ function CourseCard({
           onBlur={addAdvisor}
         />
       </div>
+      <TemplateRow course={course} onEdit={onEditTemplate} />
       <div className="course-actions">
         <button disabled={index === 0} onClick={() => onMove(-1)}>
           ↑ 上へ
@@ -120,6 +128,19 @@ function CourseCard({
           </button>
         )}
       </div>
+    </div>
+  )
+}
+
+/** コースのカードの「下書きのひな形」の行 */
+function TemplateRow({ course, onEdit }: { course: Course; onEdit: () => void }) {
+  return (
+    <div className={`tpl-row${course.template?.length ? '' : ' default'}`}>
+      <span className="l">下書きのひな形</span>
+      <b>{templateSummary(course)}</b>
+      <button className="btn sm" onClick={onEdit}>
+        編集する
+      </button>
     </div>
   )
 }
@@ -147,7 +168,8 @@ export function AdminApp() {
   const [busy, setBusy] = useState(false)
   const [message, setMessage] = useState<{ kind: 'ok' | 'ng'; text: string } | null>(null)
   const [focusedCourse, setFocusedCourse] = useState(0)
-  const [dialog, setDialog] = useState<'newYear' | 'history' | null>(null)
+  const [dialog, setDialog] = useState<'newYear' | 'history' | 'members' | null>(null)
+  const [editingTemplate, setEditingTemplate] = useState<number | null>(null)
   const [history, setHistory] = useState<HistoryRow[]>([])
   const [newYear, setNewYear] = useState('')
 
@@ -198,15 +220,30 @@ export function AdminApp() {
   }
 
   if (!state) return <div className="admin-loading">{message ? message.text : '読み込んでいます…'}</div>
-  if (!state.isAdmin)
+  const role = roleOf(state)
+  if (!role)
     return (
       <div className="admin-loading">
-        このページは管理者だけが使えます。
+        このページは、登録された管理者と先生だけが使えます。
         <br />
         ログイン中：{state.user || '（不明）'}
       </div>
     )
   if (!draft || !row) return <div className="admin-loading">年度設定がありません。</div>
+  if (role === 'teacher')
+    return (
+      <TeacherView
+        state={state}
+        row={row}
+        draft={draft}
+        setDraft={setDraft}
+        dirty={dirty}
+        busy={busy}
+        message={message}
+        onSelectYear={(y) => select(state, y)}
+        onSave={(templates) => void run(row.status === '公開中' ? 'ひな形を保存し、学生のツールに反映しました' : 'ひな形を保存しました', () => server.saveTemplates(row.year, templates))}
+      />
+    )
 
   const set = (patch: Partial<YearConfig>) => setDraft({ ...draft, ...patch })
   const setCourse = (i: number, c: Course) => set({ courses: draft.courses.map((x, j) => (j === i ? c : x)) })
@@ -257,11 +294,6 @@ export function AdminApp() {
         {dirty && <span className="badge warn">保存していない変更があります</span>}
         {isMockServer && <span className="badge old">試験用サーバー</span>}
         <span className="spacer" />
-        {import.meta.env.VITE_SOURCE_URL && (
-          <a className="link" href={import.meta.env.VITE_SOURCE_URL} target="_blank" rel="noreferrer">
-            ソースコード（AGPL-3.0）
-          </a>
-        )}
         <span className="user">{state.user}</span>
         <button
           className="link"
@@ -271,6 +303,9 @@ export function AdminApp() {
           }}
         >
           変更履歴
+        </button>
+        <button className="link" onClick={() => setDialog('members')}>
+          先生の登録
         </button>
         <button
           className="btn"
@@ -334,6 +369,7 @@ export function AdminApp() {
                 set({ courses: draft.courses.filter((_, j) => j !== i) })
                 setFocusedCourse(0)
               }}
+              onEditTemplate={() => setEditingTemplate(i)}
             />
           ))}
           <button
@@ -399,6 +435,13 @@ export function AdminApp() {
               </Field>
             </div>
           </details>
+          {import.meta.env.VITE_SOURCE_URL && (
+            <p className="source">
+              <a href={import.meta.env.VITE_SOURCE_URL} target="_blank" rel="noreferrer">
+                このツールのソースコード（AGPL-3.0）
+              </a>
+            </p>
+          )}
         </section>
 
         <section className="stage">
@@ -414,6 +457,21 @@ export function AdminApp() {
           <Preview config={draft} courseId={draft.courses[focusedCourse]?.id ?? draft.courses[0]?.id ?? ''} />
         </section>
       </main>
+
+      {editingTemplate !== null && draft.courses[editingTemplate] && (
+        <TemplateEditor
+          course={draft.courses[editingTemplate]}
+          config={draft}
+          onClose={() => setEditingTemplate(null)}
+          onApply={(template, abstractExample) => {
+            setCourse(editingTemplate, { ...draft.courses[editingTemplate], template, abstractExample })
+            setEditingTemplate(null)
+            setMessage({ kind: 'ok', text: 'ひな形を反映しました。「保存」を押すと学生のツールに届きます' })
+          }}
+        />
+      )}
+
+      {dialog === 'members' && <MembersDialog me={state.user} onClose={() => setDialog(null)} />}
 
       {dialog === 'newYear' && (
         <Modal title="新年度を作成" onClose={() => setDialog(null)}>
@@ -464,6 +522,102 @@ export function AdminApp() {
             </ul>
           )}
         </Modal>
+      )}
+    </div>
+  )
+}
+
+/**
+ * 先生の画面：コースの一覧と「下書きのひな形」の編集だけ。保存はひな形だけを送る（ほかの設定はサーバー側でも変えられない）
+ */
+function TeacherView({
+  state,
+  row,
+  draft,
+  setDraft,
+  dirty,
+  busy,
+  message,
+  onSelectYear,
+  onSave,
+}: {
+  state: AdminState
+  row: YearRow
+  draft: YearConfig
+  setDraft: (c: YearConfig) => void
+  dirty: boolean
+  busy: boolean
+  message: { kind: 'ok' | 'ng'; text: string } | null
+  onSelectYear: (year: number) => void
+  onSave: (templates: TemplateSet) => void
+}) {
+  const [editing, setEditing] = useState<number | null>(null)
+  const isPublished = row.status === '公開中'
+  const save = () => {
+    const templates: TemplateSet = {}
+    draft.courses.forEach((c) => {
+      const before = row.config.courses.find((x) => x.id === c.id)
+      if (c.template && !same([c.template, c.abstractExample ?? ''], [before?.template, before?.abstractExample ?? ''])) {
+        templates[c.id] = { template: c.template, abstractExample: c.abstractExample ?? '' }
+      }
+    })
+    if (isPublished && !confirm('この年度は学生に公開中です。保存すると、すぐに学生のツールに反映されます（すでに書き始めた学生の原稿は変わりません）。保存しますか？')) return
+    onSave(templates)
+  }
+  return (
+    <div className="admin">
+      <header className="admin-header">
+        <b>卒業制作報告書 管理ページ</b>
+        <select
+          className="sel"
+          value={row.year}
+          onChange={(e) => {
+            if (dirty && !confirm('保存していない変更があります。破棄して年度を切り替えますか？')) return
+            onSelectYear(Number(e.target.value))
+          }}
+        >
+          {state.years.map((y) => (
+            <option key={y.year} value={y.year}>
+              {y.year}年度（{y.status}）
+            </option>
+          ))}
+        </select>
+        <span className={`badge ${isPublished ? 'pub' : row.status === '準備中' ? 'draft' : 'old'}`}>{row.status}</span>
+        {dirty && <span className="badge warn">保存していない変更があります</span>}
+        {isMockServer && <span className="badge old">試験用サーバー</span>}
+        <span className="spacer" />
+        <span className="user">{state.user}（先生）</span>
+        <button className="btn primary" disabled={busy || !dirty} onClick={save}>
+          {isPublished ? 'ひな形を保存して学生に反映' : 'ひな形を保存'}
+        </button>
+      </header>
+      <main className="teacher-main">
+        {message && <div className={`message ${message.kind}`}>{message.text}</div>}
+        <h2>コースごとの下書きのひな形（{draft.fiscalYear}年度）</h2>
+        <p className="hint">学生が最初に見る本文の組み立て（大見出し・小見出し・書くことの説明・図の枠・素材表）を、コースごとに決めます。先生は、どのコースのひな形も編集できます。</p>
+        {draft.courses
+          .map((c, i) => ({ c, i }))
+          .filter(({ c }) => !c.hidden)
+          .map(({ c, i }) => (
+            <div key={c.id} className="course">
+              <div className="top">
+                <b className="name">{c.name} コース</b>
+              </div>
+              <div className="hint">指導教員：{c.advisors.join('、') || '（未登録）'}</div>
+              <TemplateRow course={c} onEdit={() => setEditing(i)} />
+            </div>
+          ))}
+      </main>
+      {editing !== null && draft.courses[editing] && (
+        <TemplateEditor
+          course={draft.courses[editing]}
+          config={draft}
+          onClose={() => setEditing(null)}
+          onApply={(template, abstractExample) => {
+            setDraft({ ...draft, courses: draft.courses.map((c, j) => (j === editing ? { ...c, template, abstractExample } : c)) })
+            setEditing(null)
+          }}
+        />
       )}
     </div>
   )

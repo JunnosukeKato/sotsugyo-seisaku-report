@@ -97,3 +97,57 @@ textarea.in { resize: vertical; }
 .history { list-style: none; padding: 0; margin: 0; }
 .history li { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px; }
 .history small { display: block; color: var(--muted); }
+
+/* ---- 下書きのひな形（mockups/v8 案1） ---- */
+.tpl-row { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 7px 10px; border-radius: 8px; background: #f6f8fb; font-size: 12px; }
+.tpl-row .l { flex: none; }
+.tpl-row b { font-weight: 700; color: var(--ink); min-width: 0; }
+.tpl-row.default b { font-weight: 400; color: var(--muted); }
+.tpl-row .btn { margin-left: auto; flex: none; white-space: nowrap; }
+.tpl-row b { font-size: 11.5px; }
+.course-actions button { white-space: nowrap; }
+.source { margin: 18px 0 0; font-size: 11px; }
+.source a { color: var(--muted); }
+.btn.sm { padding: 4px 10px; font-size: 12px; }
+.modal.tpl-modal { width: min(1240px, calc(100vw - 32px)); height: min(820px, calc(100vh - 32px)); max-height: none; padding: 0; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+.tpl-modal > header { padding: 14px 20px; margin: 0; border-bottom: 1px solid var(--line); }
+.tpl-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 0; }
+.tpl-edit { padding: 14px 18px; overflow: auto; border-right: 1px solid var(--line); }
+.tpl-edit .f { margin-bottom: 10px; }
+.tpl-h { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 0 6px; }
+.tpl-h .l, .tpl-modal .adds .l { font-size: 12px; color: var(--muted); }
+.tpl-modal .ol { display: flex; flex-direction: column; gap: 4px; }
+.tpl-modal .row { display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 8px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.tpl-modal .row.subheading { margin-left: 22px; }
+.tpl-modal .row.paragraph, .tpl-modal .row.figure, .tpl-modal .row.materialTable { margin-left: 44px; background: #fafbfc; }
+.tpl-modal .row.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.tpl-modal .row .kind { font-size: 11px; color: var(--muted); white-space: nowrap; display: flex; gap: 6px; align-items: center; }
+.tpl-modal .row .kind b { color: var(--ink); font-family: 'BIZ UDMincho', serif; font-weight: 400; font-size: 13px; }
+.tpl-modal .row input { font: inherit; font-size: 13.5px; border: 0; background: transparent; padding: 6px 4px; border-radius: 6px; min-width: 0; color: var(--ink); }
+.tpl-modal .row input:focus { outline: 2px solid var(--accent); background: #fff; }
+.tpl-modal .row.paragraph input { color: #6b7180; font-size: 12.5px; }
+.tpl-modal .row .acts { display: flex; gap: 2px; }
+.tpl-modal .row .acts button { width: 26px; height: 26px; padding: 0; border: 0; background: none; border-radius: 6px; color: var(--muted); font-size: 13px; }
+.tpl-modal .row .acts button:hover:not(:disabled) { background: var(--accent-soft); color: var(--accent); }
+.tpl-modal .adds { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 10px; }
+.tpl-modal .adds button { border: 1px dashed #aab6d6; background: #fff; color: var(--accent); border-radius: 8px; padding: 5px 10px; font-size: 12px; }
+.tpl-modal .problems { margin-top: 10px; }
+.tpl-pv { display: grid; grid-template-rows: auto 1fr; min-height: 0; background: var(--bg); }
+.tpl-pv .caption { display: flex; gap: 12px; align-items: center; padding: 10px 14px 4px; font-size: 12px; color: var(--muted); }
+.tpl-preview { min-height: 0; }
+.tpl-preview iframe { width: 100%; height: 100%; border: 0; display: block; }
+.tpl-foot { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--line); }
+
+/* ---- 管理者と先生の登録 ---- */
+.modal.members { width: min(680px, calc(100vw - 32px)); }
+.member-list { list-style: none; margin: 0 0 12px; padding: 0; }
+.member-list li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px; }
+.member-list .who { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.member-list small { display: block; color: var(--muted); font-size: 11px; }
+.member-add { display: grid; grid-template-columns: 1.4fr auto 1fr auto; gap: 8px; align-items: center; }
+
+/* ---- 先生の画面 ---- */
+.teacher-main { overflow: auto; padding: 18px max(20px, calc(50% - 380px)) 40px; }
+.teacher-main h2 { font-size: 15px; margin: 6px 0 6px; }
+.teacher-main > .hint { display: block; margin-bottom: 14px; font-size: 12.5px; line-height: 1.7; }
+.teacher-main .course { background: var(--panel); }

@@ -1,4 +1,4 @@
-import type { YearConfig } from '../config'
+import type { TemplateBlock, YearConfig } from '../config'
 import { createMockServer } from './mockServer'
 
 /**
@@ -25,10 +25,28 @@ export interface HistoryRow {
   config: YearConfig
 }
 
+/** 管理者：年度の設定をすべて変更・公開できる。先生：どのコースの下書きのひな形も編集できる */
+export type Role = 'admin' | 'teacher' | null
+
 export interface AdminState {
   user: string
   isAdmin: boolean
+  role?: Role
   years: YearRow[]
+}
+
+export interface Member {
+  email: string
+  memo: string
+  role: '管理者' | '先生'
+}
+
+/** コースごとの下書きのひな形（コースID → ひな形と抄録の書き出し例） */
+export type TemplateSet = Record<string, { template: TemplateBlock[]; abstractExample: string }>
+
+/** 役割（古いサーバーは role を返さないため、isAdmin から決める） */
+export function roleOf(state: AdminState): Role {
+  return state.role !== undefined ? state.role : state.isAdmin ? 'admin' : null
 }
 
 export interface AdminServer {
@@ -37,6 +55,10 @@ export interface AdminServer {
   publishYear(year: number): Promise<AdminState>
   createYear(fromYear: number, newYear: number): Promise<AdminState>
   getHistory(year: number): Promise<HistoryRow[]>
+  saveTemplates(year: number, templates: TemplateSet): Promise<AdminState>
+  getMembers(): Promise<Member[]>
+  addMember(email: string, role: Member['role'], memo: string): Promise<Member[]>
+  removeMember(email: string): Promise<Member[]>
 }
 
 interface ScriptRun {
@@ -65,6 +87,10 @@ function appsScriptServer(): AdminServer {
     publishYear: (year) => call('publishYear', year),
     createYear: (fromYear, newYear) => call('createYear', fromYear, newYear),
     getHistory: (year) => call('getHistory', year),
+    saveTemplates: (year, templates) => call('saveTemplates', year, templates),
+    getMembers: () => call('getMembers'),
+    addMember: (email, role, memo) => call('addMember', email, role, memo),
+    removeMember: (email) => call('removeMember', email),
   }
 }
 

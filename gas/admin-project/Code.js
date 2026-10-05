@@ -4,10 +4,12 @@
  * スプレッドシートの3つのシート
  *   年度設定 … 年度 | 状態（公開中・準備中・終了）| 設定（JSON）| 更新日時 | 更新者
  *   変更履歴 … 日時 | 更新者 | 年度 | 操作 | 設定（JSON）
- *   管理者   … メールアドレス | メモ
+ *   管理者   … メールアドレス | メモ | 役割（管理者・先生。空なら管理者）
  *
  * ウェブアプリとして公開する（実行するユーザー：自分、アクセス：大学のドメイン内）。
- * 管理ページから保存・公開できるのは「管理者」シートに載っている人だけ。
+ * 「管理者」シートに載っている人だけが使える。
+ *   管理者 … 年度の設定をすべて変更・公開できる。先生を登録できる
+ *   先生   … どのコースの「下書きのひな形」も編集できる（ほかの設定は変えられない）
  * 学生のツールへの配信は、別のプロジェクト（gas/api-project）が担う。
  *
  * このファイルは app/gas/admin-project/Code.js が元。scripts/build-gas.mjs で初期値を埋め込んで gas-dist に出力する。
@@ -19,6 +21,8 @@ const SHEET_ADMINS = '管理者'
 const STATUS_PUBLISHED = '公開中'
 const STATUS_DRAFT = '準備中'
 const STATUS_ENDED = '終了'
+const ROLE_ADMIN = '管理者'
+const ROLE_TEACHER = '先生'
 
 /** 初期値（2026年度）。ビルド時に app/src/config/2026.json の内容が入る */
 const INITIAL_CONFIG = /*INITIAL_CONFIG*/ null
@@ -47,9 +51,11 @@ function setup() {
   }
   const years = ensure(SHEET_YEARS, ['年度', '状態', '設定（JSON）', '更新日時', '更新者'])
   ensure(SHEET_HISTORY, ['日時', '更新者', '年度', '操作', '設定（JSON）'])
-  const admins = ensure(SHEET_ADMINS, ['メールアドレス', 'メモ'])
+  const admins = ensure(SHEET_ADMINS, ['メールアドレス', 'メモ', '役割'])
+  // 役割の列がない古いシートには、見出しを足す
+  if (!admins.getRange(1, 3).getValue()) admins.getRange(1, 3).setValue('役割')
   const me = Session.getActiveUser().getEmail()
-  if (me && !readAdmins_().includes(me.toLowerCase())) admins.appendRow([me, '初期設定で登録'])
+  if (me && !roleOf_(me)) admins.appendRow([me, '初期設定で登録', ROLE_ADMIN])
   if (years.getLastRow() < 2 && INITIAL_CONFIG) {
     years.appendRow([INITIAL_CONFIG.fiscalYear, STATUS_PUBLISHED, JSON.stringify(INITIAL_CONFIG), new Date(), me])
     appendHistory_(me, INITIAL_CONFIG.fiscalYear, '初期設定', INITIAL_CONFIG)
@@ -64,8 +70,78 @@ function setup() {
 
 function getState() {
   const user = Session.getActiveUser().getEmail()
-  const admin = isAdmin_(user)
-  return { user: user, isAdmin: admin, years: admin ? readYears_() : [] }
+  const role = roleOf_(user)
+  return { user: user, isAdmin: role === ROLE_ADMIN, role: role === ROLE_ADMIN ? 'admin' : role === ROLE_TEACHER ? 'teacher' : null, years: role ? readYears_() : [] }
+}
+
+/**
+ * 下書きのひな形だけを保存する（先生も使える）。templates は { コースID: { template, abstractExample } }。
+ * 年度の設定のうち、指定したコースのひな形と抄録の書き出し例だけを書き換え、ほかは変えない。
+ */
+function saveTemplates(year, templates) {
+  const user = requireTeacher_()
+  if (!templates || typeof templates !== 'object') throw new Error('ひな形の形が正しくありません')
+  return withLock_(() => {
+    const sheet = sheet_(SHEET_YEARS)
+    const rowIndex = findYearRow_(year)
+    if (rowIndex < 0) throw new Error(year + '年度の設定がありません')
+    const config = JSON.parse(sheet.getRange(rowIndex, 3).getValue())
+    const names = []
+    config.courses.forEach((course) => {
+      const t = templates[course.id]
+      if (!t) return
+      if (!Array.isArray(t.template)) throw new Error('「' + course.name + '」のひな形の形が正しくありません')
+      course.template = t.template
+      course.abstractExample = typeof t.abstractExample === 'string' ? t.abstractExample : ''
+      names.push(course.name)
+    })
+    checkConfig_(config)
+    sheet.getRange(rowIndex, 3, 1, 3).setValues([[JSON.stringify(config), new Date(), user]])
+    appendHistory_(user, year, '下書きのひな形を保存（' + names.join('・') + '）', config)
+    return getState()
+  })
+}
+
+/** 管理者と先生の一覧（管理者だけ） */
+function getMembers() {
+  requireAdmin_()
+  return readMembers_()
+}
+
+/** 管理者・先生を登録する（管理者だけ）。すでに登録されていれば、役割とメモを書き換える */
+function addMember(email, role, memo) {
+  const user = requireAdmin_()
+  const address = String(email || '').trim()
+  if (!/^[^@\s]+@[^@\s]+$/.test(address)) throw new Error('メールアドレスが正しくありません')
+  if (role !== ROLE_ADMIN && role !== ROLE_TEACHER) throw new Error('役割が正しくありません')
+  return withLock_(() => {
+    const sheet = sheet_(SHEET_ADMINS)
+    const values = sheet.getDataRange().getValues()
+    for (let i = 1; i < values.length; i++) {
+      if (String(values[i][0]).trim().toLowerCase() === address.toLowerCase()) {
+        if (address.toLowerCase() === user.toLowerCase() && role !== ROLE_ADMIN) throw new Error('自分を管理者から外すことはできません')
+        sheet.getRange(i + 1, 2, 1, 2).setValues([[memo || values[i][1] || '', role]])
+        return readMembers_()
+      }
+    }
+    sheet.appendRow([address, memo || '', role])
+    return readMembers_()
+  })
+}
+
+/** 管理者・先生の登録を外す（管理者だけ。自分は外せない） */
+function removeMember(email) {
+  const user = requireAdmin_()
+  const address = String(email || '').trim().toLowerCase()
+  if (address === user.toLowerCase()) throw new Error('自分の登録は外せません')
+  return withLock_(() => {
+    const sheet = sheet_(SHEET_ADMINS)
+    const values = sheet.getDataRange().getValues()
+    for (let i = values.length - 1; i >= 1; i--) {
+      if (String(values[i][0]).trim().toLowerCase() === address) sheet.deleteRow(i + 1)
+    }
+    return readMembers_()
+  })
 }
 
 function saveYear(config) {
@@ -116,7 +192,7 @@ function createYear(fromYear, newYear) {
 }
 
 function getHistory(year) {
-  requireAdmin_()
+  requireTeacher_()
   const values = sheet_(SHEET_HISTORY).getDataRange().getValues().slice(1)
   return values
     .filter((r) => Number(r[2]) === Number(year))
@@ -149,24 +225,35 @@ function findYearRow_(year) {
   return -1
 }
 
-function readAdmins_() {
+/** 管理者シートの一覧（役割が空なら管理者） */
+function readMembers_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_ADMINS)
   if (!sheet) return []
   return sheet
     .getDataRange()
     .getValues()
     .slice(1)
-    .map((r) => String(r[0]).trim().toLowerCase())
-    .filter(Boolean)
+    .map((r) => ({ email: String(r[0]).trim(), memo: String(r[1] || ''), role: r[2] === ROLE_TEACHER ? ROLE_TEACHER : ROLE_ADMIN }))
+    .filter((m) => m.email)
 }
 
-function isAdmin_(email) {
-  return !!email && readAdmins_().includes(email.toLowerCase())
+/** その人の役割（管理者・先生）。登録されていなければ null */
+function roleOf_(email) {
+  if (!email) return null
+  const member = readMembers_().find((m) => m.email.toLowerCase() === email.toLowerCase())
+  return member ? member.role : null
 }
 
 function requireAdmin_() {
   const user = Session.getActiveUser().getEmail()
-  if (!isAdmin_(user)) throw new Error('管理者だけが変更できます（ログイン中：' + (user || '不明') + '）')
+  if (roleOf_(user) !== ROLE_ADMIN) throw new Error('管理者だけが変更できます（ログイン中：' + (user || '不明') + '）')
+  return user
+}
+
+/** 管理者か先生 */
+function requireTeacher_() {
+  const user = Session.getActiveUser().getEmail()
+  if (!roleOf_(user)) throw new Error('登録された先生だけが使えます（ログイン中：' + (user || '不明') + '）')
   return user
 }
 
