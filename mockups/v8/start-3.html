@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v8 学生の最初の画面 案3 表紙の上で順に案内する</title>
+<link rel="stylesheet" href="../v2/common.css">
+<link rel="stylesheet" href="./start.css">
+<style>
+  body { overflow: hidden; }
+  .app { height: 100%; display: grid; grid-template-columns: 1fr 312px; }
+  .stage { position: relative; overflow: hidden; background: var(--stage-bg); }
+  .side { background: var(--panel-bg); border-left: 1px solid var(--line); padding: 20px; display: flex; flex-direction: column; gap: 14px; }
+  .side .bar { height: 12px; border-radius: 6px; background: #ece9e4; }
+  .palette { position: absolute; width: 86px; height: 150px; border-radius: 14px; background: #fff; box-shadow: var(--float-shadow); }
+  .holder { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
+  .holder .page { position: relative; inset: auto; width: 794px; height: 1123px; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08), 0 20px 60px rgba(30, 25, 20, 0.16); }
+  .crs .pick { color: #a8a8a8; text-decoration: underline dotted #a8a8a8; text-underline-offset: 3px; }
+  .spot { position: absolute; z-index: 20; border-radius: 8px; box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.9), 0 0 0 9999px rgba(22, 22, 28, 0.55); pointer-events: none; }
+  .tip { position: absolute; z-index: 21; width: 360px; background: #fff; border-radius: 16px; padding: 18px 20px 16px; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28); }
+  .tip::before { content: ''; position: absolute; left: var(--arrow-x, 40px); top: -8px; width: 18px; height: 18px; background: #fff; transform: rotate(45deg); border-radius: 3px; }
+  .tip .steps { display: flex; gap: 6px; align-items: center; font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+  .tip .steps b { color: var(--accent); }
+  .tip .steps i { width: 16px; height: 2px; background: var(--line); }
+  .tip h2 { font-family: 'BIZ UDMincho', serif; font-weight: 400; font-size: 19px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  .tip p { margin: 0 0 12px; font-size: 12.5px; line-height: 1.8; color: #4a4d54; }
+  .tip .opts { display: flex; flex-direction: column; gap: 6px; }
+  .tip .opts button { text-align: left; padding: 11px 14px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; font-size: 14px; }
+  .tip .opts button:hover { border-color: var(--accent); background: var(--accent-soft); }
+  .tip .note { display: block; margin-top: 10px; }
+  @media (max-width: 600px) {
+    .app { grid-template-columns: 1fr; }
+    .side, .palette { display: none; }
+    .tip { left: 0 !important; right: 0; top: auto !important; bottom: 0; width: auto; border-radius: 18px 18px 0 0; padding: 16px 16px 22px; }
+    .tip::before { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <main class="stage" id="stage">
+    <div class="palette" id="palette"></div>
+    <div class="holder" id="holder"></div>
+    <div class="spot" id="spot"></div>
+    <div class="tip" id="tip">
+      <div class="steps"><b>1 コース</b><i></i>2 学籍番号<i></i>3 氏名<i></i>4 サブタイトル</div>
+      <h2>はじめに、コースを選んでください</h2>
+      <p>選んだコースの下書き（章立てと、書くことの説明）が本文に入ります。そのあと、表紙の項目を順に案内します。</p>
+      <div class="opts" id="opts"></div>
+      <span class="note">コースはあとから変えられます（下書きを入れ替えるときは確認します）</span>
+    </div>
+  </main>
+  <aside class="side"><div class="bar" style="width:60%"></div><div class="bar" style="width:80%"></div><div class="bar"></div><div class="bar" style="width:40%"></div></aside>
+</div>
+<script type="module">
+  import '../fonts.ts'
+  import { pagesHtml } from '../v2/pages.js'
+  import { COURSES } from './data.js'
+  const holder = document.getElementById('holder')
+  const tmp = document.createElement('div')
+  tmp.innerHTML = pagesHtml()
+  const cover = tmp.querySelector('.page.cover')
+  cover.classList.add('current')
+  cover.querySelector('.crs').innerHTML = '<span class="pick">（コースを選ぶ）</span> コース'
+  cover.querySelector('.id').textContent = '学籍番号　（学籍番号）'
+  cover.querySelector('.nm').textContent = '氏　名：　（氏名）'
+  cover.querySelector('.st').textContent = '―（クリックして入力）の衣装制作―'
+  holder.append(cover)
+  document.getElementById('opts').innerHTML = COURSES.map((c) => `<button>${c.name} コース</button>`).join('')
+
+  const place = () => {
+    const stage = document.getElementById('stage')
+    const narrow = innerWidth <= 600
+    const w = stage.clientWidth
+    const h = stage.clientHeight
+    const s = narrow ? (w - 20) / 794 : Math.min((w - 370) / 794, (h - 36) / 1123)
+    const left = narrow ? 10 : (w - 794 * s) / 2
+    const top = narrow ? 70 : 18
+    holder.style.transform = `translate(${left}px, ${top}px) scale(${s})`
+    const pal = document.getElementById('palette')
+    pal.style.left = `${left - 104}px`
+    pal.style.top = `${top}px`
+    // コース欄にスポットを当て、横に案内を出す
+    const r = cover.querySelector('.crs').getBoundingClientRect()
+    const sr = stage.getBoundingClientRect()
+    const spot = document.getElementById('spot')
+    const pad = 8
+    const x = r.left - sr.left
+    const spotLeft = narrow ? x + r.width * 0.25 : x + r.width * 0.45
+    Object.assign(spot.style, { left: `${spotLeft - pad}px`, top: `${r.top - sr.top - pad}px`, width: `${x + r.width - spotLeft + pad * 2}px`, height: `${r.height + pad * 2}px` })
+    const tip = document.getElementById('tip')
+    // 案内は、スポットのすぐ下に出す（画面の右からはみ出さないように）
+    const tipLeft = Math.min(spotLeft - 24, w - 372)
+    tip.style.left = `${tipLeft}px`
+    tip.style.top = `${r.bottom - sr.top + pad + 14}px`
+    tip.style.setProperty('--arrow-x', `${spotLeft - tipLeft + 30}px`)
+  }
+  document.fonts.ready.then(place)
+  addEventListener('resize', place)
+</script>
+</body>
+</html>

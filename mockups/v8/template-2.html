@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>v8 ひな形の編集 案2 「下書きのひな形」タブ</title>
+<link rel="stylesheet" href="./tpl.css">
+<link rel="stylesheet" href="./paper.css">
+<style>
+  .tabs { display: flex; gap: 2px; margin-left: 14px; padding: 3px; background: #f1f3f6; border-radius: 10px; }
+  .tabs button { border: 0; background: none; border-radius: 8px; padding: 6px 14px; font-size: 13px; color: var(--muted); }
+  .tabs button.on { background: #fff; color: var(--accent); font-weight: 700; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+  .bar { display: flex; align-items: center; gap: 12px; padding: 10px 18px; background: var(--panel); border-bottom: 1px solid var(--line); }
+  .bar .sec-title { margin: 0; }
+  main { display: grid; grid-template-columns: 580px 1fr; min-height: 0; }
+  .edit { background: var(--panel); border-right: 1px solid var(--line); padding: 16px 20px; display: flex; flex-direction: column; gap: 12px; overflow: hidden; }
+  .pv { display: flex; flex-direction: column; align-items: center; gap: 10px; padding: 16px; }
+</style>
+</head>
+<body>
+<div class="admin">
+  <div id="header"></div>
+  <div class="bar"><span class="sec-title">コース</span><div class="chips" id="chips"></div><span class="spacer"></span><span class="editor-by">最終更新：10月6日　加藤（先生）</span></div>
+  <main>
+    <section class="edit" id="edit"></section>
+    <section class="pv"><div class="preview-cap"><span>学生が最初に見る本文（見本）</span><span><i></i>薄い字＝書くことの説明（PDFには出ない）</span></div><div class="paper-box" id="box"></div></section>
+  </main>
+</div>
+<script type="module">
+  import '../fonts.ts'
+  import { COURSES, HEADER, outlineHtml, ABSTRACT_FIELD, draftPage, fitPaper } from './tpl.js'
+  document.getElementById('header').outerHTML = HEADER('<div class="tabs"><button>年度の設定</button><button class="on">下書きのひな形</button></div>')
+  const chips = document.getElementById('chips')
+  chips.innerHTML = COURSES.map((c, i) => `<button class="chip${i === 0 ? ' on' : ''}" data-i="${i}">${c.name}</button>`).join('')
+  const show = (i) => {
+    const c = COURSES[i]
+    chips.querySelectorAll('.chip').forEach((el) => el.classList.toggle('on', Number(el.dataset.i) === i))
+    document.getElementById('edit').innerHTML = ABSTRACT_FIELD(c) + '<div class="sec-title" style="margin:4px 0 0">本文の組み立て</div>' + outlineHtml(c) + '<p class="help">行をつかんで動かすと、順番を変えられます。「説明」は、学生の空の段落に薄い字で出ます（学生が書き始めると消えます）。すでに書き始めた学生の原稿は変わりません。</p>'
+    const box = document.getElementById('box')
+    box.innerHTML = draftPage(c)
+    fitPaper(box, innerWidth - 580 - 60, innerHeight - 56 - 52 - 70)
+  }
+  chips.querySelectorAll('.chip').forEach((el) => el.addEventListener('click', () => show(Number(el.dataset.i))))
+  show(0)
+</script>
+</body>
+</html>

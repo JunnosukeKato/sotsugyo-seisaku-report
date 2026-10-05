@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>v8 ひな形の編集 案1 コースのカードから開く</title>
+<link rel="stylesheet" href="./tpl.css">
+<link rel="stylesheet" href="./paper.css">
+<style>
+  .admin { grid-template-rows: 56px 1fr; }
+  main { display: grid; grid-template-columns: 460px 1fr; min-height: 0; }
+  .form { background: var(--panel); border-right: 1px solid var(--line); padding: 18px 20px; overflow: hidden; display: flex; flex-direction: column; gap: 10px; }
+  .in { font: inherit; font-size: 13.5px; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+  .card { border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px; }
+  .card .top { display: flex; justify-content: space-between; font-weight: 700; }
+  .card .tpl { display: flex; align-items: center; gap: 8px; margin-top: 4px; padding: 8px 10px; border-radius: 8px; background: #f6f8fb; font-size: 12px; color: var(--muted); }
+  .card .tpl b { color: var(--ink); font-weight: 700; }
+  .card .tpl .btn { margin-left: auto; padding: 4px 10px; font-size: 12px; }
+  .stage { background: var(--bg); }
+  .scrim { position: fixed; inset: 0; background: rgba(15, 20, 35, 0.4); }
+  .modal { position: fixed; left: 50%; top: 50%; transform: translate(-50%, -50%); width: 1220px; height: 800px; background: #fff; border-radius: 16px; box-shadow: 0 24px 64px rgba(0, 0, 0, 0.3); display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
+  .modal header { display: flex; align-items: center; gap: 10px; padding: 16px 22px; border-bottom: 1px solid var(--line); }
+  .modal header h2 { margin: 0; font-size: 17px; }
+  .modal header .x { margin-left: auto; border: 0; background: none; font-size: 22px; color: var(--muted); }
+  .modal .body { display: grid; grid-template-columns: 560px 1fr; min-height: 0; }
+  .modal .edit { padding: 16px 20px; overflow: hidden; display: flex; flex-direction: column; gap: 12px; border-right: 1px solid var(--line); }
+  .modal .pv { background: var(--bg); display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 14px; }
+  .modal footer { display: flex; align-items: center; gap: 10px; padding: 12px 22px; border-top: 1px solid var(--line); }
+</style>
+</head>
+<body>
+<div class="admin">
+  <div id="header"></div>
+  <main>
+    <section class="form">
+      <div class="sec-title">毎年設定する項目</div>
+      <input class="in" value="卒業イベント「シンドバッド」について">
+      <div class="sec-title" style="margin-top:6px">コースと指導教員</div>
+      <div id="cards" style="display:flex;flex-direction:column;gap:10px"></div>
+    </section>
+    <section class="stage"></section>
+  </main>
+</div>
+<div class="scrim"></div>
+<div class="modal">
+  <header><h2 id="mtitle"></h2><span class="editor-by">最終更新：10月6日　加藤（先生）</span><button class="x">×</button></header>
+  <div class="body">
+    <div class="edit" id="edit"></div>
+    <div class="pv"><div class="preview-cap"><span>学生が最初に見る本文（見本）</span><span><i></i>薄い字＝書くことの説明（PDFには出ない）</span></div><div class="paper-box" id="box"></div></div>
+  </div>
+  <footer><span class="help">変更は「反映する」を押した後、上の「保存」で学生のツールに届きます。すでに書き始めた学生の原稿は変わりません。</span><span class="spacer"></span><button class="btn">やめる</button><button class="btn primary">反映する</button></footer>
+</div>
+<script type="module">
+  import '../fonts.ts'
+  import { COURSES, HEADER, outlineHtml, ABSTRACT_FIELD, draftPage, fitPaper } from './tpl.js'
+  document.getElementById('header').outerHTML = HEADER()
+  document.getElementById('cards').innerHTML = COURSES.map((c) => {
+    const ch = c.blocks.filter((b) => b.type === 'chapter').length
+    const sub = c.blocks.filter((b) => b.type === 'sub').length
+    return `<div class="card"><div class="top">${c.name}<span style="font-weight:400;font-size:12px;color:#2f7d4f">表示中</span></div><div class="tpl">下書きのひな形　<b>大見出し${ch}・小見出し${sub}</b><button class="btn">編集する</button></div></div>`
+  }).join('')
+  const c = COURSES[0]
+  document.getElementById('mtitle').textContent = `${c.name} コース　下書きのひな形`
+  document.getElementById('edit').innerHTML = ABSTRACT_FIELD(c) + '<div class="sec-title" style="margin:4px 0 0">本文の組み立て</div>' + outlineHtml(c)
+  const box = document.getElementById('box')
+  box.innerHTML = draftPage(c)
+  fitPaper(box, 560, 600)
+</script>
+</body>
+</html>

@@ -1,0 +1,28 @@
+/* デザイン案（v8）：学生が最初に見る「コースを選ぶ」画面。配色はデザイン1「紙と墨」 */
+:root {
+  --stage-bg: #ebe8e3;
+  --panel-bg: #fbfaf8;
+  --line: #e6e2dc;
+  --ink: #23262b;
+  --muted: #80838a;
+  --accent: #2f3e75;
+  --accent-soft: #e8ebf5;
+  --float-shadow: 0 1px 2px rgba(30, 25, 20, 0.04), 0 10px 28px rgba(30, 25, 20, 0.08);
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { font-family: 'BIZ UDPGothic', sans-serif; color: var(--ink); background: var(--stage-bg); -webkit-font-smoothing: antialiased; }
+button { font: inherit; cursor: pointer; }
+.brand-row { display: flex; align-items: center; gap: 11px; }
+.mark { width: 34px; height: 34px; flex: none; display: grid; place-items: center; border-radius: 9px; border: 1.5px solid var(--accent); color: var(--accent); font-family: 'BIZ UDMincho', serif; font-size: 16px; }
+.brand-name { font-family: 'BIZ UDMincho', serif; font-size: 16px; letter-spacing: 0.12em; }
+.brand-sub { font-size: 11px; color: var(--muted); }
+h1.q { font-family: 'BIZ UDMincho', serif; font-weight: 400; font-size: 26px; letter-spacing: 0.06em; margin: 0; }
+.lead { font-size: 14px; line-height: 1.9; color: #4a4d54; margin: 0; }
+.note { font-size: 12px; color: var(--muted); }
+.start-btn { display: inline-flex; align-items: center; gap: 10px; padding: 13px 26px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font-size: 15px; font-weight: 700; letter-spacing: 0.06em; }
+.start-btn:disabled { opacity: 0.35; cursor: default; }
+.step { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; color: var(--accent); background: var(--accent-soft); border-radius: 999px; padding: 4px 10px; letter-spacing: 0.06em; }
+.outline { list-style: none; margin: 0; padding: 0; font-family: 'BIZ UDMincho', serif; font-size: 12.5px; line-height: 1.9; color: #55585f; }
+.outline .sub { padding-left: 1.3em; color: var(--muted); }
+.outline .item { padding-left: 1.3em; color: var(--muted); font-family: 'BIZ UDPGothic', sans-serif; font-size: 11px; }

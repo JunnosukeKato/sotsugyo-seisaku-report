@@ -1,0 +1,18 @@
+/* デザイン案（v8）：見本の紙面（本文の1ページ目）。実際の組版に近い寸法（A4・11pt・38字×38行） */
+.paper { position: relative; width: 794px; height: 1123px; background: #fff; padding: 94px 94px 94px 132px; box-sizing: border-box; font-family: 'BIZ UDMincho', serif; font-size: 11pt; line-height: 18.4pt; letter-spacing: 0.189pt; color: #000; overflow: hidden; }
+.paper h1, .paper h2 { font: inherit; margin: 0; }
+.paper h1 + h2, .paper h1 + p, .paper h2 + p { margin-top: 0; }
+.paper h1:not(:first-child) { margin-top: 18.4pt; }
+.paper p { margin: 0; text-indent: 1em; }
+.paper .hint { color: #9a9ca2; }
+.paper figure { margin: 9.2pt 0; text-align: center; }
+.paper .ph { width: 200px; height: 150px; margin: 0 auto; display: grid; place-items: center; background: repeating-linear-gradient(45deg, #f1f1f1 0 8px, #e8e8e8 8px 16px); color: #9a9ca2; font-size: 9pt; border: 1px dashed #c9c9c9; }
+.paper figcaption { margin-top: 4pt; }
+.paper .tcap { text-align: center; margin-top: 9.2pt; }
+.paper table { width: 100%; border-collapse: collapse; font-size: 10pt; }
+.paper th, .paper td { border: 1px solid #000; padding: 2pt 4pt; text-align: center; font-weight: 400; }
+.paper td.g { color: #9a9ca2; }
+.paper .pno { position: absolute; bottom: 48px; left: 0; right: 0; text-align: center; }
+/* 縮小して置く */
+.paper-box { position: relative; overflow: hidden; }
+.paper-box .paper { position: absolute; left: 0; top: 0; transform-origin: 0 0; }
