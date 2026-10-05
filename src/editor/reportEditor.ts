@@ -66,7 +66,6 @@ export class ReportEditor {
   private readonly callbacks: EditorCallbacks
   private readonly renderer: ReportRenderer
   private readonly overlay: OverlayEditor
-  private readonly viewport: HTMLElement
   private readonly hideStyle: HTMLStyleElement
   private readonly images = new Map<string, ImageEntry>()
   private readonly listeners = new Set<() => void>()
@@ -85,19 +84,21 @@ export class ReportEditor {
   private snapshotCache: EditorSnapshot | null = null
   private readonly highlights = { error: new Highlight(), warning: new Highlight(), focus: new Highlight() }
 
-  constructor(viewport: HTMLElement, layer: HTMLElement, config: YearConfig, report: Report, callbacks: EditorCallbacks) {
-    this.viewport = viewport
+  /**
+   * @param container 紙面の表示枠（2つ。組み直すたびに表と裏を入れ替える）を入れる要素
+   */
+  constructor(container: HTMLElement, layer: HTMLElement, config: YearConfig, report: Report, callbacks: EditorCallbacks) {
     this.config = config
     this.report = report
     this.callbacks = callbacks
-    this.renderer = new ReportRenderer(viewport)
+    this.renderer = new ReportRenderer(container)
     this.hideStyle = document.createElement('style')
     document.head.append(this.hideStyle)
     CSS.highlights.set('issue-error', this.highlights.error)
     CSS.highlights.set('issue-warning', this.highlights.warning)
     CSS.highlights.set('issue-focus', this.highlights.focus)
 
-    this.overlay = new OverlayEditor(layer, viewport, {
+    this.overlay = new OverlayEditor(layer, { container, current: () => this.renderer.viewport }, {
       onInput: (id, text) => {
         this.report = ops.setText(this.report, id, text)
         this.afterChange({ render: 'debounce', save: true })
@@ -138,9 +139,14 @@ export class ReportEditor {
       },
     })
 
-    viewport.addEventListener('click', (e) => this.onClick(e))
+    container.addEventListener('click', (e) => this.onClick(e))
     window.addEventListener('beforeprint', () => this.beforePrint())
     window.addEventListener('afterprint', () => this.refreshHighlights())
+  }
+
+  /** いま見えている紙面の表示枠 */
+  private get viewport(): HTMLElement {
+    return this.renderer.viewport
   }
 
   // ---- 状態の受け渡し（React の useSyncExternalStore 用） ----
@@ -212,7 +218,6 @@ export class ReportEditor {
     }
     this.rendering = true
     this.notify()
-    const scrollTop = this.viewport.scrollTop
     const image = (id: string) => this.images.get(id)
     try {
       const result = await this.renderer.render(this.report, this.config, {
@@ -226,7 +231,6 @@ export class ReportEditor {
       this.renderMs = result.ms
       this.layout = result.layout
     } finally {
-      this.viewport.scrollTop = scrollTop
       this.rendering = false
     }
     this.markSelection()

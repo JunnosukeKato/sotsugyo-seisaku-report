@@ -167,7 +167,7 @@ export default function App() {
         <section className="center">
           {editor && snap ? <Toolbar editor={editor} snap={snap} /> : <div className="toolbar" />}
           <div className="canvas">
-            <div id="vivliostyle-viewer-viewport" ref={viewportRef} />
+            <div className="page-buffers" ref={viewportRef} />
             <div id="overlay-layer" ref={layerRef} />
             {(!snap || (snap.rendering && !snap.layout)) && !loadError && <div className="loading">紙面を準備しています…（初回は数秒かかります）</div>}
             {loadError && <div className="loading ng">読み込みに失敗しました：{loadError}</div>}

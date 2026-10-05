@@ -43,7 +43,7 @@ const COPIED_STYLES = ['fontFamily', 'fontSize', 'lineHeight', 'letterSpacing', 
 export class OverlayEditor {
   readonly element: HTMLDivElement
   private readonly layer: HTMLElement
-  private readonly scroller: HTMLElement
+  private readonly getScroller: () => HTMLElement
   private readonly callbacks: OverlayCallbacks
   private target: OverlayTarget | null = null
   private composing = false
@@ -52,11 +52,11 @@ export class OverlayEditor {
 
   /**
    * @param layer 入力欄を置く層（紙面の表示領域に重ねる）
-   * @param scroller 紙面をスクロールさせる要素
+   * @param scroll 紙面の表示枠の入れ物（スクロールを受け取る）と、いまスクロールしている表示枠
    */
-  constructor(layer: HTMLElement, scroller: HTMLElement, callbacks: OverlayCallbacks) {
+  constructor(layer: HTMLElement, scroll: { container: HTMLElement; current: () => HTMLElement }, callbacks: OverlayCallbacks) {
     this.layer = layer
-    this.scroller = scroller
+    this.getScroller = scroll.current
     this.callbacks = callbacks
     this.element = document.createElement('div')
     this.element.className = 'overlay-editor'
@@ -76,7 +76,8 @@ export class OverlayEditor {
     this.element.addEventListener('keydown', (e) => this.onKeyDown(e))
     this.element.addEventListener('paste', (e) => this.onPaste(e))
     this.element.addEventListener('blur', () => this.commit())
-    scroller.addEventListener('scroll', () => this.place())
+    // scroll は伝わらないため、入れ物で捕まえる（表示枠は組み直すたびに入れ替わる）
+    scroll.container.addEventListener('scroll', () => this.place(), true)
   }
 
   get blockId(): string | null {
@@ -117,8 +118,8 @@ export class OverlayEditor {
   /** 紙面が組み直されてブロックの位置が変わったときに、入力欄を合わせて動かす */
   moveTo(rect: OverlayTarget['rect']): void {
     const layerRect = this.layer.getBoundingClientRect()
-    this.contentTop = rect.top - layerRect.top + this.scroller.scrollTop
-    this.contentLeft = rect.left - layerRect.left + this.scroller.scrollLeft
+    this.contentTop = rect.top - layerRect.top + this.getScroller().scrollTop
+    this.contentLeft = rect.left - layerRect.left + this.getScroller().scrollLeft
     this.element.style.width = `${Math.max(40, rect.right - rect.left)}px`
     this.place()
   }
@@ -167,8 +168,8 @@ export class OverlayEditor {
   }
 
   private place(): void {
-    this.element.style.top = `${this.contentTop - this.scroller.scrollTop}px`
-    this.element.style.left = `${this.contentLeft - this.scroller.scrollLeft}px`
+    this.element.style.top = `${this.contentTop - this.getScroller().scrollTop}px`
+    this.element.style.left = `${this.contentLeft - this.getScroller().scrollLeft}px`
   }
 
   private emitInput(): void {

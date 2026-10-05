@@ -31,7 +31,7 @@ await withEdge(async (browser) => {
   const snap = () => page.evaluate(() => { const s = window.__editor.getSnapshot(); return { report: s.report, findings: s.findings.map((f) => ({ ruleId: f.ruleId, severity: f.severity, blockId: f.blockId })), layout: s.layout, editingId: s.editingId } })
   const clickBlock = async (id, offset = 'center') => {
     const box = await page.evaluate((id, offset) => {
-      const el = document.querySelector(`#vivliostyle-viewer-viewport [data-block-id="${id}"]`)
+      const el = document.querySelector(`.page-viewport.front [data-block-id="${id}"]`)
       el.scrollIntoView({ block: 'center' })
       const r = el.getBoundingClientRect()
       return offset === 'start' ? { x: r.left + 4, y: r.top + 6 } : { x: r.left + Math.min(r.width / 2, 40), y: r.top + r.height / 2 }
@@ -52,7 +52,13 @@ await withEdge(async (browser) => {
   await typeAndCommit('文化　花子')
   await clickBlock('basic:subtitleInput')
   await typeAndCommit('シンドバッド')
+  // コース：表紙のコース欄をクリックし、出てきた一覧から選ぶ（コースが2つ以上あると最初は未選択）
+  await clickBlock('basic:course')
+  await page.waitForSelector('.popover button')
+  await page.click('.popover button')
+  await ready()
   let s = await snap()
+  check('表紙のコース欄からコースを選べる', !!s.report.basicInfo.courseId, s.report.basicInfo.courseId)
   check('表紙の入力が保存される', s.report.basicInfo.studentId === '23FA0123' && s.report.basicInfo.name === '文化　花子' && s.report.basicInfo.subtitleInput === 'シンドバッド', JSON.stringify(s.report.basicInfo))
   check('表紙の未入力の指摘が消える', !s.findings.some((f) => f.ruleId === 'required-field'))
 
@@ -143,7 +149,7 @@ await withEdge(async (browser) => {
   await ready()
   s = await snap()
   check('読み込み直しても原稿が残っている（自動保存）', s.report.basicInfo.name === '文化　花子' && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'figureRow'))
-  const imgLoaded = await page.evaluate(() => { const img = document.querySelector('#vivliostyle-viewer-viewport figure img'); return img?.src.startsWith('blob:') && img.naturalWidth > 0 })
+  const imgLoaded = await page.evaluate(() => { const img = document.querySelector('.page-viewport.front figure img'); return img?.src.startsWith('blob:') && img.naturalWidth > 0 })
   check('読み込み直しても写真が残っている', imgLoaded)
 
   // ---- PDF に書き出す（学生が「PDFに保存」を選んだときと同じ印刷処理） ----

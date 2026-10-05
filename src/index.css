@@ -14,7 +14,7 @@
   --ok: #2e7d4f;
 }
 
-/* 画面部分だけに効かせる。組版された紙面（#vivliostyle-viewer-viewport の中）に効くと寸法が狂う */
+/* 画面部分だけに効かせる。組版された紙面（.page-viewport の中）に効くと寸法が狂う */
 .app-header, .app-header *, .page-nav, .page-nav *, .check-panel, .check-panel *, .toolbar, .toolbar *,
 .modal-backdrop, .modal-backdrop *, .popover-backdrop, .popover-backdrop *, .overlay-editor { box-sizing: border-box; }
 
@@ -67,25 +67,29 @@ button:disabled { cursor: default; opacity: 0.45; }
 
 /* ---- 紙面 ---- */
 .canvas { position: relative; min-height: 0; overflow: hidden; }
-#vivliostyle-viewer-viewport { position: absolute !important; inset: 0; width: auto !important; height: auto !important; background: var(--bg) !important; overflow: auto !important; font: initial; color: initial; }
+/* 紙面の表示枠は2つ重ねて置き、見えている側（.front）だけを表に出す（組み直しのちらつき防止） */
+.page-buffers { position: absolute; inset: 0; }
+.page-viewport:not(.front) { opacity: 0; pointer-events: none; z-index: 0; }
+.page-viewport.front { z-index: 1; }
+.page-viewport { position: absolute !important; inset: 0; width: auto !important; height: auto !important; background: var(--bg) !important; overflow: auto !important; font: initial; color: initial; }
 #overlay-layer { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
 .loading { position: absolute; inset: 0; display: grid; place-items: center; font-size: 14px; color: var(--muted); background: var(--bg); }
 
 /* すべてのページを縦に並べて表示する（組版エンジンは1ページずつ表示する作りのため、表示の枠を広げる） */
-#vivliostyle-viewer-viewport { display: block !important; }
-#vivliostyle-viewer-viewport [data-vivliostyle-outer-zoom-box] { width: auto !important; height: auto !important; margin: 0 !important; padding: 24px 0 64px; }
-#vivliostyle-viewer-viewport [data-vivliostyle-spread-container] { display: block !important; width: auto !important; height: auto !important; }
-#vivliostyle-viewer-viewport [data-vivliostyle-page-container] { display: block !important; margin: 0 auto 24px !important; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15); cursor: text; }
+.page-viewport { display: block !important; }
+.page-viewport [data-vivliostyle-outer-zoom-box] { width: auto !important; height: auto !important; margin: 0 !important; padding: 24px 0 64px; }
+.page-viewport [data-vivliostyle-spread-container] { display: block !important; width: auto !important; height: auto !important; }
+.page-viewport [data-vivliostyle-page-container] { display: block !important; margin: 0 auto 24px !important; background: #fff; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.15); cursor: text; }
 
 /* 未入力の箇所に、画面だけ仮の文字を出す（印刷には出ない） */
-#vivliostyle-viewer-viewport [data-block-id]:empty::before { content: attr(data-placeholder); color: #a8a8a8; }
-#vivliostyle-viewer-viewport [data-block-id='basic:course'] { cursor: pointer; text-decoration: underline dotted #a8a8a8; text-underline-offset: 3px; }
-#vivliostyle-viewer-viewport figure img, #vivliostyle-viewer-viewport td.swatch, #vivliostyle-viewer-viewport [data-photo-slot] { cursor: pointer; }
-#vivliostyle-viewer-viewport td.swatch:empty::before { content: '（写真を選ぶ）'; color: #a8a8a8; font-size: 9pt; }
-#vivliostyle-viewer-viewport [data-photo-slot] { outline: 1px dashed #c8c8c8; }
-#vivliostyle-viewer-viewport [data-photo-slot]:empty::before { content: '（クリックして写真を選ぶ）'; position: absolute; inset: 0; display: grid; place-items: center; color: #a8a8a8; font-family: 'BIZ UDPGothic', sans-serif; font-size: 11pt; }
-#vivliostyle-viewer-viewport section.references { cursor: pointer; }
-#vivliostyle-viewer-viewport .is-selected { outline: 2px solid var(--accent); outline-offset: 4px; }
+.page-viewport [data-block-id]:empty::before { content: attr(data-placeholder); color: #a8a8a8; }
+.page-viewport [data-block-id='basic:course'] { cursor: pointer; text-decoration: underline dotted #a8a8a8; text-underline-offset: 3px; }
+.page-viewport figure img, .page-viewport td.swatch, .page-viewport [data-photo-slot] { cursor: pointer; }
+.page-viewport td.swatch:empty::before { content: '（写真を選ぶ）'; color: #a8a8a8; font-size: 9pt; }
+.page-viewport [data-photo-slot] { outline: 1px dashed #c8c8c8; }
+.page-viewport [data-photo-slot]:empty::before { content: '（クリックして写真を選ぶ）'; position: absolute; inset: 0; display: grid; place-items: center; color: #a8a8a8; font-family: 'BIZ UDPGothic', sans-serif; font-size: 11pt; }
+.page-viewport section.references { cursor: pointer; }
+.page-viewport .is-selected { outline: 2px solid var(--accent); outline-offset: 4px; }
 
 /* 紙面に重ねる入力欄。書体・字間・行送りは紙面の要素から写し取る */
 .overlay-editor {
@@ -182,16 +186,18 @@ a.btn { text-decoration: none; }
 @media print {
   html, body, #root, .app, .app-main, .center, .canvas { display: block !important; height: auto !important; overflow: visible !important; background: #fff !important; }
   .app-header, .page-nav, .check-panel, .toolbar, #overlay-layer, .loading, .modal-backdrop, .popover-backdrop { display: none !important; }
-  #vivliostyle-viewer-viewport { position: static !important; overflow: visible !important; background: #fff !important; }
+  .page-buffers { position: static !important; }
+  .page-viewport:not(.front) { display: none !important; }
+  .page-viewport { position: static !important; overflow: visible !important; background: #fff !important; opacity: 1 !important; }
   /* 画面用の上下の余白が残ると、表紙の後ろと最後に白紙のページができる */
-  #vivliostyle-viewer-viewport [data-vivliostyle-layout-box],
-  #vivliostyle-viewer-viewport [data-vivliostyle-outer-zoom-box],
-  #vivliostyle-viewer-viewport [data-vivliostyle-spread-container] { padding: 0 !important; margin: 0 !important; }
-  #vivliostyle-viewer-viewport [data-vivliostyle-page-container] { margin: 0 !important; box-shadow: none !important; }
-  #vivliostyle-viewer-viewport [data-block-id]:empty::before,
-  #vivliostyle-viewer-viewport td.swatch:empty::before,
-  #vivliostyle-viewer-viewport [data-photo-slot]:empty::before { content: none !important; }
-  #vivliostyle-viewer-viewport [data-photo-slot] { outline: none !important; }
-  #vivliostyle-viewer-viewport .is-selected { outline: none !important; }
-  #vivliostyle-viewer-viewport [data-block-id='basic:course'] { text-decoration: none !important; }
+  .page-viewport [data-vivliostyle-layout-box],
+  .page-viewport [data-vivliostyle-outer-zoom-box],
+  .page-viewport [data-vivliostyle-spread-container] { padding: 0 !important; margin: 0 !important; }
+  .page-viewport [data-vivliostyle-page-container] { margin: 0 !important; box-shadow: none !important; }
+  .page-viewport [data-block-id]:empty::before,
+  .page-viewport td.swatch:empty::before,
+  .page-viewport [data-photo-slot]:empty::before { content: none !important; }
+  .page-viewport [data-photo-slot] { outline: none !important; }
+  .page-viewport .is-selected { outline: none !important; }
+  .page-viewport [data-block-id='basic:course'] { text-decoration: none !important; }
 }

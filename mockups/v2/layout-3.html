@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v2 案3 上は1行・道具は紙面の横に浮かぶ</title>
+<link rel="stylesheet" href="./common.css">
+<style>
+  .app { height: 100%; display: grid; grid-template-rows: 52px 1fr; }
+  main { display: grid; grid-template-columns: 1fr 300px; min-height: 0; }
+  header .tools-inline { display: flex; gap: 0; margin-left: 10px; padding-left: 10px; border-left: 1px solid var(--line); }
+  header .tools-inline .tool { flex-direction: row; padding: 6px 8px; }
+  header .tools-inline .tool svg { width: 20px; height: 20px; }
+  .float-tools { position: absolute; z-index: 11; left: calc(50% - 300px); top: 46%; display: flex; flex-direction: column; gap: 2px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 20px rgba(0,0,0,.16); padding: 6px 4px; }
+  .float-tools .cap { font-size: 10px; color: var(--muted); text-align: center; padding: 2px 0 4px; border-bottom: 1px solid var(--line); margin-bottom: 2px; }
+  .bottom { position: absolute; left: 0; right: 0; bottom: 8px; z-index: 10; display: flex; justify-content: center; opacity: 0.25; transition: opacity .2s; }
+  .bottom:hover { opacity: 1; }
+  .bottom .thumbs { background: rgba(255,255,255,.95); border: 1px solid var(--line); border-radius: 10px; padding: 4px 8px; }
+  .indicator { bottom: auto; top: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top"><div class="brand">卒業制作報告書<small>2026年度</small></div><span class="status">✓ 保存済み</span><div class="tools-inline" id="tools"></div><span class="spacer"></span><span class="status">締切まであと107日</span><button class="btn">バックアップ</button><button class="btn primary">PDFを書き出す</button></header>
+  <main>
+    <section class="stage" id="stage">
+      <div class="book" id="book"></div>
+      <div class="float-tools" id="float"></div>
+      <button class="nav-arrow prev" id="prev" aria-label="前のページ">←</button>
+      <button class="nav-arrow next" id="next" aria-label="次のページ">→</button>
+      <div class="indicator" id="indicator"></div>
+      <div class="bottom"><div class="thumbs" id="thumbs"></div></div>
+      <div id="style"></div>
+    </section>
+    <aside class="check" id="check"></aside>
+  </main>
+</div>
+<script type="module">
+  import '../fonts.ts'
+  import { pagesHtml } from './pages.js'
+  import { setupBook } from './book.js'
+  import { TOOLS, toolsHtml, CHECK_PANEL, STYLE_SELECT } from './tools.js'
+  document.getElementById('tools').innerHTML = toolsHtml({ withLabels: false })
+  // 書いている段落のすぐ横に、よく使う道具だけを出す
+  const near = TOOLS.filter((t) => ['段落', '図（写真）', '図表を参照', '削除'].includes(t.label))
+  document.getElementById('float').innerHTML = '<div class="cap">この段落</div>' + near.map((t) => `<button class="tool${t.danger ? ' danger' : ''}" title="${t.label}">${t.icon}<span>${t.label}</span></button>`).join('')
+  document.getElementById('check').innerHTML = CHECK_PANEL
+  document.getElementById('style').outerHTML = STYLE_SELECT
+  document.getElementById('book').innerHTML = pagesHtml()
+  setupBook({ stage: document.getElementById('stage'), book: document.getElementById('book'), indicator: document.getElementById('indicator'), prev: document.getElementById('prev'), next: document.getElementById('next'), thumbs: document.getElementById('thumbs'), styleSelect: document.querySelector('.style-select') })
+</script>
+</body>
+</html>

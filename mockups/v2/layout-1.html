@@ -1,0 +1,46 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v2 案1 道具は左に縦並び</title>
+<link rel="stylesheet" href="./common.css">
+<style>
+  .app { height: 100%; display: grid; grid-template-rows: 52px 1fr; }
+  main { display: grid; grid-template-columns: 76px 1fr 300px; min-height: 0; }
+  .toolbox { background: #fff; border-right: 1px solid var(--line); padding: 10px 6px; display: flex; flex-direction: column; gap: 4px; overflow: auto; }
+  .toolbox .sep { height: 1px; background: var(--line); margin: 4px 6px; }
+  .bottom { position: absolute; left: 0; right: 0; bottom: 8px; z-index: 10; display: flex; justify-content: center; }
+  .bottom .thumbs { background: rgba(255,255,255,.92); border: 1px solid var(--line); border-radius: 10px; padding: 4px 8px; }
+  .indicator { bottom: auto; top: 12px; }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top"><div class="brand">卒業制作報告書<small>2026年度</small></div><span class="status">✓ 自動保存しました（14:32）</span><span class="spacer"></span><span class="status">最終締切 1月20日（水）まで あと107日</span><button class="btn">元に戻す</button><button class="btn">バックアップ</button><button class="btn primary">PDFを書き出す</button></header>
+  <main>
+    <div class="toolbox" id="tools"></div>
+    <section class="stage" id="stage">
+      <div class="book" id="book"></div>
+      <button class="nav-arrow prev" id="prev" aria-label="前のページ">←</button>
+      <button class="nav-arrow next" id="next" aria-label="次のページ">→</button>
+      <div class="indicator" id="indicator"></div>
+      <div class="bottom"><div class="thumbs" id="thumbs"></div></div>
+      <div id="style"></div>
+    </section>
+    <aside class="check" id="check"></aside>
+  </main>
+</div>
+<script type="module">
+  import '../fonts.ts'
+  import { pagesHtml } from './pages.js'
+  import { setupBook } from './book.js'
+  import { toolsHtml, CHECK_PANEL, STYLE_SELECT } from './tools.js'
+  document.getElementById('tools').innerHTML = toolsHtml()
+  document.getElementById('check').innerHTML = CHECK_PANEL
+  document.getElementById('style').outerHTML = STYLE_SELECT
+  document.getElementById('book').innerHTML = pagesHtml()
+  setupBook({ stage: document.getElementById('stage'), book: document.getElementById('book'), indicator: document.getElementById('indicator'), prev: document.getElementById('prev'), next: document.getElementById('next'), thumbs: document.getElementById('thumbs'), styleSelect: document.querySelector('.style-select') })
+</script>
+</body>
+</html>
