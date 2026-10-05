@@ -50,10 +50,11 @@ button:disabled { cursor: default; opacity: 0.4; }
 .page-viewport:not(.front) { opacity: 0; pointer-events: none; z-index: 0; }
 .page-viewport.front { z-index: 1; }
 
-/* 1ページずつ表示する：ページを同じ位置に重ね、表示するページ（.is-current）だけを出す。縮小は spread-container で行う */
+/* 1ページずつ表示する：ページを同じ位置に重ね、表示するページ（.is-current）だけを出す。縮小は spread-container で行う
+   （組版エンジンもページに transform-origin などを指定するため、めくる軸（左端）は !important で決める） */
 .page-viewport [data-vivliostyle-outer-zoom-box] { position: relative !important; width: var(--page-w) !important; height: var(--page-h) !important; margin: var(--page-top) 0 var(--inset-bottom) var(--page-left) !important; padding: 0 !important; }
 .page-viewport [data-vivliostyle-spread-container] { position: absolute !important; left: 0; top: 0; width: 793.7px !important; height: 1122.52px !important; transform: scale(var(--s)); transform-origin: 0 0; perspective: 2600px; }
-.page-viewport [data-vivliostyle-page-container] { position: absolute !important; left: 0; top: 0; display: none !important; margin: 0 !important; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08), 0 20px 60px rgba(30, 25, 20, 0.16); transform-origin: left center; backface-visibility: hidden; cursor: text; }
+.page-viewport [data-vivliostyle-page-container] { position: absolute !important; left: 0; top: 0; display: none !important; margin: 0 !important; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08), 0 20px 60px rgba(30, 25, 20, 0.16); transform-origin: left center !important; -webkit-backface-visibility: hidden; backface-visibility: hidden; cursor: text; }
 /* 組版の間は、寸法を測れるようすべてのページを出しておく（裏側なので見えない） */
 .page-viewport.measuring [data-vivliostyle-page-container],
 .page-viewport [data-vivliostyle-page-container]:is(.is-current, .is-under, .is-under-current, .turn-in) { display: block !important; }
@@ -62,15 +63,21 @@ button:disabled { cursor: default; opacity: 0.4; }
 .page-viewport [data-vivliostyle-page-container]:is(.turn-out, .turn-in, .fade-out) { z-index: 3; }
 
 /* ページを送る動き：めくる（隣のページ）／ふわっと（離れたページ） */
-.page-viewport [data-vivliostyle-page-container].turn-out { animation: turn-out 0.7s cubic-bezier(0.45, 0, 0.25, 1) forwards; }
-.page-viewport [data-vivliostyle-page-container].turn-in { animation: turn-in 0.7s cubic-bezier(0.45, 0, 0.25, 1) forwards; }
+.page-viewport [data-vivliostyle-page-container].turn-out { animation: turn-out 0.6s cubic-bezier(0.4, 0, 0.3, 1) forwards; }
+.page-viewport [data-vivliostyle-page-container].turn-in { animation: turn-in 0.6s cubic-bezier(0.4, 0, 0.3, 1) forwards; }
 .page-viewport [data-vivliostyle-page-container]:is(.turn-out, .turn-in)::after { content: ''; position: absolute; inset: 0; z-index: 10; pointer-events: none; background: linear-gradient(to left, rgba(0, 0, 0, 0.28), rgba(0, 0, 0, 0.04) 55%, rgba(0, 0, 0, 0)); }
-.page-viewport [data-vivliostyle-page-container].turn-out::after { animation: shade-out 0.7s forwards; }
-.page-viewport [data-vivliostyle-page-container].turn-in::after { animation: shade-in 0.7s forwards; }
+.page-viewport [data-vivliostyle-page-container].turn-out::after { animation: shade-out 0.6s forwards; }
+.page-viewport [data-vivliostyle-page-container].turn-in::after { animation: shade-in 0.6s forwards; }
 .page-viewport [data-vivliostyle-page-container].fade-out { animation: fade-out 0.25s ease forwards; }
 .page-viewport [data-vivliostyle-page-container].fade-in { animation: fade-in 0.2s ease; }
-@keyframes turn-out { from { transform: rotateY(0); } to { transform: rotateY(-118deg); } }
-@keyframes turn-in { from { transform: rotateY(-118deg); } to { transform: rotateY(0); } }
+/* 真横（90度）を過ぎるとページの裏側になって見えないため、少し過ぎたところで終える */
+@keyframes turn-out { from { transform: rotateY(0); } to { transform: rotateY(-96deg); } }
+@keyframes turn-in { from { transform: rotateY(-96deg); } to { transform: rotateY(0); } }
+/* スマホは紙面が画面の幅いっぱいで、めくったページがすぐ画面の外へ出るため、奥行きを深くし、短くめくる */
+.app.phone .page-viewport [data-vivliostyle-spread-container] { perspective: 4200px; }
+.app.phone .page-viewport [data-vivliostyle-page-container]:is(.turn-out, .turn-in) { animation-duration: 0.45s; }
+.app.phone .page-viewport [data-vivliostyle-page-container].turn-out::after { animation-duration: 0.45s; }
+.app.phone .page-viewport [data-vivliostyle-page-container].turn-in::after { animation-duration: 0.45s; }
 @keyframes shade-out { from { opacity: 0; } to { opacity: 1; } }
 @keyframes shade-in { from { opacity: 1; } to { opacity: 0; } }
 @keyframes fade-out { to { opacity: 0; } }
