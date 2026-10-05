@@ -9,6 +9,9 @@
 /** A4 の大きさ（CSS の px） */
 export const PAGE_W = 793.7
 export const PAGE_H = 1122.52
+/** 本文の版面（左の余白 35mm・右の余白 25mm の内側） */
+const TEXT_LEFT = 132.3
+const TEXT_W = 566.9
 const MAX_ZOOM = 1.4
 
 export class PageStage {
@@ -37,18 +40,23 @@ export class PageStage {
     const w = this.stage.clientWidth
     const h = this.stage.clientHeight
     if (w === 0 || h === 0) return
+    // 拡大しているかで余白の幅を変えられるよう、先にクラスを付ける
+    this.stage.classList.toggle('zoomed', this.zoomed)
     const side = this.inset('--inset-side', 180)
     const top = this.inset('--inset-top', 18)
     const bottom = this.inset('--inset-bottom', 18)
-    const byWidth = (w - side * 2) / PAGE_W
+    // スマホで拡大するときは、余白を外して本文の幅を画面の幅に合わせる（--zoom-to-text: 1）
+    const toText = this.zoomed && this.inset('--zoom-to-text', 0) === 1
+    const byWidth = (w - side * 2) / (toText ? TEXT_W : PAGE_W)
     const scale = this.zoomed ? Math.min(MAX_ZOOM, byWidth) : Math.max(0.2, Math.min(byWidth, (h - top - bottom) / PAGE_H))
     const pageTop = this.zoomed ? top : top + (h - top - bottom - PAGE_H * scale) / 2
+    const pageLeft = toText ? side - TEXT_LEFT * scale : (w - PAGE_W * scale) / 2
     const s = this.stage.style
     s.setProperty('--s', String(scale))
     s.setProperty('--page-w', `${PAGE_W * scale}px`)
     s.setProperty('--page-h', `${PAGE_H * scale}px`)
     s.setProperty('--page-top', `${pageTop}px`)
-    this.stage.classList.toggle('zoomed', this.zoomed)
+    s.setProperty('--page-left', `${pageLeft}px`)
     this.scale = scale
     this.onChange()
   }

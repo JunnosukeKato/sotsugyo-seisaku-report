@@ -46,6 +46,8 @@ export interface EditorSnapshot {
   zoomed: boolean
   /** ページを送っている途中か */
   turning: boolean
+  /** スマホ：下の欄で書いているか */
+  sheet: boolean
   version: number
 }
 
@@ -207,6 +209,7 @@ export class ReportEditor {
       pageCount: this.layout?.kinds.length ?? 0,
       zoomed: this.stage.zoomed,
       turning: this.turning !== null,
+      sheet: this.overlay.inSheet,
       version: this.version,
     }
     return this.snapshotCache
@@ -393,6 +396,33 @@ export class ReportEditor {
     this.stage.setZoom(zoomed)
   }
 
+  /**
+   * スマホ：書く欄を画面の下に出す（host はその中の、入力欄を置く要素）。null なら紙面に重ねる（PC）
+   */
+  setSheetHost(host: HTMLElement | null): void {
+    this.hideStyle.textContent = ''
+    this.overlay.setSheetHost(host)
+    // 画面の並べ方が変わると紙面のまわりの余白も変わるため、倍率を求め直す
+    this.setZoom(false)
+    this.notify()
+  }
+
+  /** スマホ：書く欄の「完了」。書き終えて、紙面を1ページ全体の表示に戻す */
+  finishEditing(): void {
+    this.overlay.commit()
+    if (this.overlay.inSheet) this.setZoom(false)
+  }
+
+  /** スマホ：書いているブロックが、紙面の見えている部分の上の方に来るようにスクロールする */
+  private revealEditing(): void {
+    const id = this.overlay.blockId
+    const view = this.renderer.pageView
+    const fragment = id ? view.fragments(id).find((f) => view.pageIndexOf(f) === this.page) : undefined
+    if (!fragment) return
+    const top = fragment.getBoundingClientRect().top - this.scroller.getBoundingClientRect().top
+    this.scroller.scrollTop += top - 16
+  }
+
   /** いま見えている紙面の各ページの要素（ページ一覧の縮小表示に使う） */
   pageElements(): HTMLElement[] {
     return this.renderer.pageView.pages()
@@ -409,6 +439,7 @@ export class ReportEditor {
         this.page = page
         this.scroller.scrollTop = 0
         this.renderer.show(page, 'fade')
+        if (this.overlay.inSheet) this.revealEditing()
       }
     }
     const placement = this.overlayPlacement(id)
@@ -488,14 +519,27 @@ export class ReportEditor {
     this.selection = null
     this.markSelection()
     this.reportBeforeEdit = this.report
-    this.hideStyle.textContent = `[data-block-id="${CSS.escape(id)}"] { visibility: hidden !important; }`
+    this.hideStyle.textContent = this.editingStyle(id)
     this.overlay.open(target)
+    // スマホ：紙面を拡大し、書いているところを見せる
+    if (this.overlay.inSheet) {
+      if (!this.stage.zoomed) this.stage.setZoom(true)
+      this.revealEditing()
+    }
     this.refreshHighlights()
     this.notify()
   }
 
+  /** 書いているブロックの紙面での見せ方。PC は入力欄を重ねるので隠し、スマホは下の欄で書くので枠で示す */
+  private editingStyle(id: string): string {
+    const selector = `.page-viewport [data-block-id="${CSS.escape(id)}"]`
+    return this.overlay.inSheet
+      ? `${selector} { outline: 2px solid #2f3e75; outline-offset: 2px; background: rgba(47, 62, 117, 0.08); }`
+      : `${selector} { visibility: hidden !important; }`
+  }
+
   private reopenAfterRender(id: string, caret: number): void {
-    this.hideStyle.textContent = `[data-block-id="${CSS.escape(id)}"] { visibility: hidden !important; }`
+    this.hideStyle.textContent = this.editingStyle(id)
     this.pendingOpen = { id, caret }
     this.afterChange({ render: 'now', save: true })
   }

@@ -51,7 +51,7 @@ button:disabled { cursor: default; opacity: 0.4; }
 .page-viewport.front { z-index: 1; }
 
 /* 1ページずつ表示する：ページを同じ位置に重ね、表示するページ（.is-current）だけを出す。縮小は spread-container で行う */
-.page-viewport [data-vivliostyle-outer-zoom-box] { position: relative !important; width: var(--page-w) !important; height: var(--page-h) !important; margin: var(--page-top) auto var(--inset-bottom) !important; padding: 0 !important; }
+.page-viewport [data-vivliostyle-outer-zoom-box] { position: relative !important; width: var(--page-w) !important; height: var(--page-h) !important; margin: var(--page-top) 0 var(--inset-bottom) var(--page-left) !important; padding: 0 !important; }
 .page-viewport [data-vivliostyle-spread-container] { position: absolute !important; left: 0; top: 0; width: 793.7px !important; height: 1122.52px !important; transform: scale(var(--s)); transform-origin: 0 0; perspective: 2600px; }
 .page-viewport [data-vivliostyle-page-container] { position: absolute !important; left: 0; top: 0; display: none !important; margin: 0 !important; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08), 0 20px 60px rgba(30, 25, 20, 0.16); transform-origin: left center; backface-visibility: hidden; cursor: text; }
 /* 組版の間は、寸法を測れるようすべてのページを出しておく（裏側なので見えない） */
@@ -263,10 +263,95 @@ button:disabled { cursor: default; opacity: 0.4; }
 .popover button { border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: 6px; font-size: 14px; }
 .popover button:hover, .popover button.on { background: var(--accent-soft); color: var(--accent); }
 
+/* ---- スマホ版（mockups/v7 案2「下から書く欄が出る」）。画面の幅が狭いとき App が .phone を付ける ---- */
+.p-top, .p-nav, .pager, .sel-bar, .edit-sheet, .sheet, .scrim, .unzoom { box-sizing: border-box; }
+.p-top *, .p-nav *, .pager *, .sel-bar *, .edit-sheet *, .sheet * { box-sizing: border-box; }
+.app.phone { grid-template-columns: minmax(0, 1fr); grid-template-rows: 48px minmax(0, 1fr) 62px; touch-action: manipulation; }
+.app.phone .p-top { grid-row: 1; }
+.app.phone .stage { grid-row: 2; --inset-side: 10px; --inset-top: 12px; --inset-bottom: 64px; touch-action: pan-y; }
+.app.phone .stage.zoomed { --inset-side: 10px; --inset-top: 8px; --inset-bottom: 260px; --zoom-to-text: 1; }
+.app.phone .p-nav { grid-row: 3; }
+.app.phone .page-viewport [data-vivliostyle-page-container] { box-shadow: 0 1px 2px rgba(30, 25, 20, 0.06), 0 8px 24px rgba(30, 25, 20, 0.14); }
+
+/* 上の細い帯 */
+.p-top { display: flex; align-items: center; gap: 9px; padding: 0 4px 0 12px; background: var(--panel-bg); border-bottom: 1px solid var(--line); min-width: 0; }
+.p-top .mark { width: 28px; height: 28px; font-size: 14px; border-radius: 8px; }
+.p-title { min-width: 0; line-height: 1.3; }
+.p-title .title { font-size: 14px; font-weight: 700; letter-spacing: 0.04em; white-space: nowrap; }
+.p-title .sub { font-size: 10.5px; color: var(--muted); white-space: nowrap; }
+.p-top .chip { margin-left: auto; background: none; padding: 0 2px; font-size: 10.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.icon-btn { width: 42px; height: 42px; flex: none; border: 0; background: none; display: grid; place-items: center; color: var(--ink); border-radius: 10px; }
+.icon-btn svg { width: 22px; height: 22px; }
+
+/* ページ送り（紙面の下） */
+.pager { position: fixed; z-index: 10; left: 50%; bottom: calc(62px + 12px); transform: translateX(-50%); display: flex; align-items: center; gap: 2px; padding: 3px; background: rgba(255, 255, 255, 0.95); border: 1px solid var(--line); border-radius: 999px; box-shadow: var(--float-shadow); font-size: 12px; white-space: nowrap; }
+.pager button { width: 36px; height: 36px; border: 0; background: none; border-radius: 50%; display: grid; place-items: center; color: var(--ink); }
+.pager button svg { width: 20px; height: 20px; }
+.pager .lbl { padding: 0 6px; color: var(--muted); }
+.pager .lbl b { color: var(--ink); }
+.unzoom { position: fixed; z-index: 10; right: 12px; bottom: calc(62px + 12px); display: flex; align-items: center; gap: 5px; padding: 8px 12px; border: 1px solid var(--line); border-radius: 999px; background: rgba(255, 255, 255, 0.95); box-shadow: var(--float-shadow); font-size: 12px; color: var(--ink); }
+.unzoom svg { width: 16px; height: 16px; }
+
+/* 選んでいる図・表・作品写真の道具（下のタブの上） */
+.sel-bar { position: fixed; z-index: 11; left: 8px; right: 8px; bottom: calc(62px + 60px); display: flex; justify-content: center; }
+.sel-bar .group.ctx { display: flex; flex-direction: row; align-items: center; gap: 2px; padding: 4px 8px; margin: 0; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--float-shadow); }
+.sel-bar .ctx-label { padding: 0 6px 0 2px; }
+.sel-bar .tb { width: auto; padding: 6px 10px; }
+.sel-bar .layouts { display: flex; padding: 0; }
+.sel-bar .lay { padding: 6px 10px; border-color: var(--line); }
+.sel-bar .lay.on { border-color: var(--accent); }
+
+/* 下のタブ */
+.p-nav { display: grid; grid-template-columns: repeat(4, 1fr); padding-bottom: env(safe-area-inset-bottom); background: var(--panel-bg); border-top: 1px solid var(--line); }
+.p-nav button { position: relative; border: 0; background: none; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; font-size: 10.5px; color: var(--muted); }
+.p-nav svg { width: 23px; height: 23px; }
+.p-nav .add .plus { width: 42px; height: 30px; border-radius: 10px; background: var(--accent); color: #fff; display: grid; place-items: center; }
+.p-nav .add .plus svg { width: 20px; height: 20px; }
+.p-nav .badge { position: absolute; top: 6px; left: calc(50% + 6px); min-width: 17px; height: 17px; padding: 0 4px; border-radius: 9px; background: var(--error); color: #fff; font-size: 10px; font-style: normal; font-weight: 700; display: grid; place-items: center; box-shadow: 0 0 0 2px var(--panel-bg); }
+
+/* 下から出る書く欄（キーボードのすぐ上） */
+.edit-sheet { position: fixed; z-index: 30; left: 0; right: 0; bottom: var(--kb, 0px); display: none; padding-bottom: env(safe-area-inset-bottom); background: #fff; border-radius: 16px 16px 0 0; box-shadow: 0 -8px 24px rgba(30, 25, 20, 0.14); }
+.edit-sheet.open { display: block; }
+.es-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px 6px 16px; }
+.es-head .where { font-size: 11.5px; color: var(--muted); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.es-head .where b { color: var(--accent); }
+.es-head .done { margin-left: auto; flex: none; border: 0; background: var(--accent); color: #fff; font-weight: 700; font-size: 13px; border-radius: 8px; padding: 8px 16px; }
+.es-host { margin: 0 12px; }
+.overlay-editor.in-sheet { position: static; transform: none; width: auto; max-height: 30vh; overflow-y: auto; padding: 10px 12px; border: 1.5px solid var(--accent); border-radius: 10px; outline: none; font-family: 'BIZ UDMincho', serif; font-size: 16px; line-height: 1.75; letter-spacing: 0; text-indent: 0; text-align: start; }
+.overlay-editor.in-sheet[data-kind='paragraph'] { text-indent: 1em; }
+.es-meta { display: flex; justify-content: space-between; gap: 8px; padding: 5px 16px 2px; font-size: 11px; color: var(--muted); }
+.es-meta .ng { color: var(--error); text-align: right; }
+.es-tools { display: flex; align-items: center; gap: 2px; padding: 2px 8px 8px; overflow-x: auto; scrollbar-width: none; }
+.es-tools button { flex: none; height: 36px; display: flex; align-items: center; gap: 4px; padding: 0 10px; border: 0; background: none; border-radius: 8px; font-size: 12.5px; color: var(--ink); }
+.es-tools button svg { width: 19px; height: 19px; }
+.es-tools button.danger { color: var(--error); }
+.es-tools .chip-btn { background: var(--accent-soft); color: var(--accent); }
+
+/* 下から出る欄（ページ一覧・追加・チェック・メニュー） */
+.scrim { position: fixed; inset: 0; z-index: 40; background: rgba(20, 20, 25, 0.28); }
+.sheet { position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; max-height: 78vh; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); background: var(--panel-bg); border-radius: 18px 18px 0 0; box-shadow: 0 -10px 30px rgba(30, 25, 20, 0.18); animation: sheet-up 0.22s ease; }
+@keyframes sheet-up { from { transform: translateY(40px); opacity: 0.6; } }
+.sheet .grab { width: 40px; height: 4px; border-radius: 2px; background: #d6d3cd; margin: 8px auto 2px; }
+.sheet-head { display: flex; align-items: baseline; gap: 10px; padding: 6px 8px 8px 18px; }
+.sheet-head h2 { margin: 0; font-size: 16px; letter-spacing: 0.04em; }
+.sheet-head .tally, .sheet-head .pcount, .sheet-head .brand-sub { font-size: 11.5px; color: var(--muted); }
+.sheet-close { margin-left: auto; width: 36px; height: 36px; border: 0; background: none; font-size: 22px; color: var(--muted); }
+.sheet-body { overflow-y: auto; padding: 0 18px 18px; }
+.sheet-body .thumb-list { grid-template-columns: repeat(5, 1fr); max-height: none; }
+.sheet-body .meta { margin-top: 0; }
+.sheet-body .links { margin: 12px 0; }
+.sheet-body .notice { margin: 12px 0 0; }
+.sheet-body .export { margin-top: 16px; }
+.sheet-hint { margin: 0 0 12px; font-size: 12.5px; line-height: 1.7; color: var(--muted); }
+.add-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.add-grid .tb { padding: 14px 0 12px; border: 1px solid var(--line); background: #fff; border-radius: 12px; font-size: 12px; }
+.add-grid .tb svg { width: 26px; height: 26px; }
+
 /* ---- 印刷（PDFに保存）：紙面だけを、すべてのページを順に出す ---- */
 @media print {
   html, body, #root, .app, .stage { display: block !important; height: auto !important; overflow: visible !important; background: #fff !important; }
-  .side, .palette, .arrow, .zoom, #overlay-layer, .loading, .modal-backdrop, .popover-backdrop { display: none !important; }
+  .side, .palette, .arrow, .zoom, #overlay-layer, .loading, .modal-backdrop, .popover-backdrop,
+  .p-top, .p-nav, .pager, .sel-bar, .edit-sheet, .sheet, .scrim, .unzoom { display: none !important; }
   .page-scroller { position: static !important; overflow: visible !important; }
   .page-viewport:not(.front) { display: none !important; }
   .page-viewport { position: static !important; min-height: 0 !important; opacity: 1 !important; background: #fff !important; }

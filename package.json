@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "node scripts/e2e/smoke.mjs",
+    "e2e": "node scripts/e2e/smoke.mjs && node scripts/e2e/phone.mjs",
     "build:gas": "node scripts/build-gas.mjs",
     "deploy:gas": "node scripts/deploy-gas.mjs"
   },

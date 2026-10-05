@@ -8,6 +8,8 @@ import { allImages, listSnapshots, loadReport, putImage, saveSnapshot, usedImage
 import { BackupDialog, CourseMenu, ExportDialog, ReferencesDialog } from './app/dialogs'
 import { Icon } from './app/icons'
 import { Palette } from './app/Palette'
+import { PhoneChrome } from './app/Phone'
+import { useKeyboardInset, useNarrow, useSwipe } from './app/uiShared'
 import { SidePanel } from './app/SidePanel'
 import { useAutosave } from './app/useAutosave'
 
@@ -44,6 +46,7 @@ export default function App() {
   const stageRef = useRef<HTMLElement>(null)
   const scrollerRef = useRef<HTMLDivElement>(null)
   const layerRef = useRef<HTMLDivElement>(null)
+  const sheetHostRef = useRef<HTMLDivElement>(null)
   const started = useRef(false)
   const [config, setConfig] = useState<YearConfig>(currentConfig)
   const [editor, setEditor] = useState<ReportEditor | null>(null)
@@ -51,6 +54,14 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null)
   const autosave = useAutosave()
   const snap = useSyncExternalStore(editor?.subscribe ?? noopSubscribe, editor?.getSnapshot ?? nullSnapshot) as EditorSnapshot | null
+  // スマホ（画面の幅が狭いとき）は、並べ方と書き方を変える
+  const narrow = useNarrow()
+  const hasLayout = !!snap?.layout
+  useKeyboardInset()
+  useSwipe(stageRef, editor, narrow)
+  useEffect(() => {
+    if (editor && hasLayout) editor.setSheetHost(narrow ? sheetHostRef.current : null)
+  }, [editor, narrow, hasLayout])
 
   useEffect(() => {
     if (started.current) return
@@ -132,11 +143,11 @@ export default function App() {
   const ready = editor && snap
 
   return (
-    <div className="app">
+    <div className={`app${narrow ? ' phone' : ''}`}>
       <main className="stage" ref={stageRef}>
         <div className="page-scroller" ref={scrollerRef} />
         <div id="overlay-layer" ref={layerRef} />
-        {ready && snap.layout && (
+        {ready && snap.layout && !narrow && (
           <>
             <Palette editor={editor} snap={snap} onReferences={() => setDialog({ kind: 'references' })} />
             <button className="arrow prev" aria-label="前のページ" title="前のページ（←）" disabled={snap.page <= 0} onClick={() => editor.prevPage()}>
@@ -159,7 +170,22 @@ export default function App() {
         {loadError && <div className="loading ng">読み込みに失敗しました：{loadError}</div>}
       </main>
 
-      {ready ? (
+      {ready && narrow ? (
+        <PhoneChrome
+          editor={editor}
+          snap={snap}
+          config={config}
+          saveState={autosave.state}
+          sheetHostRef={sheetHostRef}
+          onReferences={() => setDialog({ kind: 'references' })}
+          onBackup={async () => setDialog({ kind: 'backup', snapshots: await listSnapshots() })}
+          onExport={async () => {
+            editor.commitEditing()
+            await editor.render()
+            setDialog({ kind: 'export' })
+          }}
+        />
+      ) : ready ? (
         <SidePanel
           editor={editor}
           snap={snap}

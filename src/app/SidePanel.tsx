@@ -20,7 +20,7 @@ interface Props {
   onExport: () => void
 }
 
-function SaveChip({ state }: { state: SaveState }) {
+export function SaveChip({ state }: { state: SaveState }) {
   const title = '原稿はこのブラウザに自動で保存されます'
   if (state.status === 'saving') return <span className="chip saved" title={title}><i className="dot busy" />保存しています…</span>
   if (state.status === 'error') return <span className="chip saved ng" title={state.message}><i className="dot ng" />保存できません。バックアップを保存してください</span>
@@ -28,7 +28,7 @@ function SaveChip({ state }: { state: SaveState }) {
   return <span className="chip saved" title={title}><i className="dot" />自動保存{at}</span>
 }
 
-function DeadlineChip({ deadline }: { deadline: string }) {
+export function DeadlineChip({ deadline }: { deadline: string }) {
   const days = daysUntil(deadline)
   const title = `最終締切 ${formatDeadline(deadline)}`
   if (days < 0) return <span className="chip deadline ng" title={title}>締切を過ぎています</span>
@@ -38,7 +38,7 @@ function DeadlineChip({ deadline }: { deadline: string }) {
 const SHORT_NAMES: Record<PageKind, string> = { cover: '表紙', abstract: '抄録', toc: '目次', body: '本文', references: '参考文献', photos: '作品写真', unknown: '' }
 
 /** ページ一覧。紙面を縮小した本物の見た目を出し、エラーのあるページに赤い点を付ける */
-function PageThumbs({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
+export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; snap: EditorSnapshot; onPick?: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
   const kinds = snap.layout?.kinds ?? []
   let body = 0
@@ -63,7 +63,10 @@ function PageThumbs({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsh
   return (
     <div className="thumb-list" ref={ref}>
       {names.map((name, i) => (
-        <button key={i} className={`t${i === snap.page ? ' on' : ''}${errorPages.has(i) ? ' has-error' : ''}`} title={`${name}（${i + 1}ページ目）`} onClick={() => void editor.goToPage(i)}>
+        <button key={i} className={`t${i === snap.page ? ' on' : ''}${errorPages.has(i) ? ' has-error' : ''}`} title={`${name}（${i + 1}ページ目）`} onClick={() => {
+            onPick?.()
+            void editor.goToPage(i)
+          }}>
           <span className="mini" />
           {name}
         </button>
@@ -86,11 +89,14 @@ function Meter({ label, value, ok, ratio }: { label: string; value: string; ok: 
   )
 }
 
-function Issue({ finding, editor }: { finding: ReportFinding; editor: ReportEditor }) {
+function Issue({ finding, editor, onPick }: { finding: ReportFinding; editor: ReportEditor; onPick?: () => void }) {
   return (
     <li
       className={`issue ${finding.severity}`}
-      onClick={() => void editor.goToFinding(finding)}
+      onClick={() => {
+        onPick?.()
+        void editor.goToFinding(finding)
+      }}
       onMouseEnter={() => editor.focusFinding(finding)}
       onMouseLeave={() => editor.focusFinding(null)}
     >
@@ -130,15 +136,64 @@ export function SourceNotice() {
   )
 }
 
-export function SidePanel({ editor, snap, config, saveState, onBackup, onExport }: Props) {
+/** セルフチェックの中身（進み具合のメーターと、場所ごとにまとめた指摘）。PC は右の欄、スマホは下から出る欄に置く */
+export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEditor; snap: EditorSnapshot; config: YearConfig; onPick?: () => void }) {
   const { findings, layout, report } = snap
-  const errors = findings.filter((f) => f.severity === 'error').length
   const chars = abstractCharCount(report)
   const { minChars, maxChars, minLines, maxLines } = config.abstract
   const bodyPages = layout?.bodyPages ?? 0
   const figures = report.body.flatMap((c) => c.blocks).reduce((n, b) => n + (b.type === 'figureRow' ? b.figures.length : 0), 0)
   const figureMax = Math.max(1, bodyPages * config.body.imagesPerPageGuide)
+  return (
+    <>
+      <div className="meters">
+        <Meter label="本文のページ数" value={`${bodyPages} / ${config.body.minPages}ページ以上`} ok={bodyPages >= config.body.minPages} ratio={bodyPages / config.body.minPages} />
+        <Meter label="抄録の文字数" value={`${chars}字（${minChars}〜${maxChars}）`} ok={chars >= minChars && chars <= maxChars} ratio={chars / maxChars} />
+        <Meter
+          label="抄録の行数"
+          value={`${layout?.abstractLines ?? 0}行（${minLines}〜${maxLines}）`}
+          ok={!!layout && layout.abstractLines >= minLines && layout.abstractLines <= maxLines}
+          ratio={(layout?.abstractLines ?? 0) / maxLines}
+        />
+        <Meter label="図の枚数" value={`${figures}枚（目安 ${figureMax}枚まで）`} ok={figures <= figureMax} ratio={figures / figureMax} />
+      </div>
+      {findings.length === 0 ? (
+        <div className="empty">✓ 指摘はありません。PDFを書き出せます。</div>
+      ) : (
+        AREA_ORDER.map((area) => {
+          const items = findings.filter((f) => f.area === area)
+          if (items.length === 0) return null
+          return (
+            <div key={area} className="igroup">
+              <div className="ig-h">
+                {AREA_LABELS[area]}
+                <span>{items.length}件</span>
+              </div>
+              <ul className="issues">
+                {items.map((f, i) => (
+                  <Issue key={`${f.ruleId}-${f.blockId}-${f.start}-${i}`} finding={f} editor={editor} onPick={onPick} />
+                ))}
+              </ul>
+            </div>
+          )
+        })
+      )}
+    </>
+  )
+}
 
+/** エラーと警告の件数 */
+export function Tally({ snap }: { snap: EditorSnapshot }) {
+  const errors = snap.findings.filter((f) => f.severity === 'error').length
+  return (
+    <span className="tally">
+      <b className="e">{errors}</b> エラー　<b className="w">{snap.findings.length - errors}</b> 警告
+    </span>
+  )
+}
+
+export function SidePanel({ editor, snap, config, saveState, onBackup, onExport }: Props) {
+  const errors = snap.findings.filter((f) => f.severity === 'error').length
   return (
     <aside className="side">
       <header className="side-head">
@@ -187,42 +242,9 @@ export function SidePanel({ editor, snap, config, saveState, onBackup, onExport 
       <section className="sec check">
         <div className="sec-h">
           <span>セルフチェック</span>
-          <span className="tally">
-            <b className="e">{errors}</b> エラー　<b className="w">{findings.length - errors}</b> 警告
-          </span>
+          <Tally snap={snap} />
         </div>
-        <div className="meters">
-          <Meter label="本文のページ数" value={`${bodyPages} / ${config.body.minPages}ページ以上`} ok={bodyPages >= config.body.minPages} ratio={bodyPages / config.body.minPages} />
-          <Meter label="抄録の文字数" value={`${chars}字（${minChars}〜${maxChars}）`} ok={chars >= minChars && chars <= maxChars} ratio={chars / maxChars} />
-          <Meter
-            label="抄録の行数"
-            value={`${layout?.abstractLines ?? 0}行（${minLines}〜${maxLines}）`}
-            ok={!!layout && layout.abstractLines >= minLines && layout.abstractLines <= maxLines}
-            ratio={(layout?.abstractLines ?? 0) / maxLines}
-          />
-          <Meter label="図の枚数" value={`${figures}枚（目安 ${figureMax}枚まで）`} ok={figures <= figureMax} ratio={figures / figureMax} />
-        </div>
-        {findings.length === 0 ? (
-          <div className="empty">✓ 指摘はありません。PDFを書き出せます。</div>
-        ) : (
-          AREA_ORDER.map((area) => {
-            const items = findings.filter((f) => f.area === area)
-            if (items.length === 0) return null
-            return (
-              <div key={area} className="igroup">
-                <div className="ig-h">
-                  {AREA_LABELS[area]}
-                  <span>{items.length}件</span>
-                </div>
-                <ul className="issues">
-                  {items.map((f, i) => (
-                    <Issue key={`${f.ruleId}-${f.blockId}-${f.start}-${i}`} finding={f} editor={editor} />
-                  ))}
-                </ul>
-              </div>
-            )
-          })
-        )}
+        <CheckBody editor={editor} snap={snap} config={config} />
       </section>
 
       <footer className="side-foot">

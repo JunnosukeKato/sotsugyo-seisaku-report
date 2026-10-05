@@ -1,9 +1,9 @@
 import { useState, type ReactNode } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { numbering } from '../editor/reportOps'
-import type { PageKind } from '../layout/measure'
 import type { WorkPhotoLayout } from '../model/types'
 import { Icon } from './icons'
+import { keepFocus, PAGE_CONTEXT } from './uiShared'
 
 /**
  * 紙面の左わきに置く道具。表示しているページの種類と、書いている物・選んでいる物に合わせて入れ替わる。
@@ -14,19 +14,6 @@ interface Props {
   editor: ReportEditor
   snap: EditorSnapshot
   onReferences: () => void
-}
-
-/** ボタンを押しても入力欄から文字のカーソルが外れないようにする */
-const keepFocus = (e: React.MouseEvent) => e.preventDefault()
-
-const PAGE_CONTEXT: Record<PageKind, { name: string; hint: string }> = {
-  cover: { name: '表紙', hint: '項目をクリック\nして入力' },
-  abstract: { name: '抄録', hint: 'Enter で\n段落を分ける' },
-  toc: { name: '目次', hint: '見出しから\n自動で作られる' },
-  body: { name: '本文', hint: 'クリックして\nその場で書く' },
-  references: { name: '参考文献', hint: 'クリックして\n編集する' },
-  photos: { name: '作品写真', hint: '枠をクリック\nして選ぶ' },
-  unknown: { name: '', hint: '' },
 }
 
 const PHOTO_LAYOUTS: WorkPhotoLayout[] = [1, 2, 3, 4, 6]
@@ -101,7 +88,7 @@ function ReferenceMenu({ editor, snap }: Omit<Props, 'onReferences'>) {
 }
 
 /** 書いている物・選んでいる物の道具 */
-function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
+export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
   const { editingKind, editingId, selection, report } = snap
   const kind = snap.layout?.kinds[snap.page]
 

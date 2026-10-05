@@ -3,6 +3,8 @@
  * 組版された紙面は表示専用のため、編集中の箇所だけ、同じ書体・字間・行送りの入力欄を同じ位置に重ねる。
  * 打つ手を止めると紙面全体が組み直される。
  *
+ * 画面の狭いスマホでは、紙面に重ねると文字が小さすぎるため、画面の下から出る欄（sheet）の中で大きな文字で書く。
+ *
  * - paragraph：段落。Enter で分ける、先頭の Backspace で前とつなげる、複数行の貼り付けは段落に分ける
  * - line：見出し・図のタイトル・表紙の項目。Enter で確定
  * - cell：表のセル。Enter で確定、Shift+Enter で改行
@@ -95,6 +97,28 @@ export class OverlayEditor {
     scroller.addEventListener('scroll', () => this.place())
   }
 
+  /**
+   * 書く場所を切り替える。host を渡すと、その中で（大きな文字で）書く。null なら紙面に重ねる
+   */
+  setSheetHost(host: HTMLElement | null): void {
+    if (this.target) this.commit()
+    this.sheetHost = host
+    const el = this.element
+    el.classList.toggle('in-sheet', !!host)
+    if (host) {
+      for (const key of [...COPIED_STYLES, 'transform', 'width', 'top', 'left'] as const) el.style[key] = ''
+      host.append(el)
+    } else {
+      this.clip.append(el)
+    }
+  }
+
+  private sheetHost: HTMLElement | null = null
+
+  get inSheet(): boolean {
+    return this.sheetHost !== null
+  }
+
   get blockId(): string | null {
     return this.target?.blockId ?? null
   }
@@ -125,12 +149,17 @@ export class OverlayEditor {
   open(target: OverlayTarget): void {
     this.target = target
     this.element.dataset.kind = target.kind
-    const computed = getComputedStyle(target.styleSource)
-    for (const key of COPIED_STYLES) this.element.style[key] = computed[key]
-    if (target.kind !== 'paragraph') this.element.style.textIndent = '0'
     this.element.textContent = target.text
-    this.clip.hidden = false
-    this.moveTo(target)
+    if (this.sheetHost) {
+      // 下の欄で書く：書体などは画面用（CSS）のまま。スマホでキーボードを出すには、タップの処理の中で欄を見せて入力欄に移る必要がある
+      this.sheetHost.closest('.edit-sheet')?.classList.add('open')
+    } else {
+      const computed = getComputedStyle(target.styleSource)
+      for (const key of COPIED_STYLES) this.element.style[key] = computed[key]
+      if (target.kind !== 'paragraph') this.element.style.textIndent = '0'
+      this.clip.hidden = false
+      this.moveTo(target)
+    }
     this.element.focus({ preventScroll: true })
     this.setCaret(target.caret)
   }
@@ -140,6 +169,7 @@ export class OverlayEditor {
    * 入力欄は紙面と同じ寸法で組み、紙面と同じ倍率で縮小して重ねる。
    */
   moveTo(placement: OverlayPlacement): void {
+    if (this.sheetHost) return
     const { rect, clip, scale, alignOffset } = placement
     this.scale = scale
     this.element.style.transform = `scale(${scale})`
@@ -175,6 +205,7 @@ export class OverlayEditor {
   private close(): void {
     this.target = null
     this.clip.hidden = true
+    this.sheetHost?.closest('.edit-sheet')?.classList.remove('open')
   }
 
   setCaret(offset: number): void {
@@ -206,6 +237,7 @@ export class OverlayEditor {
   }
 
   private place(): void {
+    if (this.sheetHost) return
     const c = this.clip.style
     c.top = `${this.clipBox.top - this.scroller.scrollTop}px`
     c.left = `${this.clipBox.left - this.scroller.scrollLeft}px`
@@ -256,7 +288,7 @@ export class OverlayEditor {
     const caretRect = sel.getRangeAt(0).getClientRects()[0]
     const box = this.element.getBoundingClientRect()
     if (!caretRect) return true
-    const lineHeight = (parseFloat(getComputedStyle(this.element).lineHeight) || 20) * this.scale
+    const lineHeight = (parseFloat(getComputedStyle(this.element).lineHeight) || 20) * (this.sheetHost ? 1 : this.scale)
     return edge === 'first' ? caretRect.top - box.top < lineHeight * 0.8 : box.bottom - caretRect.bottom < lineHeight * 0.8
   }
 
