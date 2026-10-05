@@ -12,18 +12,23 @@ export interface ImageSources {
   figureSize: (figure: Figure) => FigureSize
 }
 
+export type PageEffect = 'turn' | 'fade' | 'none'
+
+/** ページを送る動きのクラス（終わったら外す） */
+const MOTION_CLASSES = ['is-under', 'is-under-current', 'turn-out', 'turn-in', 'fade-out', 'fade-in']
+
 /**
- * 報告書全体を組版して紙面に表示する。
+ * 報告書全体を組版し、紙面を1ページずつ表示する。
  *
  * 画面のちらつきを防ぐため、紙面の表示枠を2つ持つ（ダブルバッファ）。
- * 見えていない側で組み直し、組み終わった瞬間に表と裏を入れ替える。
+ * 見えていない側で組み直し（renderBack）、組み終わったら表と裏を入れ替える（swap）。
+ * 組版の間は、組版エンジンが寸法を測れるよう、裏側のすべてのページを表示しておく（.measuring）。
  * 目次のページ番号は組版した結果から読み取るため、番号が変わったときだけもう一度組み直す。
  */
 export class ReportRenderer {
   private readonly buffers: [{ element: HTMLElement; view: PageView }, { element: HTMLElement; view: PageView }]
   private frontIndex = 0
   private tocPageNumbers: Record<string, number> = {}
-  layout: LayoutInfo | null = null
 
   constructor(container: HTMLElement) {
     const make = () => {
@@ -45,32 +50,112 @@ export class ReportRenderer {
     return this.buffers[this.frontIndex].element
   }
 
-  async render(report: Report, config: YearConfig, sources: ImageSources): Promise<{ ms: number; layout: LayoutInfo }> {
+  /** 見えていない側で組版し、紙面の情報を測る（まだ表には出さない） */
+  async renderBack(report: Report, config: YearConfig, sources: ImageSources): Promise<{ ms: number; layout: LayoutInfo }> {
     const back = this.buffers[1 - this.frontIndex]
-    const build = () => buildReportDocument(report, config, { ...sources, tocPageNumbers: this.tocPageNumbers })
-    let html = build()
-    // 文字の範囲ごとに分かれたフォントを、組版の前に読み込んでおく（後から読み込まれると改行位置がずれる）
-    const text = html.replace(/<[^>]+>/g, '') + '0123456789'
-    await Promise.all([
-      document.fonts.load(`${FONT_SIZE_PT}pt "BIZ UDMincho"`, text),
-      document.fonts.load(`${FONT_SIZE_PT}pt "BIZ UDPGothic"`, text),
-    ])
-    let ms = await back.view.render(html)
-    let layout = measureLayout(back.view.pages(), report.body)
-    if (!samePageNumbers(layout.tocPageNumbers, this.tocPageNumbers)) {
-      this.tocPageNumbers = layout.tocPageNumbers
-      html = build()
-      ms += await back.view.render(html)
-      layout = measureLayout(back.view.pages(), report.body)
+    back.element.classList.add('measuring')
+    try {
+      const build = () => buildReportDocument(report, config, { ...sources, tocPageNumbers: this.tocPageNumbers })
+      let html = build()
+      // 文字の範囲ごとに分かれたフォントを、組版の前に読み込んでおく（後から読み込まれると改行位置がずれる）
+      const text = html.replace(/<[^>]+>/g, '') + '0123456789'
+      await Promise.all([
+        document.fonts.load(`${FONT_SIZE_PT}pt "BIZ UDMincho"`, text),
+        document.fonts.load(`${FONT_SIZE_PT}pt "BIZ UDPGothic"`, text),
+      ])
+      let ms = await back.view.render(html)
+      let layout = measureLayout(back.view.pages(), report.body)
+      if (!samePageNumbers(layout.tocPageNumbers, this.tocPageNumbers)) {
+        this.tocPageNumbers = layout.tocPageNumbers
+        html = build()
+        ms += await back.view.render(html)
+        layout = measureLayout(back.view.pages(), report.body)
+      }
+      return { ms, layout }
+    } finally {
+      back.element.classList.remove('measuring')
     }
-    // 表と裏を入れ替える（スクロールの位置は引き継ぐ）
+  }
+
+  /** 組み終えた裏側を表に出し、page ページ目（0 から）を見せる */
+  swap(page: number): void {
+    const back = this.buffers[1 - this.frontIndex]
     const front = this.buffers[this.frontIndex]
-    back.element.scrollTop = front.element.scrollTop
-    back.element.scrollLeft = front.element.scrollLeft
+    this.setCurrent(back.view, page)
     back.element.classList.add('front')
     front.element.classList.remove('front')
     this.frontIndex = 1 - this.frontIndex
-    this.layout = layout
-    return { ms, layout }
   }
+
+  pageCount(): number {
+    return this.pageView.pages().length
+  }
+
+  /** 表の紙面で page ページ目を見せる（動きなし。fade なら、ふわっと出す） */
+  show(page: number, effect: 'none' | 'fade' = 'none'): void {
+    this.setCurrent(this.pageView, page)
+    if (effect === 'fade' && !reducedMotion()) {
+      const el = this.pageView.pages()[page]
+      el?.classList.add('fade-in')
+      el?.addEventListener('animationend', () => el.classList.remove('fade-in'), { once: true })
+    }
+  }
+
+  private setCurrent(view: PageView, page: number): void {
+    view.pages().forEach((p, i) => {
+      p.classList.remove(...MOTION_CLASSES)
+      p.classList.toggle('is-current', i === page)
+    })
+  }
+
+  /**
+   * ページを送る。隣のページは本のようにめくり、離れたページへはふわっと切り替える。
+   * 動きが終わったら解決する。
+   */
+  turn(from: number, to: number, effect: PageEffect): Promise<void> {
+    const view = this.pageView
+    const pages = view.pages()
+    const a = pages[from]
+    const b = pages[to]
+    if (!a || !b || effect === 'none' || reducedMotion()) {
+      this.setCurrent(view, to)
+      return Promise.resolve()
+    }
+    let moving: HTMLElement
+    if (effect === 'fade' || Math.abs(to - from) !== 1) {
+      b.classList.add('is-under')
+      a.classList.add('fade-out')
+      moving = a
+    } else if (to > from) {
+      // 今のページが右端から持ち上がり、左へめくれて、下の次のページが見える
+      b.classList.add('is-under')
+      a.classList.add('turn-out')
+      moving = a
+    } else {
+      // 前のページが左からめくれて戻ってくる
+      a.classList.add('is-under-current')
+      b.classList.add('turn-in')
+      moving = b
+    }
+    return new Promise((resolve) => {
+      let finished = false
+      const finish = () => {
+        if (finished) return
+        finished = true
+        moving.removeEventListener('animationend', onEnd)
+        this.setCurrent(view, to)
+        resolve()
+      }
+      // ページの影（::after）の動きの終わりも届くため、ページ本体の動きの終わりだけを見る
+      const onEnd = (e: AnimationEvent) => {
+        if (e.target === moving && !e.pseudoElement) finish()
+      }
+      moving.addEventListener('animationend', onEnd)
+      setTimeout(finish, 1500)
+    })
+  }
+}
+
+function reducedMotion(): boolean {
+  return matchMedia('(prefers-reduced-motion: reduce)').matches
 }

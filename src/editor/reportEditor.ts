@@ -6,14 +6,16 @@ import type { LayoutInfo } from '../layout/measure'
 import { FIGURE_MAX_PX, fitFigureSize, importImage, PHOTO_MAX_PX } from '../model/images'
 import { putImage, type StoredImage } from '../model/storage'
 import type { BodyBlock, Chapter, Report, WorkPhotoLayout } from '../model/types'
-import { OverlayEditor, type OverlayKind, type OverlayTarget } from './overlayEditor'
+import { OverlayEditor, type OverlayKind, type OverlayPlacement, type OverlayTarget } from './overlayEditor'
+import { PageStage } from './pageStage'
 import * as ops from './reportOps'
-import { ReportRenderer } from './reportRenderer'
+import { ReportRenderer, type PageEffect } from './reportRenderer'
 
 /**
  * 報告書の編集の中核（画面の部品から独立した、紙面まわりの処理）。
  * - 報告書データと「元に戻す」の履歴を持つ
- * - 紙面を組版して表示し、クリックした箇所に入力欄を重ねる
+ * - 紙面を組版して1ページずつ表示し、クリックした箇所に入力欄を重ねる
+ * - ページを送る（めくる）。書いている文字が次のページへ移ったら、表示も追いかける
  * - セルフチェックを実行し、紙面に波線を引く
  * 画面の部品（React）は subscribe で変化を受け取り、snapshot で状態を読む。
  */
@@ -37,6 +39,13 @@ export interface EditorSnapshot {
   currentId: string | null
   selection: Selection
   canUndo: boolean
+  /** 表示しているページ（0 から）とページ数 */
+  page: number
+  pageCount: number
+  /** 拡大して表示しているか */
+  zoomed: boolean
+  /** ページを送っている途中か */
+  turning: boolean
   version: number
 }
 
@@ -66,6 +75,10 @@ export class ReportEditor {
   private readonly callbacks: EditorCallbacks
   private readonly renderer: ReportRenderer
   private readonly overlay: OverlayEditor
+  private readonly stage: PageStage
+  private readonly scroller: HTMLElement
+  private readonly layer: HTMLElement
+  private readonly marker: HTMLDivElement
   private readonly hideStyle: HTMLStyleElement
   private readonly images = new Map<string, ImageEntry>()
   private readonly listeners = new Set<() => void>()
@@ -80,25 +93,36 @@ export class ReportEditor {
   private pendingOpen: { id: string; caret: number } | null = null
   private currentId: string | null = null
   private selection: Selection = null
+  private page = 0
+  private turning: Promise<void> | null = null
   private version = 0
   private snapshotCache: EditorSnapshot | null = null
   private readonly highlights = { error: new Highlight(), warning: new Highlight(), focus: new Highlight() }
 
   /**
-   * @param container 紙面の表示枠（2つ。組み直すたびに表と裏を入れ替える）を入れる要素
+   * @param stage 紙面を置く台（大きさに合わせて紙面の倍率を決める）
+   * @param scroller 紙面の表示枠（2つ。組み直すたびに表と裏を入れ替える）を入れる要素。拡大したときはスクロールする
+   * @param layer 入力欄などを紙面に重ねる層
    */
-  constructor(container: HTMLElement, layer: HTMLElement, config: YearConfig, report: Report, callbacks: EditorCallbacks) {
+  constructor(stage: HTMLElement, scroller: HTMLElement, layer: HTMLElement, config: YearConfig, report: Report, callbacks: EditorCallbacks) {
     this.config = config
     this.report = report
     this.callbacks = callbacks
-    this.renderer = new ReportRenderer(container)
+    this.scroller = scroller
+    this.layer = layer
+    this.renderer = new ReportRenderer(scroller)
     this.hideStyle = document.createElement('style')
     document.head.append(this.hideStyle)
     CSS.highlights.set('issue-error', this.highlights.error)
     CSS.highlights.set('issue-warning', this.highlights.warning)
     CSS.highlights.set('issue-focus', this.highlights.focus)
+    this.marker = document.createElement('div')
+    this.marker.className = 'insert-marker'
+    this.marker.hidden = true
+    this.marker.textContent = 'ここに入ります'
+    layer.append(this.marker)
 
-    this.overlay = new OverlayEditor(layer, { container, current: () => this.renderer.viewport }, {
+    this.overlay = new OverlayEditor(layer, scroller, {
       onInput: (id, text) => {
         this.report = ops.setText(this.report, id, text)
         this.afterChange({ render: 'debounce', save: true })
@@ -139,7 +163,16 @@ export class ReportEditor {
       },
     })
 
-    container.addEventListener('click', (e) => this.onClick(e))
+    // 画面の大きさが変わって紙面の倍率・位置が変わったら、入力欄も合わせる
+    this.stage = new PageStage(stage, () => {
+      this.marker.hidden = true
+      const id = this.overlay.blockId
+      const placement = id ? this.overlayPlacement(id) : null
+      if (placement) this.overlay.moveTo(placement)
+      this.notify()
+    })
+
+    scroller.addEventListener('click', (e) => this.onClick(e))
     window.addEventListener('beforeprint', () => this.beforePrint())
     window.addEventListener('afterprint', () => this.refreshHighlights())
   }
@@ -170,6 +203,10 @@ export class ReportEditor {
       currentId: this.currentId,
       selection: this.selection,
       canUndo: this.history.length > 0,
+      page: this.page,
+      pageCount: this.layout?.kinds.length ?? 0,
+      zoomed: this.stage.zoomed,
+      turning: this.turning !== null,
       version: this.version,
     }
     return this.snapshotCache
@@ -220,7 +257,7 @@ export class ReportEditor {
     this.notify()
     const image = (id: string) => this.images.get(id)
     try {
-      const result = await this.renderer.render(this.report, this.config, {
+      const result = await this.renderer.renderBack(this.report, this.config, {
         imageSrc: (id) => image(id)?.url ?? this.placeholderImage,
         photoSrc: (id) => image(id)?.url ?? this.placeholderImage,
         figureSize: (f) => {
@@ -228,8 +265,12 @@ export class ReportEditor {
           return img ? fitFigureSize(img, FIGURE_MAX_MM) : { widthMm: 60, heightMm: 45 }
         },
       })
+      // ページを送っている途中なら、送り終わってから入れ替える
+      if (this.turning) await this.turning
       this.renderMs = result.ms
       this.layout = result.layout
+      this.page = Math.max(0, Math.min(this.page, result.layout.kinds.length - 1))
+      this.renderer.swap(this.page)
     } finally {
       this.rendering = false
     }
@@ -241,8 +282,7 @@ export class ReportEditor {
       this.pendingOpen = null
       this.openEditor(id, caret)
     } else if (this.overlay.blockId) {
-      const target = this.overlayTarget(this.overlay.blockId, 0)
-      if (target) this.overlay.moveTo(target.rect)
+      this.followCaret()
     }
     this.notify()
     if (this.renderAgain) {
@@ -282,26 +322,97 @@ export class ReportEditor {
     }
   }
 
-  /** 指摘の箇所へ移動する（文字の指摘なら入力欄を開く） */
-  goToFinding(finding: ReportFinding): void {
+  /** ブロックの文字位置 offset があるページ（0 から）。紙面になければ -1 */
+  pageOfBlock(blockId: string, offset = 0): number {
+    return this.renderer.pageView.pageOfOffset(blockId, offset)
+  }
+
+  /** 指摘の箇所があるページ（0 から）。わからなければ -1 */
+  pageOfFinding(finding: ReportFinding): number {
     if (finding.blockId) {
-      const fragment = this.renderer.pageView.fragments(finding.blockId)[0]
-      fragment?.scrollIntoView({ block: 'center' })
-      if (fragment && ops.findEditable(this.report, finding.blockId)) {
-        requestAnimationFrame(() => this.openEditor(finding.blockId!, finding.start ?? 0))
-      }
-      return
+      const page = this.renderer.pageView.pageOfOffset(finding.blockId, finding.start ?? 0)
+      if (page >= 0) return page
     }
-    this.scrollToArea(finding.area)
+    return this.layout?.kinds.indexOf(finding.area) ?? -1
   }
 
-  scrollToArea(area: string): void {
+  /** 指摘の箇所へ移動する（文字の指摘なら入力欄を開く） */
+  async goToFinding(finding: ReportFinding): Promise<void> {
+    const page = this.pageOfFinding(finding)
+    if (page < 0) return
+    await this.goToPage(page, 'fade')
+    const id = finding.blockId
+    if (!id) return
+    const fragment = this.renderer.pageView.fragments(id).find((f) => this.renderer.pageView.pageIndexOf(f) === this.page)
+    if (this.stage.zoomed) fragment?.scrollIntoView({ block: 'center' })
+    if (fragment && ops.findEditable(this.report, id)) requestAnimationFrame(() => this.openEditor(id, finding.start ?? 0))
+  }
+
+  // ---- ページ送り ----
+
+  /**
+   * page ページ目（0 から）を表示する。
+   * turn：隣のページは本のようにめくる（離れたページはふわっと切り替える）／fade：ふわっと切り替える／none：すぐ切り替える
+   */
+  goToPage(index: number, effect: PageEffect = 'turn'): Promise<void> {
+    const to = Math.max(0, Math.min(index, this.renderer.pageCount() - 1))
+    if (this.turning) return this.turning
+    if (to === this.page || to < 0) return Promise.resolve()
+    if (this.overlay.blockId) this.overlay.commit()
+    this.marker.hidden = true
+    this.selection = null
+    this.markSelection()
+    const from = this.page
+    this.page = to
+    this.scroller.scrollTop = 0
+    this.turning = this.renderer.turn(from, to, effect).finally(() => {
+      this.turning = null
+      this.notify()
+    })
+    this.notify()
+    return this.turning
+  }
+
+  nextPage(): void {
+    void this.goToPage(this.page + 1)
+  }
+
+  prevPage(): void {
+    void this.goToPage(this.page - 1)
+  }
+
+  /** 種類（表紙・抄録など）の最初のページへ */
+  goToArea(area: string): void {
     const index = this.layout?.kinds.indexOf(area as never) ?? -1
-    this.renderer.pageView.pages()[index]?.scrollIntoView({ block: 'start' })
+    if (index >= 0) void this.goToPage(index, 'fade')
   }
 
-  scrollToPage(index: number): void {
-    this.renderer.pageView.pages()[index]?.scrollIntoView({ block: 'start' })
+  /** 全体（1ページ全体を表示）と拡大（横幅いっぱい）を切り替える */
+  setZoom(zoomed: boolean): void {
+    this.scroller.scrollTop = 0
+    this.stage.setZoom(zoomed)
+  }
+
+  /** いま見えている紙面の各ページの要素（ページ一覧の縮小表示に使う） */
+  pageElements(): HTMLElement[] {
+    return this.renderer.pageView.pages()
+  }
+
+  /** 書いている文字が別のページへ移ったら、表示もそのページへ移り、入力欄を合わせる */
+  private followCaret(): void {
+    const id = this.overlay.blockId
+    if (!id) return
+    // 日本語の変換中は動かさない（変換の候補が見えなくなるため）
+    if (!this.overlay.composing) {
+      const page = this.renderer.pageView.pageOfOffset(id, this.overlay.caret)
+      if (page >= 0 && page !== this.page && !this.turning) {
+        this.page = page
+        this.scroller.scrollTop = 0
+        this.renderer.show(page, 'fade')
+      }
+    }
+    const placement = this.overlayPlacement(id)
+    if (placement) this.overlay.moveTo(placement)
   }
 
   applyFinding(finding: ReportFinding): void {
@@ -319,33 +430,57 @@ export class ReportEditor {
     return kind === 'tableCell' ? 'cell' : 'line'
   }
 
-  private overlayTarget(id: string, caret: number): OverlayTarget | null {
+  /** 入力欄を重ねる位置。いま見えているページにそのブロックがなければ null */
+  private overlayPlacement(id: string): OverlayPlacement | null {
     const editable = ops.findEditable(this.report, id)
-    const fragment = this.renderer.pageView.fragments(id)[0]
-    if (!editable || !fragment) return null
-    const kind = this.overlayKind(editable.kind)
-    if (kind === 'paragraph') {
+    const view = this.renderer.pageView
+    const fragment = view.fragments(id).find((f) => view.pageIndexOf(f) === this.page)
+    const page = view.pages()[this.page]
+    if (!editable || !fragment || !page) return null
+    const p = page.getBoundingClientRect()
+    const clip = { left: p.left, top: p.top, right: p.right, bottom: p.bottom }
+    const scale = this.stage.scale
+    if (this.overlayKind(editable.kind) === 'paragraph') {
       const r = fragment.getBoundingClientRect()
-      return { blockId: id, kind, text: editable.text, caret, rect: { left: r.left, top: r.top, right: r.right }, styleSource: fragment }
+      const alignOffset = view.charsBefore(id, fragment)
+      // 前のページから続く段落は、前のページの部分（入力欄の上の方）がページの上の余白に見えないよう、段落の上端から下だけを見せる
+      return { rect: { left: r.left, top: r.top, right: r.right }, clip: alignOffset > 0 ? { ...clip, top: r.top } : clip, scale, alignOffset }
     }
     // 見出し・図のタイトル・表紙の項目・表のセル：入力部分の左端から、行（セル）の右端まで
+    const kind = this.overlayKind(editable.kind)
     const box = (fragment.closest('td, h1, h2, figcaption, p, .el') as HTMLElement | null) ?? fragment
     const own = fragment.getBoundingClientRect()
     const boxRect = box.getBoundingClientRect()
-    const left = kind === 'cell' ? boxRect.left + 2 : own.left
-    const right = Math.max(boxRect.right - (kind === 'cell' ? 2 : 0), own.left + 120)
+    const left = kind === 'cell' ? boxRect.left + 2 * scale : own.left
+    const right = Math.max(boxRect.right - (kind === 'cell' ? 2 * scale : 0), own.left + 120 * scale)
+    return { rect: { left, top: kind === 'cell' ? own.top : boxRect.top, right }, clip, scale, alignOffset: 0 }
+  }
+
+  private overlayTarget(id: string, caret: number): OverlayTarget | null {
+    const editable = ops.findEditable(this.report, id)
+    const placement = this.overlayPlacement(id)
+    // 書体などは、段落の最初の部分から写し取る（ページをまたいだ続きの部分は字下げがないため）
+    const styleSource = this.renderer.pageView.fragments(id)[0]
+    if (!editable || !placement || !styleSource) return null
     return {
+      ...placement,
       blockId: id,
-      kind,
+      kind: this.overlayKind(editable.kind),
       text: editable.text,
       caret,
-      rect: { left, top: kind === 'cell' ? own.top : boxRect.top, right },
-      styleSource: fragment,
+      styleSource,
       enterCreatesParagraph: editable.kind === 'chapter' || editable.kind === 'subheading',
     }
   }
 
   openEditor(id: string, caret: number): void {
+    // 書く位置が別のページにあれば、そのページを表示する
+    const page = this.renderer.pageView.pageOfOffset(id, caret)
+    if (page >= 0 && page !== this.page && !this.turning) {
+      this.page = page
+      this.scroller.scrollTop = 0
+      this.renderer.show(page)
+    }
     const target = this.overlayTarget(id, caret)
     if (!target) return
     if (this.overlay.blockId && this.overlay.blockId !== id) this.overlay.commit()
@@ -422,6 +557,17 @@ export class ReportEditor {
     this.notify()
   }
 
+  /** 表のタイトル・セルの ID から、その表の ID を求める */
+  tableIdOf(id: string): string | null {
+    const rowId = id.split(':')[0]
+    for (const chapter of this.report.body) {
+      for (const b of chapter.blocks) {
+        if (b.type === 'materialTable' && (b.id === id || b.rows.some((r) => r.id === rowId))) return b.id
+      }
+    }
+    return null
+  }
+
   /** 選んでいる図・表に枠を付ける */
   private markSelection(): void {
     for (const el of this.viewport.querySelectorAll('.is-selected')) el.classList.remove('is-selected')
@@ -481,8 +627,36 @@ export class ReportEditor {
 
   // ---- ブロックの追加 ----
 
-  private insertAndEdit(block: BodyBlock, editId: string): void {
-    const after = this.overlay.blockId ?? this.currentId
+  /**
+   * 段落などを足す位置（このブロックの後ろに入る）。
+   * 書いている・最後に触ったブロックが見えているページにあればその後ろ、なければ見えているページの最後の後ろ
+   */
+  private insertionAnchor(): string | null {
+    const view = this.renderer.pageView
+    const id = this.overlay.blockId ?? this.currentId
+    if (id && view.fragments(id).some((f) => view.pageIndexOf(f) === this.page)) return id
+    const blocks = view.pages()[this.page]?.querySelectorAll<HTMLElement>('section.body [data-block-id]')
+    return blocks?.length ? blocks[blocks.length - 1].dataset.blockId! : id
+  }
+
+  /** 段落などを足す道具にマウスを重ねたとき、紙面のどこに入るかを線で示す */
+  previewInsert(on: boolean): void {
+    this.marker.hidden = true
+    if (!on) return
+    const id = this.insertionAnchor()
+    const view = this.renderer.pageView
+    const fragments = id ? view.fragments(id).filter((f) => view.pageIndexOf(f) === this.page) : []
+    const last = fragments[fragments.length - 1]
+    if (!last) return
+    const block = (last.closest('figure, .material-table, h1, h2, p') as HTMLElement | null) ?? last
+    const r = block.getBoundingClientRect()
+    const l = this.layer.getBoundingClientRect()
+    Object.assign(this.marker.style, { left: `${r.left - l.left}px`, top: `${r.bottom - l.top + 2}px`, width: `${r.width}px` })
+    this.marker.hidden = false
+  }
+
+  private insertAndEdit(block: BodyBlock, editId: string, after = this.insertionAnchor()): void {
+    this.marker.hidden = true
     if (this.overlay.blockId) this.overlay.commit()
     this.pushHistory(this.report)
     this.report = ops.insertAfter(this.report, after, block)
@@ -500,7 +674,8 @@ export class ReportEditor {
   }
 
   addChapter(): void {
-    const after = this.overlay.blockId ?? this.currentId
+    const after = this.insertionAnchor()
+    this.marker.hidden = true
     if (this.overlay.blockId) this.overlay.commit()
     const chapter: Chapter = { id: ops.newId('c'), title: '', blocks: [{ type: 'paragraph', id: ops.newId('p'), content: [{ type: 'text', text: '' }] }] }
     this.pushHistory(this.report)
@@ -509,12 +684,13 @@ export class ReportEditor {
   }
 
   async addFigure(): Promise<void> {
-    const after = this.overlay.blockId ?? this.currentId
+    // 写真を選んでいる間に入力欄が閉じるため、入れる位置を先に決めておく
+    const after = this.insertionAnchor()
+    this.marker.hidden = true
     const imageId = await this.importImage('figure')
     if (!imageId) return
     const figureId = ops.newId('f')
-    this.currentId = after
-    this.insertAndEdit({ type: 'figureRow', id: ops.newId('r'), figures: [{ id: figureId, imageId, caption: '' }] }, figureId)
+    this.insertAndEdit({ type: 'figureRow', id: ops.newId('r'), figures: [{ id: figureId, imageId, caption: '' }] }, figureId, after)
   }
 
   addMaterialTable(): void {

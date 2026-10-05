@@ -25,13 +25,22 @@ export interface OverlayCallbacks {
   onPasteParagraphs(blockId: string, paragraphs: string[], caretInLast: number): void
 }
 
-export interface OverlayTarget {
+/** 紙面上の位置と大きさ（画面座標）。紙面は縮小・拡大して表示しているため、倍率も渡す */
+export interface OverlayPlacement {
+  /** 入力欄を合わせる、いま見えているページ上の要素の位置 */
+  rect: { left: number; top: number; right: number }
+  /** いま見えているページの範囲（入力欄はこの外を隠す） */
+  clip: { left: number; top: number; right: number; bottom: number }
+  scale: number
+  /** 段落がページをまたぐとき、見えているページより前にある文字数（その文字が rect の上端に来るようにずらす） */
+  alignOffset: number
+}
+
+export interface OverlayTarget extends OverlayPlacement {
   blockId: string
   kind: OverlayKind
   text: string
   caret: number
-  /** 紙面上の表示位置（画面座標） */
-  rect: { left: number; top: number; right: number }
   /** 書体・字間・行送りを写し取る紙面上の要素 */
   styleSource: HTMLElement
   /** 見出しで Enter を押したときに後ろへ段落を作るか */
@@ -43,41 +52,47 @@ const COPIED_STYLES = ['fontFamily', 'fontSize', 'lineHeight', 'letterSpacing', 
 export class OverlayEditor {
   readonly element: HTMLDivElement
   private readonly layer: HTMLElement
-  private readonly getScroller: () => HTMLElement
+  private readonly clip: HTMLDivElement
+  private readonly scroller: HTMLElement
   private readonly callbacks: OverlayCallbacks
   private target: OverlayTarget | null = null
-  private composing = false
-  private contentTop = 0
-  private contentLeft = 0
+  private composingNow = false
+  private scale = 1
+  /** 見えているページの範囲（スクロールする前の座標） */
+  private clipBox = { top: 0, left: 0, width: 0, height: 0 }
+  /** ページの範囲の中での、入力欄の位置 */
+  private offset = { top: 0, left: 0 }
 
   /**
    * @param layer 入力欄を置く層（紙面の表示領域に重ねる）
-   * @param scroll 紙面の表示枠の入れ物（スクロールを受け取る）と、いまスクロールしている表示枠
+   * @param scroller 紙面をスクロールする要素（拡大して表示しているとき）
    */
-  constructor(layer: HTMLElement, scroll: { container: HTMLElement; current: () => HTMLElement }, callbacks: OverlayCallbacks) {
+  constructor(layer: HTMLElement, scroller: HTMLElement, callbacks: OverlayCallbacks) {
     this.layer = layer
-    this.getScroller = scroll.current
+    this.scroller = scroller
     this.callbacks = callbacks
+    this.clip = document.createElement('div')
+    this.clip.className = 'overlay-clip'
+    this.clip.hidden = true
     this.element = document.createElement('div')
     this.element.className = 'overlay-editor'
     this.element.contentEditable = 'plaintext-only'
     this.element.spellcheck = false
-    this.element.hidden = true
-    layer.append(this.element)
+    this.clip.append(this.element)
+    layer.append(this.clip)
 
-    this.element.addEventListener('compositionstart', () => (this.composing = true))
+    this.element.addEventListener('compositionstart', () => (this.composingNow = true))
     this.element.addEventListener('compositionend', () => {
-      this.composing = false
+      this.composingNow = false
       this.emitInput()
     })
     this.element.addEventListener('input', () => {
-      if (!this.composing) this.emitInput()
+      if (!this.composingNow) this.emitInput()
     })
     this.element.addEventListener('keydown', (e) => this.onKeyDown(e))
     this.element.addEventListener('paste', (e) => this.onPaste(e))
     this.element.addEventListener('blur', () => this.commit())
-    // scroll は伝わらないため、入れ物で捕まえる（表示枠は組み直すたびに入れ替わる）
-    scroll.container.addEventListener('scroll', () => this.place(), true)
+    scroller.addEventListener('scroll', () => this.place())
   }
 
   get blockId(): string | null {
@@ -86,6 +101,11 @@ export class OverlayEditor {
 
   get kind(): OverlayKind | null {
     return this.target?.kind ?? null
+  }
+
+  /** 日本語の変換中か */
+  get composing(): boolean {
+    return this.composingNow
   }
 
   get text(): string {
@@ -109,18 +129,36 @@ export class OverlayEditor {
     for (const key of COPIED_STYLES) this.element.style[key] = computed[key]
     if (target.kind !== 'paragraph') this.element.style.textIndent = '0'
     this.element.textContent = target.text
-    this.element.hidden = false
-    this.moveTo(target.rect)
+    this.clip.hidden = false
+    this.moveTo(target)
     this.element.focus({ preventScroll: true })
     this.setCaret(target.caret)
   }
 
-  /** 紙面が組み直されてブロックの位置が変わったときに、入力欄を合わせて動かす */
-  moveTo(rect: OverlayTarget['rect']): void {
+  /**
+   * 紙面が組み直された・ページを送った・倍率が変わったときに、入力欄を合わせて動かす。
+   * 入力欄は紙面と同じ寸法で組み、紙面と同じ倍率で縮小して重ねる。
+   */
+  moveTo(placement: OverlayPlacement): void {
+    const { rect, clip, scale, alignOffset } = placement
+    this.scale = scale
+    this.element.style.transform = `scale(${scale})`
+    this.element.style.width = `${Math.max(40, (rect.right - rect.left) / scale)}px`
     const layerRect = this.layer.getBoundingClientRect()
-    this.contentTop = rect.top - layerRect.top + this.getScroller().scrollTop
-    this.contentLeft = rect.left - layerRect.left + this.getScroller().scrollLeft
-    this.element.style.width = `${Math.max(40, rect.right - rect.left)}px`
+    this.clipBox = {
+      top: clip.top - layerRect.top + this.scroller.scrollTop,
+      left: clip.left - layerRect.left + this.scroller.scrollLeft,
+      width: clip.right - clip.left,
+      height: clip.bottom - clip.top,
+    }
+    // ページをまたぐ段落：見えているページの最初の文字が、そのページの段落の上端に来るようにずらす
+    let shift = 0
+    if (alignOffset > 0) {
+      const first = this.range(0, 1)?.getClientRects()[0]
+      const here = this.range(alignOffset, alignOffset + 1)?.getClientRects()[0]
+      if (first && here) shift = here.top - first.top
+    }
+    this.offset = { top: rect.top - clip.top - shift, left: rect.left - clip.left }
     this.place()
   }
 
@@ -136,7 +174,7 @@ export class OverlayEditor {
   /** 確定せずに閉じる（呼び出し側がデータを処理済みのとき） */
   private close(): void {
     this.target = null
-    this.element.hidden = true
+    this.clip.hidden = true
   }
 
   setCaret(offset: number): void {
@@ -168,8 +206,13 @@ export class OverlayEditor {
   }
 
   private place(): void {
-    this.element.style.top = `${this.contentTop - this.getScroller().scrollTop}px`
-    this.element.style.left = `${this.contentLeft - this.getScroller().scrollLeft}px`
+    const c = this.clip.style
+    c.top = `${this.clipBox.top - this.scroller.scrollTop}px`
+    c.left = `${this.clipBox.left - this.scroller.scrollLeft}px`
+    c.width = `${this.clipBox.width}px`
+    c.height = `${this.clipBox.height}px`
+    this.element.style.top = `${this.offset.top}px`
+    this.element.style.left = `${this.offset.left}px`
   }
 
   private emitInput(): void {
@@ -178,7 +221,7 @@ export class OverlayEditor {
 
   private onKeyDown(e: KeyboardEvent): void {
     // 日本語の変換中の Enter は、変換の確定として扱う
-    if (!this.target || e.isComposing || this.composing || e.keyCode === 229) return
+    if (!this.target || e.isComposing || this.composingNow || e.keyCode === 229) return
     const { blockId, kind } = this.target
     const caret = this.caret
     const text = this.text
@@ -213,7 +256,7 @@ export class OverlayEditor {
     const caretRect = sel.getRangeAt(0).getClientRects()[0]
     const box = this.element.getBoundingClientRect()
     if (!caretRect) return true
-    const lineHeight = parseFloat(getComputedStyle(this.element).lineHeight) || 20
+    const lineHeight = (parseFloat(getComputedStyle(this.element).lineHeight) || 20) * this.scale
     return edge === 'first' ? caretRect.top - box.top < lineHeight * 0.8 : box.bottom - caretRect.bottom < lineHeight * 0.8
   }
 

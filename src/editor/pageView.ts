@@ -60,13 +60,42 @@ export class PageView {
     return [...this.viewport.querySelectorAll<HTMLElement>(`[data-block-id="${CSS.escape(blockId)}"]`)]
   }
 
+  /** 要素が何ページ目（0 から）にあるか。見つからなければ -1 */
+  pageIndexOf(element: Element): number {
+    const page = element.closest('[data-vivliostyle-page-container]')
+    return page ? this.pages().indexOf(page as HTMLElement) : -1
+  }
+
+  /** ブロックの文字位置 offset が何ページ目にあるか（段落がページをまたぐときに使う） */
+  pageOfOffset(blockId: string, offset: number): number {
+    const fragments = this.fragments(blockId)
+    let end = 0
+    for (const fragment of fragments) {
+      end += this.nodesIn(fragment).reduce((n, t) => n + t.length, 0)
+      if (offset < end) return this.pageIndexOf(fragment)
+    }
+    return fragments.length ? this.pageIndexOf(fragments[fragments.length - 1]) : -1
+  }
+
+  /** ブロックの中で、fragment より前（前のページ）にある文字数 */
+  charsBefore(blockId: string, fragment: HTMLElement): number {
+    let count = 0
+    for (const f of this.fragments(blockId)) {
+      if (f === fragment) return count
+      count += this.nodesIn(f).reduce((n, t) => n + t.length, 0)
+    }
+    return count
+  }
+
+  private nodesIn(el: HTMLElement): Text[] {
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    const nodes: Text[] = []
+    while (walker.nextNode()) nodes.push(walker.currentNode as Text)
+    return nodes
+  }
+
   private textNodes(blockId: string): Text[] {
-    return this.fragments(blockId).flatMap((el) => {
-      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
-      const nodes: Text[] = []
-      while (walker.nextNode()) nodes.push(walker.currentNode as Text)
-      return nodes
-    })
+    return this.fragments(blockId).flatMap((el) => this.nodesIn(el))
   }
 
   /** 画面上の点から、ブロック ID と文字位置を求める */

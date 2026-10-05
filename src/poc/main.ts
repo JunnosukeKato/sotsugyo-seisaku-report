@@ -57,11 +57,12 @@ function buildHtml(): string {
 
 async function renderReport() {
   const renderer = new ReportRenderer(document.getElementById('vivliostyle-viewer-viewport')!)
-  const { layout } = await renderer.render(demoReport(), currentConfig, {
+  const { layout } = await renderer.renderBack(demoReport(), currentConfig, {
     imageSrc: () => PLACEHOLDER_IMAGE,
     photoSrc: () => PLACEHOLDER_IMAGE,
     figureSize: (f) => SAMPLE_FIGURE_SIZES[f.caption] ?? { widthMm: 50, heightMm: 50 },
   })
+  renderer.swap(0)
   console.log('layout', layout)
   window.__pocLayoutDone = true
 }

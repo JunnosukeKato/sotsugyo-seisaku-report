@@ -24,25 +24,47 @@ await withEdge(async (browser) => {
   await page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
   await page.evaluate(() => new Promise((r) => { const req = indexedDB.deleteDatabase('sotsugyo-seisaku-report'); req.onsuccess = req.onerror = req.onblocked = () => r() }))
   await page.reload({ waitUntil: 'networkidle0' })
-  const ready = () => page.waitForFunction(() => window.__editor?.getSnapshot().layout && !window.__editor.getSnapshot().rendering && !document.querySelector('.loading'), { timeout: 60000 })
+  const ready = () =>
+    page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
   await ready()
   check('新しい報告書が開く', true)
 
-  const snap = () => page.evaluate(() => { const s = window.__editor.getSnapshot(); return { report: s.report, findings: s.findings.map((f) => ({ ruleId: f.ruleId, severity: f.severity, blockId: f.blockId })), layout: s.layout, editingId: s.editingId } })
+  const snap = () => page.evaluate(() => { const s = window.__editor.getSnapshot(); return { report: s.report, findings: s.findings.map((f) => ({ ruleId: f.ruleId, severity: f.severity, blockId: f.blockId })), layout: s.layout, editingId: s.editingId, page: s.page, pageCount: s.pageCount, zoomed: s.zoomed } })
+  // 紙面は1ページずつ表示するため、ブロックのあるページを表示してからクリックする
   const clickBlock = async (id, offset = 'center') => {
+    await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), id)
+    await ready()
     const box = await page.evaluate((id, offset) => {
-      const el = document.querySelector(`.page-viewport.front [data-block-id="${id}"]`)
-      el.scrollIntoView({ block: 'center' })
+      const el = [...document.querySelectorAll(`.page-viewport.front [data-block-id="${id}"]`)].find((e) => e.getBoundingClientRect().width > 0)
       const r = el.getBoundingClientRect()
       return offset === 'start' ? { x: r.left + 4, y: r.top + 6 } : { x: r.left + Math.min(r.width / 2, 40), y: r.top + r.height / 2 }
     }, id, offset)
     await page.mouse.click(box.x, box.y)
   }
+  const clickTool = (title) => page.evaluate((title) => document.querySelector(`.palette .tb[title="${title}"]`).click(), title)
   const typeAndCommit = async (text, key = 'Enter') => {
     await page.keyboard.type(text)
     await page.keyboard.press(key)
     await ready()
   }
+
+  // ---- 1ページずつの表示とページ送り ----
+  let s = await snap()
+  check('紙面は1ページだけを表示する', (await page.evaluate(() => [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].filter((p) => p.getBoundingClientRect().width > 0).length)) === 1)
+  await page.keyboard.press('ArrowRight')
+  await ready()
+  check('→キーで次のページへめくれる', (await snap()).page === 1)
+  await page.click('.arrow.prev')
+  await ready()
+  check('←ボタンで前のページへ戻る', (await snap()).page === 0)
+  check('最初のページでは←ボタンが押せない', await page.$eval('.arrow.prev', (b) => b.disabled))
+  await page.click('.zoom button:last-child')
+  await ready()
+  const zoomedWidth = await page.evaluate(() => document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current').getBoundingClientRect().width)
+  await page.click('.zoom button:first-child')
+  await ready()
+  const fitWidth = await page.evaluate(() => document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current').getBoundingClientRect().width)
+  check('「拡大」で紙面が大きくなり、「全体」で戻る', zoomedWidth > fitWidth * 1.1, `${Math.round(fitWidth)}px → ${Math.round(zoomedWidth)}px`)
 
   // ---- 表紙 ----
   await clickBlock('basic:studentId')
@@ -57,7 +79,7 @@ await withEdge(async (browser) => {
   await page.waitForSelector('.popover button')
   await page.click('.popover button')
   await ready()
-  let s = await snap()
+  s = await snap()
   check('表紙のコース欄からコースを選べる', !!s.report.basicInfo.courseId, s.report.basicInfo.courseId)
   check('表紙の入力が保存される', s.report.basicInfo.studentId === '23FA0123' && s.report.basicInfo.name === '文化　花子' && s.report.basicInfo.subtitleInput === 'シンドバッド', JSON.stringify(s.report.basicInfo))
   check('表紙の未入力の指摘が消える', !s.findings.some((f) => f.ruleId === 'required-field'))
@@ -80,7 +102,7 @@ await withEdge(async (browser) => {
   check('本文の誤りを見つける', ['first-person', 'digit-fullwidth', 'seisaku'].every((r) => ruleIds.includes(r)), ruleIds.join(','))
   await page.screenshot({ path: `${OUT}/1-findings.png` })
   for (let i = 0; i < 3; i++) {
-    const fix = await page.$('.check-panel .issue .fix')
+    const fix = await page.$('.side .issue .fix')
     if (!fix) break
     await fix.click()
     await ready()
@@ -116,7 +138,7 @@ await withEdge(async (browser) => {
   const pngPath = join(tmpdir(), 'sotsugyo-e2e-figure.png')
   writeFileSync(pngPath, Buffer.from(png, 'base64'))
   await clickBlock(firstParagraph)
-  const [chooser] = await Promise.all([page.waitForFileChooser(), page.evaluate(() => [...document.querySelectorAll('.toolbar button')].find((b) => b.textContent.includes('図（写真）')).click())])
+  const [chooser] = await Promise.all([page.waitForFileChooser(), clickTool('図（写真）を入れる')])
   await chooser.accept([pngPath])
   try {
     await page.waitForFunction(() => window.__editor.getSnapshot().editingId?.startsWith('f-'), { timeout: 30000 })
@@ -135,13 +157,32 @@ await withEdge(async (browser) => {
   // ---- 図を参照する ----
   await clickBlock(firstParagraph)
   await page.keyboard.press('End')
-  await page.evaluate(() => [...document.querySelectorAll('.toolbar button')].find((b) => b.textContent.includes('図表を参照')).click())
-  await page.evaluate(() => [...document.querySelectorAll('.toolbar .menu button')].find((b) => b.textContent.includes('図1')).click())
+  await page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('図表を参照')).click())
+  await page.evaluate(() => [...document.querySelectorAll('.palette .side-menu button')].find((b) => b.textContent.includes('図1')).click())
   await page.keyboard.press('Escape')
   await ready()
   s = await snap()
   check('「図表を参照」で（図1）が入り、指摘が消える', !s.findings.some((f) => f.ruleId === 'figure-unreferenced'))
   await page.screenshot({ path: `${OUT}/2-figure.png` })
+
+  // ---- 書いた文字が次のページへあふれたら、表示も追いかける ----
+  await clickBlock(firstParagraph)
+  const startPage = (await snap()).page
+  await page.keyboard.press('End')
+  await page.keyboard.type('航海の場面ごとに衣装の色を変え、物語の流れが観客に伝わるよう工夫した。'.repeat(50))
+  await new Promise((r) => setTimeout(r, 1200))
+  await ready()
+  const follow = await page.evaluate(() => {
+    const ed = window.__editor
+    const s = ed.getSnapshot()
+    const clip = document.querySelector('.overlay-clip').getBoundingClientRect()
+    const caret = getSelection().getRangeAt(0).getBoundingClientRect()
+    return { page: s.page, caretPage: ed.pageOfBlock(s.editingId, 1e9), caretVisible: caret.top >= clip.top && caret.bottom <= clip.bottom }
+  })
+  await page.screenshot({ path: `${OUT}/3-follow.png` })
+  check('書いた文字が次のページへ移ると、表示も追いかける', follow.page === follow.caretPage && follow.caretPage > startPage && follow.caretVisible, JSON.stringify({ startPage, ...follow }))
+  await page.keyboard.press('Escape')
+  await ready()
 
   // ---- 自動保存：読み込み直しても残っている ----
   await new Promise((r) => setTimeout(r, 1500))
