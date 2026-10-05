@@ -54,6 +54,8 @@ export interface ParagraphBlock {
   type: 'paragraph'
   id: string
   content: InlineNode[]
+  /** ひな形の「ここに何を書くか」の説明。空の段落に薄く出す（画面だけ） */
+  hint?: string
 }
 
 export type InlineNode = TextNode | ReferenceNode
@@ -79,6 +81,7 @@ export interface FigureRowBlock {
 
 export interface Figure {
   id: string
+  /** 画像の ID。ひな形で用意した、まだ写真を入れていない枠は空文字 */
   imageId: string
   /** 名称のみ（例: デザイン画）。「図1.」は自動で付く */
   caption: string

@@ -66,13 +66,18 @@ function renderBlock(block: BodyBlock, numbers: Map<string, number>, tableIds: S
           return node.withParens ? `（${label}）` : label
         })
         .join('')
-      return `<p data-block-id="${escapeHtml(block.id)}" data-placeholder="（クリックして文章を入力）">${text}</p>`
+      // 空の段落には、ひな形の「ここに何を書くか」の説明（なければ操作の案内）を薄く出す（画面だけ）
+      const placeholder = block.hint ? `（${block.hint}）` : '（クリックして文章を入力）'
+      return `<p data-block-id="${escapeHtml(block.id)}" data-placeholder="${escapeHtml(placeholder)}">${text}</p>`
     }
     case 'figureRow': {
       const figures = block.figures
         .map((f) => {
           const size = options.figureSize(f)
-          return `<figure data-figure-id="${escapeHtml(f.id)}"><img src="${escapeHtml(options.imageSrc(f.imageId))}" style="width:${size.widthMm}mm;height:${size.heightMm}mm" alt=""><figcaption>${captionHtml('図', numbers.get(f.id)!, f.caption, f.id)}</figcaption></figure>`
+          const style = `width:${size.widthMm}mm;height:${size.heightMm}mm`
+          // ひな形で用意した、まだ写真を入れていない枠は、クリックして写真を選ぶ枠にする
+          const picture = f.imageId ? `<img src="${escapeHtml(options.imageSrc(f.imageId))}" style="${style}" alt="">` : `<div class="figure-slot" style="${style}"></div>`
+          return `<figure data-figure-id="${escapeHtml(f.id)}"${f.imageId ? '' : ' data-empty-figure'}>${picture}<figcaption>${captionHtml('図', numbers.get(f.id)!, f.caption, f.id)}</figcaption></figure>`
         })
         .join('')
       return `<div class="figure-row">${figures}</div>`

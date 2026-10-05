@@ -381,3 +381,39 @@ button:disabled { cursor: default; opacity: 0.4; }
   .page-viewport .is-selected { outline: none !important; }
   .page-viewport [data-block-id='basic:course'] { text-decoration: none !important; }
 }
+
+/* ---- ひな形の図の枠（まだ写真を入れていない） ---- */
+.page-viewport .figure-slot { margin: 0 auto; outline: 1px dashed #b9b9b9; background: repeating-linear-gradient(45deg, #f6f6f6 0 8px, #efefef 8px 16px); display: grid; place-items: center; cursor: pointer; }
+.page-viewport .figure-slot::before { content: '（クリックして写真を選ぶ）'; color: #9a9a9a; font-family: 'BIZ UDPGothic', sans-serif; font-size: 10pt; }
+@media print {
+  .page-viewport .figure-slot { outline: none !important; background: none !important; }
+  .page-viewport .figure-slot::before { content: none !important; }
+}
+
+/* ---- はじめての案内（表紙の上で順に案内する） ---- */
+.guide { position: fixed; inset: 0; z-index: 45; pointer-events: none; }
+.guide, .guide * { box-sizing: border-box; }
+.g-block { position: absolute; inset: 0; pointer-events: auto; }
+.g-spot { position: fixed; border-radius: 8px; box-shadow: 0 0 0 4px rgba(255, 255, 255, 0.92), 0 0 0 200vmax rgba(22, 22, 28, 0.5); transition: left 0.25s ease, top 0.25s ease, width 0.25s ease, height 0.25s ease; }
+.g-dim { position: fixed; inset: 0; background: rgba(22, 22, 28, 0.5); }
+.g-tip { position: fixed; width: 360px; pointer-events: auto; background: #fff; border-radius: 16px; padding: 18px 20px 16px; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.28); animation: sheet-up 0.22s ease; }
+.g-tip::before { content: ''; position: absolute; left: var(--arrow-x, 40px); top: -8px; width: 18px; height: 18px; background: #fff; transform: rotate(45deg); border-radius: 3px; }
+.g-tip.above::before { top: auto; bottom: -8px; }
+.g-steps { display: flex; flex-wrap: wrap; gap: 4px 10px; font-size: 11px; color: var(--muted); margin-bottom: 10px; }
+.g-steps .on { color: var(--accent); font-weight: 700; }
+.g-steps .past { color: var(--ok); }
+.g-tip h2 { font-family: 'BIZ UDMincho', serif; font-weight: 400; font-size: 19px; letter-spacing: 0.04em; margin: 0 0 6px; }
+.g-tip p { margin: 0 0 12px; font-size: 12.5px; line-height: 1.8; color: #4a4d54; }
+.g-opts { display: flex; flex-direction: column; gap: 6px; }
+.g-opts button { text-align: left; padding: 11px 14px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; font-size: 14px; color: var(--ink); word-break: keep-all; overflow-wrap: anywhere; }
+.g-opts button:hover { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.g-note { display: block; margin-top: 10px; font-size: 11px; color: var(--muted); line-height: 1.6; }
+.g-actions { display: flex; gap: 8px; }
+.g-actions button { border: 1px solid var(--line); background: #fff; border-radius: var(--r-md); padding: 8px 16px; font-size: 13px; color: var(--ink); }
+.g-actions button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
+.g-later { margin-top: 4px; border: 0; background: none; padding: 0; font-size: 12px; color: var(--muted); text-decoration: underline; }
+/* スマホ：案内は、コースを選ぶときと最後は画面の下、欄を書くときは画面の上（下に書く欄が出るため）に出す */
+.guide.narrow .g-tip { left: 8px; right: 8px; width: auto; top: 56px; padding: 14px 16px; }
+.guide.narrow.step-course .g-tip, .guide.narrow.step-done .g-tip { top: auto; bottom: calc(8px + env(safe-area-inset-bottom)); }
+.guide.narrow .g-tip::before { display: none; }
+.guide.narrow .g-tip h2 { font-size: 17px; }

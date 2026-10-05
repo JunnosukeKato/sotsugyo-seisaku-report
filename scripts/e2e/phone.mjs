@@ -32,6 +32,26 @@ await withEdge(async (browser) => {
   check('紙面が画面の幅いっぱいに表示される', pageWidth > 330, `${Math.round(pageWidth)}px`)
   await shot('1-cover')
 
+  // はじめての案内：コースを選び、案内に沿って学籍番号を入力する
+  check('はじめて開くと、コースを選ぶ案内が出る', !!(await page.$('.guide.step-course .g-opts button')))
+  await page.evaluate(() => document.querySelector('.g-opts button').click())
+  await page.waitForSelector('.guide.step-studentId')
+  await ready()
+  const idAt = await page.evaluate(() => {
+    const r = document.querySelector('.page-viewport.front [data-block-id="basic:studentId"]').getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })
+  await page.touchscreen.tap(idAt.x, idAt.y)
+  await wait(300)
+  await shot('1a-guide')
+  check('案内の欄をタップすると、下の書く欄で入力できる', (await snap()).editingId === 'basic:studentId')
+  await page.keyboard.type('23FA0123')
+  await page.click('.edit-sheet .done')
+  await page.waitForSelector('.guide.step-name')
+  check('学籍番号を書き終えると、氏名の案内に進む', (await snap()).report.basicInfo.studentId === '23FA0123')
+  await page.click('.g-later')
+  await ready()
+
   // 表紙のコース欄をタップすると、コースの一覧が画面の中（下から）に出る
   const courseAt = await page.evaluate(() => {
     const el = document.querySelector('.page-viewport.front [data-block-id="basic:course"]')

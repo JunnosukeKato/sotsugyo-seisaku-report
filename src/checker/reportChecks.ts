@@ -128,6 +128,21 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     }
   }
 
+  // 書き忘れ：まだ何も書いていない段落（ひな形の「書くことの説明」だけが残っている段落）
+  for (const block of report.body.flatMap((c) => c.blocks)) {
+    if (block.type === 'paragraph' && !contentToText(block.content, num).trim()) {
+      findings.push({
+        ruleId: 'paragraph-empty',
+        severity: 'warning',
+        source: 'supplementary',
+        title: block.hint ? 'まだ書いていない段落がある' : '空の段落がある',
+        detail: block.hint,
+        area: 'body',
+        blockId: block.id,
+      })
+    }
+  }
+
   // 図表：画像、本文中での参照（リンクになった参照も、手で書いた「表1」も、文字列として数える）
   const referenced = new Set<string>()
   for (const e of list.filter((x) => x.kind === 'paragraph')) {

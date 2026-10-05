@@ -5,6 +5,7 @@ import { FIELD_IDS } from '../layout/document'
 import type { LayoutInfo } from '../layout/measure'
 import { FIGURE_MAX_PX, fitFigureSize, importImage, PHOTO_MAX_PX } from '../model/images'
 import { putImage, type StoredImage } from '../model/storage'
+import { applyCourseTemplate, bodyWritten } from '../model/template'
 import type { BodyBlock, Chapter, Report, WorkPhotoLayout } from '../model/types'
 import { OverlayEditor, type OverlayKind, type OverlayPlacement, type OverlayTarget } from './overlayEditor'
 import { PageStage } from './pageStage'
@@ -571,7 +572,12 @@ export class ReportEditor {
       return
     }
     const figure = target.closest<HTMLElement>('figure[data-figure-id]')
-    if (figure) return this.select({ kind: 'figure', id: figure.dataset.figureId! })
+    if (figure) {
+      this.select({ kind: 'figure', id: figure.dataset.figureId! })
+      // ひな形で用意した、まだ写真を入れていない枠は、すぐ写真を選ぶ
+      if (figure.hasAttribute('data-empty-figure')) void this.replaceFigureImage(figure.dataset.figureId!)
+      return
+    }
     const swatch = target.closest<HTMLElement>('td[data-swatch-row]')
     if (swatch) {
       void this.setSwatch(swatch.dataset.swatchRow!)
@@ -667,6 +673,29 @@ export class ReportEditor {
 
   setCourse(courseId: string): void {
     this.update((r) => ops.setCourse(r, courseId))
+  }
+
+  /** 本文を書き始めているか（そのコースのひな形のままでなければ、書き始めているとみなす） */
+  bodyWritten(): boolean {
+    return bodyWritten(this.report, this.config)
+  }
+
+  /** コースを変え、本文の下書きをそのコースのひな形に入れ替える（元に戻せる） */
+  changeCourseWithTemplate(courseId: string): void {
+    this.currentId = null
+    this.selection = null
+    this.update((r) => applyCourseTemplate(r, this.config, courseId))
+  }
+
+  /** ブロックの入力欄を開く。組み直しの途中なら、組み終わってから開く */
+  openWhenReady(id: string, caret = 0): void {
+    const page = this.renderer.pageView.pageOfOffset(id, caret)
+    if (this.rendering || page < 0) {
+      this.pendingOpen = { id, caret }
+      if (!this.rendering) void this.render()
+      return
+    }
+    this.openEditor(id, caret)
   }
 
   // ---- ブロックの追加 ----

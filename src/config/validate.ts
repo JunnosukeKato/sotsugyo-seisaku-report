@@ -53,6 +53,14 @@ export function validateConfig(config: YearConfig): ConfigProblem[] {
     names.set(c.name.trim(), (names.get(c.name.trim()) ?? 0) + 1)
     if (!c.subtitleTemplate.includes('{input}')) error(field, `「${c.name || `${i + 1}番目のコース`}」のサブタイトルの形式に、学生が入力する部分（{input}）がありません`)
     if (!c.hidden && c.advisors.filter((x) => x.trim()).length === 0) warning(field, `「${c.name || `${i + 1}番目のコース`}」の指導教員が登録されていません`)
+    // 下書きのひな形（ないときは標準のひな形を使うので、なくてもよい）
+    if (c.template) {
+      const label = `「${c.name || `${i + 1}番目のコース`}」の下書きのひな形`
+      if (c.template.length > 0 && c.template[0].type !== 'chapter') error(field, `${label}は、大見出しから始めてください`)
+      if (c.template.length > 0 && !c.template.some((b) => b.type === 'chapter')) error(field, `${label}に大見出しがありません`)
+      const blank = c.template.find((b) => (b.type === 'chapter' || b.type === 'subheading' ? !b.title.trim() : b.type === 'figure' || b.type === 'materialTable' ? !b.caption.trim() : false))
+      if (blank) error(field, `${label}に、名前が空の${{ chapter: '大見出し', subheading: '小見出し', figure: '図', materialTable: '素材表', paragraph: '' }[blank.type]}があります`)
+    }
   })
   for (const [name, count] of names) if (name && count > 1) error('courses', `コース名「${name}」が重複しています`)
   return problems

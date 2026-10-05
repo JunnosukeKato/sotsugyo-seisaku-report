@@ -30,8 +30,67 @@
     {
       "id": "film-stage-costume",
       "name": "映画・舞台衣装デザイナー",
-      "advisors": ["梶田　貴子", "佐藤　綾", "加藤　淳之介"],
-      "subtitleTemplate": "―{input}の衣装制作―"
+      "advisors": [
+        "梶田　貴子",
+        "佐藤　綾",
+        "加藤　淳之介"
+      ],
+      "subtitleTemplate": "―{input}の衣装制作―",
+      "abstractExample": "本制作報告書は、卒業イベント「シンドバッド」において、筆者が制作した〇〇の衣装についてである。",
+      "template": [
+        {
+          "type": "chapter",
+          "title": "企画・立案"
+        },
+        {
+          "type": "subheading",
+          "title": "担当衣装のキャラクター"
+        },
+        {
+          "type": "paragraph",
+          "hint": "担当したキャラクターの性格や、物語の中での役割を書く"
+        },
+        {
+          "type": "subheading",
+          "title": "デザイン説明"
+        },
+        {
+          "type": "paragraph",
+          "hint": "デザインのもとにした時代・地域の装いと、込めた意図を書く"
+        },
+        {
+          "type": "figure",
+          "caption": "デザイン画"
+        },
+        {
+          "type": "subheading",
+          "title": "使用素材"
+        },
+        {
+          "type": "paragraph",
+          "hint": "使った素材と使った場所を表1にまとめ、文中に「表1」と書く"
+        },
+        {
+          "type": "materialTable",
+          "caption": "使用素材表"
+        },
+        {
+          "type": "chapter",
+          "title": "制作過程"
+        },
+        {
+          "type": "paragraph",
+          "hint": "パターン・縫製・装飾など、作った順に工夫した点を書く"
+        },
+        {
+          "type": "chapter",
+          "title": "まとめ"
+        },
+        {
+          "type": "paragraph",
+          "hint": "完成した衣装を振り返り、できたこと・課題を書く"
+        }
+      ]
     }
   ]
 }

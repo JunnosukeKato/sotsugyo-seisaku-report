@@ -37,6 +37,9 @@ const KIND_LABELS: Record<EditableKind, string> = {
   tableCell: '表のセル',
 }
 
+/** 表紙の項目の名前 */
+const FIELD_LABELS: Record<string, string> = { 'basic:studentId': '学籍番号', 'basic:name': '氏名', 'basic:subtitleInput': 'サブタイトル' }
+
 type SheetKind = 'pages' | 'add' | 'check' | 'menu' | null
 
 /** 画面の下から出る欄（ページ一覧・追加・チェック・メニュー） */
@@ -101,7 +104,7 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
     <section className={`edit-sheet${snap.editingId ? ' open' : ''}`} aria-label="書く欄">
       <header className="es-head">
         <span className="where">
-          {pageName(snap)} ・ <b>{snap.editingKind ? KIND_LABELS[snap.editingKind] : ''}</b>を書いています
+          {pageName(snap)} ・ <b>{(id && FIELD_LABELS[id]) ?? (snap.editingKind ? KIND_LABELS[snap.editingKind] : '')}</b>を書いています
         </span>
         <button className="done" onMouseDown={keepFocus} onClick={() => editor.finishEditing()}>
           完了

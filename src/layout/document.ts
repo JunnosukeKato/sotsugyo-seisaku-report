@@ -81,7 +81,8 @@ export function abstractHtml(report: Report, config: YearConfig): string {
   const paragraphs = report.abstract.paragraphs
     .map((p) => {
       const text = p.content.map((n) => (n.type === 'text' ? n.text : '')).join('')
-      return `<p data-block-id="${escapeHtml(p.id)}" data-placeholder="（クリックして抄録を入力）">${escapeHtml(text)}</p>`
+      const placeholder = p.hint ? `（${p.hint}）` : '（クリックして抄録を入力）'
+      return `<p data-block-id="${escapeHtml(p.id)}" data-placeholder="${escapeHtml(placeholder)}">${escapeHtml(text)}</p>`
     })
     .join('\n')
   return `<section class="abstract">

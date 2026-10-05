@@ -59,4 +59,19 @@ export interface Course {
    * 削除せずに非表示にする（ID は変えない）
    */
   hidden?: boolean
+  /** 下書きのひな形（学生が最初に見る本文の組み立て）。ないときは標準のひな形を使う */
+  template?: TemplateBlock[]
+  /** 抄録の書き出し例（学生の抄録の欄に薄く出す）。ないときは年度の設定の openingExample を使う */
+  abstractExample?: string
 }
+
+/**
+ * 下書きのひな形の部品。並べた順に本文になる（最初は大見出し）。
+ * 段落の hint は「ここに何を書くか」の説明で、空の段落に薄く出す（画面だけ。PDF には出ない）
+ */
+export type TemplateBlock =
+  | { type: 'chapter'; title: string }
+  | { type: 'subheading'; title: string }
+  | { type: 'paragraph'; hint: string }
+  | { type: 'figure'; caption: string }
+  | { type: 'materialTable'; caption: string }

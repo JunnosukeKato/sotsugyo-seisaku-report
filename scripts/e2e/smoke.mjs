@@ -48,8 +48,29 @@ await withEdge(async (browser) => {
     await ready()
   }
 
-  // ---- 1ページずつの表示とページ送り ----
+  // ---- はじめての案内：コースを選び、表紙の項目を順に入力する ----
+  check('はじめて開くと、表紙の上でコースを選ぶ案内が出る', !!(await page.$('.guide.step-course .g-opts button')))
+  await page.evaluate(() => document.querySelector('.g-opts button').click())
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:studentId', { timeout: 30000 })
   let s = await snap()
+  check('コースを選ぶと、そのコースの下書きが本文に入り、学籍番号の入力が始まる', !!s.report.basicInfo.courseId && s.report.body.length > 0 && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'paragraph' && b.hint), s.report.basicInfo.courseId)
+  await page.keyboard.type('23FA0123')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:name', { timeout: 30000 })
+  await page.keyboard.type('文化　花子')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:subtitleInput', { timeout: 30000 })
+  await page.keyboard.type('シンドバッド')
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('.guide.step-done')
+  await page.screenshot({ path: `${OUT}/0-guide-done.png` })
+  await page.evaluate(() => [...document.querySelectorAll('.g-actions button')].find((b) => b.textContent.includes('閉じる')).click())
+  await ready()
+  s = await snap()
+  check('案内に沿って、表紙の学籍番号・氏名・サブタイトルを入力できる', s.report.basicInfo.studentId === '23FA0123' && s.report.basicInfo.name === '文化　花子' && s.report.basicInfo.subtitleInput === 'シンドバッド' && !(await page.$('.guide')), JSON.stringify(s.report.basicInfo))
+  check('表紙の未入力の指摘が消える', !s.findings.some((f) => f.ruleId === 'required-field'))
+
+  // ---- 1ページずつの表示とページ送り ----
   check('紙面は1ページだけを表示する', (await page.evaluate(() => [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].filter((p) => p.getBoundingClientRect().width > 0).length)) === 1)
   await page.keyboard.press('ArrowRight')
   await ready()
@@ -69,20 +90,24 @@ await withEdge(async (browser) => {
   // ---- 表紙 ----
   await clickBlock('basic:studentId')
   check('表紙の学籍番号をクリックすると入力欄が開く', (await snap()).editingId === 'basic:studentId')
-  await typeAndCommit('23FA0123')
-  await clickBlock('basic:name')
-  await typeAndCommit('文化　花子')
-  await clickBlock('basic:subtitleInput')
-  await typeAndCommit('シンドバッド')
-  // コース：表紙のコース欄をクリックし、出てきた一覧から選ぶ（コースが2つ以上あると最初は未選択）
+  await page.keyboard.press('Escape')
+  await ready()
+  // コース：表紙のコース欄をクリックし、出てきた一覧から別のコースを選ぶ（本文をまだ書いていないので、確かめずに下書きを入れ替える）
+  const firstCourse = (await snap()).report.basicInfo.courseId
   await clickBlock('basic:course')
   await page.waitForSelector('.popover button')
-  await page.click('.popover button')
-  await ready()
+  const courseCount = await page.$$eval('.popover button', (b) => b.length)
+  if (courseCount > 1) {
+    await page.evaluate(() => [...document.querySelectorAll('.popover button')].find((b) => !b.classList.contains('on')).click())
+    await ready()
+    s = await snap()
+    check('表紙のコース欄から、ほかのコースに変えられる', s.report.basicInfo.courseId !== firstCourse && !(await page.$('.modal')), s.report.basicInfo.courseId)
+  } else {
+    await page.click('.popover button')
+    await ready()
+  }
   s = await snap()
-  check('表紙のコース欄からコースを選べる', !!s.report.basicInfo.courseId, s.report.basicInfo.courseId)
-  check('表紙の入力が保存される', s.report.basicInfo.studentId === '23FA0123' && s.report.basicInfo.name === '文化　花子' && s.report.basicInfo.subtitleInput === 'シンドバッド', JSON.stringify(s.report.basicInfo))
-  check('表紙の未入力の指摘が消える', !s.findings.some((f) => f.ruleId === 'required-field'))
+  check('表紙の入力は、コースを変えても残る', s.report.basicInfo.studentId === '23FA0123' && s.report.basicInfo.name === '文化　花子' && s.report.basicInfo.subtitleInput === 'シンドバッド', JSON.stringify(s.report.basicInfo))
 
   // ---- 抄録 ----
   const abstractId = s.report.abstract.paragraphs[0].id
@@ -123,6 +148,21 @@ await withEdge(async (browser) => {
   const blocks = s.report.body[0].blocks
   const i = blocks.findIndex((b) => b.id === firstParagraph)
   check('Enter で段落が分かれる', blocks[i + 1]?.type === 'paragraph' && blocks[i + 1].content.map((n) => n.text ?? '').join('') === '次の段落である。')
+
+  // ---- 本文を書き始めてからコースを変えると、確かめる ----
+  if (courseCount > 1) {
+    const before = s.report.basicInfo.courseId
+    await clickBlock('basic:course')
+    await page.waitForSelector('.popover button')
+    await page.evaluate(() => [...document.querySelectorAll('.popover button')].find((b) => !b.classList.contains('on')).click())
+    await page.waitForSelector('.modal')
+    const asked = await page.evaluate(() => document.querySelector('.modal h2')?.textContent ?? '')
+    await page.evaluate(() => [...document.querySelectorAll('.modal button')].find((b) => b.textContent.includes('コース名だけ変える')).click())
+    await ready()
+    s = await snap()
+    const kept = s.report.body.flatMap((c) => c.blocks).some((b) => b.id === firstParagraph)
+    check('本文を書き始めてからコースを変えると確かめ、「コース名だけ変える」なら本文を残す', asked.includes('コースを変えますか') && s.report.basicInfo.courseId !== before && kept, asked)
+  }
 
   // ---- 図を入れる ----
   const png = await page.evaluate(async () => {

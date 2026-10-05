@@ -1,7 +1,9 @@
 import 'fake-indexeddb/auto'
 import { describe, expect, it } from 'vitest'
-import { currentConfig } from '../config'
+import { currentConfig, type YearConfig } from '../config'
+import { validateConfig } from '../config/validate'
 import { checkReport } from '../checker/reportChecks'
+import { applyCourseTemplate, bodyFromTemplate, bodyWritten, courseTemplate, DEFAULT_TEMPLATE } from './template'
 import { backupFileName, BackupFormatError, createBackup, readBackup } from './backup'
 import { demoReport } from './demoReport'
 import { fitFigureSize, printDpi } from './images'
@@ -11,15 +13,69 @@ import { listSnapshots, loadReport, putImage, getImage, saveReport, saveSnapshot
 import { DATA_FORMAT_VERSION } from './types'
 
 describe('createReport', () => {
-  it('テンプレートの章立てで始まり、未入力の項目をチェックが指摘する', () => {
+  it('コースの下書きのひな形で始まり、未入力の項目をチェックが指摘する', () => {
     const report = createReport(currentConfig)
     expect(report.body.map((c) => c.title)).toEqual(['企画・立案', '制作過程', 'まとめ'])
     // コースが1つだけのときは最初から選ばれている
     expect(report.basicInfo.courseId).toBe('film-stage-costume')
+    // 書くことの説明・図の枠・素材表がひな形どおりに入る
+    const blocks = report.body[0].blocks
+    expect(blocks.map((b) => b.type)).toEqual(['subheading', 'paragraph', 'subheading', 'paragraph', 'figureRow', 'subheading', 'paragraph', 'materialTable'])
+    expect(blocks[1].type === 'paragraph' && blocks[1].hint).toBe('担当したキャラクターの性格や、物語の中での役割を書く')
+    expect(blocks[4].type === 'figureRow' && blocks[4].figures[0]).toMatchObject({ imageId: '', caption: 'デザイン画' })
+    expect(report.abstract.paragraphs[0].hint).toContain('本制作報告書は、卒業イベント')
     const ids = checkReport(report, currentConfig).map((f) => f.ruleId)
-    expect(ids).toEqual(expect.arrayContaining(['required-field', 'abstract-length', 'swatch-image', 'photos-required']))
-    // 使用素材の紹介文は表1を参照している
-    expect(ids).not.toContain('table-unreferenced')
+    expect(ids).toEqual(expect.arrayContaining(['required-field', 'abstract-length', 'figure-image', 'swatch-image', 'photos-required', 'paragraph-empty']))
+  })
+})
+
+describe('下書きのひな形', () => {
+  const twoCourses: YearConfig = {
+    ...currentConfig,
+    courses: [
+      currentConfig.courses[0],
+      { id: 'other', name: 'ほかのコース', advisors: ['文化 太郎'], subtitleTemplate: '―{input}―', template: [{ type: 'chapter', title: '概要' }, { type: 'paragraph', hint: '概要を書く' }] },
+      { id: 'plain', name: 'ひな形のないコース', advisors: ['文化 太郎'], subtitleTemplate: '―{input}―' },
+    ],
+  }
+
+  it('コースが2つ以上なら、コースは未選択で始まる（標準のひな形）', () => {
+    const report = createReport(twoCourses)
+    expect(report.basicInfo.courseId).toBe('')
+    expect(report.body.map((c) => c.title)).toEqual(DEFAULT_TEMPLATE.filter((b) => b.type === 'chapter').map((b) => (b.type === 'chapter' ? b.title : '')))
+  })
+
+  it('ひな形のないコースは、標準のひな形を使う', () => {
+    expect(courseTemplate(twoCourses, 'plain')).toBe(DEFAULT_TEMPLATE)
+    expect(courseTemplate(twoCourses, 'other')).toHaveLength(2)
+  })
+
+  it('大見出しより前の部品はまとめ、中身のない大見出しには空の段落を入れる', () => {
+    const body = bodyFromTemplate([{ type: 'paragraph', hint: 'はじめに' }, { type: 'chapter', title: 'A' }, { type: 'chapter', title: 'B' }, { type: 'paragraph', hint: 'b' }])
+    expect(body.map((c) => [c.title, c.blocks.length])).toEqual([['', 1], ['A', 1], ['B', 1]])
+  })
+
+  it('ひな形のままなら「書き始めていない」、書き足したら「書き始めた」とみなす', () => {
+    const report = createReport(twoCourses, 'other')
+    expect(bodyWritten(report, twoCourses)).toBe(false)
+    const p = report.body[0].blocks[0]
+    const written = { ...report, body: [{ ...report.body[0], blocks: [{ ...p, content: [{ type: 'text' as const, text: '書いた' }] }] }] }
+    expect(bodyWritten(written, twoCourses)).toBe(true)
+  })
+
+  it('コースを変えると、本文をそのコースのひな形に入れ替え、表紙と書いた抄録は残す', () => {
+    const report = { ...createReport(twoCourses, 'other'), basicInfo: { studentId: '23FA0001', name: '文化　花子', courseId: 'other', subtitleInput: 'X' } }
+    const changed = applyCourseTemplate(report, twoCourses, 'film-stage-costume')
+    expect(changed.basicInfo).toMatchObject({ studentId: '23FA0001', name: '文化　花子', courseId: 'film-stage-costume' })
+    expect(changed.body.map((c) => c.title)).toEqual(['企画・立案', '制作過程', 'まとめ'])
+    expect(changed.abstract.paragraphs[0].hint).toContain('卒業イベント')
+  })
+
+  it('ひな形の誤り（大見出しから始まらない・名前が空）を、管理ページの入力チェックで指摘する', () => {
+    const bad: YearConfig = { ...twoCourses, courses: [{ ...twoCourses.courses[1], template: [{ type: 'subheading', title: '' }] }] }
+    const messages = validateConfig(bad).map((p) => p.message)
+    expect(messages.some((m) => m.includes('大見出しから始めて'))).toBe(true)
+    expect(messages.some((m) => m.includes('名前が空の小見出し'))).toBe(true)
   })
 })
 

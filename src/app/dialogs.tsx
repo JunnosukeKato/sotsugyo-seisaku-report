@@ -48,8 +48,9 @@ export function CourseMenu({ config, rect, current, onSelect, onClose }: { confi
             key={c.id}
             className={c.id === current ? 'on' : ''}
             onClick={() => {
-              onSelect(c.id)
+              // 先に閉じる（選んだ後に確かめる画面を出すことがあるため）
               onClose()
+              onSelect(c.id)
             }}
           >
             {c.name} コース
@@ -57,6 +58,28 @@ export function CourseMenu({ config, rect, current, onSelect, onClose }: { confi
         ))}
       </div>
     </div>
+  )
+}
+
+// ---- 本文を書き始めてからコースを変えるとき ----
+
+export function CourseChangeDialog({ courseName, onReplace, onNameOnly, onClose }: { courseName: string; onReplace: () => void; onNameOnly: () => void; onClose: () => void }) {
+  return (
+    <Modal title="コースを変えますか？" onClose={onClose}>
+      <p className="lead">
+        「{courseName}」コースに変えると、本文の下書きを、そのコースのひな形（章立てと、書くことの説明）に入れ替えます。
+        いま書いている本文は「自動の控え」に残すので、あとで「バックアップ」から戻せます。
+      </p>
+      <p className="muted">表紙の学籍番号・氏名・サブタイトル、抄録、引用・参考文献、作品写真はそのまま残ります。</p>
+      <div className="row-buttons">
+        <button onClick={onClose}>やめる</button>
+        <span className="spacer" />
+        <button onClick={onNameOnly}>コース名だけ変える</button>
+        <button className="primary" onClick={onReplace}>
+          下書きを入れ替える
+        </button>
+      </div>
+    </Modal>
   )
 }
 

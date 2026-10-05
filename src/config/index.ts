@@ -1,9 +1,10 @@
 import config2026 from './2026.json'
 import type { Course, YearConfig } from './types'
 
-export type { Course, YearConfig } from './types'
+export type { Course, TemplateBlock, YearConfig } from './types'
 
-export const currentConfig: YearConfig = config2026
+// JSON の文字列（ひな形の部品の種類など）は型が広がるため、型を指定して読み込む
+export const currentConfig: YearConfig = config2026 as YearConfig
 
 export function findCourse(config: YearConfig, courseId: string): Course | undefined {
   return config.courses.find((course) => course.id === courseId)

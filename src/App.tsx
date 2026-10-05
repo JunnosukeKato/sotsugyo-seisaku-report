@@ -1,22 +1,29 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
-import { currentConfig, type YearConfig } from './config'
+import { currentConfig, findCourse, type YearConfig } from './config'
 import { loadConfig } from './config/remote'
 import { ReportEditor, type EditorSnapshot } from './editor/reportEditor'
 import { backupFileName, createBackup, readBackup } from './model/backup'
 import { createReport } from './model/newReport'
 import { allImages, listSnapshots, loadReport, putImage, saveSnapshot, usedImageIds, type Snapshot } from './model/storage'
-import { BackupDialog, CourseMenu, ExportDialog, ReferencesDialog } from './app/dialogs'
+import { BackupDialog, CourseChangeDialog, CourseMenu, ExportDialog, ReferencesDialog } from './app/dialogs'
 import { Icon } from './app/icons'
 import { Palette } from './app/Palette'
 import { PhoneChrome } from './app/Phone'
 import { useKeyboardInset, useNarrow, useSwipe } from './app/uiShared'
 import { SidePanel } from './app/SidePanel'
+import { StartGuide, type GuideStep } from './app/StartGuide'
 import { useAutosave } from './app/useAutosave'
 
 const noopSubscribe = () => () => {}
 const nullSnapshot = () => null
 
-type Dialog = { kind: 'export' } | { kind: 'references' } | { kind: 'backup'; snapshots: Snapshot[] } | { kind: 'course'; rect: DOMRect } | null
+type Dialog =
+  | { kind: 'export' }
+  | { kind: 'references' }
+  | { kind: 'backup'; snapshots: Snapshot[] }
+  | { kind: 'course'; rect: DOMRect }
+  | { kind: 'courseChange'; courseId: string }
+  | null
 
 /** 写真を選ぶ画面を開き、選ばれたファイルを返す（やめたら null） */
 function pickImageFile(): Promise<File | null> {
@@ -52,6 +59,8 @@ export default function App() {
   const [editor, setEditor] = useState<ReportEditor | null>(null)
   const [dialog, setDialog] = useState<Dialog>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
+  // はじめて使う学生への案内（コース → 学籍番号 → 氏名 → サブタイトル）
+  const [guide, setGuide] = useState<GuideStep | null>(null)
   const autosave = useAutosave()
   const snap = useSyncExternalStore(editor?.subscribe ?? noopSubscribe, editor?.getSnapshot ?? nullSnapshot) as EditorSnapshot | null
   // スマホ（画面の幅が狭いとき）は、並べ方と書き方を変える
@@ -70,7 +79,8 @@ export default function App() {
       try {
         const { config: loaded } = await loadConfig()
         setConfig(loaded)
-        const report = (await loadReport()) ?? createReport(loaded)
+        const saved = await loadReport()
+        const report = saved ?? createReport(loaded)
         const ed = new ReportEditor(stageRef.current!, scrollerRef.current!, layerRef.current!, loaded, report, {
           onChange: autosave.save,
           onCourseClick: (rect) => setDialog({ kind: 'course', rect }),
@@ -82,6 +92,9 @@ export default function App() {
         // 開発中だけ、自動テストから操作できるようにする
         if (import.meta.env.DEV) Object.assign(window, { __editor: ed })
         await ed.render()
+        // はじめて開いたときは、コースを選ぶところから案内する（コースが1つだけなら学籍番号から）。コースを選んでいない原稿も、コースを選ぶ案内を出す
+        if (!findCourse(loaded, report.basicInfo.courseId)) setGuide('course')
+        else if (!saved) setGuide('studentId')
       } catch (e) {
         setLoadError(String(e))
       }
@@ -102,7 +115,7 @@ export default function App() {
         }
         return
       }
-      if (dialog || isTyping(e.target) || e.altKey) return
+      if (dialog || guide === 'course' || isTyping(e.target) || e.altKey) return
       if (e.key === 'ArrowRight' || e.key === 'PageDown') {
         e.preventDefault()
         editor.nextPage()
@@ -113,7 +126,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editor, dialog])
+  }, [editor, dialog, guide])
 
   const saveBackup = useCallback(async () => {
     if (!snap) return
@@ -138,6 +151,15 @@ export default function App() {
       }
     },
     [editor, snap],
+  )
+
+  const chooseCourse = useCallback(
+    (courseId: string) => {
+      if (!editor || editor.getSnapshot().report.basicInfo.courseId === courseId) return
+      if (editor.bodyWritten()) setDialog({ kind: 'courseChange', courseId })
+      else editor.changeCourseWithTemplate(courseId)
+    },
+    [editor],
   )
 
   const ready = editor && snap
@@ -203,7 +225,36 @@ export default function App() {
       )}
 
       {dialog?.kind === 'course' && snap && editor && (
-        <CourseMenu config={config} rect={dialog.rect} current={snap.report.basicInfo.courseId} onSelect={(id) => editor.setCourse(id)} onClose={() => setDialog(null)} />
+        <CourseMenu config={config} rect={dialog.rect} current={snap.report.basicInfo.courseId} onSelect={chooseCourse} onClose={() => setDialog(null)} />
+      )}
+      {dialog?.kind === 'courseChange' && snap && editor && (
+        <CourseChangeDialog
+          courseName={findCourse(config, dialog.courseId)?.name ?? ''}
+          onClose={() => setDialog(null)}
+          onNameOnly={() => {
+            editor.setCourse(dialog.courseId)
+            setDialog(null)
+          }}
+          onReplace={async () => {
+            await saveSnapshot(snap.report)
+            editor.changeCourseWithTemplate(dialog.courseId)
+            setDialog(null)
+          }}
+        />
+      )}
+      {ready && guide && snap.layout && (
+        <StartGuide
+          editor={editor}
+          snap={snap}
+          config={config}
+          narrow={narrow}
+          step={guide}
+          onStep={setGuide}
+          onChooseCourse={(courseId) => {
+            editor.changeCourseWithTemplate(courseId)
+            setGuide('studentId')
+          }}
+        />
       )}
       {dialog?.kind === 'references' && snap && editor && (
         <ReferencesDialog report={snap.report} onSave={(references) => editor.update((r) => ({ ...r, references }))} onClose={() => setDialog(null)} />
@@ -223,8 +274,11 @@ export default function App() {
           onStartOver={async () => {
             if (!confirm('今の原稿を消して、最初から作り直しますか？\n（今の原稿は自動の控えに残します）')) return
             await saveSnapshot(snap.report)
-            editor.replace(createReport(config))
+            const fresh = createReport(config)
+            editor.replace(fresh)
             setDialog(null)
+            // 作り直したら、はじめての案内からやり直す
+            setGuide(findCourse(config, fresh.basicInfo.courseId) ? 'studentId' : 'course')
           }}
           onClose={() => setDialog(null)}
         />
