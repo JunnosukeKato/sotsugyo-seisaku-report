@@ -107,6 +107,22 @@ export function CheckPanel({ editor, snap, config }: Props) {
           )
         })
       )}
+      <SourceNotice />
     </aside>
+  )
+}
+
+/** ライセンス（AGPL-3.0）に従い、利用者にソースコードの場所を示す */
+export function SourceNotice() {
+  const url = import.meta.env.VITE_SOURCE_URL as string | undefined
+  if (!url) return null
+  return (
+    <p className="source-notice">
+      このツールは AGPL-3.0 のもとで公開しています（
+      <a href={url} target="_blank" rel="noreferrer">
+        ソースコード
+      </a>
+      ）
+    </p>
   )
 }

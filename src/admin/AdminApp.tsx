@@ -257,6 +257,11 @@ export function AdminApp() {
         {dirty && <span className="badge warn">保存していない変更があります</span>}
         {isMockServer && <span className="badge old">試験用サーバー</span>}
         <span className="spacer" />
+        {import.meta.env.VITE_SOURCE_URL && (
+          <a className="link" href={import.meta.env.VITE_SOURCE_URL} target="_blank" rel="noreferrer">
+            ソースコード（AGPL-3.0）
+          </a>
+        )}
         <span className="user">{state.user}</span>
         <button
           className="link"

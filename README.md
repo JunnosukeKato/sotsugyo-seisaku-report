@@ -33,7 +33,15 @@ npm run build    # 配信用ファイルを dist/ に出力
 - 画面のデザインは複数案を確認していただいてから決める。
 - 画面の紙面と提出 PDF は同じ組版の結果（印刷すると紙面だけが出る）。
 
-## ライセンス上の注意
+## ライセンス
 
-組版エンジンの Vivliostyle.js（`@vivliostyle/core`）は AGPL-3.0 のため、このツールのソースコードは公開する前提で扱う。
+このツールは [GNU Affero General Public License v3.0](LICENSE)（AGPL-3.0-or-later）のもとで公開する。
+組版エンジンの Vivliostyle.js（`@vivliostyle/core`）が AGPL-3.0 のため、それに合わせている。
+ツールと管理ページの画面には、ソースコードの場所（`.env` の `VITE_SOURCE_URL`）へのリンクを表示する。
+
 同梱フォント（BIZ UD明朝・BIZ UDPゴシック）は SIL Open Font License 1.1。
+
+## 公開
+
+- 学生用ツール：GitHub Pages。`main` に送ると GitHub Actions がテスト・ビルドして公開する（`.github/workflows/pages.yml`）
+- 管理ページと年度設定の配信：大学の Google アカウントの Apps Script。更新は `npm run deploy:gas`（場所は `gas/deployments.json`）
