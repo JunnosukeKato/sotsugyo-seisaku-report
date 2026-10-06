@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>v9 抄録の見出し（学籍番号・氏名と指導教員）の並べ方</title>
+<style>
+  html, body { margin: 0; }
+  body { background: #ebe8e3; font-family: 'BIZ UDPGothic', sans-serif; color: #23262b; padding: 22px 26px; }
+  h1 { font-size: 18px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 13px; color: #666; }
+  #cards { display: grid; grid-template-columns: 1fr 1fr; gap: 18px 22px; }
+  .card { margin: 0; }
+  .card figcaption { margin-bottom: 8px; }
+  .card figcaption b { display: block; font-size: 14.5px; margin-bottom: 2px; }
+  .card figcaption span { font-size: 12px; color: #666; line-height: 1.6; }
+  .card.v-now figcaption b { color: #8a8c91; }
+  /* A4 の上の部分だけを、縮小して見せる */
+  .sheet { width: 650px; height: 300px; overflow: hidden; background: #fff; box-shadow: 0 1px 3px rgba(0,0,0,.1), 0 8px 24px rgba(0,0,0,.08); }
+  .page { width: 210mm; box-sizing: border-box; padding: 25mm 25mm 0 35mm; transform: scale(0.8187); transform-origin: 0 0; }
+</style>
+</head>
+<body>
+  <h1>抄録の見出し：「学籍番号・氏名」と「指導教員」の並べ方</h1>
+  <p class="lead">学生のツールと同じ組版の部品で作った見本です（A4 の上の部分を縮小しています）。見出しの2行以外は同じです。</p>
+  <div id="cards"></div>
+  <script type="module" src="./abstract.ts"></script>
+</body>
+</html>
