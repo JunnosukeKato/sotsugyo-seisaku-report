@@ -78,6 +78,16 @@ p {
   margin: ${LINE_PITCH_PT}pt 0;
 }
 
+/*
+ * 段落のすぐ下に入りきらない図のまとまりは、次のページの上へ送り、後ろの文章で今のページを埋める。
+ * 送るまとまりは、組んだ結果を見て figureFloat.ts が選ぶ（入りきるものまで送ると、段落より上に出てしまうため）
+ */
+.figure-group.deferred {
+  float: block-start;
+  float-reference: page;
+  margin: 0 0 ${LINE_PITCH_PT}pt;
+}
+
 .figure-row {
   display: flex;
   justify-content: center;

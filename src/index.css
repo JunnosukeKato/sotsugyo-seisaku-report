@@ -364,7 +364,7 @@ button:disabled { cursor: default; opacity: 0.4; }
 @media print {
   html, body, #root, .app, .stage { display: block !important; height: auto !important; overflow: visible !important; background: #fff !important; }
   .side, .palette, .arrow, .zoom, #overlay-layer, .loading, .modal-backdrop, .popover-backdrop,
-  .p-top, .p-nav, .pager, .sel-bar, .edit-sheet, .sheet, .scrim, .unzoom { display: none !important; }
+  .p-top, .p-nav, .pager, .sel-bar, .edit-sheet, .sheet, .scrim, .unzoom, .popover, .guide { display: none !important; }
   .page-scroller { position: static !important; overflow: visible !important; }
   .page-viewport:not(.front) { display: none !important; }
   .page-viewport { position: static !important; min-height: 0 !important; opacity: 1 !important; background: #fff !important; }

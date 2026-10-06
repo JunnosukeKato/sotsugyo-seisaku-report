@@ -281,6 +281,42 @@ await withEdge(async (browser) => {
   const page1 = await doc.getPage(1)
   const vp = page1.getViewport({ scale: 1 })
   check('PDF は A4', Math.abs(vp.width - 595.3) < 2 && Math.abs(vp.height - 841.9) < 2, `${vp.width.toFixed(1)}x${vp.height.toFixed(1)}pt`)
+
+  // ---- 図が段落の下に入りきらないときは、図だけ次のページの上へ送り、後ろの文章でページを埋める ----
+  const setBody = async (rest, nextChapter) => {
+    await page.evaluate((rest, nextChapter) => {
+      const kana = '本制作では、衣装の素材や形を検討し、舞台の上での見え方を確かめながら制作を進めた。'
+      const text = (n) => Array.from({ length: n }, (_, i) => kana[i % kana.length]).join('')
+      const para = (id, n, ref) => ({ type: 'paragraph', id, content: [{ type: 'text', text: text(n) }, ...(ref ? [{ type: 'ref', targetId: ref, withParens: true }, { type: 'text', text: '。' }] : [])] })
+      const body = [{ id: 'fc1', title: '制作過程', blocks: [para('fpA', 1050), para('fpP', 60, 'ff1'), { type: 'figureRow', id: 'fg1', figures: [{ id: 'ff1', imageId: '', caption: 'デザイン画' }] }, para('fpB', rest)] }]
+      if (nextChapter) body.push({ id: 'fc2', title: 'まとめ', blocks: [para('fpE', 300)] })
+      window.__editor.update((r) => ({ ...r, body }))
+    }, rest, nextChapter)
+    await new Promise((r) => setTimeout(r, 300))
+    await ready()
+    return page.evaluate(() => {
+      const vp = document.querySelector('.page-viewport.front')
+      vp.classList.add('measuring')
+      const pages = [...vp.querySelectorAll('[data-vivliostyle-page-container]')]
+      const at = (el) => {
+        const pg = el.closest('[data-vivliostyle-page-container]')
+        const pr = pg.getBoundingClientRect()
+        const r = el.getBoundingClientRect()
+        return { page: pages.indexOf(pg), top: Math.round(((r.top - pr.top) / pr.height) * 297), bottom: Math.round(((r.bottom - pr.top) / pr.height) * 297) }
+      }
+      const group = document.querySelector('.page-viewport.front .figure-group[data-group-id="fg1"]')
+      const anchor = [...vp.querySelectorAll('[data-block-id="fpP"]')].at(-1)
+      const after = [...vp.querySelectorAll('[data-block-id="fpB"]')]
+      const chapter2 = vp.querySelector('#ch-fc2')
+      const result = { deferred: group.classList.contains('deferred'), group: at(group), anchor: at(anchor), after: after.map(at), chapter2: chapter2 && at(chapter2) }
+      vp.classList.remove('measuring')
+      return result
+    })
+  }
+  let f = await setBody(600, false)
+  check('図が入りきらないときは、図を次のページの上へ送り、後ろの文章でページの下まで埋める', f.deferred && f.group.page === f.anchor.page + 1 && f.group.top <= 26 && f.after[0].page === f.anchor.page && f.after[0].bottom >= 265, JSON.stringify(f))
+  f = await setBody(100, true)
+  check('章の残りの文章が少ないときは送らない（図が次の章の見出しより上に出ない）', !f.deferred && f.group.page === f.anchor.page + 1 && f.chapter2.page > f.group.page, JSON.stringify(f))
   await context.close()
 })
 

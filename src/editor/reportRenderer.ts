@@ -2,6 +2,7 @@ import type { YearConfig } from '../config'
 import type { FigureSize } from '../layout/bodyHtml'
 import { buildReportDocument } from '../layout/document'
 import { FONT_SIZE_PT } from '../layout/documentCss'
+import { reviseDeferredGroups, sameSet } from '../layout/figureFloat'
 import { measureLayout, samePageNumbers, type LayoutInfo } from '../layout/measure'
 import type { Figure, Report } from '../model/types'
 import { PageView } from './pageView'
@@ -14,6 +15,9 @@ export interface ImageSources {
 
 export type PageEffect = 'turn' | 'fade' | 'none'
 
+/** 組み直しの上限（図の送り方と目次のページ番号が落ち着くまで） */
+const MAX_PASSES = 4
+
 /** ページを送る動きのクラス（終わったら外す） */
 const MOTION_CLASSES = ['is-under', 'is-under-current', 'turn-out', 'turn-in', 'fade-out', 'fade-in']
 
@@ -24,11 +28,14 @@ const MOTION_CLASSES = ['is-under', 'is-under-current', 'turn-out', 'turn-in', '
  * 見えていない側で組み直し（renderBack）、組み終わったら表と裏を入れ替える（swap）。
  * 組版の間は、組版エンジンが寸法を測れるよう、裏側のすべてのページを表示しておく（.measuring）。
  * 目次のページ番号は組版した結果から読み取るため、番号が変わったときだけもう一度組み直す。
+ * 段落のすぐ下に入りきらない図は次のページの上へ送る（figureFloat.ts）。送る図が変わったときも組み直す。
  */
 export class ReportRenderer {
   private readonly buffers: [{ element: HTMLElement; view: PageView }, { element: HTMLElement; view: PageView }]
   private frontIndex = 0
   private tocPageNumbers: Record<string, number> = {}
+  /** 前に組んだときに次のページへ送った図のまとまり（たいていそのままでよいので、次もここから始める） */
+  private deferredGroups = new Set<string>()
 
   constructor(container: HTMLElement) {
     const make = () => {
@@ -55,22 +62,34 @@ export class ReportRenderer {
     const back = this.buffers[1 - this.frontIndex]
     back.element.classList.add('measuring')
     try {
-      const build = () => buildReportDocument(report, config, { ...sources, tocPageNumbers: this.tocPageNumbers })
-      let html = build()
+      const groupIds = new Set(report.body.flatMap((c) => c.blocks).filter((b) => b.type === 'figureRow').map((b) => b.id))
+      let deferred = new Set([...this.deferredGroups].filter((id) => groupIds.has(id)))
+      const build = () => buildReportDocument(report, config, { ...sources, tocPageNumbers: this.tocPageNumbers, deferredGroups: deferred })
       // 文字の範囲ごとに分かれたフォントを、組版の前に読み込んでおく（後から読み込まれると改行位置がずれる）
-      const text = html.replace(/<[^>]+>/g, '') + '0123456789'
+      const text = build().replace(/<[^>]+>/g, '') + '0123456789'
       await Promise.all([
         document.fonts.load(`${FONT_SIZE_PT}pt "BIZ UDMincho"`, text),
         document.fonts.load(`${FONT_SIZE_PT}pt "BIZ UDPGothic"`, text),
       ])
-      let ms = await back.view.render(html)
-      let layout = measureLayout(back.view.pages(), report.body)
-      if (!samePageNumbers(layout.tocPageNumbers, this.tocPageNumbers)) {
-        this.tocPageNumbers = layout.tocPageNumbers
-        html = build()
-        ms += await back.view.render(html)
+      let ms = 0
+      let layout: LayoutInfo
+      const blocked = new Set<string>()
+      let fallback = false
+      for (let pass = 1; ; pass++) {
+        ms += await back.view.render(build())
         layout = measureLayout(back.view.pages(), report.body)
+        const tocChanged = !samePageNumbers(layout.tocPageNumbers, this.tocPageNumbers)
+        if (tocChanged) this.tocPageNumbers = layout.tocPageNumbers
+        let next = fallback ? deferred : reviseDeferredGroups(back.view.pages(), report.body, deferred, blocked)
+        // 図の送り方が落ち着かないときは、送るのをやめて段落のすぐ下に置く（ページの下に空白が残るだけで、順番は崩れない）
+        if (!fallback && pass >= MAX_PASSES && !sameSet(next, deferred)) {
+          fallback = true
+          next = new Set()
+        }
+        if ((sameSet(next, deferred) && !tocChanged) || pass >= MAX_PASSES + 2) break
+        deferred = next
       }
+      this.deferredGroups = deferred
       return { ms, layout }
     } finally {
       back.element.classList.remove('measuring')

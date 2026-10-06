@@ -31,6 +31,8 @@ export interface BodyRenderOptions {
   figureSize: (figure: Figure) => FigureSize
   /** 素材表の生地見本のサイズ */
   swatchSize?: FigureSize
+  /** 次のページの上へ送る図のまとまり（figureRow の ID）。選び方は figureFloat.ts */
+  deferredGroups?: ReadonlySet<string>
 }
 
 /** 図・表の番号を本文の出現順に振る。参照（図n）の解決にも使う */
@@ -102,7 +104,8 @@ function renderBlock(block: BodyBlock, numbers: Map<string, number>, tableIds: S
         previousHeight = Math.min(...sizes.map((s) => s.heightMm))
         return `<div class="figure-row">${row.map((f, k) => renderFigure(f, sizes[k], numbers.get(f.id)!, options)).join('')}</div>`
       })
-      return `<div class="figure-group">${rowHtml.join('')}</div>`
+      const deferred = options.deferredGroups?.has(block.id) ? ' deferred' : ''
+      return `<div class="figure-group${deferred}" data-group-id="${escapeHtml(block.id)}">${rowHtml.join('')}</div>`
     }
     case 'materialTable':
       return renderMaterialTable(block, numbers.get(block.id)!, options)
