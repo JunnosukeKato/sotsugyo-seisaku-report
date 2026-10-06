@@ -4,7 +4,7 @@ import * as ops from '../editor/reportOps'
 import type { LayoutInfo } from '../layout/measure'
 import { demoReport } from '../model/demoReport'
 import type { Report } from '../model/types'
-import { abstractCharCount, checkReport } from './reportChecks'
+import { abstractCharCount, checkReport, checkReportDetailed } from './reportChecks'
 
 const layout = (over: Partial<LayoutInfo> = {}): LayoutInfo => ({
   kinds: [],
@@ -129,6 +129,22 @@ describe('手で書いた図表の番号', () => {
     expect(missing?.detail).toContain('図を入れる')
     expect(missing?.replacement).toBeUndefined()
     expect(findings.some((x) => x.ruleId === 'manual-ref')).toBe(false)
+  })
+})
+
+describe('確認済み（補助の指摘を、学生がこのままにする）', () => {
+  it('補助の指摘だけに目印が付き、確認済みにするとエラーに数えない（手順書のルールの指摘は外せない）', () => {
+    // 文末の「。」がない（補助）と、「です」（手順書のルール）
+    const r = ops.setText(demoReport(), 'p1', '衣装を作ったのです')
+    const before = checkReport(r, currentConfig).filter((f) => f.blockId === 'p1')
+    const sentenceEnd = before.find((f) => f.ruleId === 'sentence-end')
+    expect(sentenceEnd?.key).toBe('sentence-end|p1|す')
+    expect(before.find((f) => f.ruleId === 'desu-masu')?.key).toBeUndefined()
+    const acked = { ...r, acknowledged: [sentenceEnd!.key!] }
+    const { findings, acknowledged } = checkReportDetailed(acked, currentConfig)
+    expect(findings.some((f) => f.ruleId === 'sentence-end' && f.blockId === 'p1')).toBe(false)
+    expect(findings.some((f) => f.ruleId === 'desu-masu' && f.blockId === 'p1')).toBe(true)
+    expect(acknowledged.map((f) => f.ruleId)).toEqual(['sentence-end'])
   })
 })
 

@@ -68,5 +68,5 @@ export function useAutosave() {
     pending.current = null
   }, [])
 
-  return { state, save, stop }
+  return { state, save, stop, flush }
 }

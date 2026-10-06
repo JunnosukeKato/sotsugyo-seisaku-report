@@ -52,6 +52,11 @@ export interface YearConfig {
   /** 学籍番号の形式（正規表現）。未確定の間は null とし、形式チェックを行わない */
   studentIdPattern: string | null
   courses: Course[]
+  /**
+   * 学生のドライブ保存。省略・required はログイン必須（ふだん）。off は止める（Google の障害や大学の設定変更で、
+   * 学生がログインできないとき。学生はログインせずに書け、原稿はその端末にだけ保存される）
+   */
+  driveSave?: 'required' | 'off'
   /** その年度の手順書へのリンク（任意） */
   handbookUrl?: string
 }

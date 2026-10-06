@@ -157,6 +157,14 @@ describe('変換を間違えやすい語', () => {
   })
 })
 
+describe('「」『』の中（人の言葉の引用・作品名）', () => {
+  it('引用の中の「です・ます」「私」「製作」は指摘しない（地の文は指摘する）', () => {
+    expect(ids('監督は「もっと軽やかにしてほしいです」と言った。')).toEqual([])
+    expect(ids('作品『私の製作日記』を参考にした。')).toEqual([])
+    expect(ids('監督は「軽やかに」と言いました。').filter((id) => id === 'desu-masu')).toEqual(['desu-masu'])
+  })
+})
+
 describe('その他', () => {
   it('テンプレートの仮の文字はエラー', () => {
     expect(ids('―●●●の衣装制作―').filter((id) => id !== 'sentence-end')).toEqual(['placeholder'])

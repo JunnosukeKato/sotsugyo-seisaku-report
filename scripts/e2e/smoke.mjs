@@ -631,6 +631,79 @@ await withEdge(async (browser) => {
   let naText = ''
   for (let n = 1; n <= naDoc.numPages; n++) naText += (await (await naDoc.getPage(n)).getTextContent()).items.map((it) => it.str).join('')
   check('抄録を書き始める前は、PDF に抄録のページが入らない（画面には残る）', naDoc.numPages === s.layout.kinds.length - 1 && !/卒業制作\s*抄録/.test(naText) && s.layout.kinds.includes('abstract'), `${naDoc.numPages} / ${s.layout.kinds.length}ページ`)
+
+  // ---- エラーが残っていても、「下書き」の透かし入りの PDF は書き出せる（mockups/v22 ① 案A） ----
+  // 文末に「。」がない段落を作る（補助の指摘のエラー）
+  const keepId = await page.evaluate(() => {
+    const ed = window.__editor
+    const target = ed.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.type === 'paragraph')
+    ed.update((r) => ({ ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === target.id ? { ...b, content: [{ type: 'text', text: '袖を大きく広げた' }] } : b)) })) }))
+    return target.id
+  })
+  await pause(300)
+  await ready()
+  await page.evaluate(() => {
+    window.print = () => (window.__printed = { draft: document.documentElement.classList.contains('print-draft'), title: document.title })
+  })
+  await page.click('.side .export')
+  await page.waitForSelector('.modal .draft-box button')
+  const titleBefore = await page.title()
+  await page.click('.modal .draft-box button')
+  await page.waitForFunction(() => !!window.__printed)
+  const printed = await page.evaluate(() => window.__printed)
+  // 印刷画面が開いているときの見た目：どのページにも「下書き」が入る（透かしは PDF の文字としては取り出せないので、印刷のときの見た目で確かめる。PDF は目視用）
+  // （PDF に書き出すと「印刷が終わった」ことになり、透かしの印が外れるので、見た目を確かめてから書き出す）
+  await page.evaluate(() => document.documentElement.classList.add('print-draft'))
+  await page.emulateMediaType('print')
+  const draftPages = await page.evaluate(() => [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].map((p) => getComputedStyle(p, '::after').content))
+  await page.emulateMediaType(null)
+  await page.pdf({ path: `${OUT}/draft.pdf`, preferCSSPageSize: true, printBackground: true })
+  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
+  const afterPrint = await page.evaluate(() => ({ draft: document.documentElement.classList.contains('print-draft'), title: document.title }))
+  check('エラーが残っていても、「下書きの PDF を書き出す」で印刷に進め、ファイル名に「_下書き」が付く（終わると元に戻る）', printed.draft && printed.title.endsWith('_下書き') && !afterPrint.draft && afterPrint.title === titleBefore, JSON.stringify(printed))
+  check('下書きの PDF は、どのページにも「下書き」の透かしが入る', draftPages.length > 0 && draftPages.every((t) => t.includes('下書き')), draftPages.map((t) => (t.includes('下書き') ? '○' : '×')).join(''))
+  await page.emulateMediaType('print')
+  const plainPages = await page.evaluate(() => [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].map((p) => getComputedStyle(p, '::after').content))
+  await page.emulateMediaType(null)
+  check('提出用の PDF には透かしが入らない', plainPages.length > 0 && !plainPages.some((t) => t.includes('下書き')), plainPages.join(','))
+
+  // ---- 補助の指摘は「このままにする（確認済み）」にでき、「戻す」で元に戻る（mockups/v22 ① 案A） ----
+  const keepKey = `sentence-end|${keepId}|`
+  const keepClicked = await page.evaluate((key) => {
+    const ed = window.__editor
+    const f = ed.getSnapshot().findings.find((x) => x.key?.startsWith(key))
+    if (!f) return false
+    const li = [...document.querySelectorAll('.side .issue')].find((el) => el.querySelector('.keep') && el.textContent.includes(f.title) && (!f.detail || el.textContent.includes(f.detail)))
+    li?.querySelector('.keep').click()
+    return !!li
+  }, keepKey)
+  await pause(300)
+  await ready()
+  s = await page.evaluate(() => { const s = window.__editor.getSnapshot(); return { acked: s.report.acknowledged ?? [], left: s.findings.filter((f) => f.key).map((f) => f.key), summary: document.querySelector('.side details.acked summary')?.textContent ?? '' } })
+  check('補助の指摘を「このままにする（確認済み）」にすると、エラーに数えず「確認済み」の一覧へ移る', keepClicked && s.acked.some((k) => k.startsWith(keepKey)) && !s.left.some((k) => k.startsWith(keepKey)) && s.summary.includes('確認済み 1件'), s.summary)
+  await page.evaluate(() => [...document.querySelectorAll('.side details.acked button')].find((b) => b.textContent === '戻す').click())
+  await pause(300)
+  await ready()
+  s = await page.evaluate(() => { const s = window.__editor.getSnapshot(); return { acked: s.report.acknowledged ?? [], left: s.findings.filter((f) => f.key).map((f) => f.key) } })
+  check('「戻す」で、元の指摘に戻る', s.acked.length === 0 && s.left.some((k) => k.startsWith(keepKey)))
+
+  // ---- 同じパソコンで2つめのタブを開くと、そのタブでは書けない（mockups/v22 ③ 案A） ----
+  const page2 = await context.newPage()
+  await stubConfig(page2)
+  page2.on('pageerror', (e) => console.log('pageerror(2):', e.message))
+  await page2.setViewport({ width: 1440, height: 900 })
+  await page2.goto('http://localhost:5173/?nodrive', { waitUntil: 'networkidle0' })
+  const lockedShown = await page2.waitForSelector('.tab-locked', { timeout: 30000 }).then(() => true, () => false)
+  check('2つめのタブで開くと、「別のタブで開いています」の窓が出て、そのタブでは書けない', lockedShown && !(await page.$('.tab-locked')))
+  await page2.screenshot({ path: `${OUT}/tab-locked.png` })
+  const reloaded = page2.waitForNavigation({ waitUntil: 'networkidle0', timeout: 30000 })
+  await page2.evaluate(() => [...document.querySelectorAll('.tab-locked button')].find((b) => b.textContent.includes('こちらで続ける')).click())
+  const firstLocked = await page.waitForSelector('.tab-locked', { timeout: 15000 }).then(() => true, () => false)
+  await reloaded
+  await page2.waitForFunction(() => window.__editor?.getSnapshot()?.layout && !document.querySelector('.loading'), { timeout: 60000 })
+  await pause(500)
+  check('「こちらで続ける」を押すと、そのタブで書けるようになり、もう一方のタブが書けなくなる', firstLocked && !(await page2.$('.tab-locked')))
+  await page2.close()
   await context.close()
 })
 

@@ -277,6 +277,18 @@ await withEdge(async (browser) => {
   await staff.context.close()
   drive.email = '22fac123@bunka-wu.ac.jp'
 
+  // ---- 管理ページでドライブ保存を止めているとき（Google の障害など。mockups/v22 ②） ----
+  config.driveSave = 'off'
+  const stopped = await device(browser, drive)
+  await stopped.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+  await editorReady(stopped.page)
+  await stopped.page.waitForSelector('.drive-stopped', { timeout: 30000 })
+  const stoppedInfo = await stopped.page.evaluate(() => ({ gate: !!document.querySelector('.login-over'), guide: !!document.querySelector('.guide .g-opts button'), chip: !!document.querySelector('.drive-chip-wrap') }))
+  check('ドライブ保存を止めていると、ログインせずに書け、右の欄に「この端末にだけ保存」と出る', !stoppedInfo.gate && stoppedInfo.guide && !stoppedInfo.chip, JSON.stringify(stoppedInfo))
+  await stopped.page.screenshot({ path: 'poc-output/e2e/drive-stopped.png' })
+  await stopped.context.close()
+  delete config.driveSave
+
   // ---- インターネットにつながっていないとき ----
   await pc.page.setOfflineMode(true)
   await pc.page.waitForFunction(() => document.querySelector('.login-btn')?.disabled && document.querySelector('.login-warn'), { timeout: 10000 })

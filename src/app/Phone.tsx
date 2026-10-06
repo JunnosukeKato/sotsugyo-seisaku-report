@@ -4,7 +4,7 @@ import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { findEditable, type EditableKind } from '../editor/reportOps'
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
-import { CheckBody, CourseNotice, DeadlineChip, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
+import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
 import { keepFocus, PAGE_CONTEXT, pageName } from './uiShared'
 import { DriveChip, DriveMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
@@ -197,6 +197,8 @@ interface Props {
   saveState: SaveState
   /** ドライブに保存しているとき（ログイン必須） */
   drive?: DriveControls
+  /** 管理ページでドライブ保存を止めている */
+  driveStopped?: boolean
   onBackup: () => void
   onExport: () => void
   onReferences: () => void
@@ -204,7 +206,7 @@ interface Props {
 }
 
 /** スマホ版の、紙面のまわりの部品（紙面そのものは App の .stage） */
-export function PhoneChrome({ editor, snap, config, saveState, drive, onBackup, onExport, onReferences, sheetHostRef }: Props) {
+export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, onReferences, sheetHostRef }: Props) {
   const [sheet, setSheet] = useState<SheetKind>(null)
   const close = () => setSheet(null)
   const errors = snap.findings.filter((f) => f.severity === 'error').length
@@ -297,6 +299,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, onBackup, 
             <DeadlineChip deadline={config.deadline} />
           </div>
           {drive && <DriveMenu drive={drive} inline onDone={close} />}
+          {driveStopped && <DriveStoppedNote />}
           {drive?.staff && <p className="staff-note">教職員のアカウントで試しています（学籍番号は自動で入りません）</p>}
           <CourseNotice config={config} courseId={snap.report.basicInfo.courseId} />
           <div className="links">

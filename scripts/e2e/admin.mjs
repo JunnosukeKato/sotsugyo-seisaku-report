@@ -30,7 +30,7 @@ await withEdge(async (browser) => {
 
   // 共通の題目を変えると、見本の表紙と抄録にすぐ反映される
   const title = await fieldInput('共通の題目')
-  await title.click({ clickCount: 3 })
+  await title.evaluate((el) => el.select())
   await title.type('卒業イベント「試験」について')
   await new Promise((r) => setTimeout(r, 300))
   const text = await previewText()
@@ -101,6 +101,20 @@ await withEdge(async (browser) => {
   const savedNotice = await page.evaluate(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config.courses[0].notice)
   check('コースのカードに書いたお知らせが、そのコースに保存される', savedNotice === '管理者が書いたお知らせ', savedNotice)
 
+  // 学生のドライブ保存を止める（詳細設定の中。Google の障害のとき。mockups/v22 ② 案B）
+  const savedDriveSave = () => page.evaluate(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config.driveSave)
+  await page.evaluate(() => (document.querySelector('details.details').open = true))
+  await clickButton('止める（Google の障害のとき）')
+  const stopWarn = await page.evaluate(() => document.querySelector('.drive-switch.off .warn')?.textContent ?? '')
+  await page.screenshot({ path: `${OUT}/admin-drive-switch.png` })
+  await clickButton('保存して学生に反映')
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config.driveSave === 'off', { timeout: 10000 }).catch(() => {})
+  check('詳細設定で「止める」にして保存すると、学生のドライブ保存を止める設定になる（注意書きが出る）', (await savedDriveSave()) === 'off' && stopWarn.includes('ログインせずに書けます'), String(await savedDriveSave()))
+  await clickButton('必須（ふだん）')
+  await clickButton('保存して学生に反映')
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config.driveSave === 'required', { timeout: 10000 }).catch(() => {})
+  check('「必須」に戻して保存すると、元に戻る', (await savedDriveSave()) === 'required', String(await savedDriveSave()))
+
   // 先生の画面：ひな形だけを編集・保存できる
   const teacher = await context.newPage()
   teacher.on('dialog', (d) => d.accept())
@@ -126,6 +140,8 @@ await withEdge(async (browser) => {
   await teacher.evaluate(() => [...document.querySelectorAll('.admin-header button')].find((b) => b.textContent.includes('保存して学生に反映')).click())
   await teacher.waitForFunction(() => document.querySelector('.message.ok'))
   // 管理者は、先生が保存する前に開いた画面のまま保存しようとする → 先生の変更を消さないよう、保存せずに知らせる
+  // 管理者のタブに戻る（後ろのタブのままだと、画面の更新が止まることがある）
+  await page.bringToFront()
   const staleTitle = await fieldInput('共通の題目')
   await staleTitle.type('（古い画面）')
   await clickButton('保存して学生に反映')

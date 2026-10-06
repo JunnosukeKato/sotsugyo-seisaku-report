@@ -17,6 +17,8 @@ import { PhoneChrome } from './app/Phone'
 import { useKeyboardInset, useNarrow, useSwipe, useWheelPaging } from './app/uiShared'
 import { SidePanel, PageColumn } from './app/SidePanel'
 import { StartGuide, type GuideStep } from './app/StartGuide'
+import { TabLockedOverlay } from './app/TabLock'
+import { useTabLock } from './app/useTabLock'
 import { useAutosave } from './app/useAutosave'
 import { usePanelWidths } from './app/usePanelWidths'
 
@@ -94,6 +96,15 @@ export default function App() {
   const [reloginError, setReloginError] = useState<string | null>(null)
   /** 「もう一度ログイン」の窓を「あとで」にした（しばらく出さない） */
   const [reloginLater, setReloginLater] = useState(false)
+  /** 管理ページでドライブ保存を止めている（Google の障害など）。ログインせずに書け、原稿はこの端末にだけ保存する */
+  const [driveStopped, setDriveStopped] = useState(false)
+  const stoppedRef = useRef(false)
+  // 同じパソコンで2つめのタブを開いたら、そのタブでは書けないようにする（mockups/v22 ③）。取り上げられたら、送っていない変更を保存する
+  const tabLock = useTabLock(() => {
+    editorRef.current?.commitEditing()
+    void autosave.flush()
+    void drive?.flush()
+  })
   const editorRef = useRef<ReportEditor | null>(null)
   const configRef = useRef<YearConfig>(currentConfig)
   /** 公開中の年度の設定（「最初から作り直す」は、公開中の年度で作る） */
@@ -107,7 +118,7 @@ export default function App() {
   useKeyboardInset()
   useSwipe(stageRef, editor, narrow)
   // ホイールでページを送る（コースを選ぶ案内や、画面の上に出る窓が開いている間は送らない）
-  useWheelPaging(stageRef, scrollerRef, editor, !dialog && !gate && !driveDialog && guide !== 'course')
+  useWheelPaging(stageRef, scrollerRef, editor, !dialog && !gate && !driveDialog && !tabLock.locked && guide !== 'course')
   useEffect(() => {
     if (editor && hasLayout) editor.setSheetHost(narrow ? sheetHostRef.current : null)
   }, [editor, narrow, hasLayout])
@@ -219,6 +230,11 @@ export default function App() {
     void (async () => {
       try {
         const { config: published, source } = await loadConfig()
+        if (drive && published.driveSave === 'off') {
+          stoppedRef.current = true
+          setDriveStopped(true)
+          setGate(null)
+        }
         publishedRef.current = published
         const saved = await loadReport()
         localAtStart.current = saved
@@ -244,7 +260,7 @@ export default function App() {
         // 開発中だけ、自動テストから操作できるようにする
         if (import.meta.env.DEV) Object.assign(window, { __editor: ed })
         await ed.render()
-        if (!drive) startGuide(loaded, report, !saved)
+        if (!drive || stoppedRef.current) startGuide(loaded, report, !saved)
         // 紙面の準備より先にログインが済んでいたら、ここで始める
         else if (drive.tokenValid) void enter(ed)
       } catch (e) {
@@ -282,7 +298,8 @@ export default function App() {
     setGate({ kind: 'signing' })
     drive.login().then(
       () => {
-        if (editorRef.current) void enter(editorRef.current)
+        if (stoppedRef.current) setGate(null)
+        else if (editorRef.current) void enter(editorRef.current)
         else setGate({ kind: 'loading' })
       },
       (e) => setGate({ kind: 'error', message: errorText(e) }),
@@ -340,7 +357,7 @@ export default function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // ログインするまでは、何もできないようにする
-      if (!editor || gate) return
+      if (!editor || gate || tabLock.locked) return
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'z' && !isTyping(e.target)) {
           e.preventDefault()
@@ -361,7 +378,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editor, dialog, guide, gate, driveDialog])
+  }, [editor, dialog, guide, gate, driveDialog, tabLock.locked])
 
   const saveBackup = useCallback(async () => {
     if (!snap) return
@@ -448,7 +465,8 @@ export default function App() {
           snap={snap}
           config={config}
           saveState={autosave.state}
-          drive={driveControls}
+          drive={driveStopped ? undefined : driveControls}
+          driveStopped={driveStopped}
           sheetHostRef={sheetHostRef}
           onReferences={() => setDialog({ kind: 'references' })}
           onBackup={async () => setDialog({ kind: 'backup', snapshots: await listSnapshots() })}
@@ -465,7 +483,8 @@ export default function App() {
           config={config}
           onReferences={() => setDialog({ kind: 'references' })}
           saveState={autosave.state}
-          drive={driveControls}
+          drive={driveStopped ? undefined : driveControls}
+          driveStopped={driveStopped}
           onBackup={async () => setDialog({ kind: 'backup', snapshots: await listSnapshots() })}
           onExport={async () => {
             editor.commitEditing()
@@ -541,6 +560,9 @@ export default function App() {
           onClose={() => setDialog(null)}
         />
       )}
+
+      {/* ---- 別のタブで開いているとき（このタブでは書けない） ---- */}
+      {tabLock.locked && <TabLockedOverlay onTakeOver={tabLock.takeOver} />}
 
       {/* ---- ドライブ（ログイン必須） ---- */}
       {gate && <LoginGate gate={gate} reportName={config.reportName} fiscalYear={config.fiscalYear} onLogin={onGateLogin} />}

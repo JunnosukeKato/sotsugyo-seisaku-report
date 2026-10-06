@@ -421,6 +421,23 @@ export function AdminApp() {
 
           <details className="details">
             <summary>詳細設定（手順書が改訂されたときだけ変更）</summary>
+            {/* Google の障害や大学の設定変更で学生がログインできないときだけ止める（mockups/v22 ② 案B） */}
+            <div className={`drive-switch${draft.driveSave === 'off' ? ' off' : ''}`}>
+              <span className="l">学生のドライブ保存</span>
+              <div className="seg2" role="group" aria-label="学生のドライブ保存">
+                <button aria-pressed={draft.driveSave !== 'off'} className={draft.driveSave !== 'off' ? 'on' : ''} onClick={() => set({ driveSave: 'required' })}>
+                  必須（ふだん）
+                </button>
+                <button aria-pressed={draft.driveSave === 'off'} className={draft.driveSave === 'off' ? 'on stop' : 'stop'} onClick={() => set({ driveSave: 'off' })}>
+                  止める（Google の障害のとき）
+                </button>
+              </div>
+              {draft.driveSave === 'off' ? (
+                <span className="warn">止めているあいだ、学生はログインせずに書けます（原稿はその端末にだけ保存されます）。Google が使えるようになったら「必須」に戻して保存してください。</span>
+              ) : (
+                <span className="hint">Google の障害や大学の設定変更で、学生がログインできないときだけ「止める」にして保存します。</span>
+              )}
+            </div>
             <div className="grid">
               <Field label="報告書の名前">
                 <TextInput value={draft.reportName} onChange={(v) => set({ reportName: v })} />

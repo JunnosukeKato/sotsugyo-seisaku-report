@@ -66,6 +66,7 @@ export function migrateReport(input: unknown): Report {
     abstract: migrateAbstract(abstract),
     body: migrateBody(raw.body as Raw[]),
     references: Array.isArray(raw.references) ? (raw.references as Report['references']) : [],
+    ...(Array.isArray(raw.acknowledged) ? { acknowledged: (raw.acknowledged as unknown[]).filter((k): k is string => typeof k === 'string') } : {}),
     workPhotos: migratePhotos(photos),
     updatedAt: str(raw.updatedAt) || new Date().toISOString(),
   }

@@ -27,6 +27,11 @@ export interface ReportFinding {
   start?: number
   end?: number
   replacement?: string
+  /**
+   * 学生が「このままにする（確認済み）」にできる指摘（手順書のルールではない、文章の補助のチェック）の目印。
+   * 規則・場所・指摘した文字で決まるので、文を書き足しても同じ指摘なら同じ目印になる
+   */
+  key?: string
 }
 
 const AREA_OF_KIND: Record<EditableKind, Area> = {
@@ -53,7 +58,15 @@ export function abstractCharCount(report: Report): number {
   return report.abstract.paragraphs.reduce((n, p) => n + contentToText(p.content, num).replace(/[\s　]/g, '').length, 0)
 }
 
-export function checkReport(report: Report, config: YearConfig, layout?: LayoutInfo | null): ReportFinding[] {
+/** 指摘（findings）と、学生が「確認済み」にした指摘（acknowledged。エラーに数えない） */
+export function checkReportDetailed(report: Report, config: YearConfig, layout?: LayoutInfo | null): { findings: ReportFinding[]; acknowledged: ReportFinding[] } {
+  const all = checkReport(report, config, layout, true)
+  const keys = new Set(report.acknowledged ?? [])
+  return { findings: all.filter((f) => !f.key || !keys.has(f.key)), acknowledged: all.filter((f) => f.key && keys.has(f.key)) }
+}
+
+/** セルフチェック。includeAcknowledged を付けないと、学生が「確認済み」にした指摘は除く */
+export function checkReport(report: Report, config: YearConfig, layout?: LayoutInfo | null, includeAcknowledged = false): ReportFinding[] {
   const findings: ReportFinding[] = []
   const num = numbering(report)
   const list = editables(report)
@@ -65,7 +78,8 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     const area = AREA_OF_KIND[e.kind]
     for (const f of checkText(e.text, words) as TextFinding[]) {
       if ((f.ruleId === 'taigen-dome' || f.ruleId === 'sentence-end') && !SENTENCE_KINDS.includes(e.kind)) continue
-      findings.push({ ...f, area, blockId: e.id })
+      const key = f.source === 'supplementary' ? `${f.ruleId}|${e.id}|${e.text.slice(f.start, f.end)}` : undefined
+      findings.push({ ...f, area, blockId: e.id, ...(key ? { key } : {}) })
     }
   }
 
@@ -282,5 +296,7 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   else if (photos.length < report.workPhotos.layout)
     findings.push(guide('photos-empty-slot', 'warning', '作品写真のページに空いている枠がある', 'photos', { detail: `${report.workPhotos.layout}枚の配置に${photos.length}枚` }))
 
-  return findings
+  if (includeAcknowledged) return findings
+  const acknowledged = new Set(report.acknowledged ?? [])
+  return findings.filter((f) => !f.key || !acknowledged.has(f.key))
 }

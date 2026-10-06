@@ -245,10 +245,19 @@ export function ExportDialog({ editor, findings, onClose }: { editor: ReportEdit
   const [checked, setChecked] = useState<boolean[]>(SELF_CHECKS.map(() => false))
   const allChecked = checked.every(Boolean)
 
-  const print = () => {
+  /** draft：下書き（どのページにも「下書き」の透かしを入れる。エラーが残っていても出せる。提出には使えない） */
+  const print = (draft = false) => {
     const title = document.title
-    document.title = editor.pdfTitle
-    window.addEventListener('afterprint', () => (document.title = title), { once: true })
+    document.title = draft ? `${editor.pdfTitle}_下書き` : editor.pdfTitle
+    document.documentElement.classList.toggle('print-draft', draft)
+    window.addEventListener(
+      'afterprint',
+      () => {
+        document.title = title
+        document.documentElement.classList.remove('print-draft')
+      },
+      { once: true },
+    )
     onClose()
     // ダイアログが閉じてから印刷画面を開く
     setTimeout(() => window.print(), 50)
@@ -275,8 +284,14 @@ export function ExportDialog({ editor, findings, onClose }: { editor: ReportEdit
               {f.detail && <span className="detail">（{f.detail}）</span>}
             </li>
           ))}
-          {errors.length > 8 && <li>ほか {errors.length - 8}件（右のセルフチェックを見てください）</li>}
+          {errors.length > 8 && <li>ほか {errors.length - 8}件（セルフチェックを見てください）</li>}
         </ul>
+        <div className="draft-box">
+          <b>先生に途中経過を見せるとき</b>
+          エラーが残っていても、どのページにも「下書き」の透かしが入った PDF を書き出せます（提出には使えません）。
+          <PrintSteps />
+          <button onClick={() => print(true)}>下書きの PDF を書き出す</button>
+        </div>
         <div className="row-buttons">
           <span className="spacer" />
           <button className="primary" onClick={onClose}>
@@ -311,7 +326,7 @@ export function ExportDialog({ editor, findings, onClose }: { editor: ReportEdit
       <div className="row-buttons">
         <span className="spacer" />
         <button onClick={onClose}>やめる</button>
-        <button className="primary" disabled={!allChecked} onClick={print}>
+        <button className="primary" disabled={!allChecked} onClick={() => print()}>
           印刷の画面を開く
         </button>
       </div>

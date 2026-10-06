@@ -1,5 +1,5 @@
 import type { YearConfig } from '../config'
-import { checkReport, type ReportFinding } from '../checker/reportChecks'
+import { checkReportDetailed, type ReportFinding } from '../checker/reportChecks'
 import { applyFix } from '../checker/textRules'
 import { FIELD_IDS } from '../layout/document'
 import type { LayoutInfo } from '../layout/measure'
@@ -47,6 +47,8 @@ export type Selection =
 export interface EditorSnapshot {
   report: Report
   findings: ReportFinding[]
+  /** 学生が「このままにする（確認済み）」にした指摘（エラーに数えない） */
+  acknowledged: ReportFinding[]
   layout: LayoutInfo | null
   rendering: boolean
   renderMs: number
@@ -110,6 +112,7 @@ export class ReportEditor {
   private history: Report[] = []
   private reportBeforeEdit: Report | null = null
   private findings: ReportFinding[] = []
+  private acknowledged: ReportFinding[] = []
   private layout: LayoutInfo | null = null
   private rendering = false
   private renderAgain = false
@@ -243,6 +246,7 @@ export class ReportEditor {
     this.snapshotCache = {
       report: this.report,
       findings: this.findings,
+      acknowledged: this.acknowledged,
       layout: this.layout,
       rendering: this.rendering,
       renderMs: this.renderMs,
@@ -312,6 +316,15 @@ export class ReportEditor {
     this.renderTimer = window.setTimeout(() => void this.render(), delay)
   }
 
+  /** 補助の指摘を「このままにする（確認済み）」にする（エラーに数えない）。戻すときは unacknowledge */
+  acknowledge(key: string): void {
+    this.update((r) => ({ ...r, acknowledged: [...new Set([...(r.acknowledged ?? []), key])] }))
+  }
+
+  unacknowledge(key: string): void {
+    this.update((r) => ({ ...r, acknowledged: (r.acknowledged ?? []).filter((k) => k !== key) }))
+  }
+
   /** 年度の設定を入れ替える（原稿を、書き始めた年度の設定で開くとき） */
   setConfig(config: YearConfig): void {
     this.config = config
@@ -368,7 +381,9 @@ export class ReportEditor {
   // ---- セルフチェック ----
 
   private runChecks(): void {
-    this.findings = checkReport(this.report, this.config, this.layout)
+    const checked = checkReportDetailed(this.report, this.config, this.layout)
+    this.findings = checked.findings
+    this.acknowledged = checked.acknowledged
     this.refreshHighlights()
   }
 

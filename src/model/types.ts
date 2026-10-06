@@ -15,6 +15,11 @@ export interface Report {
   /** 引用・参考文献（任意） */
   references: Reference[]
   workPhotos: WorkPhotos
+  /**
+   * 学生が「このままにする（確認済み）」にした補助の指摘（ReportFinding.key）。エラーに数えない。
+   * 手順書のルールではない補助のチェックは誤って指摘することがあるため、学生が確かめて外せる
+   */
+  acknowledged?: string[]
   /** ISO 8601 */
   updatedAt: string
 }

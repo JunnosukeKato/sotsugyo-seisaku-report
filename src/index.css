@@ -7,7 +7,8 @@
   --panel-bg: #fbfaf8;
   --line: #e6e2dc;
   --ink: #23262b;
-  --muted: #80838a;
+  /* 説明の文字（背景との差が、見やすさの基準 4.5:1 に届く濃さ。mockups/v22 ⑨） */
+  --muted: #686b72;
   --accent: #2f3e75;
   --accent-ink: #fff;
   --accent-soft: #e8ebf5;
@@ -167,7 +168,7 @@ body.resizing .page-viewport { pointer-events: none; }
 .palette .group + .group { border-top: 1px solid var(--palette-line); margin-top: 5px; padding-top: 5px; }
 .p-head { padding: 6px 2px 8px; text-align: center; }
 .p-head b { display: block; font-size: 12px; letter-spacing: 0.1em; color: var(--ink); }
-.p-head span { display: block; margin-top: 3px; font-size: 10px; line-height: 1.45; color: var(--muted); white-space: pre-line; }
+.p-head span { display: block; margin-top: 3px; font-size: 10.5px; line-height: 1.45; color: var(--muted); white-space: pre-line; }
 .p-head + .group { border-top: 1px solid var(--palette-line); margin-top: 0; padding-top: 5px; }
 .tb { display: flex; flex-direction: column; align-items: center; gap: 3px; width: 100%; padding: 8px 0 7px; border: 0; background: none; color: var(--palette-ink); border-radius: var(--r-md); font-size: 10.5px; letter-spacing: 0.02em; transition: background 0.15s, color 0.15s; }
 .tb svg { width: 22px; height: 22px; }
@@ -191,7 +192,7 @@ body.resizing .page-viewport { pointer-events: none; }
 .seg { display: flex; flex-direction: column; gap: 3px; padding: 2px 4px 4px; }
 .seg button { border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 5px 0; font-size: 9.5px; letter-spacing: -0.03em; white-space: nowrap; color: var(--ink); }
 .seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
-.ctx-note { font-size: 9.5px; line-height: 1.5; color: var(--muted); padding: 2px 4px 4px; text-align: center; }
+.ctx-note { font-size: 10px; line-height: 1.5; color: var(--muted); padding: 2px 4px 4px; text-align: center; }
 .menu-wrap { position: relative; }
 .side-menu { position: absolute; left: calc(100% + 10px); top: 0; z-index: 20; min-width: 150px; display: grid; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(30, 25, 20, 0.16); }
 .side-menu-title { font-size: 10.5px; color: var(--muted); padding: 2px 8px 4px; }
@@ -218,7 +219,7 @@ body.resizing .page-viewport { pointer-events: none; }
 .brand-name { font-family: 'BIZ UDMincho', serif; font-size: 16px; letter-spacing: 0.12em; }
 .brand-sub { font-size: 11px; color: var(--muted); margin-top: 1px; letter-spacing: 0.04em; }
 .meta { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 14px; }
-.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 11.5px; padding: 4px 10px; border-radius: 999px; background: var(--chip-bg); color: var(--muted); }
+.chip { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; padding: 4px 10px; border-radius: 999px; background: var(--chip-bg); color: var(--muted); }
 .chip b { color: var(--ink); font-size: 13px; }
 .chip.ng { color: var(--error); background: var(--error-soft); }
 .chip .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok); }
@@ -235,7 +236,7 @@ body.resizing .page-viewport { pointer-events: none; }
 .notice p { margin: 2px 0 0; white-space: pre-wrap; }
 
 .sec { padding: 14px 20px 16px; border-top: 1px solid var(--line); }
-.sec-h { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; font-size: 11px; color: var(--muted); }
+.sec-h { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; font-size: 11.5px; color: var(--muted); }
 .sec-h > span:first-child { font-weight: 700; color: var(--ink); letter-spacing: 0.12em; }
 .pcount b { color: var(--ink); font-size: 14px; }
 .tally b { font-size: 15px; }
@@ -255,8 +256,8 @@ body.resizing .page-viewport { pointer-events: none; }
 /* セルフチェック */
 .check { flex: 1; overflow: auto; }
 .meters { display: flex; flex-direction: column; gap: 9px; padding: 2px 0 12px; border-bottom: 1px solid var(--line); }
-.meter .row { display: flex; justify-content: space-between; gap: 8px; font-size: 11.5px; color: var(--muted); }
-.meter .row b { font-size: 11.5px; color: var(--ok); }
+.meter .row { display: flex; justify-content: space-between; gap: 8px; font-size: 12px; color: var(--muted); }
+.meter .row b { font-size: 12px; color: var(--ok); }
 .meter .row b.ng { color: var(--error); }
 .meter .bar { height: 4px; margin-top: 4px; border-radius: 2px; background: var(--chip-bg); overflow: hidden; }
 .meter .bar i { display: block; height: 100%; border-radius: 2px; background: var(--ok); }
@@ -265,16 +266,19 @@ body.resizing .page-viewport { pointer-events: none; }
 .ig-h { display: flex; justify-content: space-between; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; }
 .ig-h span { font-weight: 400; color: var(--muted); letter-spacing: 0; }
 .issues { list-style: none; margin: 0; padding: 0; }
-.issue { display: grid; grid-template-columns: 8px 1fr auto; gap: 10px; align-items: start; margin: 0 -4px; padding: 10px 4px; border-bottom: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
+.issue { display: grid; grid-template-columns: 16px 1fr auto; gap: 10px; align-items: start; margin: 0 -4px; padding: 10px 4px; border-bottom: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
 .issue:hover { background: var(--chip-bg); }
 /* 書いている（選んでいる）箇所の指摘：カーソルのある箇所ははっきり、同じ欄のほかの指摘はうすく */
 .issue.active.here { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .issue.active.block { background: rgba(47, 62, 117, 0.045); }
-.issue .dot { width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--error); }
-.issue.warning .dot { background: var(--warn); }
+/* エラー・注意は、色だけでなく印の形でも分ける（エラー：× の丸、注意：! のひし形。mockups/v22 ⑨ 案A） */
+.issue .dot { width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; background: var(--error); display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 700; font-style: normal; line-height: 1; }
+.issue .dot::before { content: '×'; }
+.issue.warning .dot { background: var(--warn); border-radius: 3px; transform: rotate(45deg) scale(0.86); }
+.issue.warning .dot::before { content: '!'; transform: rotate(-45deg); }
 .issue .ttl { font-size: 13px; font-weight: 700; line-height: 1.5; }
-.issue .src { display: inline-block; white-space: nowrap; margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: var(--chip-bg); font-size: 9.5px; font-weight: 400; color: var(--muted); vertical-align: 1px; }
-.issue .detail { font-size: 11.5px; color: var(--muted); margin-top: 2px; line-height: 1.6; }
+.issue .src { display: inline-block; white-space: nowrap; margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: var(--chip-bg); font-size: 10.5px; font-weight: 400; color: var(--muted); vertical-align: 1px; }
+.issue .detail { font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.6; }
 .issue .fix { align-self: center; border: 1px solid var(--accent); background: transparent; color: var(--accent); border-radius: 999px; padding: 3px 12px; font-size: 11.5px; white-space: nowrap; }
 .issue .fix:hover { background: var(--accent); color: var(--accent-ink); }
 .empty { margin-top: 12px; font-size: 13px; color: var(--ok); line-height: 1.6; }
@@ -284,7 +288,7 @@ body.resizing .page-viewport { pointer-events: none; }
 .export { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 0; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-size: 14px; font-weight: 700; letter-spacing: 0.06em; transition: filter 0.15s; }
 .export svg { width: 18px; height: 18px; }
 .export:hover:not(:disabled) { filter: brightness(1.12); }
-.side-foot p { margin: 8px 0 0; font-size: 11px; color: var(--muted); text-align: center; }
+.side-foot p { margin: 8px 0 0; font-size: 12px; color: var(--muted); text-align: center; }
 .source-notice { display: block; margin-top: 6px; font-size: 10px; color: var(--muted); text-align: center; }
 
 /* ---- ダイアログ ---- */
@@ -564,3 +568,32 @@ body.resizing .page-viewport { pointer-events: none; }
   .g-spot, .login-progress i { transition: none !important; }
   * { scroll-behavior: auto !important; }
 }
+
+/* ---- 「確認済み」（手順書のルールではない補助の指摘を、学生がこのままにする。mockups/v22 ① 案A） ---- */
+.issue .keep { grid-column: 2 / 4; justify-self: start; margin-top: -4px; border: 0; background: none; padding: 2px 0; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.issue .keep:hover { color: var(--accent); }
+.acked { margin: 12px 0 4px; padding: 8px 10px; border-radius: 8px; background: var(--chip-bg); font-size: 12px; color: var(--muted); }
+.acked summary { cursor: pointer; }
+.acked ul { list-style: none; margin: 8px 0 0; padding: 0; display: grid; gap: 6px; }
+.acked li { display: flex; align-items: flex-start; gap: 8px; }
+.acked li span { flex: 1; color: var(--ink); }
+.acked li small { display: block; color: var(--muted); }
+.acked li button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--accent); }
+
+/* ---- 下書きの PDF（どのページにも「下書き」の透かし。mockups/v22 ① 案A） ---- */
+.draft-box { margin: 14px 0 0; padding: 12px 14px; border-radius: 10px; background: #f6f4ef; border: 1px solid var(--line); font-size: 13px; line-height: 1.7; }
+.draft-box b { display: block; margin-bottom: 2px; }
+.draft-box ul { margin: 6px 0; padding-left: 20px; font-size: 12.5px; color: var(--muted); }
+.draft-box button { margin-top: 6px; }
+@media print {
+  .print-draft .page-viewport [data-vivliostyle-page-container] { position: relative; }
+  /* 印刷のときはページの影（::after）を消しているので、下書きのときだけ、その場所に透かしを出す */
+  .print-draft .page-viewport [data-vivliostyle-page-container]::after { content: '下書き' !important; position: absolute !important; inset: auto !important; left: 50% !important; top: 50% !important; transform: translate(-50%, -50%) rotate(-32deg) !important; background: none !important; animation: none !important; font-family: 'BIZ UDPGothic', sans-serif; font-weight: 700; font-size: 96pt; letter-spacing: 0.3em; color: rgba(181, 68, 59, 0.14) !important; white-space: nowrap; pointer-events: none; z-index: 10; }
+}
+
+/* 管理ページでドライブ保存を止めているとき（mockups/v22 ②） */
+.drive-stopped { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 12px; line-height: 1.6; }
+
+/* 別のタブで開いているとき（mockups/v22 ③ 案A）：ログインの窓より上に出す */
+.login-over.tab-locked { z-index: 75; }
+.tab-locked-title { font-size: 18px; margin: 0 0 8px; }

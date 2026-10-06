@@ -19,6 +19,8 @@ interface Props {
   saveState: SaveState
   /** ドライブに保存しているとき（ログイン必須）。保存のようすをドライブのものにする */
   drive?: DriveControls
+  /** 管理ページでドライブ保存を止めている */
+  driveStopped?: boolean
   onBackup: () => void
   onExport: () => void
   onReferences: () => void
@@ -30,6 +32,11 @@ export function SaveChip({ state }: { state: SaveState }) {
   if (state.status === 'error') return <span className="chip saved ng" title={state.message}><i className="dot ng" />保存できません。バックアップを保存してください</span>
   const at = state.status === 'saved' ? ` ${state.at.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}` : ''
   return <span className="chip saved" title={title}><i className="dot" />自動保存{at}</span>
+}
+
+/** 管理ページでドライブ保存を止めているとき（mockups/v22 ②） */
+export function DriveStoppedNote() {
+  return <div className="drive-stopped">いまはドライブへの保存を止めています（学科の判断）。原稿はこの端末にだけ保存されます。再開されたら、ログインするとドライブにも保存されます。</div>
 }
 
 /** 自分のコースへのお知らせ（管理ページで、コースごとに書く。mockups/v21） */
@@ -187,6 +194,18 @@ function Issue({ finding, editor, onPick, active }: { finding: ReportFinding; ed
       ) : (
         <span />
       )}
+      {/* 手順書のルールではない補助の指摘は、学生が確かめて「このままにする」にできる（mockups/v22 ① 案A） */}
+      {finding.key && (
+        <button
+          className="keep"
+          onClick={(e) => {
+            e.stopPropagation()
+            editor.acknowledge(finding.key!)
+          }}
+        >
+          このままにする（確認済み）
+        </button>
+      )}
     </li>
   )
 }
@@ -257,6 +276,22 @@ export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEdit
           )
         })
       )}
+      {snap.acknowledged.length > 0 && (
+        <details className="acked">
+          <summary>確認済み {snap.acknowledged.length}件（エラーに数えない）</summary>
+          <ul>
+            {snap.acknowledged.map((f) => (
+              <li key={f.key}>
+                <span>
+                  {f.title}
+                  {f.detail && <small>{f.detail}</small>}
+                </span>
+                <button onClick={() => f.key && editor.unacknowledge(f.key)}>戻す</button>
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       </div>
     </>
   )
@@ -272,7 +307,7 @@ export function Tally({ snap }: { snap: EditorSnapshot }) {
   )
 }
 
-export function SidePanel({ editor, snap, config, saveState, drive, onBackup, onExport, onReferences }: Props) {
+export function SidePanel({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, onReferences }: Props) {
   const errors = snap.findings.filter((f) => f.severity === 'error').length
   return (
     <aside className="side">
@@ -288,6 +323,7 @@ export function SidePanel({ editor, snap, config, saveState, drive, onBackup, on
           {drive ? <DriveChipMenu drive={drive} /> : <SaveChip state={saveState} />}
           <DeadlineChip deadline={config.deadline} />
         </div>
+        {driveStopped && <DriveStoppedNote />}
         {drive?.staff && <p className="staff-note">教職員のアカウントで試しています（学籍番号は自動で入りません）</p>}
         <div className="links">
           {config.handbookUrl && (

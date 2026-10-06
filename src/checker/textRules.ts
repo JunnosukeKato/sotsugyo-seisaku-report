@@ -32,6 +32,19 @@ function matches(text: string, re: RegExp) {
   return [...text.matchAll(re)].map((m) => ({ match: m, start: m.index, end: m.index + m[0].length }))
 }
 
+/**
+ * 「」『』の中（人の言葉の引用や、作品・資料の名前）か。中は書き手の文体ではないので、文体のルール（です・ます、一人称、製作）を当てない
+ */
+export function quoted(text: string, index: number): boolean {
+  let depth = 0
+  for (let i = 0; i < index; i++) {
+    const c = text[i]
+    if (c === '「' || c === '『') depth++
+    else if ((c === '」' || c === '』') && depth > 0) depth--
+  }
+  return depth > 0
+}
+
 const KATAKANA = 'ァ-ヶ'
 const KANJI = '\\u3400-\\u9fff々'
 
@@ -74,7 +87,9 @@ export const TEXT_RULES: TextRule[] = [
     source: 'guide',
     title: '「です・ます」ではなく「である」調で書く',
     find: (text) =>
-      matches(text, /(でしょう|でした|です|ました|ません|ます)(?=[。、」）！？]|$)/g).map(({ match, start, end }) => {
+      matches(text, /(でしょう|でした|です|ました|ません|ます)(?=[。、」）！？]|$)/g)
+        .filter(({ start }) => !quoted(text, start))
+        .map(({ match, start, end }) => {
         const fixes: Record<string, string> = { です: 'である', でした: 'であった' }
         const replacement = fixes[match[0]]
         return { start, end, replacement, detail: replacement ? `「${match[0]}」→「${replacement}」` : `「${match[0]}」を「である」調に直す` }
@@ -86,7 +101,9 @@ export const TEXT_RULES: TextRule[] = [
     source: 'guide',
     title: '一人称は「筆者」にする',
     find: (text) =>
-      matches(text, /私たち|わたしたち|僕たち|僕ら|私(?![服物立鉄語的有見案事情設費淑信])|わたし|僕/g).map(({ match, start, end }) => {
+      matches(text, /私たち|わたしたち|僕たち|僕ら|私(?![服物立鉄語的有見案事情設費淑信])|わたし|僕/g)
+        .filter(({ start }) => !quoted(text, start))
+        .map(({ match, start, end }) => {
         const plural = /たち|ら$/.test(match[0])
         return plural
           ? { start, end, detail: `「${match[0]}」→「筆者ら」など` }
@@ -98,7 +115,10 @@ export const TEXT_RULES: TextRule[] = [
     severity: 'error',
     source: 'guide',
     title: '「製作」ではなく「制作」で統一する',
-    find: (text) => matches(text, /製作/g).map(({ start, end }) => ({ start, end, replacement: '制作', detail: '「製作」→「制作」' })),
+    find: (text) =>
+      matches(text, /製作/g)
+        .filter(({ start }) => !quoted(text, start))
+        .map(({ start, end }) => ({ start, end, replacement: '制作', detail: '「製作」→「制作」' })),
   },
   {
     id: 'honorific',
