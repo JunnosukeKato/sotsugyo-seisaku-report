@@ -3,6 +3,7 @@
  * 位置や大きさは、テンプレートと 2025年度サンプル PDF から読み取った値（mm・pt）。
  * 表紙はテンプレートの「指定のフォーマットにそのまま入力する」に従い、要素を決まった位置に置く。
  */
+import { PHOTO_ARRANGEMENTS } from '../model/photos'
 import { FONT_SIZE_PT, LETTER_SPACING_PT, LINE_PITCH_PT, reportCss } from './reportCss'
 
 const MM_TO_PT = 72 / 25.4
@@ -14,8 +15,8 @@ export const ABSTRACT_CHARS_PER_LINE = 40
 const ABSTRACT_LETTER_SPACING_PT =
   Math.floor(((150 * MM_TO_PT - ABSTRACT_CHARS_PER_LINE * ABSTRACT_FONT_PT) / ABSTRACT_CHARS_PER_LINE) * 1000) / 1000
 
-/** 作品写真のページの余白（手順書に定めがないため、写真を大きく載せられるよう狭めにする） */
-export const PHOTO_PAGE_MARGIN_MM = 15
+/** 作品写真のページ：ふちなし（紙の端まで写真）、写真の間は細い白い線（mockups/v11 案A） */
+export const PHOTO_GAP_MM = 1.5
 
 const COVER_FONT = `'BIZ UDPGothic', sans-serif`
 const MINCHO = `'BIZ UDMincho', serif`
@@ -27,7 +28,7 @@ ${reportCss}
 @page cover { margin: 25mm; @bottom-center { content: none; } }
 @page abstract { @bottom-center { content: none; } }
 @page toc { @bottom-center { content: none; } }
-@page photos { margin: ${PHOTO_PAGE_MARGIN_MM}mm; @bottom-center { content: none; } }
+@page photos { margin: 0; @bottom-center { content: none; } }
 
 section { break-before: page; }
 section:first-child { break-before: auto; }
@@ -95,15 +96,11 @@ section.body { counter-reset: page 1; }
 .references ul { list-style: none; margin: 0; padding: 0; }
 .references li { text-indent: -1em; padding-left: 1em; }
 
-/* ---- 作品写真（文字を置かない。写真は切り取らずに枠内に収める） ---- */
-.photos { height: ${297 - PHOTO_PAGE_MARGIN_MM * 2}mm; display: grid; gap: 4mm; }
-.photos.layout-1 { grid-template: 1fr / 1fr; }
-.photos.layout-2 { grid-template: 1fr / 1fr 1fr; }
-.photos.layout-3 { grid-template: 1fr / 1fr 1fr 1fr; }
-.photos.layout-4 { grid-template: 1fr 1fr / 1fr 1fr; }
-.photos.layout-6 { grid-template: 1fr 1fr 1fr / 1fr 1fr; }
-.photos .slot { position: relative; min-width: 0; min-height: 0; }
-.photos .slot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+/* ---- 作品写真（文字を置かない。写真は枠いっぱいに切り抜き、細い白い線で区切る） ---- */
+.photos { height: 297mm; display: grid; gap: ${PHOTO_GAP_MM}mm; background: #fff; }
+${PHOTO_ARRANGEMENTS.map((a) => `.photos.grid-${a.columns}x${a.rows} { grid-template: repeat(${a.rows}, 1fr) / repeat(${a.columns}, 1fr); }`).join('\n')}
+.photos .slot { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
+.photos .slot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 `
 
 export { FONT_SIZE_PT, LETTER_SPACING_PT, LINE_PITCH_PT }

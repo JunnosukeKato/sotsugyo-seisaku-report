@@ -1,3 +1,4 @@
+import { clampPercent, photoGrid } from './photos'
 import type { Report } from './types'
 import { DATA_FORMAT_VERSION } from './types'
 
@@ -10,6 +11,21 @@ import { DATA_FORMAT_VERSION } from './types'
 export class UnsupportedDataError extends Error {}
 
 type Raw = Record<string, unknown>
+
+/** 作品写真：3枚の並べ方はなくしたため、4枚にする（写真は残る） */
+function migratePhotos(photos: Raw): Report['workPhotos'] {
+  const layout = photos.layout === 3 ? 4 : (([1, 2, 4, 6] as const).find((n) => n === photos.layout) ?? 1)
+  const imageIds = Array.isArray(photos.imageIds) ? (photos.imageIds as unknown[]).map((x) => (typeof x === 'string' ? x : '')) : []
+  const positions = Array.isArray(photos.positions)
+    ? (photos.positions as unknown[]).map((p) => {
+        const q = p as { x?: unknown; y?: unknown } | null
+        return q && typeof q.x === 'number' && typeof q.y === 'number' ? { x: clampPercent(q.x), y: clampPercent(q.y) } : null
+      })
+    : undefined
+  // 並べ方は、その枚数で選べるものだけ残す（なければ既定の並べ方）
+  const columns = typeof photos.columns === 'number' && photoGrid({ layout, columns: photos.columns }).columns === photos.columns ? photos.columns : undefined
+  return { layout, imageIds, ...(columns ? { columns } : {}), ...(positions ? { positions } : {}) }
+}
 
 export function migrateReport(input: unknown): Report {
   if (!input || typeof input !== 'object') throw new UnsupportedDataError('報告書のデータではありません')
@@ -31,10 +47,7 @@ export function migrateReport(input: unknown): Report {
     abstract: { paragraphs: Array.isArray(abstract.paragraphs) ? (abstract.paragraphs as Report['abstract']['paragraphs']) : [] },
     body: raw.body as Report['body'],
     references: Array.isArray(raw.references) ? (raw.references as Report['references']) : [],
-    workPhotos: {
-      layout: ([1, 2, 3, 4, 6] as const).find((n) => n === photos.layout) ?? 1,
-      imageIds: Array.isArray(photos.imageIds) ? (photos.imageIds as string[]) : [],
-    },
+    workPhotos: migratePhotos(photos),
     updatedAt: str(raw.updatedAt) || new Date().toISOString(),
   }
 }

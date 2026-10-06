@@ -89,6 +89,10 @@ button:disabled { cursor: default; opacity: 0.4; }
 .page-viewport figure img, .page-viewport td.swatch, .page-viewport [data-photo-slot] { cursor: pointer; }
 .page-viewport td.swatch:empty::before { content: '（写真を選ぶ）'; color: #a8a8a8; font-size: 9pt; }
 .page-viewport [data-photo-slot] { outline: 1px dashed #c8c8c8; }
+/* 作品写真は、つかんで動かすと見える位置が変わる */
+.page-viewport [data-photo-slot] img { cursor: grab; touch-action: none; user-select: none; -webkit-user-drag: none; }
+.page-viewport [data-photo-slot] img.dragging { cursor: grabbing; }
+.page-viewport [data-photo-slot]:has(img) { outline: none; }
 .page-viewport [data-photo-slot]:empty::before { content: '（クリックして写真を選ぶ）'; position: absolute; inset: 0; display: grid; place-items: center; color: #a8a8a8; font-family: 'BIZ UDPGothic', sans-serif; font-size: 11pt; }
 .page-viewport section.references { cursor: pointer; }
 .page-viewport .is-selected { outline: 3px solid var(--accent); outline-offset: 6px; }
@@ -149,8 +153,16 @@ button:disabled { cursor: default; opacity: 0.4; }
 .palette .group.ctx .tb:hover:not(:disabled) { background: rgba(255, 255, 255, 0.75); }
 .ctx-label { font-size: 10px; text-align: center; color: var(--accent); font-weight: 700; letter-spacing: 0.08em; padding: 3px 0 1px; }
 .layouts { display: grid; grid-template-columns: 1fr 1fr; gap: 3px; padding: 4px; }
-.lay { border: 1px solid transparent; background: #fff; border-radius: 6px; font-size: 11px; padding: 5px 0; color: var(--ink); }
+.lay { display: flex; flex-direction: column; align-items: center; gap: 2px; border: 1px solid transparent; background: #fff; border-radius: 6px; font-size: 10.5px; line-height: 1.25; padding: 5px 0 4px; color: var(--ink); white-space: nowrap; }
+.lay-grid { margin-bottom: 2px; }
+.lay-sub { font-size: 9.5px; color: var(--muted); }
+.lay.on .lay-sub { color: var(--accent); }
 .lay.on { border-color: var(--accent); color: var(--accent); font-weight: 700; }
+/* 並べ方の小さな見本（紙と、写真の枠） */
+.lay-grid { display: grid; gap: 1px; width: 15px; height: 21px; padding: 0; background: #fff; box-shadow: 0 0 0 1px #c9c6c0; }
+.lay-grid i { background: #b7b4ae; }
+.lay.on .lay-grid i { background: var(--accent); }
+.ctx-note { font-size: 9.5px; line-height: 1.5; color: var(--muted); padding: 2px 4px 4px; text-align: center; }
 .menu-wrap { position: relative; }
 .side-menu { position: absolute; left: calc(100% + 10px); top: 0; z-index: 20; min-width: 150px; display: grid; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(30, 25, 20, 0.16); }
 .side-menu-title { font-size: 10.5px; color: var(--muted); padding: 2px 8px 4px; }
@@ -313,6 +325,7 @@ button:disabled { cursor: default; opacity: 0.4; }
 .sel-bar { position: fixed; z-index: 11; left: 8px; right: 8px; bottom: calc(62px + 60px); display: flex; justify-content: center; }
 .sel-bar .group.ctx { display: flex; flex-direction: row; align-items: center; gap: 2px; padding: 4px 8px; margin: 0; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--float-shadow); }
 .sel-bar .ctx-label { padding: 0 6px 0 2px; }
+.sel-bar .ctx-note { display: none; }
 .sel-bar .tb { width: auto; padding: 6px 10px; }
 .sel-bar .layouts { display: flex; padding: 0; }
 .sel-bar .lay { padding: 6px 10px; border-color: var(--line); }

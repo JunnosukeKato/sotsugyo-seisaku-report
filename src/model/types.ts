@@ -125,11 +125,25 @@ export interface WebReference {
   accessedOn: string
 }
 
-export type WorkPhotoLayout = 1 | 2 | 3 | 4 | 6
+/** 作品写真のページに載せる枚数 */
+export type WorkPhotoLayout = 1 | 2 | 4 | 6
+
+/** 写真を枠に合わせて切り抜く位置（%）。50・50 が中央、0 が左（上）端、100 が右（下）端 */
+export interface PhotoPosition {
+  x: number
+  y: number
+}
 
 export interface WorkPhotos {
   layout: WorkPhotoLayout
+  /** 横に並べる数（2枚：2＝左右・1＝上下、6枚：2＝2列×3段・3＝3列×2段）。省略したら既定の並べ方（photoGrid） */
+  columns?: number
+  /**
+   * 写真（1枚目から順）。枚数を減らしても消さずに残し、先頭から layout 枚を載せる（枚数を戻すと、また載る）
+   */
   imageIds: string[]
+  /** 写真ごとの切り抜く位置（imageIds と同じ順。null は中央） */
+  positions?: (PhotoPosition | null)[]
 }
 
 /** 画像の実体は文書データとは別に保存し、ID で参照する */

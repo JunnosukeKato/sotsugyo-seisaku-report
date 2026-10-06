@@ -64,7 +64,7 @@ const WHEEL_TURN_PX = 50
 
 /**
  * マウスのホイール（タッチパッドの2本指）でページを送る。下（右）へ回すと次のページ、上（左）へ回すと前のページ。
- * 1回の操作（間が空くまでの一続きの回転）で1ページ。タッチパッドの指を離したあとの惰性では続けて送らない。
+ * 1回の操作（間が空くまでの一続きの回転）で1ページ。めくっている間の回転と、タッチパッドの指を離したあとの惰性では続けて送らない。
  * 紙面をスクロールできるとき（拡大など）は、ふつうにスクロールし、端まで来てから改めて回したときだけ送る。
  */
 export function useWheelPaging(target: React.RefObject<HTMLElement | null>, scroller: React.RefObject<HTMLElement | null>, editor: ReportEditor | null, enabled: boolean): void {
@@ -75,24 +75,14 @@ export function useWheelPaging(target: React.RefObject<HTMLElement | null>, scro
     let last = 0
     let sum = 0
     let mode: 'turn' | 'scroll' | 'done' = 'turn'
-    // めくっている間に回されたら、めくり終わってから送る（1回分だけ覚えておく）
+    // めくっている間の回転は、そのめくりの続き（惰性など）とみなして使わない
     let busy = false
-    let queued = 0
     const turn = async (dir: number) => {
-      if (busy) {
-        queued = dir
-        return
-      }
       busy = true
       try {
         await editor.goToPage(editor.getSnapshot().page + dir)
       } finally {
         busy = false
-      }
-      if (queued) {
-        const next = queued
-        queued = 0
-        void turn(next)
       }
     }
     const onWheel = (e: WheelEvent) => {
@@ -108,7 +98,7 @@ export function useWheelPaging(target: React.RefObject<HTMLElement | null>, scro
         // 新しい操作：縦にスクロールできる余地があれば、ふつうにスクロールする
         const atEdge = d > 0 ? sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 2 : sc.scrollTop <= 1
         sum = 0
-        mode = Math.abs(dy) >= Math.abs(dx) && !atEdge ? 'scroll' : 'turn'
+        mode = busy || editor.getSnapshot().turning ? 'done' : Math.abs(dy) >= Math.abs(dx) && !atEdge ? 'scroll' : 'turn'
       }
       last = now
       if (mode === 'scroll') return
@@ -129,7 +119,9 @@ export function useSwipe(target: React.RefObject<HTMLElement | null>, editor: Re
   useEffect(() => {
     const el = target.current
     if (!el || !editor || !enabled) return
-    const down = (e: PointerEvent) => (start.current = e.pointerType === 'mouse' ? null : { x: e.clientX, y: e.clientY })
+    // 作品写真をつかんで動かすときは、ページを送らない
+    const down = (e: PointerEvent) =>
+      (start.current = e.pointerType === 'mouse' || (e.target as HTMLElement).closest?.('[data-photo-slot] img') ? null : { x: e.clientX, y: e.clientY })
     const up = (e: PointerEvent) => {
       const s = start.current
       start.current = null

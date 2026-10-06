@@ -306,6 +306,45 @@ await withEdge(async (browser) => {
   await page.keyboard.press('Escape')
   await ready()
 
+  // ---- 作品写真：並べ方を選び、写真を入れ、つかんで動かす ----
+  await page.evaluate(() => window.__editor.goToArea('photos'))
+  await ready()
+  const chooseArrangement = async (title) => {
+    await page.evaluate((title) => [...document.querySelectorAll('.palette .lay')].find((b) => b.title.startsWith(title)).click(), title)
+    await pause(300)
+    await ready()
+  }
+  await chooseArrangement('2枚（上下')
+  const slotBox = (i, sel = '') => page.evaluate((i, sel) => { const r = document.querySelector(`.page-viewport.front [data-photo-slot="${i}"]${sel}`).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } }, i, sel)
+  for (const i of [0, 1]) {
+    const b = await slotBox(i)
+    const [photoChooser] = await Promise.all([page.waitForFileChooser(), page.mouse.click(b.x, b.y)])
+    await photoChooser.accept([pngPath])
+    await page.waitForFunction((i) => !!window.__editor.getSnapshot().report.workPhotos.imageIds[i], {}, i)
+    await ready()
+  }
+  const photoFit = await page.evaluate(() => getComputedStyle(document.querySelector('.page-viewport.front [data-photo-slot="0"] img')).objectFit)
+  check('作品写真を2枚（上下）で入れると、枠いっぱいに切り抜いて載る', (await snap()).report.workPhotos.imageIds.filter(Boolean).length === 2 && photoFit === 'cover', photoFit)
+  // 1枚目をつかんで下へ動かす（ファイルを選ぶ画面は開かない）
+  let chooserOpened = false
+  const onChooser = () => (chooserOpened = true)
+  page.on('filechooser', onChooser)
+  const d = await slotBox(0, ' img')
+  await page.mouse.move(d.x, d.y)
+  await page.mouse.down()
+  for (let k = 1; k <= 8; k++) await page.mouse.move(d.x, d.y + k * 12)
+  await page.mouse.up()
+  await pause()
+  await ready()
+  page.off('filechooser', onChooser)
+  const moved = (await snap()).report.workPhotos.positions?.[0]
+  check('作品写真をつかんで動かすと、見える位置が変わる（写真は選び直さない）', !!moved && moved.y < 50 && moved.x === 50 && !chooserOpened, JSON.stringify(moved))
+  await chooseArrangement('1枚')
+  const oneShown = await page.evaluate(() => document.querySelectorAll('.page-viewport.front [data-photo-slot]').length)
+  await chooseArrangement('2枚（上下')
+  s = await snap()
+  check('1枚にしてから2枚に戻すと、2枚目の写真も戻る（1枚目から順に載る）', oneShown === 1 && s.report.workPhotos.imageIds.filter(Boolean).length === 2 && !s.findings.some((f) => f.ruleId.startsWith('photos')), String(oneShown))
+
   // ---- 自動保存：読み込み直しても残っている ----
   await new Promise((r) => setTimeout(r, 1500))
   await page.reload({ waitUntil: 'networkidle0' })

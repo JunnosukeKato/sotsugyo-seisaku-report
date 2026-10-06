@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { numbering } from '../editor/reportOps'
-import type { WorkPhotoLayout } from '../model/types'
+import { PHOTO_ARRANGEMENTS, photoGrid } from '../model/photos'
 import { Icon } from './icons'
 import { keepFocus, PAGE_CONTEXT } from './uiShared'
 
@@ -15,8 +15,6 @@ interface Props {
   snap: EditorSnapshot
   onReferences: () => void
 }
-
-const PHOTO_LAYOUTS: WorkPhotoLayout[] = [1, 2, 3, 4, 6]
 
 function Tool({
   label,
@@ -93,16 +91,29 @@ export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
   const kind = snap.layout?.kinds[snap.page]
 
   if (kind === 'photos') {
+    const current = photoGrid(report.workPhotos)
     return (
       <div className="group ctx">
         <div className="ctx-label">並べ方</div>
         <div className="layouts">
-          {PHOTO_LAYOUTS.map((n) => (
-            <button key={n} className={`lay${report.workPhotos.layout === n ? ' on' : ''}`} onClick={() => editor.setPhotoLayout(n)}>
-              {n}枚
+          {PHOTO_ARRANGEMENTS.map((a) => (
+            <button
+              key={a.label}
+              className={`lay${current === a ? ' on' : ''}`}
+              title={`${a.label}（写真をつかんで動かすと、見える位置を変えられます）`}
+              onClick={() => editor.setPhotoLayout(a.layout, a.columns)}
+            >
+              <span className="lay-grid" style={{ gridTemplate: `repeat(${a.rows}, 1fr) / repeat(${a.columns}, 1fr)` }}>
+                {Array.from({ length: a.layout }, (_, i) => (
+                  <i key={i} />
+                ))}
+              </span>
+              <span className="lay-n">{a.layout}枚</span>
+              {a.arrange && <span className="lay-sub">{a.arrange}</span>}
             </button>
           ))}
         </div>
+        <div className="ctx-note">写真をつかんで動かすと、見える位置を変えられます</div>
       </div>
     )
   }

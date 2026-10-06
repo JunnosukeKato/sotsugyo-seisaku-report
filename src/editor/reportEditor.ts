@@ -6,7 +6,8 @@ import type { LayoutInfo } from '../layout/measure'
 import { FIGURE_MAX_PX, fitFigureSize, importImage, PHOTO_MAX_PX } from '../model/images'
 import { putImage, type StoredImage } from '../model/storage'
 import { applyCourseTemplate, bodyWritten } from '../model/template'
-import type { BodyBlock, Chapter, Report, WorkPhotoLayout } from '../model/types'
+import { changeArrangement, clampPercent, movePhoto, putPhoto } from '../model/photos'
+import type { BodyBlock, Chapter, PhotoPosition, Report, WorkPhotoLayout } from '../model/types'
 import { OverlayEditor, type OverlayKind, type OverlayPlacement, type OverlayTarget } from './overlayEditor'
 import { PageStage } from './pageStage'
 import * as ops from './reportOps'
@@ -20,6 +21,20 @@ import { ReportRenderer, type PageEffect } from './reportRenderer'
  * - セルフチェックを実行し、紙面に波線を引く
  * 画面の部品（React）は subscribe で変化を受け取り、snapshot で状態を読む。
  */
+
+/** 作品写真をつかんで動かしている間の状態 */
+interface PhotoDrag {
+  index: number
+  img: HTMLImageElement
+  pointerId: number
+  startX: number
+  startY: number
+  from: PhotoPosition
+  /** 枠からはみ出している写真の幅・高さ（画面の px）。この分だけ動かせる */
+  spanX: number
+  spanY: number
+  moved: boolean
+}
 
 export type Selection =
   | { kind: 'figure'; id: string }
@@ -185,6 +200,13 @@ export class ReportEditor {
     })
 
     scroller.addEventListener('click', (e) => this.onClick(e))
+    scroller.addEventListener('pointerdown', (e) => this.onPhotoPointerDown(e))
+    scroller.addEventListener('dragstart', (e) => {
+      if ((e.target as HTMLElement).closest?.('[data-photo-slot]')) e.preventDefault()
+    })
+    window.addEventListener('pointermove', (e) => this.onPhotoPointerMove(e))
+    window.addEventListener('pointerup', (e) => this.onPhotoPointerUp(e))
+    window.addEventListener('pointercancel', () => this.cancelPhotoDrag())
     window.addEventListener('beforeprint', () => this.beforePrint())
     window.addEventListener('afterprint', () => this.refreshHighlights())
   }
@@ -568,6 +590,11 @@ export class ReportEditor {
   // ---- クリック ----
 
   private onClick(e: MouseEvent): void {
+    // 作品写真をつかんで動かした直後のクリックでは、写真を選び直さない
+    if (this.suppressClick) {
+      this.suppressClick = false
+      return
+    }
     const target = e.target as HTMLElement
     // 空の項目は仮の文字（::before）しかないため、文字の位置からは特定できない。クリックした要素から探す
     const clickedBlock = target.closest<HTMLElement>('[data-block-id]')?.dataset.blockId
@@ -885,22 +912,92 @@ export class ReportEditor {
 
   // ---- 作品写真 ----
 
-  setPhotoLayout(layout: WorkPhotoLayout): void {
-    this.update((r) => ({ ...r, workPhotos: { layout, imageIds: r.workPhotos.imageIds.slice(0, layout) } }))
+  /** 並べ方を変える（写真は消さずに先頭へ詰める。枚数を減らすと、1枚目から順に載る） */
+  setPhotoLayout(layout: WorkPhotoLayout, columns: number): void {
+    this.update((r) => ({ ...r, workPhotos: changeArrangement(r.workPhotos, layout, columns) }))
   }
 
   async setPhoto(index: number): Promise<void> {
     const imageId = await this.importImage('photo')
     if (!imageId) return
-    this.update((r) => {
-      const imageIds = [...r.workPhotos.imageIds]
-      imageIds[index] = imageId
-      return { ...r, workPhotos: { ...r.workPhotos, imageIds: imageIds.map((x) => x ?? '') } }
-    })
+    this.update((r) => ({ ...r, workPhotos: putPhoto(r.workPhotos, index, imageId) }))
   }
 
   removePhoto(index: number): void {
-    this.update((r) => ({ ...r, workPhotos: { ...r.workPhotos, imageIds: r.workPhotos.imageIds.map((x, i) => (i === index ? '' : x)) } }))
+    this.update((r) => ({ ...r, workPhotos: putPhoto(r.workPhotos, index, '') }))
+  }
+
+  /** 写真の切り抜く位置を変える（x・y は %。50 が中央） */
+  setPhotoPosition(index: number, position: PhotoPosition): void {
+    this.update((r) => ({ ...r, workPhotos: movePhoto(r.workPhotos, index, position) }))
+  }
+
+  // 作品写真をつかんで動かし、枠の中で見える位置を変える（つかまずに離したらクリック＝写真を選び直す）
+  private photoDrag: PhotoDrag | null = null
+  private suppressClick = false
+
+  private onPhotoPointerDown(e: PointerEvent): void {
+    const img = (e.target as HTMLElement).closest?.<HTMLImageElement>('[data-photo-slot] img')
+    if (!img || e.button !== 0 || !img.naturalWidth) return
+    const slot = img.closest<HTMLElement>('[data-photo-slot]')!
+    const index = Number(slot.dataset.photoSlot)
+    const cell = slot.getBoundingClientRect()
+    const k = Math.max(cell.width / img.naturalWidth, cell.height / img.naturalHeight)
+    this.photoDrag = {
+      index,
+      img,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      from: this.report.workPhotos.positions?.[index] ?? { x: 50, y: 50 },
+      spanX: img.naturalWidth * k - cell.width,
+      spanY: img.naturalHeight * k - cell.height,
+      moved: false,
+    }
+  }
+
+  private onPhotoPointerMove(e: PointerEvent): void {
+    const d = this.photoDrag
+    if (!d || e.pointerId !== d.pointerId) return
+    const dx = e.clientX - d.startX
+    const dy = e.clientY - d.startY
+    if (!d.moved && Math.hypot(dx, dy) < 4) return
+    if (!d.moved) {
+      d.moved = true
+      d.img.classList.add('dragging')
+    }
+    e.preventDefault()
+    const p = this.photoDragPosition(d, dx, dy)
+    d.img.style.objectPosition = `${p.x}% ${p.y}%`
+  }
+
+  private onPhotoPointerUp(e: PointerEvent): void {
+    const d = this.photoDrag
+    if (!d || e.pointerId !== d.pointerId) return
+    this.photoDrag = null
+    if (!d.moved) return
+    d.img.classList.remove('dragging')
+    // 離した後に届くクリックを無視する（届かなかったときのため、すぐ後に戻す）
+    this.suppressClick = true
+    setTimeout(() => (this.suppressClick = false), 0)
+    this.setPhotoPosition(d.index, this.photoDragPosition(d, e.clientX - d.startX, e.clientY - d.startY))
+  }
+
+  private cancelPhotoDrag(): void {
+    const d = this.photoDrag
+    this.photoDrag = null
+    if (d?.moved) {
+      d.img.classList.remove('dragging')
+      d.img.style.objectPosition = `${d.from.x}% ${d.from.y}%`
+    }
+  }
+
+  /** 指（マウス）を右へ動かすと写真も右へ動き、左側が見えてくる（位置の % は小さくなる） */
+  private photoDragPosition(d: PhotoDrag, dx: number, dy: number): PhotoPosition {
+    return {
+      x: d.spanX > 0.5 ? clampPercent(d.from.x - (dx / d.spanX) * 100) : d.from.x,
+      y: d.spanY > 0.5 ? clampPercent(d.from.y - (dy / d.spanY) * 100) : d.from.y,
+    }
   }
 
   // ---- 印刷（PDF に保存） ----

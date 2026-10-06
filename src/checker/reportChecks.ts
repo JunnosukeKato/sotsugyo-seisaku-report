@@ -190,7 +190,8 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   }
 
   // ---- 作品写真 ----
-  const photos = report.workPhotos.imageIds.filter(Boolean)
+  // ページに載るのは先頭から layout 枚（枚数を減らしても、後ろの写真は消さずに残している）
+  const photos = report.workPhotos.imageIds.slice(0, report.workPhotos.layout).filter(Boolean)
   if (photos.length === 0) findings.push(guide('photos-required', 'error', '作品写真を入れる', 'photos'))
   else if (photos.length < report.workPhotos.layout)
     findings.push(guide('photos-empty-slot', 'warning', '作品写真のページに空いている枠がある', 'photos', { detail: `${report.workPhotos.layout}枚の配置に${photos.length}枚` }))

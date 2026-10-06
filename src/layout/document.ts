@@ -1,5 +1,6 @@
 import { findCourse, type YearConfig } from '../config'
 import type { Reference, Report } from '../model/types'
+import { photoGrid, shownPhotos } from '../model/photos'
 import { bodyContentHtml, chapterLabel, escapeHtml, subheadingLabel, type BodyRenderOptions } from './bodyHtml'
 import { documentCss } from './documentCss'
 
@@ -162,14 +163,17 @@ ${items}
 </section>`
 }
 
+/** 作品写真：枠いっぱいに切り抜いて並べる。切り抜く位置は学生が写真をつかんで動かして決める */
 function photosHtml(report: Report, options: DocumentRenderOptions): string {
-  const { layout, imageIds } = report.workPhotos
-  const slots = Array.from({ length: layout }, (_, i) => {
-    const id = imageIds[i]
-    const img = id && options.photoSrc ? `<img src="${escapeHtml(options.photoSrc(id))}" alt="">` : ''
-    return `<div class="slot${img ? '' : ' empty-slot'}" data-photo-slot="${i}">${img}</div>`
-  }).join('')
-  return `<section class="photos layout-${layout}">${slots}</section>`
+  const grid = photoGrid(report.workPhotos)
+  const slots = shownPhotos(report.workPhotos)
+    .map(({ imageId, position }, i) => {
+      const at = position ? ` style="object-position:${position.x}% ${position.y}%"` : ''
+      const img = imageId && options.photoSrc ? `<img src="${escapeHtml(options.photoSrc(imageId))}"${at} alt="">` : ''
+      return `<div class="slot${img ? '' : ' empty-slot'}" data-photo-slot="${i}">${img}</div>`
+    })
+    .join('')
+  return `<section class="photos grid-${grid.columns}x${grid.rows}">${slots}</section>`
 }
 
 export function buildReportDocument(report: Report, config: YearConfig, options: DocumentRenderOptions): string {
