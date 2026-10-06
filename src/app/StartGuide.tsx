@@ -42,16 +42,29 @@ export function StartGuide({ editor, snap, config, narrow, step, onStep, onChoos
   const tipRef = useRef<HTMLDivElement>(null)
   const prevEditing = useRef<string | null>(null)
 
-  // 案内している欄の位置（紙面を組み直したり、画面の大きさが変わったりしたら測り直す）
+  // 案内している欄の位置。PC で入力欄が開いていれば、入力欄に光を当てる（紙面の仮の文字より広いことがある）。
+  // 紙面の組み直し・画面の大きさ・キーボード・文字の読み込みなどで位置が変わるため、毎フレーム確かめ、変わったときだけ動かす
   useLayoutEffect(() => {
+    let frame = 0
+    let last = ''
     const measure = () => {
-      const el = field ? document.querySelector<HTMLElement>(`.page-viewport.front [data-block-id="${field}"]`) : null
-      setRect(el && el.getBoundingClientRect().width > 0 ? el.getBoundingClientRect() : null)
+      let el: HTMLElement | null | undefined = null
+      if (field) {
+        if (!narrow && editor.getSnapshot().editingId === field) el = document.querySelector<HTMLElement>('.overlay-clip:not([hidden]) .overlay-editor')
+        el ??= [...document.querySelectorAll<HTMLElement>(`.page-viewport.front [data-block-id="${CSS.escape(field)}"]`)].find((e) => e.getBoundingClientRect().width > 0)
+      }
+      const r = el?.getBoundingClientRect()
+      const next = r && r.width > 0 ? r : null
+      const key = next ? [next.left, next.top, next.width, next.height].map(Math.round).join() : ''
+      if (key !== last) {
+        last = key
+        setRect(next)
+      }
+      frame = requestAnimationFrame(measure)
     }
     measure()
-    window.addEventListener('resize', measure)
-    return () => window.removeEventListener('resize', measure)
-  }, [field, snap.version])
+    return () => cancelAnimationFrame(frame)
+  }, [editor, field, narrow])
 
   // 表紙を表示する。PC は案内する欄の入力欄を開く（スマホは、タップしたときにキーボードが出るよう、学生にタップしてもらう）
   useEffect(() => {

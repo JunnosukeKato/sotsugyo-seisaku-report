@@ -59,6 +59,14 @@ await withEdge(async (browser) => {
   await page.keyboard.type('文化　花子')
   await page.keyboard.press('Enter')
   await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:subtitleInput', { timeout: 30000 })
+  // 光る枠は、開いた入力欄（紙面の仮の文字より広い）を囲む
+  await new Promise((r) => setTimeout(r, 500))
+  const spotCovers = await page.evaluate(() => {
+    const s = document.querySelector('.g-spot')?.getBoundingClientRect()
+    const e = document.querySelector('.overlay-clip:not([hidden]) .overlay-editor')?.getBoundingClientRect()
+    return !!s && !!e && s.left <= e.left && s.right >= e.right && s.top <= e.top && s.bottom >= e.bottom
+  })
+  check('案内の光る枠が、開いた入力欄を囲む', spotCovers)
   await page.keyboard.type('シンドバッド')
   await page.keyboard.press('Enter')
   await page.waitForSelector('.guide.step-done')
