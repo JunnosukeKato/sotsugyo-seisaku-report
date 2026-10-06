@@ -30,7 +30,10 @@ function load(): Store {
   } catch {
     // 壊れていたら作り直す
   }
-  return { years: [{ year: currentConfig.fiscalYear, status: '公開中', config: currentConfig, updatedAt: new Date().toISOString(), updatedBy: USER }], history: [] }
+  // はじめての状態は、すぐ控えておく（読むたびに作り直すと更新日時が変わり、「ほかの人が保存した」と判定されてしまう）
+  const initial: Store = { years: [{ year: currentConfig.fiscalYear, status: '公開中', config: currentConfig, updatedAt: new Date().toISOString(), updatedBy: USER }], history: [] }
+  save(initial)
+  return initial
 }
 
 function save(store: Store): void {
@@ -58,11 +61,14 @@ export function createMockServer(): AdminServer {
       await wait()
       return state(load())
     },
-    async saveYear(config) {
+    async saveYear(config, expectedUpdatedAt) {
       await wait()
       const store = load()
       requireAdmin(store)
       const row = store.years.find((y) => y.year === config.fiscalYear)
+      if (row && expectedUpdatedAt && row.updatedAt !== expectedUpdatedAt) {
+        throw new Error(`この画面を開いたあとに、ほかの人（${row.updatedBy}）がこの年度の設定を保存しました。そのまま保存すると、その変更が消えてしまうため、保存しませんでした。ページを読み込み直してから、もう一度変更してください`)
+      }
       if (row) Object.assign(row, { config, updatedAt: new Date().toISOString(), updatedBy: USER })
       else store.years.push({ year: config.fiscalYear, status: '準備中', config, updatedAt: new Date().toISOString(), updatedBy: USER })
       record(store, config.fiscalYear, '保存', config)
@@ -97,6 +103,38 @@ export function createMockServer(): AdminServer {
       return load()
         .history.filter((h) => h.year === year)
         .reverse()
+    },
+    async saveTeacherEdits(year, edits) {
+      await wait()
+      const store = load()
+      if (!roleOf(store)) throw new Error('登録された先生だけが使えます')
+      const row = store.years.find((y) => y.year === year)!
+      const done: string[] = []
+      const templates = edits.templates ?? {}
+      const notices = edits.notices ?? {}
+      const tNames: string[] = []
+      const nNames: string[] = []
+      for (const course of row.config.courses) {
+        const t = templates[course.id]
+        if (t) {
+          Object.assign(course, { template: t.template, abstractExample: t.abstractExample })
+          tNames.push(course.name)
+        }
+        if (course.id in notices) {
+          course.notice = notices[course.id]
+          nNames.push(course.name)
+        }
+      }
+      if (tNames.length) done.push(`下書きのひな形を保存（${tNames.join('・')}）`)
+      if (nNames.length) done.push(`お知らせを保存（${nNames.join('・')}）`)
+      if (edits.words) {
+        row.config.wordChecks = edits.words
+        done.push(`書き間違えやすい語を保存（${edits.words.length}語）`)
+      }
+      Object.assign(row, { updatedAt: new Date().toISOString(), updatedBy: USER })
+      record(store, year, done.join('・') || '保存（変更なし）', row.config)
+      save(store)
+      return state(store)
     },
     async saveNotices(year, notices) {
       await wait()

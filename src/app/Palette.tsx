@@ -155,7 +155,7 @@ export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
         <div className="ctx-label sub">列の幅</div>
         <div className="seg">
           {(['equal', 'auto'] as const).map((w) => (
-            <button key={w} className={table?.widths === w ? 'on' : ''} onMouseDown={keepFocus} onClick={() => editor.setTableWidths(tableId, w)}>
+            <button key={w} className={table?.widths === w ? 'on' : ''} aria-pressed={table?.widths === w} onMouseDown={keepFocus} onClick={() => editor.setTableWidths(tableId, w)}>
               {w === 'equal' ? 'そろえる' : '中身に合わせる'}
             </button>
           ))}

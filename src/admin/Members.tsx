@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useDialogFocus } from '../app/useDialogFocus'
 import { isUniversityAddress, parseAddresses, studentIdFromEmail } from '../model/account'
 import { server, type Member } from './server'
 
@@ -18,6 +19,8 @@ export function MembersDialog({ me, studentIdPattern, onClose }: { me: string; s
   /** 読み取った結果で、チェックを外した人 */
   const [unchecked, setUnchecked] = useState<Set<string>>(new Set())
   const [error, setError] = useState('')
+  const ref = useRef<HTMLDivElement>(null)
+  useDialogFocus(ref, onClose)
 
   useEffect(() => {
     server.getMembers().then(setMembers, (e) => setError(String(e?.message ?? e)))
@@ -51,7 +54,7 @@ export function MembersDialog({ me, studentIdPattern, onClose }: { me: string; s
 
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal members" role="dialog" aria-label="管理者と先生の登録">
+      <div className="modal members" role="dialog" aria-modal="true" aria-label="管理者と先生の登録" ref={ref}>
         <header>
           <h2>管理者と先生の登録</h2>
           <button className="close" onClick={onClose} aria-label="閉じる">

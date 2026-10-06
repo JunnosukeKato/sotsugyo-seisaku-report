@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useDialogFocus } from '../app/useDialogFocus'
 import type { Course, TemplateBlock, YearConfig } from '../config'
 import { bodyContentHtml } from '../layout/bodyHtml'
 import { reportCss } from '../layout/reportCss'
@@ -141,9 +142,12 @@ export function TemplateEditor({ course, config, onApply, onClose }: Props) {
     setFocusKey(row.key)
   }
 
+  const dialogRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(dialogRef)
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal tpl-modal" role="dialog" aria-label={`${course.name} コースの下書きのひな形`}>
+    // 書きかけのひな形が消えないよう、窓の外を押しても閉じない（「×」「やめる」「反映する」だけ）
+    <div className="modal-backdrop">
+      <div className="modal tpl-modal" role="dialog" aria-modal="true" aria-label={`${course.name} コースの下書きのひな形`} ref={dialogRef}>
         <header>
           <h2>{course.name || '（名前のないコース）'} コース　下書きのひな形</h2>
           <button className="close" onClick={onClose} aria-label="閉じる">

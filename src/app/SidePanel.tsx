@@ -102,7 +102,12 @@ export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; sna
   return (
     <div className="thumb-list" ref={ref}>
       {names.map((name, i) => (
-        <button key={i} className={`t${i === snap.page ? ' on' : ''}${errorPages.has(i) ? ' has-error' : ''}`} title={`${name}（${i + 1}ページ目）`} onClick={() => {
+        <button
+          key={i}
+          className={`t${i === snap.page ? ' on' : ''}${errorPages.has(i) ? ' has-error' : ''}`}
+          title={`${name}（${i + 1}ページ目）${errorPages.has(i) ? '：エラーがあります' : ''}`}
+          aria-current={i === snap.page ? 'page' : undefined}
+          onClick={() => {
             onPick?.()
             void editor.goToPage(i)
           }}>
@@ -143,6 +148,17 @@ function Issue({ finding, editor, onPick, active }: { finding: ReportFinding; ed
   return (
     <li
       className={`issue ${finding.severity}${active ? ` active ${active}` : ''}`}
+      // キーボードでも選べるようにする（Tab で移り、Enter でその箇所へ）
+      tabIndex={0}
+      role="button"
+      aria-label={`${finding.severity === 'error' ? 'エラー' : '注意'}：${finding.title}${finding.detail ? `（${finding.detail}）` : ''}`}
+      onKeyDown={(e) => {
+        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault()
+          onPick?.()
+          void editor.goToFinding(finding)
+        }
+      }}
       onClick={() => {
         onPick?.()
         void editor.goToFinding(finding)

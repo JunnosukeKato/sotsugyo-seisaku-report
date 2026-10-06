@@ -6,12 +6,19 @@ import { newId } from '../editor/reportOps'
 import { formatReference } from '../layout/document'
 import type { Snapshot } from '../model/storage'
 import type { Reference, Report } from '../model/types'
+import { deviceName } from '../drive/device'
 import { AREA_LABELS } from './labels'
+import { useDialogFocus } from './useDialogFocus'
 
-export function Modal({ title, onClose, children, wide }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean }) {
+/**
+ * 画面の上に出す窓。keepOpen：窓の外を押しても Esc でも閉じない（書きかけの内容が消えないように。閉じるのは「×」とボタンだけ）
+ */
+export function Modal({ title, onClose, children, wide, keepOpen }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean; keepOpen?: boolean }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDialogFocus(ref, keepOpen ? undefined : onClose)
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-label={title}>
+    <div className="modal-backdrop" onMouseDown={(e) => !keepOpen && e.target === e.currentTarget && onClose()}>
+      <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} ref={ref}>
         <header>
           <h2>{title}</h2>
           <button className="close" onClick={onClose} aria-label="閉じる">
@@ -39,9 +46,10 @@ export function CourseMenu({ config, rect, current, onSelect, onClose }: { confi
     el.style.left = `${left}px`
     el.style.top = `${top}px`
   }, [rect])
+  useDialogFocus(ref, onClose)
   return (
     <div className="popover-backdrop" onMouseDown={onClose}>
-      <div className="popover course-menu" ref={ref} style={{ left: rect.left, top: rect.bottom + 6 }} onMouseDown={(e) => e.stopPropagation()}>
+      <div className="popover course-menu" ref={ref} role="dialog" aria-label="コースを選ぶ" style={{ left: rect.left, top: rect.bottom + 6 }} onMouseDown={(e) => e.stopPropagation()}>
         <div className="popover-title">コースを選ぶ</div>
         {config.courses.filter((c) => !c.hidden || c.id === current).map((c) => (
           <button
@@ -104,7 +112,8 @@ export function ReferencesDialog({ report, onSave, onClose }: { report: Report; 
   const [refs, setRefs] = useState<Reference[]>(report.references)
   const update = (id: string, patch: Partial<Reference>) => setRefs(refs.map((r) => (r.id === id ? ({ ...r, ...patch } as Reference) : r)))
   return (
-    <Modal title="引用・参考文献" onClose={onClose} wide>
+    // 書きかけの内容が消えないよう、窓の外を押しても Esc でも閉じない（「×」と「やめる」「保存」だけ）
+    <Modal title="引用・参考文献" onClose={onClose} wide keepOpen>
       <p className="lead">
         項目を埋めると、手順書の書き方（著者名、『書名』、出版社、出版年）に自動で整えます。なくても構いません。本文の後に改ページして載ります。
       </p>
@@ -113,7 +122,16 @@ export function ReferencesDialog({ report, onSave, onClose }: { report: Report; 
           <div key={ref.id} className="ref-card">
             <div className="ref-head">
               <b>{i + 1}.</b>
-              <select value={ref.type} onChange={(e) => setRefs(refs.map((r) => (r.id === ref.id ? emptyReference(e.target.value as Reference['type']) : r)))}>
+              <select
+                value={ref.type}
+                aria-label={`${i + 1}つ目の種類`}
+                onChange={(e) => {
+                  // 書籍とWebサイトでは項目が違うため、入れ替えると書いた内容は消える。書いてあれば確かめる
+                  const filled = Object.entries(ref).some(([k, v]) => k !== 'type' && k !== 'id' && k !== 'accessedOn' && typeof v === 'string' && v.trim())
+                  if (filled && !confirm('種類を変えると、この文献に書いた内容は消えます。変えますか？')) return
+                  setRefs(refs.map((r) => (r.id === ref.id ? emptyReference(e.target.value as Reference['type']) : r)))
+                }}
+              >
                 <option value="book">書籍</option>
                 <option value="web">Webサイト</option>
               </select>
@@ -167,6 +185,59 @@ const SELF_CHECKS = [
   '作品写真は、自分で撮影した写真だけを使った',
   '指導教員に内容を見てもらい、了承を得た',
 ]
+
+/** PDF の保存のしかた（端末とブラウザによって、印刷の画面が違う） */
+function PrintSteps() {
+  const device = deviceName()
+  if (/^(iPhone|iPad)/.test(device)) {
+    return (
+      <ul>
+        <li>
+          印刷の画面の右上（または下）の <b>共有のボタン（四角に上向きの矢印）</b> を押し、<b>「"ファイル"に保存」</b> を選ぶ
+        </li>
+        <li>保存する場所（「iCloud Drive」や「このiPhone内」など）を選んで「保存」</li>
+        <li>うまく保存できないときは、パソコンで書き出してください</li>
+      </ul>
+    )
+  }
+  if (/^Android/.test(device)) {
+    return (
+      <ul>
+        <li>
+          上のプリンターを <b>「PDF 形式で保存」</b> にする
+        </li>
+        <li>
+          用紙サイズ：<b>A4</b>　→　<b>PDF のボタン</b> を押して保存
+        </li>
+      </ul>
+    )
+  }
+  if (/^Mac・Safari/.test(device)) {
+    return (
+      <ul>
+        <li>
+          「詳細を表示」を押し、用紙サイズ：<b>A4</b>　「背景をプリント」：<b>チェックを入れる</b>　「ヘッダとフッタをプリント」：<b>チェックを外す</b>
+        </li>
+        <li>
+          左下の <b>「PDF」</b> から <b>「PDF として保存」</b> を選ぶ
+        </li>
+      </ul>
+    )
+  }
+  return (
+    <ul>
+      <li>
+        送信先：<b>{/Edge/.test(device) ? 'PDF として保存' : 'PDF に保存'}</b>
+      </li>
+      <li>
+        用紙サイズ：<b>A4</b>　／　倍率：<b>既定（100%）</b>
+      </li>
+      <li>
+        詳細設定の「ヘッダーとフッター」：<b>オフ</b>　「背景のグラフィック」：<b>オン</b>
+      </li>
+    </ul>
+  )
+}
 
 export function ExportDialog({ editor, findings, onClose }: { editor: ReportEditor; findings: ReportFinding[]; onClose: () => void }) {
   const errors = findings.filter((f) => f.severity === 'error')
@@ -233,13 +304,9 @@ export function ExportDialog({ editor, findings, onClose }: { editor: ReportEdit
         ))}
       </div>
       <div className="print-guide">
-        <b>印刷の画面で、次のように選んでください</b>
-        <ul>
-          <li>送信先：<b>PDFに保存</b></li>
-          <li>用紙サイズ：<b>A4</b>　／　倍率：<b>既定（100%）</b></li>
-          <li>詳細設定の「ヘッダーとフッター」：<b>オフ</b>　「背景のグラフィック」：<b>オン</b></li>
-        </ul>
-        ファイル名は「{editor.pdfTitle}.pdf」になります。
+        <b>印刷の画面で、次のように選んでください（{deviceName()}）</b>
+        <PrintSteps />
+        ファイル名は「{editor.pdfTitle}.pdf」になります。保存したら PDF を開いて、ページの数と写真を確かめてください。
       </div>
       <div className="row-buttons">
         <span className="spacer" />
@@ -272,7 +339,7 @@ export function BackupDialog({
   return (
     <Modal title="バックアップと復元" onClose={onClose}>
       <p className="lead">
-        原稿は、書くたびに（書くのをやめて約1秒後に）このブラウザの中へ自動で保存されています。別のパソコンで続きを書くときや、念のための控えとして、ときどきバックアップファイルを保存してください。
+        原稿は、書くたびに（書くのをやめて約1秒後に）このブラウザの中へ自動で保存され、大学のアカウントでログインしているあいだは Google ドライブにも保存されます（別の端末では、ログインすると続きが開きます）。バックアップファイルは、念のための控えとして、ときどき保存しておくと安心です。
       </p>
       <div className="backup-actions">
         <button className="primary" onClick={onSaveBackup}>

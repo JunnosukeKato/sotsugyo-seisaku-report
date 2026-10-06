@@ -93,7 +93,7 @@ const FIGURE_MAX_MM = 80
 
 export class ReportEditor {
   private report: Report
-  private readonly config: YearConfig
+  private config: YearConfig
   private readonly callbacks: EditorCallbacks
   private readonly renderer: ReportRenderer
   private readonly overlay: OverlayEditor
@@ -310,6 +310,14 @@ export class ReportEditor {
   scheduleRender(delay = RENDER_DELAY_MS): void {
     clearTimeout(this.renderTimer)
     this.renderTimer = window.setTimeout(() => void this.render(), delay)
+  }
+
+  /** 年度の設定を入れ替える（原稿を、書き始めた年度の設定で開くとき） */
+  setConfig(config: YearConfig): void {
+    this.config = config
+    this.runChecks()
+    this.notify()
+    void this.render()
   }
 
   async render(): Promise<void> {

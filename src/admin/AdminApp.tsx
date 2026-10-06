@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useDialogFocus } from '../app/useDialogFocus'
 import { DEFAULT_WORD_CHECKS } from '../checker/textRules'
 import type { Course, WordCheck, YearConfig } from '../config'
 import { validateConfig } from '../config/validate'
@@ -175,9 +176,11 @@ function NoticeField({ course, onChange }: { course: Course; onChange: (notice: 
 }
 
 function Modal({ title, children, onClose }: { title: string; children: ReactNode; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDialogFocus(ref, onClose)
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal" role="dialog" aria-label={title}>
+      <div className="modal" role="dialog" aria-modal="true" aria-label={title} ref={ref}>
         <header>
           <h2>{title}</h2>
           <button className="close" onClick={onClose} aria-label="閉じる">
@@ -272,14 +275,10 @@ export function AdminApp() {
         message={message}
         onSelectYear={(y) => select(state, y)}
         onSave={(templates, words, notices) =>
-          void run(row.status === '公開中' ? '保存し、学生のツールに反映しました' : '保存しました', async () => {
-            let saved: AdminState | null = null
-            const hasNotices = Object.keys(notices).length > 0
-            if (Object.keys(templates).length || (!words && !hasNotices)) saved = await server.saveTemplates(row.year, templates)
-            if (hasNotices) saved = await server.saveNotices(row.year, notices)
-            if (words) saved = await server.saveWordChecks(row.year, words)
-            return saved!
-          })
+          // ひな形・お知らせ・書き間違えやすい語を、まとめて1回で保存する（途中で失敗して一部だけ保存されないように）
+          void run(row.status === '公開中' ? '保存し、学生のツールに反映しました' : '保存しました', () =>
+            server.saveTeacherEdits(row.year, { templates, notices, ...(words ? { words } : {}) }),
+          )
         }
       />
     )
@@ -299,14 +298,14 @@ export function AdminApp() {
   const save = () => {
     if (isPublished && errors.length) return setMessage({ kind: 'ng', text: '公開中の年度は、エラーを直してから保存してください' })
     if (isPublished && !confirm('この年度は学生に公開中です。保存すると、すぐに学生のツールに反映されます。保存しますか？')) return
-    void run(isPublished ? '保存し、学生のツールに反映しました' : '保存しました', () => server.saveYear(draft))
+    void run(isPublished ? '保存し、学生のツールに反映しました' : '保存しました', () => server.saveYear(draft, row.updatedAt))
   }
   const publish = () => {
     if (errors.length) return setMessage({ kind: 'ng', text: 'エラーを直してから公開してください' })
     const current = state.years.find((y) => y.status === '公開中')
     if (!confirm(`${draft.fiscalYear}年度の設定を学生に公開しますか？${current ? `\n今公開中の${current.year}年度は「終了」になります。` : ''}`)) return
     void run(`${draft.fiscalYear}年度を学生に公開しました`, async () => {
-      if (dirty) await server.saveYear(draft)
+      if (dirty) await server.saveYear(draft, row.updatedAt)
       return server.publishYear(draft.fiscalYear)
     })
   }

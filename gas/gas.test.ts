@@ -20,6 +20,7 @@ class FakeSheet {
       for (let i = 0; i < numRows; i++) for (let j = 0; j < numCols; j++) this.rows[row - 1 + i][col - 1 + j] = values[i][j]
     },
     getValue: () => this.rows[row - 1][col - 1],
+    getValues: () => Array.from({ length: numRows }, (_, i) => Array.from({ length: numCols }, (_, j) => this.rows[row - 1 + i][col - 1 + j])),
   })
 }
 
@@ -121,6 +122,44 @@ describe('管理ページ（admin-project）', () => {
     expect(course).toMatchObject({ template, abstractExample: '本制作報告書は、' })
     expect(saved.years[0].config.commonTitle).toBe(initialConfig.commonTitle)
     expect(gas.getHistory(2026)[0].action).toContain('下書きのひな形を保存')
+  })
+
+  it('先生の画面の保存は、ひな形・お知らせ・語の一覧をまとめて1回で保存する', () => {
+    const gas = load('admin-project')
+    gas.setup()
+    gas.addMember('sensei@example.ac.jp', '先生')
+    user = 'sensei@example.ac.jp'
+    const template = [{ type: 'chapter', title: '概要' }]
+    const saved = gas.saveTeacherEdits(2026, {
+      templates: { 'film-stage-costume': { template, abstractExample: '本制作報告書は、' } },
+      notices: { 'film-stage-costume': 'お知らせ' },
+      words: [{ wrong: '見頃', right: '身頃', severity: 'error' }],
+    })
+    const config = saved.years[0].config
+    expect(config.courses[0]).toMatchObject({ template, notice: 'お知らせ' })
+    expect(config.wordChecks).toEqual([{ wrong: '見頃', right: '身頃', note: '', severity: 'error' }])
+    const history = gas.getHistory(2026)
+    expect(history[0].action).toBe('下書きのひな形を保存（映画・舞台衣装デザイナー）・お知らせを保存（映画・舞台衣装デザイナー）・書き間違えやすい語を保存（1語）')
+    expect(history).toHaveLength(2)
+    // 形が正しくないものがあれば、何も保存しない
+    expect(() => gas.saveTeacherEdits(2026, { notices: { 'film-stage-costume': '別の' }, templates: { 'film-stage-costume': { template: 'x' } } })).toThrow(/形が正しくありません/)
+    expect(gas.getState().years[0].config.courses[0].notice).toBe('お知らせ')
+  })
+
+  it('管理者の保存：画面を開いたあとにほかの人が保存していたら、保存せずに知らせる', () => {
+    const gas = load('admin-project')
+    gas.setup()
+    // 管理者が、少し前に画面を開いた（そのときの更新日時）
+    const opened = { ...gas.getState().years[0], updatedAt: '2026-10-01T00:00:00.000Z' }
+    gas.addMember('sensei@example.ac.jp', '先生')
+    user = 'sensei@example.ac.jp'
+    gas.saveNotices(2026, { 'film-stage-costume': '先生のお知らせ' })
+    user = 'kato@example.ac.jp'
+    expect(() => gas.saveYear({ ...opened.config, deadline: '2027-01-21' }, opened.updatedAt)).toThrow(/ほかの人（sensei@example.ac.jp）/)
+    expect(gas.getState().years[0].config.courses[0].notice).toBe('先生のお知らせ')
+    // 読み込み直した更新日時なら保存できる
+    const fresh = gas.getState().years[0]
+    expect(gas.saveYear({ ...fresh.config, deadline: '2027-01-21' }, fresh.updatedAt).years[0].config.deadline).toBe('2027-01-21')
   })
 
   it('先生もコースのお知らせを保存できる（指定したコースだけ書き換える）', () => {

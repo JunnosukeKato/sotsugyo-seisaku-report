@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { currentConfig, findCourse, type YearConfig } from './config'
-import { loadConfig, type ConfigSource } from './config/remote'
+import { loadConfig, loadYearConfig, type ConfigSource } from './config/remote'
 import { ReportEditor, type EditorSnapshot } from './editor/reportEditor'
 import { preloadGis } from './drive/driveApi'
 import { DriveSync, hasContent, type DriveState, type RemoteCopy, type Resolution } from './drive/driveSync'
@@ -96,6 +96,8 @@ export default function App() {
   const [reloginLater, setReloginLater] = useState(false)
   const editorRef = useRef<ReportEditor | null>(null)
   const configRef = useRef<YearConfig>(currentConfig)
+  /** 公開中の年度の設定（「最初から作り直す」は、公開中の年度で作る） */
+  const publishedRef = useRef<YearConfig>(currentConfig)
   /** 開いたときに、この端末にあった原稿（なければ null） */
   const localAtStart = useRef<Report | null>(null)
   // スマホ（画面の幅が狭いとき）は、並べ方と書き方を変える
@@ -125,6 +127,16 @@ export default function App() {
     [drive],
   )
 
+  /** 原稿の年度が今の設定と違えば、その年度の設定に切り替える（別の年度の原稿を開いたとき。読めなければ今のまま） */
+  const matchYear = useCallback(async (ed: ReportEditor, report: Report) => {
+    if (report.fiscalYear === configRef.current.fiscalYear) return
+    const yearConfig = report.fiscalYear === publishedRef.current.fiscalYear ? publishedRef.current : await loadYearConfig(report.fiscalYear)
+    if (!yearConfig) return
+    configRef.current = yearConfig
+    setConfig(yearConfig)
+    ed.setConfig(yearConfig)
+  }, [])
+
   /** ドライブの原稿を開く（写真を読み込んでから、原稿を入れ替える。それまでの原稿は控えに残す） */
   const openRemote = useCallback(
     async (ed: ReportEditor, remote: RemoteCopy) => {
@@ -135,8 +147,9 @@ export default function App() {
       ed.addImages(await drive.downloadImages(remote.report, (done, total) => setGate({ kind: 'loading', done, total })))
       ed.replace(remote.report)
       drive.adopt(remote, ed.getSnapshot().report)
+      await matchYear(ed, remote.report)
     },
-    [drive],
+    [drive, matchYear],
   )
 
   /** どの原稿で始めるか（続けるか）が決まったら、そのとおりにする。atLogin：ログインした直後 */
@@ -205,12 +218,15 @@ export default function App() {
     if (drive) void preloadGis().catch(() => {})
     void (async () => {
       try {
-        const { config: loaded, source } = await loadConfig()
+        const { config: published, source } = await loadConfig()
+        publishedRef.current = published
+        const saved = await loadReport()
+        localAtStart.current = saved
+        // 原稿は、書き始めた年度の設定で開く（新年度を公開しても、前年度の学生の表紙が新年度の題目・教員に変わらないように）
+        const loaded = (saved && saved.fiscalYear !== published.fiscalYear && (await loadYearConfig(saved.fiscalYear))) || published
         setConfig(loaded)
         setConfigSource(source)
         configRef.current = loaded
-        const saved = await loadReport()
-        localAtStart.current = saved
         // 設定を一度も読み込めていない（同梱の初期値で動く）ときは、コースを勝手に決めない
         const report = saved ?? createReport(loaded, source === 'bundled' ? '' : undefined)
         const ed = new ReportEditor(stageRef.current!, scrollerRef.current!, layerRef.current!, loaded, report, {
@@ -364,12 +380,13 @@ export default function App() {
         await Promise.all(images.map(putImage))
         editor.addImages(images)
         editor.replace(report)
+        await matchYear(editor, report)
         setDialog(null)
       } catch (e) {
         alert(e instanceof Error ? e.message : String(e))
       }
     },
-    [editor, snap],
+    [editor, snap, matchYear],
   )
 
   const chooseCourse = useCallback(
@@ -412,10 +429,10 @@ export default function App() {
               {Icon.next}
             </button>
             <div className="zoom" role="group" aria-label="表示の大きさ">
-              <button className={snap.zoomed ? '' : 'on'} title="1ページ全体を表示" onClick={() => editor.setZoom(false)}>
+              <button className={snap.zoomed ? '' : 'on'} aria-pressed={!snap.zoomed} title="1ページ全体を表示" onClick={() => editor.setZoom(false)}>
                 {Icon.fit}全体
               </button>
-              <button className={snap.zoomed ? 'on' : ''} title="文字を大きく表示（マウスのホイールで上下に動かす）" onClick={() => editor.setZoom(true)}>
+              <button className={snap.zoomed ? 'on' : ''} aria-pressed={snap.zoomed} title="文字を大きく表示（マウスのホイールで上下に動かす）" onClick={() => editor.setZoom(true)}>
                 {Icon.zoom}拡大
               </button>
             </div>
@@ -506,17 +523,20 @@ export default function App() {
             if (!confirm(`${new Date(s.savedAt).toLocaleString('ja-JP')} の控えに戻しますか？`)) return
             await saveSnapshot(snap.report)
             editor.replace(s.report)
+            await matchYear(editor, s.report)
             setDialog(null)
           }}
           onStartOver={async () => {
             if (!confirm('今の原稿を消して、最初から作り直しますか？\n（今の原稿は自動の控えに残します）')) return
             await saveSnapshot(snap.report)
-            const fresh = createReport(config)
+            // 作り直すときは、公開中の年度で作る（前年度の原稿だった学生も、新年度で書き直せる）
+            const fresh = createReport(publishedRef.current)
             editor.replace(fresh)
+            await matchYear(editor, fresh)
             prefillStudentId(editor)
             setDialog(null)
-            // 作り直したら、はじめての案内からやり直す
-            startGuide(config, editor.getSnapshot().report, true)
+            // 作り直したら、はじめての案内からやり直す（年度を切り替えたあとの設定で）
+            startGuide(configRef.current, editor.getSnapshot().report, true)
           }}
           onClose={() => setDialog(null)}
         />

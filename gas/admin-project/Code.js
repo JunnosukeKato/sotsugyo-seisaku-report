@@ -83,25 +83,7 @@ function getState() {
 function saveTemplates(year, templates) {
   const user = requireTeacher_()
   if (!templates || typeof templates !== 'object') throw new Error('ひな形の形が正しくありません')
-  return withLock_(() => {
-    const sheet = sheet_(SHEET_YEARS)
-    const rowIndex = findYearRow_(year)
-    if (rowIndex < 0) throw new Error(year + '年度の設定がありません')
-    const config = JSON.parse(sheet.getRange(rowIndex, 3).getValue())
-    const names = []
-    config.courses.forEach((course) => {
-      const t = templates[course.id]
-      if (!t) return
-      if (!Array.isArray(t.template)) throw new Error('「' + course.name + '」のひな形の形が正しくありません')
-      course.template = t.template
-      course.abstractExample = typeof t.abstractExample === 'string' ? t.abstractExample : ''
-      names.push(course.name)
-    })
-    checkConfig_(config)
-    sheet.getRange(rowIndex, 3, 1, 3).setValues([[JSON.stringify(config), new Date(), user]])
-    appendHistory_(user, year, '下書きのひな形を保存（' + names.join('・') + '）', config)
-    return getState()
-  })
+  return editYear_(year, user, (config) => '下書きのひな形を保存（' + applyTemplates_(config, templates).join('・') + '）')
 }
 
 /**
@@ -111,22 +93,7 @@ function saveTemplates(year, templates) {
 function saveNotices(year, notices) {
   const user = requireTeacher_()
   if (!notices || typeof notices !== 'object') throw new Error('お知らせの形が正しくありません')
-  return withLock_(() => {
-    const sheet = sheet_(SHEET_YEARS)
-    const rowIndex = findYearRow_(year)
-    if (rowIndex < 0) throw new Error(year + '年度の設定がありません')
-    const config = JSON.parse(sheet.getRange(rowIndex, 3).getValue())
-    const names = []
-    config.courses.forEach((course) => {
-      if (!Object.prototype.hasOwnProperty.call(notices, course.id)) return
-      course.notice = String(notices[course.id] || '')
-      names.push(course.name)
-    })
-    checkConfig_(config)
-    sheet.getRange(rowIndex, 3, 1, 3).setValues([[JSON.stringify(config), new Date(), user]])
-    appendHistory_(user, year, 'お知らせを保存（' + names.join('・') + '）', config)
-    return getState()
-  })
+  return editYear_(year, user, (config) => 'お知らせを保存（' + applyNotices_(config, notices).join('・') + '）')
 }
 
 /**
@@ -136,7 +103,78 @@ function saveNotices(year, notices) {
 function saveWordChecks(year, words) {
   const user = requireTeacher_()
   if (!Array.isArray(words)) throw new Error('書き間違えやすい語の形が正しくありません')
-  const clean = words
+  return editYear_(year, user, (config) => {
+    config.wordChecks = cleanWords_(words)
+    return '書き間違えやすい語を保存（' + config.wordChecks.length + '語）'
+  })
+}
+
+/**
+ * 先生の画面の「保存」：ひな形・お知らせ・書き間違えやすい語を、まとめて1回で保存する（先生も使える）。
+ * 別々に送ると、途中で失敗したときに一部だけが保存されるため。edits は { templates?, notices?, words? }
+ */
+function saveTeacherEdits(year, edits) {
+  const user = requireTeacher_()
+  if (!edits || typeof edits !== 'object') throw new Error('保存する内容の形が正しくありません')
+  return editYear_(year, user, (config) => {
+    const done = []
+    if (edits.templates && typeof edits.templates === 'object' && Object.keys(edits.templates).length) {
+      done.push('下書きのひな形を保存（' + applyTemplates_(config, edits.templates).join('・') + '）')
+    }
+    if (edits.notices && typeof edits.notices === 'object' && Object.keys(edits.notices).length) {
+      done.push('お知らせを保存（' + applyNotices_(config, edits.notices).join('・') + '）')
+    }
+    if (Array.isArray(edits.words)) {
+      config.wordChecks = cleanWords_(edits.words)
+      done.push('書き間違えやすい語を保存（' + config.wordChecks.length + '語）')
+    }
+    return done.join('・') || '保存（変更なし）'
+  })
+}
+
+/** 年度の設定を読み、fn で書き換えて保存し、変更履歴に残す（fn は履歴に残す操作の名前を返す） */
+function editYear_(year, user, fn) {
+  return withLock_(() => {
+    const sheet = sheet_(SHEET_YEARS)
+    const rowIndex = findYearRow_(year)
+    if (rowIndex < 0) throw new Error(year + '年度の設定がありません')
+    const config = JSON.parse(sheet.getRange(rowIndex, 3).getValue())
+    const action = fn(config)
+    checkConfig_(config)
+    sheet.getRange(rowIndex, 3, 1, 3).setValues([[JSON.stringify(config), new Date(), user]])
+    appendHistory_(user, year, action, config)
+    return getState()
+  })
+}
+
+/** 指定したコースのひな形と抄録の書き出し例を書き換える。書き換えたコースの名前を返す */
+function applyTemplates_(config, templates) {
+  const names = []
+  config.courses.forEach((course) => {
+    const t = templates[course.id]
+    if (!t) return
+    if (!Array.isArray(t.template)) throw new Error('「' + course.name + '」のひな形の形が正しくありません')
+    course.template = t.template
+    course.abstractExample = typeof t.abstractExample === 'string' ? t.abstractExample : ''
+    names.push(course.name)
+  })
+  return names
+}
+
+/** 指定したコースのお知らせを書き換える。書き換えたコースの名前を返す */
+function applyNotices_(config, notices) {
+  const names = []
+  config.courses.forEach((course) => {
+    if (!Object.prototype.hasOwnProperty.call(notices, course.id)) return
+    course.notice = String(notices[course.id] || '')
+    names.push(course.name)
+  })
+  return names
+}
+
+/** 書き間違えやすい語の一覧を整える（書き間違いか正しい語が空の行、2つが同じ行は捨てる） */
+function cleanWords_(words) {
+  return words
     .map((w) => ({
       wrong: String((w && w.wrong) || '').trim(),
       right: String((w && w.right) || '').trim(),
@@ -144,17 +182,6 @@ function saveWordChecks(year, words) {
       severity: w && w.severity === 'warning' ? 'warning' : 'error',
     }))
     .filter((w) => w.wrong && w.right && w.wrong !== w.right)
-  return withLock_(() => {
-    const sheet = sheet_(SHEET_YEARS)
-    const rowIndex = findYearRow_(year)
-    if (rowIndex < 0) throw new Error(year + '年度の設定がありません')
-    const config = JSON.parse(sheet.getRange(rowIndex, 3).getValue())
-    config.wordChecks = clean
-    checkConfig_(config)
-    sheet.getRange(rowIndex, 3, 1, 3).setValues([[JSON.stringify(config), new Date(), user]])
-    appendHistory_(user, year, '書き間違えやすい語を保存（' + clean.length + '語）', config)
-    return getState()
-  })
 }
 
 /** 管理者と先生の一覧（管理者だけ） */
@@ -225,13 +252,26 @@ function removeMember(email) {
   })
 }
 
-function saveYear(config) {
+/**
+ * 年度の設定を丸ごと保存する（管理者だけ）。
+ * expectedUpdatedAt は、画面を開いたときの更新日時。そのあとにほかの人（先生など）が保存していたら、
+ * 丸ごと書き戻すとその変更が消えるので、保存せずに知らせる
+ */
+function saveYear(config, expectedUpdatedAt) {
   const user = requireAdmin_()
   checkConfig_(config)
   return withLock_(() => {
     const sheet = sheet_(SHEET_YEARS)
     const rowIndex = findYearRow_(config.fiscalYear)
     if (rowIndex > 0) {
+      if (expectedUpdatedAt) {
+        const [updatedAt, updatedBy] = sheet.getRange(rowIndex, 4, 1, 2).getValues()[0]
+        if (new Date(updatedAt).toISOString() !== expectedUpdatedAt) {
+          throw new Error(
+            'この画面を開いたあとに、ほかの人（' + updatedBy + '）がこの年度の設定を保存しました。そのまま保存すると、その変更が消えてしまうため、保存しませんでした。ページを読み込み直してから、もう一度変更してください',
+          )
+        }
+      }
       sheet.getRange(rowIndex, 3, 1, 3).setValues([[JSON.stringify(config), new Date(), user]])
     } else {
       sheet.appendRow([config.fiscalYear, STATUS_DRAFT, JSON.stringify(config), new Date(), user])

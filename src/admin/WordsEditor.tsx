@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useDialogFocus } from '../app/useDialogFocus'
 import { checkText } from '../checker/textRules'
 import type { WordCheck } from '../config'
 import { cleanWords } from './wordsText'
@@ -31,9 +32,12 @@ export function WordsEditor({ words, onApply, onClose }: { words: WordCheck[]; o
   }
   pieces.push({ text: trial.slice(pos) })
 
+  const ref = useRef<HTMLDivElement>(null)
+  useDialogFocus(ref)
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
-      <div className="modal words-modal" role="dialog" aria-label="書き間違えやすい語">
+    // 書きかけの一覧が消えないよう、窓の外を押しても Esc でも閉じない（「×」「やめる」「反映する」だけ）
+    <div className="modal-backdrop">
+      <div className="modal words-modal" role="dialog" aria-modal="true" aria-label="書き間違えやすい語" ref={ref}>
         <header>
           <h2>書き間違えやすい語</h2>
           <button className="close" onClick={onClose} aria-label="閉じる">

@@ -83,6 +83,10 @@ export class OverlayEditor {
     this.element = document.createElement('div')
     this.element.className = 'overlay-editor'
     this.element.contentEditable = 'plaintext-only'
+    // 読み上げソフトにも、書く欄だと分かるようにする
+    this.element.setAttribute('role', 'textbox')
+    this.element.setAttribute('aria-multiline', 'true')
+    this.element.setAttribute('aria-label', '書く欄')
     this.element.spellcheck = false
     this.clip.append(this.element)
     layer.append(this.clip)

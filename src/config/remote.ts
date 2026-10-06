@@ -24,33 +24,49 @@ function usable(config: unknown): config is YearConfig {
   }
 }
 
-function readCache(): YearConfig | null {
+function readCache(key = CACHE_KEY): YearConfig | null {
   try {
-    const cached = JSON.parse(localStorage.getItem(CACHE_KEY) ?? 'null')
+    const cached = JSON.parse(localStorage.getItem(key) ?? 'null')
     return usable(cached) ? cached : null
   } catch {
     return null
   }
 }
 
-export async function loadConfig(apiUrl = import.meta.env.VITE_CONFIG_API_URL as string | undefined): Promise<{ config: YearConfig; source: ConfigSource }> {
+/** 配信の窓口から読む（year を省くと公開中の年度）。読めて使える設定なら、このブラウザに控える */
+async function fetchConfig(apiUrl: string | undefined, year: number | null, cacheKey: string): Promise<YearConfig | null> {
   for (let attempt = 0; apiUrl && attempt < ATTEMPTS; attempt++) {
     try {
-      const response = await fetch(`${apiUrl}?action=config`, { signal: AbortSignal.timeout(TIMEOUT_MS) })
+      const response = await fetch(`${apiUrl}?action=config${year ? `&year=${year}` : ''}`, { signal: AbortSignal.timeout(TIMEOUT_MS) })
       const body = await response.json()
-      if (body?.ok && usable(body.config)) {
+      if (body?.ok && usable(body.config) && (!year || body.config.fiscalYear === year)) {
         try {
-          localStorage.setItem(CACHE_KEY, JSON.stringify(body.config))
+          localStorage.setItem(cacheKey, JSON.stringify(body.config))
         } catch {
           // 控えを残せなくても、今回は読み込んだ設定で動く
         }
-        return { config: body.config, source: 'remote' }
+        return body.config
       }
     } catch {
       // 通信できないときは試し直し、それでもだめなら控えか初期値を使う
     }
   }
+  return null
+}
+
+export async function loadConfig(apiUrl = import.meta.env.VITE_CONFIG_API_URL as string | undefined): Promise<{ config: YearConfig; source: ConfigSource }> {
+  const remote = await fetchConfig(apiUrl, null, CACHE_KEY)
+  if (remote) return { config: remote, source: 'remote' }
   const cached = readCache()
   if (cached) return { config: cached, source: 'cache' }
   return { config: currentConfig, source: 'bundled' }
+}
+
+/**
+ * 指定した年度の設定（公開中・終了した年度）。原稿は、書き始めた年度の設定で開く（新年度を公開しても、
+ * 前年度の学生の表紙が新年度の題目・教員に変わらないように）。読めなければ null
+ */
+export async function loadYearConfig(year: number, apiUrl = import.meta.env.VITE_CONFIG_API_URL as string | undefined): Promise<YearConfig | null> {
+  const key = `${CACHE_KEY}:${year}`
+  return (await fetchConfig(apiUrl, year, key)) ?? readCache(key) ?? (currentConfig.fiscalYear === year ? currentConfig : null)
 }

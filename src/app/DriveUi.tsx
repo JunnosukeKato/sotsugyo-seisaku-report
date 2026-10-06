@@ -3,6 +3,7 @@ import { summarize, type DriveState, type RemoteCopy } from '../drive/driveSync'
 import { UNIVERSITY_DOMAIN } from '../model/account'
 import type { Report } from '../model/types'
 import type { SaveState } from './useAutosave'
+import { useDialogFocus } from './useDialogFocus'
 
 /**
  * Google ドライブへの保存の画面（mockups/v18 案3・v19 案A）。
@@ -62,6 +63,8 @@ export type GateState =
 
 export function LoginGate({ gate, reportName, fiscalYear, onLogin }: { gate: GateState; reportName: string; fiscalYear: number; onLogin: () => void }) {
   const online = useOnline()
+  const cardRef = useRef<HTMLDivElement>(null)
+  useDialogFocus(cardRef)
   const brand = (
     <div className="login-brand">
       <span className="login-mark">卒</span>
@@ -83,8 +86,8 @@ export function LoginGate({ gate, reportName, fiscalYear, onLogin }: { gate: Gat
     </button>
   )
   return (
-    <div className="login-over" role="dialog" aria-label="ログイン">
-      <div className="login-card">
+    <div className="login-over" role="dialog" aria-modal="true" aria-label="ログイン">
+      <div className="login-card" ref={cardRef}>
         {brand}
         {gate.kind === 'loading' ? (
           <>
@@ -141,7 +144,21 @@ const localTime = (local: SaveState) => (local.status === 'saved' ? ` ${formatTi
 /** 保存のようす。compact はスマホの上の帯 */
 export function DriveChip({ drive, compact, onClick }: { drive: DriveControls; compact?: boolean; onClick?: () => void }) {
   const { status } = drive.state
-  const props = { onClick, role: onClick ? 'button' : undefined, title: '原稿は、この端末とあなたの Google ドライブに保存されます' }
+  const props = {
+    onClick,
+    role: onClick ? 'button' : undefined,
+    tabIndex: onClick ? 0 : undefined,
+    'aria-haspopup': onClick ? ('menu' as const) : undefined,
+    onKeyDown: onClick
+      ? (e: React.KeyboardEvent) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault()
+            onClick()
+          }
+        }
+      : undefined,
+    title: '原稿は、この端末とあなたの Google ドライブに保存されます',
+  }
   const click = onClick ? ' click' : ''
   // この端末（ブラウザ）への保存が失敗している：ドライブにつながっていても隠さずに出す（古い原稿が端末に残るため）
   if (drive.local.status === 'error') {
@@ -244,8 +261,16 @@ export function DriveChipMenu({ drive }: { drive: DriveControls }) {
     const close = (e: PointerEvent) => {
       if (!ref.current?.contains(e.target as Node)) setOpen(false)
     }
+    // Esc でも閉じる（キーボードで開いたとき）
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false)
+    }
     document.addEventListener('pointerdown', close)
-    return () => document.removeEventListener('pointerdown', close)
+    document.addEventListener('keydown', onKey)
+    return () => {
+      document.removeEventListener('pointerdown', close)
+      document.removeEventListener('keydown', onKey)
+    }
   }, [open])
   return (
     <span className="drive-chip-wrap" ref={ref}>
@@ -280,10 +305,13 @@ export function ConflictDialog({
   onChooseLocal: () => void
 }) {
   const remoteNewer = remote.savedAt >= local.updatedAt
+  // 必ずどちらかを選んでもらうので、Esc では閉じない
+  const ref = useRef<HTMLDivElement>(null)
+  useDialogFocus(ref)
   const at = (iso: string) => formatTime(new Date(iso))
   return (
     <div className="modal-backdrop">
-      <div className="modal wide" role="dialog" aria-label="どちらの原稿で続けますか">
+      <div className="modal wide" role="dialog" aria-modal="true" aria-label="どちらの原稿で続けますか" ref={ref}>
         <header>
           <h2>{atLogin ? 'この端末とドライブで、原稿が違います' : '別の端末で書いた原稿が、ドライブにあります'}</h2>
         </header>
@@ -320,9 +348,11 @@ export function ConflictDialog({
 
 /** 共用のパソコンで書き終えたとき：この端末から原稿を消す */
 export function WipeDialog({ lastSaved, busy, onConfirm, onClose }: { lastSaved: Date | null; busy: boolean; onConfirm: () => void; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDialogFocus(ref, () => !busy && onClose())
   return (
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy && onClose()}>
-      <div className="modal" role="dialog" aria-label="この端末から原稿を消しますか">
+      <div className="modal" role="dialog" aria-modal="true" aria-label="この端末から原稿を消しますか" ref={ref}>
         <header>
           <h2>この端末から原稿を消しますか？</h2>
           <button className="close" onClick={onClose} disabled={busy} aria-label="閉じる">
@@ -351,9 +381,11 @@ export function WipeDialog({ lastSaved, busy, onConfirm, onClose }: { lastSaved:
 
 /** 書いている途中で、Google の許可が切れたとき */
 export function ReloginDialog({ busy, error, onLogin, onLater }: { busy: boolean; error: string | null; onLogin: () => void; onLater: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDialogFocus(ref, () => !busy && onLater())
   return (
     <div className="modal-backdrop">
-      <div className="modal" role="dialog" aria-label="もう一度ログインしてください">
+      <div className="modal" role="dialog" aria-modal="true" aria-label="もう一度ログインしてください" ref={ref}>
         <header>
           <h2>もう一度ログインしてください</h2>
         </header>
@@ -376,9 +408,11 @@ export function ReloginDialog({ busy, error, onLogin, onLater }: { busy: boolean
 
 /** この端末に、別のアカウントの原稿が残っているとき（共用のパソコンなど） */
 export function OtherAccountDialog({ previousEmail, unsynced, onRelogin, onDiscard }: { previousEmail: string; unsynced: boolean; onRelogin: () => void; onDiscard: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDialogFocus(ref)
   return (
     <div className="modal-backdrop">
-      <div className="modal" role="dialog" aria-label="別のアカウントの原稿があります">
+      <div className="modal" role="dialog" aria-modal="true" aria-label="別のアカウントの原稿があります" ref={ref}>
         <header>
           <h2>この端末には、別のアカウントの原稿があります</h2>
         </header>
