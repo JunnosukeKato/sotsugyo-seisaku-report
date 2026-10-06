@@ -1,4 +1,4 @@
-import type { BodyBlock, Chapter, Figure, MaterialTableBlock } from '../model/types'
+import type { BodyBlock, Chapter, Figure, TableBlock, TableCell } from '../model/types'
 import { reportCss } from './reportCss'
 
 const CHAPTER_NUMERALS = ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ']
@@ -29,8 +29,6 @@ export interface BodyRenderOptions {
   imageSrc: (imageId: string) => string
   /** 図の表示サイズ */
   figureSize: (figure: Figure) => FigureSize
-  /** 素材表の生地見本のサイズ */
-  swatchSize?: FigureSize
   /** 次のページの上へ送る図のまとまり（figureRow の ID）。選び方は figureFloat.ts */
   deferredGroups?: ReadonlySet<string>
 }
@@ -44,7 +42,7 @@ export function numberFiguresAndTables(chapters: Chapter[]): Map<string, number>
     for (const block of chapter.blocks) {
       if (block.type === 'figureRow') {
         for (const f of block.figures) numbers.set(f.id, ++figure)
-      } else if (block.type === 'materialTable') {
+      } else if (block.type === 'table') {
         numbers.set(block.id, ++table)
       }
     }
@@ -107,8 +105,8 @@ function renderBlock(block: BodyBlock, numbers: Map<string, number>, tableIds: S
       const deferred = options.deferredGroups?.has(block.id) ? ' deferred' : ''
       return `<div class="figure-group${deferred}" data-group-id="${escapeHtml(block.id)}">${rowHtml.join('')}</div>`
     }
-    case 'materialTable':
-      return renderMaterialTable(block, numbers.get(block.id)!, options)
+    case 'table':
+      return renderTable(block, numbers.get(block.id)!, options)
     case 'pageBreak':
       // 画面では「改ページ」の印を出す（印は画面だけ。index.css）
       return `<div class="page-break" data-block-id="${escapeHtml(block.id)}"></div>`
@@ -122,18 +120,21 @@ function renderFigure(f: Figure, size: FigureSize, number: number, options: Body
   return `<figure data-figure-id="${escapeHtml(f.id)}"${f.imageId ? '' : ' data-empty-figure'}>${picture}<figcaption>${captionHtml('図', number, f.caption, f.id)}</figcaption></figure>`
 }
 
-function renderMaterialTable(block: MaterialTableBlock, number: number, options: BodyRenderOptions): string {
-  const swatch = options.swatchSize ?? { widthMm: 35, heightMm: 32 }
-  const rows = block.rows
-    .map((row) => {
-      const img = row.swatchImageId
-        ? `<img src="${escapeHtml(options.imageSrc(row.swatchImageId))}" style="width:${swatch.widthMm}mm;height:${swatch.heightMm}mm" alt="">`
-        : ''
-      const id = escapeHtml(row.id)
-      return `<tr><td><span data-block-id="${id}:name" data-placeholder="（名称）">${escapeHtml(row.name)}</span></td><td><span data-block-id="${id}:usage" data-placeholder="（使用箇所）">${escapeHtml(row.usage)}</span></td><td class="swatch" data-swatch-row="${id}">${img}</td></tr>`
-    })
-    .join('')
-  return `<div class="material-table"><p class="table-caption">${captionHtml('表', number, block.caption, block.id)}</p><table><thead><tr><th>名称</th><th>使用箇所</th><th>生地見本</th></tr></thead><tbody>${rows}</tbody></table></div>`
+/**
+ * 表：タイトルは表の上。1行目は見出しの行。セルの画像は文字の上に、セルの幅に合わせて縮めて置く。
+ * 列の幅は「そろえる（同じ幅）」か「中身に合わせる」
+ */
+function renderTable(block: TableBlock, number: number, options: BodyRenderOptions): string {
+  const cellHtml = (cell: TableCell, header: boolean) => {
+    const tag = header ? 'th' : 'td'
+    const img = cell.imageId ? `<img src="${escapeHtml(options.imageSrc(cell.imageId))}" alt="">` : ''
+    const placeholder = header ? '（見出し）' : '（クリックして入力）'
+    return `<${tag} data-cell-id="${escapeHtml(cell.id)}">${img}<span data-block-id="${escapeHtml(cell.id)}" data-placeholder="${placeholder}">${escapeHtml(cell.text)}</span></${tag}>`
+  }
+  const [head, ...body] = block.rows
+  const thead = head ? `<thead><tr>${head.cells.map((c) => cellHtml(c, true)).join('')}</tr></thead>` : ''
+  const tbody = `<tbody>${body.map((r) => `<tr>${r.cells.map((c) => cellHtml(c, false)).join('')}</tr>`).join('')}</tbody>`
+  return `<div class="data-table" data-table-id="${escapeHtml(block.id)}"><p class="table-caption">${captionHtml('表', number, block.caption, block.id)}</p><table class="widths-${block.widths}">${thead}${tbody}</table></div>`
 }
 
 /**
@@ -169,7 +170,7 @@ export function chapterAnchor(chapterId: string): string {
 /** 本文（大見出し以下）の HTML。報告書全体の文書にも、本文だけの文書にも使う */
 export function bodyContentHtml(chapters: Chapter[], options: BodyRenderOptions): string {
   const numbers = numberFiguresAndTables(chapters)
-  const tableIds = new Set(chapters.flatMap((c) => c.blocks).filter((b) => b.type === 'materialTable').map((b) => b.id))
+  const tableIds = new Set(chapters.flatMap((c) => c.blocks).filter((b) => b.type === 'table').map((b) => b.id))
   return chapters.map((c, i) => renderChapter(c, i, numbers, tableIds, options)).join('\n')
 }
 

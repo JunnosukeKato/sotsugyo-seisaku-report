@@ -100,6 +100,10 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
   const editable = id ? findEditable(snap.report, id) : undefined
   const issues = id ? snap.findings.filter((f) => f.blockId === id) : []
   const removable = snap.editingKind === 'paragraph' || snap.editingKind === 'abstractParagraph' || snap.editingKind === 'subheading' || snap.editingKind === 'chapter'
+  // 表のセル・タイトルを書いているときの表
+  const tableId = id && (snap.editingKind === 'tableCell' || snap.editingKind === 'tableCaption') ? editor.tableIdOf(id) : null
+  const tableBlock = tableId ? snap.report.body.flatMap((c) => c.blocks).find((b) => b.id === tableId) : undefined
+  const tableWidths = tableBlock?.type === 'table' ? tableBlock.widths : 'equal'
   return (
     <section className={`edit-sheet${snap.editingId ? ' open' : ''}`} aria-label="書く欄">
       <header className="es-head">
@@ -122,11 +126,41 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
           </button>
         )}
         {snap.editingKind === 'paragraph' && (
-          <button onMouseDown={keepFocus} onClick={() => editor.addMaterialTable()}>
+          <button onMouseDown={keepFocus} onClick={() => editor.addTable('blank')}>
+            {Icon.table}表を入れる
+          </button>
+        )}
+        {snap.editingKind === 'paragraph' && (
+          <button onMouseDown={keepFocus} onClick={() => editor.addTable('material')}>
             {Icon.table}素材表
           </button>
         )}
         <RefButtons editor={editor} snap={snap} />
+        {tableId && (
+          <>
+            <button onMouseDown={keepFocus} onClick={() => editor.addTableRow(tableId)}>
+              {Icon.rowAdd}行
+            </button>
+            <button onMouseDown={keepFocus} onClick={() => editor.addTableColumn(tableId)}>
+              {Icon.colAdd}列
+            </button>
+            {snap.editingKind === 'tableCell' && (
+              <button onMouseDown={keepFocus} onClick={() => (editor.currentCellHasImage(tableId) ? editor.removeCellImage(tableId) : void editor.setCellImage(tableId))}>
+                {Icon.image}
+                {editor.currentCellHasImage(tableId) ? '画像を外す' : '画像'}
+              </button>
+            )}
+            <button onMouseDown={keepFocus} onClick={() => editor.removeTableRow(tableId)}>
+              {Icon.rowRemove}行を消す
+            </button>
+            <button onMouseDown={keepFocus} onClick={() => editor.removeTableColumn(tableId)}>
+              {Icon.colRemove}列を消す
+            </button>
+            <button onMouseDown={keepFocus} onClick={() => editor.setTableWidths(tableId, tableWidths === 'equal' ? 'auto' : 'equal')}>
+              {tableWidths === 'equal' ? '幅：そろえる' : '幅：中身に合わせる'}
+            </button>
+          </>
+        )}
         {removable && (
           <button
             className="danger"
@@ -178,7 +212,7 @@ function AddTools({ editor, snap, onDone, onReferences }: { editor: ReportEditor
         {tool('大見出し', Icon.heading1, () => editor.addChapter())}
         {tool('改ページ', Icon.pageBreak, () => editor.addPageBreak())}
       </div>
-      <p className="sheet-hint">図・表は、文中の入れたい位置をタップして、書く欄の「図を入れる」「素材表」で入れます。</p>
+      <p className="sheet-hint">図・表は、文中の入れたい位置をタップして、書く欄の「図を入れる」「表を入れる」「素材表」で入れます。</p>
       {snap.report.references.length === 0 && (
         <button className="add-refs" onClick={() => { onDone(); onReferences() }}>
           ＋ 引用・参考文献を入れる（使うときだけ）

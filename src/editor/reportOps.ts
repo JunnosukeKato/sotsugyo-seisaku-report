@@ -1,4 +1,5 @@
-import type { BasicInfo, BodyBlock, Chapter, Figure, InlineNode, ParagraphBlock, Report } from '../model/types'
+import { setCellText } from '../model/table'
+import type { BasicInfo, BodyBlock, Chapter, Figure, InlineNode, ParagraphBlock, Report, TableBlock } from '../model/types'
 
 /**
  * 報告書データの操作。いずれも元のデータを変えず、新しいデータを返す（元に戻す機能のため）。
@@ -56,7 +57,7 @@ export function numbering(report: Pick<Report, 'body'>): Numbering {
         numbers.set(f.id, n)
         figureByNumber.set(n, f.id)
       }
-    } else if (block.type === 'materialTable') {
+    } else if (block.type === 'table') {
       const n = tableByNumber.size + 1
       numbers.set(block.id, n)
       tableIds.add(block.id)
@@ -126,14 +127,8 @@ export function editables(report: Report): Editable[] {
             return b.figures.map((f) => ({ id: f.id, kind: 'figureCaption' as const, text: f.caption }))
           case 'pageBreak':
             return []
-          case 'materialTable':
-            return [
-              { id: b.id, kind: 'tableCaption', text: b.caption },
-              ...b.rows.flatMap((r) => [
-                { id: `${r.id}:name`, kind: 'tableCell' as const, text: r.name },
-                { id: `${r.id}:usage`, kind: 'tableCell' as const, text: r.usage },
-              ]),
-            ]
+          case 'table':
+            return [{ id: b.id, kind: 'tableCaption', text: b.caption }, ...b.rows.flatMap((r) => r.cells.map((c) => ({ id: c.id, kind: 'tableCell' as const, text: c.text })))]
         }
       }),
     ]),
@@ -169,13 +164,11 @@ export function setText(report: Report, id: string, text: string): Report {
   }
   const num = numbering(report)
   const withChapter = { ...report, body: report.body.map((c) => (c.id === id ? { ...c, title: text.replace(/[\r\n]/g, '') } : c)) }
-  const [rowId, column] = id.split(':')
   return mapBody(withChapter, (b): BodyBlock => {
     if (b.type === 'subheading' && b.id === id) return { ...b, title: text.replace(/[\r\n]/g, '') }
     if (b.type === 'paragraph' && b.id === id) return paragraph(id, text, num)
-    if (b.type === 'materialTable' && b.id === id) return { ...b, caption: text.replace(/[\r\n]/g, '') }
-    if (b.type === 'materialTable' && (column === 'name' || column === 'usage') && b.rows.some((r) => r.id === rowId))
-      return { ...b, rows: b.rows.map((r) => (r.id === rowId ? { ...r, [column]: text.trim() } : r)) }
+    if (b.type === 'table' && b.id === id) return { ...b, caption: text.replace(/[\r\n]/g, '') }
+    if (b.type === 'table' && b.rows.some((r) => r.cells.some((c) => c.id === id))) return setCellText(b, id, text.trim())
     if (b.type === 'figureRow' && b.figures.some((f) => f.id === id))
       return { ...b, figures: b.figures.map((f) => (f.id === id ? { ...f, caption: text.replace(/[\r\n]/g, '') } : f)) }
     return b
@@ -206,7 +199,7 @@ export function split(report: Report, id: string, before: string, after: string)
     }
   }
   // 図・表のタイトル：そのまとまり（表）の下に段落を作る
-  const owner = report.body.flatMap((c) => c.blocks).find((b) => (b.type === 'figureRow' && b.figures.some((f) => f.id === id)) || (b.type === 'materialTable' && b.id === id))
+  const owner = report.body.flatMap((c) => c.blocks).find((b) => (b.type === 'figureRow' && b.figures.some((f) => f.id === id)) || (b.type === 'table' && b.id === id))
   if (owner) return { report: mapBody(report, (b) => (b === owner ? [b, paragraph(created, '')] : b)), newId: created }
   for (const chapter of report.body) {
     const i = chapter.blocks.findIndex((b) => b.id === id)
@@ -274,13 +267,25 @@ export function replaceWithParagraphs(report: Report, id: string, texts: string[
 
 /** ID からブロックの位置を探す（図の ID・表のセルの ID でもよい） */
 function blockIndex(chapter: Chapter, id: string): number {
-  const rowId = id.split(':')[0]
   return chapter.blocks.findIndex(
     (b) =>
       b.id === id ||
       (b.type === 'figureRow' && b.figures.some((f) => f.id === id)) ||
-      (b.type === 'materialTable' && b.rows.some((r) => r.id === rowId)),
+      (b.type === 'table' && b.rows.some((r) => r.cells.some((c) => c.id === id))),
   )
+}
+
+/** 表のタイトル・セルの ID から、その表を探す */
+export function findTable(report: Report, id: string): TableBlock | null {
+  for (const b of report.body.flatMap((c) => c.blocks)) {
+    if (b.type === 'table' && (b.id === id || b.rows.some((r) => r.cells.some((c) => c.id === id)))) return b
+  }
+  return null
+}
+
+/** 表を書き換える */
+export function updateTable(report: Report, tableId: string, fn: (table: TableBlock) => TableBlock): Report {
+  return mapBody(report, (b) => (b.type === 'table' && b.id === tableId ? fn(b) : b))
 }
 
 /** 指定した位置の後ろに本文のブロックを入れる。章の ID なら章の先頭、見つからなければ最後の章の末尾 */
@@ -431,7 +436,7 @@ export function addTableBelow(report: Report, paragraphId: string, table: BodyBl
 
 /** 段落のすぐ下に付く図・表 */
 function isAttachment(b: BodyBlock | undefined): boolean {
-  return b?.type === 'figureRow' || b?.type === 'materialTable'
+  return b?.type === 'figureRow' || b?.type === 'table'
 }
 
 /** 図のまとまりの中の、ある図のすぐ後ろに図を加える（「もう1枚」） */

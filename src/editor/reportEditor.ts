@@ -7,7 +7,8 @@ import { FIGURE_MAX_PX, fitFigureSize, importImage, PHOTO_MAX_PX } from '../mode
 import { putImage, type StoredImage } from '../model/storage'
 import { applyCourseTemplate, bodyWritten } from '../model/template'
 import { changeArrangement, clampPercent, movePhoto, putPhoto } from '../model/photos'
-import type { BodyBlock, Chapter, PhotoPosition, Report, WorkPhotoLayout } from '../model/types'
+import { addColumn, addRow, blankTable, cellPosition, materialTable, removeColumn, removeRow, setCellImage } from '../model/table'
+import type { BodyBlock, Chapter, PhotoPosition, Report, TableBlock, WorkPhotoLayout } from '../model/types'
 import { OverlayEditor, type OverlayKind, type OverlayPlacement, type OverlayTarget } from './overlayEditor'
 import { PageStage } from './pageStage'
 import * as ops from './reportOps'
@@ -686,12 +687,13 @@ export class ReportEditor {
       if (figure.hasAttribute('data-empty-figure')) void this.replaceFigureImage(figure.dataset.figureId!)
       return
     }
-    const swatch = target.closest<HTMLElement>('td[data-swatch-row]')
-    if (swatch) {
-      void this.setSwatch(swatch.dataset.swatchRow!)
+    // 表のセル（画像の上や、文字のないところ）：そのセルを書く
+    const cell = target.closest<HTMLElement>('[data-cell-id]')
+    if (cell) {
+      this.openEditor(cell.dataset.cellId!, ops.findEditable(this.report, cell.dataset.cellId!)?.text.length ?? 0)
       return
     }
-    const table = target.closest('.material-table')
+    const table = target.closest('.data-table')
     if (table) {
       const caption = table.querySelector<HTMLElement>('.table-caption [data-block-id]')
       if (caption) return this.select({ kind: 'table', id: caption.dataset.blockId! })
@@ -717,13 +719,7 @@ export class ReportEditor {
 
   /** 表のタイトル・セルの ID から、その表の ID を求める */
   tableIdOf(id: string): string | null {
-    const rowId = id.split(':')[0]
-    for (const chapter of this.report.body) {
-      for (const b of chapter.blocks) {
-        if (b.type === 'materialTable' && (b.id === id || b.rows.some((r) => r.id === rowId))) return b.id
-      }
-    }
-    return null
+    return ops.findTable(this.report, id)?.id ?? null
   }
 
   /** 選んでいる図・表に枠を付ける */
@@ -731,7 +727,7 @@ export class ReportEditor {
     for (const el of this.viewport.querySelectorAll('.is-selected')) el.classList.remove('is-selected')
     const s = this.selection
     if (s?.kind === 'figure') this.viewport.querySelector(`figure[data-figure-id="${CSS.escape(s.id)}"]`)?.classList.add('is-selected')
-    if (s?.kind === 'table') this.renderer.pageView.fragments(s.id)[0]?.closest('.material-table')?.classList.add('is-selected')
+    if (s?.kind === 'table') this.renderer.pageView.fragments(s.id)[0]?.closest('.data-table')?.classList.add('is-selected')
     if (s?.kind === 'pageBreak') this.renderer.pageView.fragments(s.id)[0]?.classList.add('is-selected')
   }
 
@@ -830,7 +826,7 @@ export class ReportEditor {
     const fragments = id ? view.fragments(id).filter((f) => view.pageIndexOf(f) === this.page) : []
     const last = fragments[fragments.length - 1]
     if (!last) return
-    const block = (last.closest('figure, .material-table, h1, h2, p') as HTMLElement | null) ?? last
+    const block = (last.closest('figure, .data-table, h1, h2, p') as HTMLElement | null) ?? last
     const r = block.getBoundingClientRect()
     const l = this.layer.getBoundingClientRect()
     Object.assign(this.marker.style, { left: `${r.left - l.left}px`, top: `${r.bottom - l.top + 2}px`, width: `${r.width}px` })
@@ -920,10 +916,10 @@ export class ReportEditor {
   }
 
   /**
-   * 表を入れる。図と同じく、文中の入れたい位置に「（表n）」が入り、段落のすぐ下に表が入る。
+   * 表を入れる（空の表か、素材表のひな形）。図と同じく、文中の入れたい位置に「（表n）」が入り、段落のすぐ下に表が入る。
    * タイトルを書いて Enter を押すと、書いていた段落の続きに戻る
    */
-  addMaterialTable(): void {
+  addTable(kind: 'blank' | 'material'): void {
     const paragraphId = this.editingParagraph()
     if (!paragraphId) return
     const caret = this.overlay.caret
@@ -931,7 +927,7 @@ export class ReportEditor {
     const tableId = ops.newId('t')
     this.pushHistory(this.report)
     let next = ops.insertRef(this.report, paragraphId, caret, tableId)
-    next = ops.addTableBelow(next, paragraphId, { type: 'materialTable', id: tableId, caption: '', rows: [{ id: ops.newId('m'), name: '', usage: '', swatchImageId: null }] })
+    next = ops.addTableBelow(next, paragraphId, kind === 'material' ? materialTable(tableId, ops.newId) : blankTable(tableId, ops.newId))
     this.report = next
     this.returnTo = { from: tableId, id: paragraphId, caret: ops.refEnd(next, paragraphId, tableId) }
     this.reopenAfterRender(tableId, 0)
@@ -979,39 +975,87 @@ export class ReportEditor {
     this.update((r) => (s.kind === 'figure' ? ops.removeFigure(r, s.id) : ops.removeBlock(r, s.id)))
   }
 
+  /** 表を書いているセル（書いていなければ最後に触ったセル） */
+  private currentCell(tableId: string): { table: TableBlock; row: number; column: number; cellId: string } | null {
+    const table = ops.findTable(this.report, tableId)
+    if (!table) return null
+    const id = this.overlay.blockId ?? this.currentId
+    const at = id ? cellPosition(table, id) : null
+    const row = at?.row ?? table.rows.length - 1
+    const column = at?.column ?? (table.rows[0]?.cells.length ?? 1) - 1
+    return { table, row, column, cellId: table.rows[row]?.cells[column]?.id ?? '' }
+  }
+
+  /** 行を足す（書いているセルの行の下。足した行の最初のセルを書く） */
   addTableRow(tableId: string): void {
-    const rowId = ops.newId('m')
+    const at = this.currentCell(tableId)
+    if (!at) return
+    if (this.overlay.blockId) this.overlay.commit()
     this.pushHistory(this.report)
-    this.report = {
-      ...this.report,
-      body: this.report.body.map((c) => ({
-        ...c,
-        blocks: c.blocks.map((b) => (b.type === 'materialTable' && b.id === tableId ? { ...b, rows: [...b.rows, { id: rowId, name: '', usage: '', swatchImageId: null }] } : b)),
-      })),
-    }
-    this.reopenAfterRender(`${rowId}:name`, 0)
+    const { table, firstCellId } = addRow(at.table, at.row, ops.newId)
+    this.report = ops.updateTable(this.report, tableId, () => table)
+    this.reopenAfterRender(firstCellId, 0)
   }
 
+  /** 書いているセルの行を消す（見出しの行と、最後の1行は残す） */
   removeTableRow(tableId: string): void {
-    this.update((r) => ({
-      ...r,
-      body: r.body.map((c) => ({
-        ...c,
-        blocks: c.blocks.map((b) => (b.type === 'materialTable' && b.id === tableId && b.rows.length > 1 ? { ...b, rows: b.rows.slice(0, -1) } : b)),
-      })),
-    }))
+    const at = this.currentCell(tableId)
+    if (at) this.changeTable(tableId, (t) => removeRow(t, at.row))
   }
 
-  async setSwatch(rowId: string): Promise<void> {
+  /** 列を足す（書いているセルの列の右） */
+  addTableColumn(tableId: string): void {
+    const at = this.currentCell(tableId)
+    if (at) this.changeTable(tableId, (t) => addColumn(t, at.column, ops.newId))
+  }
+
+  /** 書いているセルの列を消す（最後の1列は残す） */
+  removeTableColumn(tableId: string): void {
+    const at = this.currentCell(tableId)
+    if (at) this.changeTable(tableId, (t) => removeColumn(t, at.column))
+  }
+
+  /** 列の幅：そろえる（同じ幅）／中身に合わせる */
+  setTableWidths(tableId: string, widths: TableBlock['widths']): void {
+    this.changeTable(tableId, (t) => ({ ...t, widths }))
+  }
+
+  /** 書いているセルに画像（生地見本など）を入れる・外す */
+  async setCellImage(tableId: string): Promise<void> {
+    const at = this.currentCell(tableId)
+    if (!at?.cellId) return
     const imageId = await this.importImage('swatch')
-    if (!imageId) return
-    this.update((r) => ({
-      ...r,
-      body: r.body.map((c) => ({
-        ...c,
-        blocks: c.blocks.map((b) => (b.type === 'materialTable' ? { ...b, rows: b.rows.map((row) => (row.id === rowId ? { ...row, swatchImageId: imageId } : row)) } : b)),
-      })),
-    }))
+    if (imageId) this.changeTable(tableId, (t) => setCellImage(t, at.cellId, imageId), at.cellId)
+  }
+
+  removeCellImage(tableId: string): void {
+    const at = this.currentCell(tableId)
+    if (at?.cellId) this.changeTable(tableId, (t) => setCellImage(t, at.cellId, null), at.cellId)
+  }
+
+  /**
+   * 表を書き換える。書いていたセル（keep を渡せばそのセル）が残っていれば、続けてそのセルを書く。
+   * なくなったら表を選んだ状態にする（どちらでも、表の道具が出たままになり、続けて操作できる）
+   */
+  private changeTable(tableId: string, fn: (table: TableBlock) => TableBlock, keep?: string): void {
+    const editing = this.overlay.blockId
+    const caret = editing ? this.overlay.caret : 0
+    if (this.overlay.blockId) this.overlay.commit()
+    this.pushHistory(this.report)
+    this.report = ops.updateTable(this.report, tableId, fn)
+    const cellId = keep ?? editing
+    if (cellId && ops.findEditable(this.report, cellId)) {
+      this.reopenAfterRender(cellId, cellId === editing ? caret : (ops.findEditable(this.report, cellId)?.text.length ?? 0))
+    } else {
+      this.selection = { kind: 'table', id: tableId }
+      this.afterChange({ render: 'now', save: true })
+    }
+  }
+
+  /** 書いているセルに画像があるか */
+  currentCellHasImage(tableId: string): boolean {
+    const at = this.currentCell(tableId)
+    return !!at && !!at.table.rows[at.row]?.cells[at.column]?.imageId
   }
 
   // ---- 作品写真 ----

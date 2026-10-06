@@ -45,7 +45,7 @@ export interface Chapter {
   blocks: BodyBlock[]
 }
 
-export type BodyBlock = SubheadingBlock | ParagraphBlock | FigureRowBlock | MaterialTableBlock | PageBreakBlock
+export type BodyBlock = SubheadingBlock | ParagraphBlock | FigureRowBlock | TableBlock | PageBreakBlock
 
 /** 改ページ（学生が好きな位置に入れる。この後ろは次のページから始まる） */
 export interface PageBreakBlock {
@@ -98,20 +98,30 @@ export interface Figure {
   caption: string
 }
 
-/** 素材表。生地見本は写真で入れる */
-export interface MaterialTableBlock {
-  type: 'materialTable'
+/**
+ * 表。1行目は見出しの行。行と列は自由に足せ、セルには文字と画像（生地見本など）を入れられる。
+ * 素材表（名称・使用箇所・生地見本）は、この表のひな形の1つ（model/table.ts）
+ */
+export interface TableBlock {
+  type: 'table'
   id: string
   /** 名称のみ（例: 使用素材表）。「表1.」は自動で付く */
   caption: string
-  rows: MaterialRow[]
+  /** 列の幅：equal＝そろえる（同じ幅）、auto＝中身に合わせる */
+  widths: 'equal' | 'auto'
+  rows: TableRow[]
 }
 
-export interface MaterialRow {
+export interface TableRow {
   id: string
-  name: string
-  usage: string
-  swatchImageId: string | null
+  cells: TableCell[]
+}
+
+export interface TableCell {
+  id: string
+  text: string
+  /** セルの画像（生地見本など）。文字の上に置く */
+  imageId: string | null
 }
 
 export type Reference = BookReference | WebReference

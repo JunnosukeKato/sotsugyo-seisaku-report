@@ -85,6 +85,27 @@ function ReferenceMenu({ editor, snap }: Omit<Props, 'onReferences'>) {
   )
 }
 
+/** 表を入れる：空の表か、素材表のひな形かを選ぶ */
+function TableMenu({ editor, disabled }: { editor: ReportEditor; disabled: boolean }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="menu-wrap">
+      <Tool label="表を入れる" icon={Icon.table} title="書いている位置に「（表n）」が入り、この段落のすぐ下に表が入ります" disabled={disabled} onClick={() => setOpen(!open)} />
+      {open && !disabled && (
+        <div className="side-menu" onMouseLeave={() => setOpen(false)}>
+          <div className="side-menu-title">どの表を入れますか</div>
+          <button onMouseDown={keepFocus} onClick={() => { setOpen(false); editor.addTable('blank') }}>
+            空の表（2列）
+          </button>
+          <button onMouseDown={keepFocus} onClick={() => { setOpen(false); editor.addTable('material') }}>
+            素材表（名称・使用箇所・生地見本）
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
 /** 書いている物・選んでいる物の道具 */
 export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
   const { editingKind, editingId, selection, report } = snap
@@ -149,12 +170,29 @@ export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
   }
 
   const tableId = selection?.kind === 'table' ? selection.id : editingId && (editingKind === 'tableCaption' || editingKind === 'tableCell') ? editor.tableIdOf(editingId) : null
-  if (tableId) {
+  const table = tableId ? snap.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'table' && b.id === tableId) : undefined
+  if (tableId && table?.type === 'table') {
     return (
       <div className="group ctx">
         <div className="ctx-label">この表</div>
-        <Tool label="行を追加" icon={Icon.rowAdd} onClick={() => editor.addTableRow(tableId)} />
-        <Tool label="行を削除" icon={Icon.rowRemove} title="最後の行を削除" onClick={() => editor.removeTableRow(tableId)} />
+        <Tool label="行を足す" icon={Icon.rowAdd} title="書いているセルの行の下に、行を足す" onClick={() => editor.addTableRow(tableId)} />
+        <Tool label="列を足す" icon={Icon.colAdd} title="書いているセルの列の右に、列を足す" onClick={() => editor.addTableColumn(tableId)} />
+        {editingKind === 'tableCell' &&
+          (editor.currentCellHasImage(tableId) ? (
+            <Tool label="画像を外す" icon={Icon.image} title="このセルの画像を外す" onClick={() => editor.removeCellImage(tableId)} />
+          ) : (
+            <Tool label="画像を入れる" icon={Icon.image} title="このセルに画像（生地見本など）を入れる" onClick={() => void editor.setCellImage(tableId)} />
+          ))}
+        <Tool label="行を消す" icon={Icon.rowRemove} title="書いているセルの行を消す（見出しの行は消せません）" onClick={() => editor.removeTableRow(tableId)} />
+        <Tool label="列を消す" icon={Icon.colRemove} title="書いているセルの列を消す" onClick={() => editor.removeTableColumn(tableId)} />
+        <div className="ctx-label sub">列の幅</div>
+        <div className="seg">
+          {(['equal', 'auto'] as const).map((w) => (
+            <button key={w} className={table?.widths === w ? 'on' : ''} onMouseDown={keepFocus} onClick={() => editor.setTableWidths(tableId, w)}>
+              {w === 'equal' ? 'そろえる' : '中身に合わせる'}
+            </button>
+          ))}
+        </div>
         <Tool
           label="削除"
           icon={Icon.remove}
@@ -229,7 +267,7 @@ export function Palette({ editor, snap, onReferences }: Props) {
               disabled={!writing}
               onClick={() => void editor.addFigure()}
             />
-            <Tool label="素材表" icon={Icon.table} title="書いている位置に「（表n）」が入り、この段落のすぐ下に表が入ります" disabled={!writing} onClick={() => editor.addMaterialTable()} />
+            <TableMenu editor={editor} disabled={!writing} />
             {!writing && <div className="ctx-note">図・表は、文中の入れたい位置をクリックしてから押します</div>}
           </div>
         </>

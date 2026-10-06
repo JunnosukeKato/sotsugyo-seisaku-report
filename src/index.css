@@ -131,8 +131,8 @@ button:disabled { cursor: default; opacity: 0.4; }
   caret-color: var(--accent);
   min-height: 1em;
 }
-/* 書いている段落の左の余白に、細い線を出す（枠は出さない。mockups/v10 案2） */
-.overlay-editor:not(.in-sheet)::before { content: ''; position: absolute; left: -16px; top: 2px; bottom: 2px; width: 3px; border-radius: 2px; background: var(--accent); opacity: 0.55; }
+/* 書いている段落の左の余白に、細い線を出す（枠は出さない。mockups/v10 案2）。見出しや表のセルなど1行の欄は、カーソルだけ */
+.overlay-editor[data-kind='paragraph']:not(.in-sheet)::before { content: ''; position: absolute; left: -16px; top: 2px; bottom: 2px; width: 3px; border-radius: 2px; background: var(--accent); opacity: 0.55; }
 
 /* 段落などを足す位置 */
 .insert-marker { position: absolute; z-index: 7; height: 0; border-top: 3px solid var(--accent); padding-top: 2px; text-align: right; font-size: 11px; font-weight: 700; color: var(--accent); pointer-events: none; }
@@ -179,6 +179,10 @@ button:disabled { cursor: default; opacity: 0.4; }
 .lay-grid { display: grid; gap: 1px; width: 15px; height: 21px; padding: 0; background: #fff; box-shadow: 0 0 0 1px #c9c6c0; }
 .lay-grid i { background: #b7b4ae; }
 .lay.on .lay-grid i { background: var(--accent); }
+.ctx-label.sub { color: var(--muted); font-weight: 400; padding-top: 6px; }
+.seg { display: flex; flex-direction: column; gap: 3px; padding: 2px 4px 4px; }
+.seg button { border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 5px 0; font-size: 9.5px; letter-spacing: -0.03em; white-space: nowrap; color: var(--ink); }
+.seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 .ctx-note { font-size: 9.5px; line-height: 1.5; color: var(--muted); padding: 2px 4px 4px; text-align: center; }
 .menu-wrap { position: relative; }
 .side-menu { position: absolute; left: calc(100% + 10px); top: 0; z-index: 20; min-width: 150px; display: grid; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(30, 25, 20, 0.16); }
@@ -344,7 +348,11 @@ button:disabled { cursor: default; opacity: 0.4; }
 .sel-bar { position: fixed; z-index: 11; left: 8px; right: 8px; bottom: calc(62px + 60px); display: flex; justify-content: center; }
 .sel-bar .group.ctx { display: flex; flex-direction: row; align-items: center; gap: 2px; padding: 4px 8px; margin: 0; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--float-shadow); }
 .sel-bar .ctx-label { padding: 0 6px 0 2px; }
-.sel-bar .ctx-note { display: none; }
+.sel-bar .ctx-label.sub { color: var(--muted); font-weight: 400; padding-top: 6px; }
+.seg { display: flex; flex-direction: column; gap: 3px; padding: 2px 4px 4px; }
+.seg button { border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 5px 0; font-size: 9.5px; letter-spacing: -0.03em; white-space: nowrap; color: var(--ink); }
+.seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.ctx-note { display: none; }
 .sel-bar .tb { width: auto; padding: 6px 10px; }
 .sel-bar .layouts { display: flex; padding: 0; }
 .sel-bar .lay { padding: 6px 10px; border-color: var(--line); }

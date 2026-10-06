@@ -1,3 +1,4 @@
+import { fromMaterialTable } from './table'
 import type { Chapter, ParagraphBlock, Report } from './types'
 import { DATA_FORMAT_VERSION } from './types'
 
@@ -20,8 +21,7 @@ const body: Chapter[] = [
       { type: 'figureRow', id: 'r1', figures: [{ id: 'f1', imageId: '', caption: 'デザイン画' }] },
       { type: 'subheading', id: 's3', title: '使用素材' },
       p('p3', '表1に使用した素材をまとめる。'),
-      {
-        type: 'materialTable',
+      fromMaterialTable({
         id: 't1',
         caption: '使用素材表',
         rows: [
@@ -29,7 +29,7 @@ const body: Chapter[] = [
           { id: 'm2', name: 'シルクシフォン', usage: '袖\n帯', swatchImageId: null },
           { id: 'm3', name: 'ブロード', usage: 'シャツ', swatchImageId: null },
         ],
-      },
+      }),
     ],
   },
   {

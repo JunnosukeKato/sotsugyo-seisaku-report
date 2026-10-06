@@ -1,4 +1,5 @@
 import { clampPercent, photoGrid } from './photos'
+import { fromMaterialTable } from './table'
 import type { Report } from './types'
 import { DATA_FORMAT_VERSION } from './types'
 
@@ -11,6 +12,16 @@ import { DATA_FORMAT_VERSION } from './types'
 export class UnsupportedDataError extends Error {}
 
 type Raw = Record<string, unknown>
+
+/** 本文：前の版の素材表（決まった3列）は、行と列を足せる表にする */
+function migrateBody(chapters: Raw[]): Report['body'] {
+  return chapters.map((c) => ({
+    ...(c as unknown as Report['body'][number]),
+    blocks: ((c.blocks ?? []) as Raw[]).map((b) =>
+      b.type === 'materialTable' ? fromMaterialTable(b as Parameters<typeof fromMaterialTable>[0]) : (b as unknown as Report['body'][number]['blocks'][number]),
+    ),
+  }))
+}
 
 /** 抄録：「書き始めたか」がない前の版の原稿は、抄録をすでに書いていれば書き始めているとみなす（書いた抄録を隠さない） */
 function migrateAbstract(abstract: Raw): Report['abstract'] {
@@ -53,7 +64,7 @@ export function migrateReport(input: unknown): Report {
     fiscalYear: typeof raw.fiscalYear === 'number' ? raw.fiscalYear : 0,
     basicInfo: { studentId: str(basic.studentId), name: str(basic.name), courseId: str(basic.courseId), subtitleInput: str(basic.subtitleInput) },
     abstract: migrateAbstract(abstract),
-    body: raw.body as Report['body'],
+    body: migrateBody(raw.body as Raw[]),
     references: Array.isArray(raw.references) ? (raw.references as Report['references']) : [],
     workPhotos: migratePhotos(photos),
     updatedAt: str(raw.updatedAt) || new Date().toISOString(),

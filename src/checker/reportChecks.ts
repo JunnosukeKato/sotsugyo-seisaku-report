@@ -2,6 +2,7 @@ import { findCourse, type YearConfig } from '../config'
 import { contentToText, editables, numbering, type EditableKind } from '../editor/reportOps'
 import type { LayoutInfo } from '../layout/measure'
 import type { Report } from '../model/types'
+import { swatchColumn } from '../model/table'
 import { checkText, type TextFinding } from './textRules'
 import type { Severity } from './types'
 
@@ -134,8 +135,8 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     }
   }
   for (const e of list) {
-    if (!e.text.trim() && ['chapter', 'subheading', 'figureCaption', 'tableCaption', 'tableCell'].includes(e.kind)) {
-      const what = { chapter: '大見出し', subheading: '小見出し', figureCaption: '図のタイトル', tableCaption: '表のタイトル', tableCell: '表のセル' }[e.kind as string]
+    if (!e.text.trim() && ['chapter', 'subheading', 'figureCaption', 'tableCaption'].includes(e.kind)) {
+      const what = { chapter: '大見出し', subheading: '小見出し', figureCaption: '図のタイトル', tableCaption: '表のタイトル' }[e.kind as string]
       findings.push(guide('required-text', 'error', `${what}が入力されていない`, 'body', { blockId: e.id }))
     }
   }
@@ -155,6 +156,18 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     }
   }
 
+  // 表のセル：見出しの行の空欄はエラー。ほかの空いているセル（画像もない）は注意
+  for (const block of report.body.flatMap((c) => c.blocks)) {
+    if (block.type !== 'table') continue
+    block.rows.forEach((row, i) => {
+      for (const c of row.cells) {
+        if (c.text.trim() || c.imageId) continue
+        if (i === 0) findings.push(guide('required-text', 'error', '表の見出しが入力されていない', 'body', { blockId: c.id }))
+        else findings.push({ ruleId: 'table-cell-empty', severity: 'warning', source: 'supplementary', title: '表に空いているセルがある', area: 'body', blockId: c.id })
+      }
+    })
+  }
+
   // 図表の番号を手で書いている：「図を入れる」「図表を参照」で入れた（図n）は図表とつながっていて、番号が自動でそろう。
   // 手で書いた（図n）も、その番号の図表があれば確定したときにつながる。つながらずに文字のまま残ったものを知らせる
   const manual = /[（(]\s*([図表])\s*([0-9０-９]+)\s*[）)]|(?<![㐀-鿿々])([図表])([0-9０-９]+)/g
@@ -168,19 +181,18 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
           const kind = (m[1] ?? m[3]) as '図' | '表'
           const n = Number((m[2] ?? m[4]).replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0)))
           const exists = (kind === '表' ? num.tableByNumber : num.figureByNumber).has(n)
+          if (!exists) continue
           findings.push({
             ruleId: 'manual-ref',
             severity: 'error',
             source: 'supplementary',
             title: `${kind}の番号を手で書いている`,
-            detail: exists
-              ? `「直す」で${kind}${n}とつなげます（つなげると、${kind}を足したり消したりしても番号が自動でそろいます）`
-              : `${kind}${n}がありません。${kind === '図' ? '図は「図を入れる」' : '表は「素材表」'}で、ほかの${kind}を指すときは「図表を参照」で入れます`,
+            detail: `「直す」で${kind}${n}とつなげます（つなげると、${kind}を足したり消したりしても番号が自動でそろいます）`,
             area: 'body',
             blockId: block.id,
             start: offset + m.index,
             end: offset + m.index + m[0].length,
-            ...(exists ? { replacement: `（${kind}${n}）` } : {}),
+            replacement: `（${kind}${n}）`,
           })
         }
       }
@@ -219,12 +231,17 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
         if (!referenced.has(f.id))
           findings.push(guide('figure-unreferenced', 'error', `本文中に「図${n}」または「（図${n}）」を入れる`, 'body', { blockId: f.id, detail: `図${n}が本文から参照されていない` }))
       }
-    } else if (block.type === 'materialTable') {
+    } else if (block.type === 'table') {
       const n = num.numbers.get(block.id)
       if (!referenced.has(block.id))
         findings.push(guide('table-unreferenced', 'error', `本文中に「表${n}」または「（表${n}）」を入れる`, 'body', { blockId: block.id, detail: `表${n}が本文から参照されていない` }))
-      for (const row of block.rows) {
-        if (!row.swatchImageId) findings.push(guide('swatch-image', 'error', '素材表の生地見本に写真を入れる', 'body', { blockId: `${row.id}:name` }))
+      // 素材表（見出しに「生地見本」の列がある表）：生地見本に写真を入れる
+      const swatch = swatchColumn(block)
+      if (swatch >= 0) {
+        for (const row of block.rows.slice(1)) {
+          const c = row.cells[swatch]
+          if (c && !c.imageId) findings.push(guide('swatch-image', 'error', '素材表の生地見本に写真を入れる', 'body', { blockId: c.id }))
+        }
       }
     }
   }
@@ -234,7 +251,14 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
       if (/[㐀-鿿々]/.test(e.text[m.index - 1] ?? '') && !m[0].startsWith('（') && !m[0].startsWith('(')) continue
       const exists = m[2] !== '?' && (m[1] === '表' ? num.tableByNumber : num.figureByNumber).has(Number(m[2]))
       if (!exists)
-        findings.push(guide('reference-missing', 'error', `「${m[0]}」の${m[1]}がない`, 'body', { blockId: e.id, start: m.index, end: m.index + m[0].length }))
+        findings.push(
+          guide('reference-missing', 'error', `「${m[0]}」の${m[1]}がない`, 'body', {
+            blockId: e.id,
+            start: m.index,
+            end: m.index + m[0].length,
+            detail: '図は「図を入れる」、表は「表を入れる」で入れます。ほかの図表を指すときは「図表を参照」で入れます',
+          }),
+        )
     }
   }
 

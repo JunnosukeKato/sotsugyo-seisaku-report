@@ -20,7 +20,7 @@ describe('createReport', () => {
     expect(report.basicInfo.courseId).toBe('film-stage-costume')
     // 書くことの説明・図の枠・素材表がひな形どおりに入る
     const blocks = report.body[0].blocks
-    expect(blocks.map((b) => b.type)).toEqual(['subheading', 'paragraph', 'subheading', 'paragraph', 'figureRow', 'subheading', 'paragraph', 'materialTable'])
+    expect(blocks.map((b) => b.type)).toEqual(['subheading', 'paragraph', 'subheading', 'paragraph', 'figureRow', 'subheading', 'paragraph', 'table'])
     expect(blocks[1].type === 'paragraph' && blocks[1].hint).toBe('担当したキャラクターの性格や、物語の中での役割を書く')
     expect(blocks[4].type === 'figureRow' && blocks[4].figures[0]).toMatchObject({ imageId: '', caption: 'デザイン画' })
     expect(report.abstract.paragraphs[0].hint).toContain('本制作報告書は、卒業イベント')

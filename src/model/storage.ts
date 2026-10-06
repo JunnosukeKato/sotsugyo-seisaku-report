@@ -104,7 +104,7 @@ export function usedImageIds(report: Report): string[] {
   const ids: string[] = []
   for (const block of report.body.flatMap((c) => c.blocks)) {
     if (block.type === 'figureRow') ids.push(...block.figures.map((f) => f.imageId))
-    if (block.type === 'materialTable') ids.push(...block.rows.map((r) => r.swatchImageId ?? ''))
+    if (block.type === 'table') ids.push(...block.rows.flatMap((r) => r.cells.map((c) => c.imageId ?? '')))
   }
   ids.push(...report.workPhotos.imageIds)
   return ids.filter(Boolean)

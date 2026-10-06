@@ -129,25 +129,34 @@ figcaption,
   margin-top: ${LINE_PITCH_PT / 2}pt;
 }
 
-.material-table {
+.data-table {
   margin: 0 0 ${LINE_PITCH_PT}pt;
 }
 
 /* 表のタイトルは表の上。表と別のページに分かれないようにする */
-.material-table .table-caption {
+.data-table .table-caption {
   margin: 0;
   break-after: avoid;
 }
 
-.material-table table {
+.data-table table {
   width: 100%;
   border-collapse: collapse;
+}
+
+/* 列の幅：そろえる（同じ幅）／中身に合わせる */
+.data-table table.widths-equal {
   table-layout: fixed;
 }
 
-.material-table th,
-.material-table td {
+.data-table table.widths-auto {
+  table-layout: auto;
+}
+
+.data-table th,
+.data-table td {
   border: 0.75pt solid #000;
+  font-weight: normal;
   text-align: center;
   vertical-align: middle;
   text-indent: 0;
@@ -155,11 +164,17 @@ figcaption,
   white-space: pre-line;
 }
 
-.material-table tr {
+.data-table tr {
   break-inside: avoid;
 }
 
-.material-table td img {
-  margin: 0 auto;
+/* セルの画像（生地見本など）：セルの幅に合わせて縮め、縦に長くなりすぎないようにする */
+.data-table td img,
+.data-table th img {
+  display: block;
+  max-width: 100%;
+  max-height: 40mm;
+  margin: 0 auto 1mm;
+  object-fit: contain;
 }
 `

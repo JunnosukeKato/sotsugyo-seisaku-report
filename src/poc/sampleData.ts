@@ -2,7 +2,8 @@
 // - 2025年度サンプル（src/poc/fixtures/*.private.json。他人の作品のため Git の管理対象外）
 // - 架空の文章（どこでも使える。セルフチェックの指摘が出るよう、わざと誤りを含めている）
 import type { FigureSize } from '../layout/bodyHtml'
-import type { BodyBlock, Chapter, MaterialTableBlock } from '../model/types'
+import { fromMaterialTable } from '../model/table'
+import type { BodyBlock, Chapter, TableBlock } from '../model/types'
 
 // サンプル PDF から測った図のおおよその大きさ（mm）
 export const SAMPLE_FIGURE_SIZES: Record<string, FigureSize> = {
@@ -20,8 +21,7 @@ export const SAMPLE_FIGURE_SIZES: Record<string, FigureSize> = {
   葬式用帽子: { widthMm: 60, heightMm: 56 },
 }
 
-export const SAMPLE_MATERIAL_TABLE: MaterialTableBlock = {
-  type: 'materialTable',
+export const SAMPLE_MATERIAL_TABLE: TableBlock = fromMaterialTable({
   id: 'table-materials',
   caption: '使用素材表',
   rows: [
@@ -32,7 +32,7 @@ export const SAMPLE_MATERIAL_TABLE: MaterialTableBlock = {
     ['プレミアムフラノ', 'ベスト'],
     ['シルク羽二重', 'フリル'],
   ].map(([name, usage], i) => ({ id: `m${i}`, name, usage, swatchImageId: `swatch${i}` })),
-}
+})
 
 export const PLACEHOLDER_IMAGE =
   'data:image/svg+xml,' +

@@ -183,7 +183,7 @@ describe('表を入れる・Enter で段落を分ける（段落の下の図・�
       },
     ],
   })
-  const table = (id: string) => ({ type: 'materialTable' as const, id, caption: '', rows: [] })
+  const table = (id: string) => ({ type: 'table' as const, id, caption: '', widths: 'equal' as const, rows: [] })
   const types = (r: Report) => r.body[0].blocks.map((b) => b.type)
 
   it('表は、段落のすぐ下（すでにある図の後ろ）に入り、本文に（表n）が入る', () => {
@@ -191,7 +191,7 @@ describe('表を入れる・Enter で段落を分ける（段落の下の図・�
     r = ops.addFigureBelow(r, 'pa', { id: 'f1', imageId: 'i', caption: '' })
     r = ops.insertRef(r, 'pa', 14 + 4, 't1')
     r = ops.addTableBelow(r, 'pa', table('t1'))
-    expect(types(r)).toEqual(['paragraph', 'figureRow', 'materialTable', 'paragraph'])
+    expect(types(r)).toEqual(['paragraph', 'figureRow', 'table', 'paragraph'])
     expect(ops.findEditable(r, 'pa')?.text).toBe('袖を大きくした（図1）。帯を巻いた（表1）。')
   })
 

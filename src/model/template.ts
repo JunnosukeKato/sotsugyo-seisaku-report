@@ -1,4 +1,5 @@
 import { findCourse, type TemplateBlock, type YearConfig } from '../config'
+import { materialTable } from './table'
 import type { BodyBlock, Chapter, ParagraphBlock, Report } from './types'
 
 /**
@@ -59,7 +60,7 @@ export function bodyFromTemplate(template: TemplateBlock[]): Chapter[] {
         body = { type: 'figureRow', id: newId('r'), figures: [{ id: newId('f'), imageId: '', caption: block.caption }] }
         break
       case 'materialTable':
-        body = { type: 'materialTable', id: newId('t'), caption: block.caption, rows: [{ id: newId('m'), name: '', usage: '', swatchImageId: null }] }
+        body = materialTable(newId('t'), newId, block.caption)
         break
     }
     current().blocks.push(body)
@@ -78,7 +79,7 @@ function shape(body: Chapter[]): string {
         if (b.type === 'subheading') return { type: b.type, title: b.title }
         if (b.type === 'figureRow') return { type: b.type, figures: b.figures.map((f) => [f.imageId, f.caption]) }
         if (b.type === 'pageBreak') return { type: b.type }
-        return { type: b.type, caption: b.caption, rows: b.rows.map((r) => [r.name, r.usage, r.swatchImageId]) }
+        return { type: b.type, caption: b.caption, rows: b.rows.map((r) => r.cells.map((c) => [c.text, c.imageId])) }
       }),
     })),
   )

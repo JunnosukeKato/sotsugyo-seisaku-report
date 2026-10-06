@@ -36,8 +36,8 @@ function cleanReport(): Report {
       blocks: c.blocks.map((b) =>
         b.type === 'figureRow'
           ? { ...b, figures: b.figures.map((f) => ({ ...f, imageId: 'img1' })) }
-          : b.type === 'materialTable'
-            ? { ...b, rows: b.rows.map((row) => ({ ...row, swatchImageId: 'sw' })) }
+          : b.type === 'table'
+            ? { ...b, rows: b.rows.map((row, i) => (i === 0 ? row : { ...row, cells: row.cells.map((c, k) => (k === 2 ? { ...c, imageId: 'sw' } : c)) })) }
             : b,
       ),
     })),
@@ -122,10 +122,12 @@ describe('手で書いた図表の番号', () => {
     expect(checkReport(fixed, currentConfig).some((x) => x.ruleId === 'manual-ref' && x.blockId === 'p1')).toBe(false)
   })
 
-  it('ない番号の（図n）は、図を入れるよう案内する（「直す」はない）', () => {
+  it('ない番号の（図n）は「図がない」と知らせ、図を入れるよう案内する（「直す」はない）', () => {
     const r = ops.setText(demoReport(), 'p1', '袖を大きくした（図9）。')
-    const f = checkReport(r, currentConfig).find((x) => x.ruleId === 'manual-ref')
-    expect(f?.detail).toContain('図9がありません')
-    expect(f?.replacement).toBeUndefined()
+    const findings = checkReport(r, currentConfig).filter((x) => x.blockId === 'p1')
+    const missing = findings.find((x) => x.ruleId === 'reference-missing')
+    expect(missing?.detail).toContain('図を入れる')
+    expect(missing?.replacement).toBeUndefined()
+    expect(findings.some((x) => x.ruleId === 'manual-ref')).toBe(false)
   })
 })

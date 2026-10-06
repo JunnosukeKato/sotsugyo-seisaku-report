@@ -44,6 +44,9 @@ export const Icon = {
     </>,
   ),
   pageBreak: svg(<path d="M6 3.5h12v6H6zM6 14.5h12v6H6zM3 12h2M7.5 12h2M12 12h2M16.5 12h2" />),
+  colAdd: svg(<path d="M4 5h9v14H4zM8.5 5v14M17.5 9v6M14.5 12h6" />),
+  colRemove: svg(<path d="M4 5h9v14H4zM8.5 5v14M14.5 12h6" />),
+  image: svg(<path d="M4.5 5.5h15v13h-15zM4.5 15.5l4-4 3.5 3.5 2.5-2.5 5 4M15 9.5h.01" />),
   refs: svg(<path d="M6 4.5h12v15H6zM9 8.5h6M9 12h6M9 15.5h4" />),
   ref: svg(
     <>

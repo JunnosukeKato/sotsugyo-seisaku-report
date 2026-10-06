@@ -23,7 +23,7 @@ const chapters: Chapter[] = [
         ],
       },
       { type: 'figureRow', id: 'r1', figures: [{ id: 'f1', imageId: 'i1', caption: 'デザイン画' }] },
-      { type: 'materialTable', id: 't1', caption: '使用素材表', rows: [] },
+      { type: 'table', id: 't1', caption: '使用素材表', widths: 'equal', rows: [] },
     ],
   },
   {
