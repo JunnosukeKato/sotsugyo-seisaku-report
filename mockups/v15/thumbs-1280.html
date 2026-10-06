@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v15：幅の狭い画面（1280×800）で比べる</title>
+<style>
+  body { margin: 0; padding: 24px 28px 30px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 19px; margin: 0 0 4px; }
+  .lead { margin: 0 0 16px; font-size: 13px; color: #5d6068; line-height: 1.8; }
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  figure { margin: 0; background: #fff; border-radius: 12px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 10px 14px; font-size: 14px; font-weight: 700; }
+  img { display: block; width: 100%; }
+</style>
+</head>
+<body>
+  <h1>幅の狭いノートパソコンの画面（1280×800。13インチで表示を150%にしたときなど）</h1>
+  <p class="lead">紙面の大きさは「画面の高さ」と「真ん中の幅」の、きつい方で決まります。横長の大きな画面では高さで決まるため、どの案でも同じ大きさです。<br>幅の狭い画面では、案2は一覧の欄の分だけ真ん中が狭くなり、紙面が小さくなります。案1は空いている余白を使うため、小さくなりにくい形です。</p>
+  <div class="grid">
+    <figure><figcaption>今</figcaption><img src="screens/now-1280.png" alt=""></figure>
+    <figure><figcaption>案1　紙面の左の空きに縦一列</figcaption><img src="screens/a-1280.png" alt=""></figure>
+    <figure><figcaption>案2　画面の左端に一覧の欄</figcaption><img src="screens/b-1280.png" alt=""></figure>
+  </div>
+</body>
+</html>

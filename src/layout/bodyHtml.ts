@@ -140,13 +140,13 @@ function renderMaterialTable(block: MaterialTableBlock, number: number, options:
  * 番号（自動）と、学生が入力した部分を分けて出力する。
  * 入力部分には data-block-id を付け、紙面上で編集する箇所を特定できるようにする。
  */
-function labeledHtml(label: string, text: string, blockId: string): string {
-  return `<span class="num">${escapeHtml(label)}</span><span data-block-id="${escapeHtml(blockId)}" data-placeholder="（クリックして入力）">${escapeHtml(text)}</span>`
+function labeledHtml(label: string, text: string, blockId: string, placeholder = '（クリックして入力）'): string {
+  return `<span class="num">${escapeHtml(label)}</span><span data-block-id="${escapeHtml(blockId)}" data-placeholder="${escapeHtml(placeholder)}">${escapeHtml(text)}</span>`
 }
 
 function captionHtml(kind: '図' | '表', number: number, name: string, blockId: string): string {
   const full = figureCaption(kind, number, name)
-  return labeledHtml(full.slice(0, full.length - name.length), name, blockId)
+  return labeledHtml(full.slice(0, full.length - name.length), name, blockId, `（${kind}のタイトルを入力）`)
 }
 
 function renderChapter(chapter: Chapter, index: number, numbers: Map<string, number>, tableIds: Set<string>, options: BodyRenderOptions): string {

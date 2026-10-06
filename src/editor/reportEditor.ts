@@ -326,6 +326,11 @@ export class ReportEditor {
   }
 
   private refreshHighlights(): void {
+    // 空いている欄（タイトル・表紙の項目など）のエラーは、欄を赤い点線と赤い字で示す
+    for (const el of this.viewport.querySelectorAll('.has-issue')) el.classList.remove('has-issue')
+    for (const f of this.findings) {
+      if (f.severity === 'error' && f.blockId && f.start === undefined) for (const el of this.renderer.pageView.fragments(f.blockId)) el.classList.add('has-issue')
+    }
     this.highlights.error.clear()
     this.highlights.warning.clear()
     for (const f of this.findings) {

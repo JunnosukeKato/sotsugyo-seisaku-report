@@ -128,8 +128,13 @@ button:disabled { cursor: default; opacity: 0.4; }
 .insert-marker { position: absolute; z-index: 7; height: 0; border-top: 3px solid var(--accent); padding-top: 2px; text-align: right; font-size: 11px; font-weight: 700; color: var(--accent); pointer-events: none; }
 .insert-marker[hidden] { display: none; }
 
-::highlight(issue-error) { text-decoration: underline wavy var(--error); text-decoration-thickness: 1.5px; background-color: var(--error-soft); }
-::highlight(issue-warning) { text-decoration: underline wavy var(--warn); text-decoration-thickness: 1.5px; background-color: var(--warn-soft); }
+/* 指摘の箇所：文字そのものを濃く示す（mockups/v14 案1） */
+::highlight(issue-error) { text-decoration: underline 2px solid var(--error); text-underline-offset: 3px; background-color: rgba(198, 40, 40, 0.16); color: #b71c1c; }
+::highlight(issue-warning) { text-decoration: underline 2px solid var(--warn); text-underline-offset: 3px; background-color: rgba(201, 138, 0, 0.16); }
+/* 空いている欄のエラー：赤い点線と赤い字 */
+.page-viewport [data-block-id].has-issue:empty::before { color: var(--error) !important; }
+.page-viewport [data-block-id].has-issue:empty { outline: 1.5px dashed var(--error); outline-offset: 2px; }
+
 ::highlight(issue-focus) { background-color: #ffe48a; }
 
 /* ---- 道具（紙面の左わき） ---- */

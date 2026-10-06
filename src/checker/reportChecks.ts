@@ -155,6 +155,39 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     }
   }
 
+  // 図表の番号を手で書いている：「図を入れる」「図表を参照」で入れた（図n）は図表とつながっていて、番号が自動でそろう。
+  // 手で書いた（図n）も、その番号の図表があれば確定したときにつながる。つながらずに文字のまま残ったものを知らせる
+  const manual = /[（(]\s*([図表])\s*([0-9０-９]+)\s*[）)]|(?<![㐀-鿿々])([図表])([0-9０-９]+)/g
+  for (const block of report.body.flatMap((c) => c.blocks)) {
+    if (block.type !== 'paragraph') continue
+    let offset = 0
+    for (const node of block.content) {
+      const length = contentToText([node], num).length
+      if (node.type === 'text') {
+        for (const m of node.text.matchAll(manual)) {
+          const kind = (m[1] ?? m[3]) as '図' | '表'
+          const n = Number((m[2] ?? m[4]).replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0)))
+          const exists = (kind === '表' ? num.tableByNumber : num.figureByNumber).has(n)
+          findings.push({
+            ruleId: 'manual-ref',
+            severity: 'error',
+            source: 'supplementary',
+            title: `${kind}の番号を手で書いている`,
+            detail: exists
+              ? `「直す」で${kind}${n}とつなげます（つなげると、${kind}を足したり消したりしても番号が自動でそろいます）`
+              : `${kind}${n}がありません。${kind === '図' ? '図は「図を入れる」' : '表は「素材表」'}で、ほかの${kind}を指すときは「図表を参照」で入れます`,
+            area: 'body',
+            blockId: block.id,
+            start: offset + m.index,
+            end: offset + m.index + m[0].length,
+            ...(exists ? { replacement: `（${kind}${n}）` } : {}),
+          })
+        }
+      }
+      offset += length
+    }
+  }
+
   // 改ページ：ページの半分以上が空いている（ページ数を増やすためだけの改ページになっていないか）
   for (const b of layout?.pageBreaks ?? []) {
     if (b.emptyRatio > 0.5) {

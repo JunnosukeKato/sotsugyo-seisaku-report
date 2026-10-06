@@ -24,6 +24,8 @@ function cleanReport(): Report {
   let r = demoReport()
   r = ops.setText(r, 'p1', '筆者が担当したのは、主人公の衣装である。')
   r = ops.setText(r, 'p2', 'デザインを考えた（図1）。')
+  // 本文の「表1」は、確定すると表へのつながりになる（見本のデータは文字のままなので、書いて確定したときと同じにする）
+  r = ops.setText(r, 'p3', '表1に使用した素材をまとめる。')
   r = ops.setText(r, 'p4', '前身頃には金のブレードを縫い付けた。')
   r = ops.setText(r, 'p5', '袖口には細かいピンタックを施した。')
   r = {
@@ -103,5 +105,27 @@ describe('改ページ', () => {
     const report = demoReport()
     expect(ids(report, layout({ pageBreaks: [{ id: 'pb1', page: 4, emptyRatio: 0.7 }] }))).toContain('page-break-gap')
     expect(ids(report, layout({ pageBreaks: [{ id: 'pb1', page: 4, emptyRatio: 0.3 }] }))).not.toContain('page-break-gap')
+  })
+})
+
+describe('手で書いた図表の番号', () => {
+  it('図とつながっていない（図n）はエラー。その番号の図があれば「直す」でつなげられる', () => {
+    let r = demoReport()
+    // 全角の数字で書くと、図とつながらずに文字のまま残る
+    r = ops.setText(r, 'p1', '袖を大きくした（図１）。')
+    const f = checkReport(r, currentConfig).find((x) => x.ruleId === 'manual-ref')
+    expect(f?.severity).toBe('error')
+    expect(f?.replacement).toBe('（図1）')
+    // 「直す」：番号を半角にして確定すると、図へのつながりになる
+    const fixed = ops.setText(r, 'p1', '袖を大きくした（図1）。')
+    expect(fixed.body.flatMap((c) => c.blocks).find((b) => b.id === 'p1')).toMatchObject({ content: expect.arrayContaining([expect.objectContaining({ type: 'ref' })]) })
+    expect(checkReport(fixed, currentConfig).some((x) => x.ruleId === 'manual-ref' && x.blockId === 'p1')).toBe(false)
+  })
+
+  it('ない番号の（図n）は、図を入れるよう案内する（「直す」はない）', () => {
+    const r = ops.setText(demoReport(), 'p1', '袖を大きくした（図9）。')
+    const f = checkReport(r, currentConfig).find((x) => x.ruleId === 'manual-ref')
+    expect(f?.detail).toContain('図9がありません')
+    expect(f?.replacement).toBeUndefined()
   })
 })
