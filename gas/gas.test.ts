@@ -148,6 +148,30 @@ describe('管理ページ（admin-project）', () => {
     expect(() => gas.saveWordChecks(2026, [])).toThrow(/登録された先生だけ/)
   })
 
+  it('管理者は、まとめて登録できる（登録済みの人はそのまま。先生はまとめて登録できない）', () => {
+    const gas = load('admin-project')
+    gas.setup()
+    gas.addMember('sensei@example.ac.jp', '先生', '前からの先生')
+    const list = gas.addMembers(
+      [
+        { email: ' a@example.ac.jp ', memo: '文化 太郎' },
+        { email: 'SENSEI@example.ac.jp', memo: '上書きしない' },
+        { email: 'b@example.ac.jp', memo: '' },
+        { email: 'not-an-address', memo: '' },
+      ],
+      '先生',
+    )
+    expect(list.map((m: { email: string; role: string; memo: string }) => `${m.email}:${m.role}:${m.memo}`)).toEqual([
+      'kato@example.ac.jp:管理者:初期設定で登録',
+      'sensei@example.ac.jp:先生:前からの先生',
+      'a@example.ac.jp:先生:文化 太郎',
+      'b@example.ac.jp:先生:',
+    ])
+    expect(() => gas.addMembers([], '学生')).toThrow(/役割が正しくありません/)
+    user = 'sensei@example.ac.jp'
+    expect(() => gas.addMembers([{ email: 'c@example.ac.jp' }], '先生')).toThrow(/管理者だけ/)
+  })
+
   it('登録していない人はひな形を保存できない。自分の登録は外せない', () => {
     const gas = load('admin-project')
     gas.setup()

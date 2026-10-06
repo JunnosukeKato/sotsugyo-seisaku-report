@@ -157,6 +157,32 @@ function addMember(email, role, memo) {
   })
 }
 
+/**
+ * まとめて登録する（管理者だけ）。entries は [{ email, memo }]。すでに登録されている人は、そのままにする（役割もメモも変えない）
+ */
+function addMembers(entries, role) {
+  requireAdmin_()
+  if (!Array.isArray(entries)) throw new Error('登録する人の形が正しくありません')
+  if (role !== ROLE_ADMIN && role !== ROLE_TEACHER) throw new Error('役割が正しくありません')
+  const list = entries
+    .map((e) => ({ email: String((e && e.email) || '').trim(), memo: String((e && e.memo) || '').trim() }))
+    .filter((e) => /^[^@\s]+@[^@\s]+$/.test(e.email))
+  return withLock_(() => {
+    const sheet = sheet_(SHEET_ADMINS)
+    const known = sheet
+      .getDataRange()
+      .getValues()
+      .slice(1)
+      .map((r) => String(r[0]).trim().toLowerCase())
+    list.forEach((e) => {
+      if (known.indexOf(e.email.toLowerCase()) >= 0) return
+      sheet.appendRow([e.email, e.memo, role])
+      known.push(e.email.toLowerCase())
+    })
+    return readMembers_()
+  })
+}
+
 /** 管理者・先生の登録を外す（管理者だけ。自分は外せない） */
 function removeMember(email) {
   const user = requireAdmin_()

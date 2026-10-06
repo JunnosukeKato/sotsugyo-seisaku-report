@@ -60,6 +60,8 @@ export interface AdminServer {
   saveWordChecks(year: number, words: WordCheck[]): Promise<AdminState>
   getMembers(): Promise<Member[]>
   addMember(email: string, role: Member['role'], memo: string): Promise<Member[]>
+  /** まとめて登録する（すでに登録されている人は、そのまま） */
+  addMembers(entries: { email: string; memo: string }[], role: Member['role']): Promise<Member[]>
   removeMember(email: string): Promise<Member[]>
 }
 
@@ -93,6 +95,7 @@ function appsScriptServer(): AdminServer {
     saveWordChecks: (year, words) => call('saveWordChecks', year, words),
     getMembers: () => call('getMembers'),
     addMember: (email, role, memo) => call('addMember', email, role, memo),
+    addMembers: (entries, role) => call('addMembers', entries, role),
     removeMember: (email) => call('removeMember', email),
   }
 }

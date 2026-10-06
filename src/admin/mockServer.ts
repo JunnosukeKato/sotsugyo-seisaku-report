@@ -145,6 +145,18 @@ export function createMockServer(): AdminServer {
       save(store)
       return clone(list)
     },
+    async addMembers(entries, role) {
+      await wait()
+      const store = load()
+      requireAdmin(store)
+      const list = clone(members(store))
+      for (const { email, memo } of entries) {
+        if (!list.some((m) => m.email.toLowerCase() === email.trim().toLowerCase())) list.push({ email: email.trim(), role, memo })
+      }
+      store.members = list
+      save(store)
+      return clone(list)
+    },
     async removeMember(email) {
       await wait()
       const store = load()

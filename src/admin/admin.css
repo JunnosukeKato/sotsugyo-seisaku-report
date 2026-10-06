@@ -139,12 +139,25 @@ textarea.in { resize: vertical; }
 .tpl-foot { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--line); }
 
 /* ---- 管理者と先生の登録 ---- */
-.modal.members { width: min(680px, calc(100vw - 32px)); }
 .member-list { list-style: none; margin: 0 0 12px; padding: 0; }
 .member-list li { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid #eee; font-size: 13px; }
 .member-list .who { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .member-list small { display: block; color: var(--muted); font-size: 11px; }
-.member-add { display: grid; grid-template-columns: 1.4fr auto 1fr auto; gap: 8px; align-items: center; }
+.member-add { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: start; }
+.member-add textarea.in { resize: vertical; font-size: 13px; min-height: 36px; }
+/* まとめて登録（mockups/v20 案3）：2人以上を貼り付けたら、読み取った結果を出す */
+.modal.members { width: min(760px, calc(100vw - 32px)); }
+.bulk-hint { font-size: 12px; color: var(--muted); margin: 10px 0 4px; }
+.bulk-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.bulk-table th { font-size: 11px; color: var(--muted); font-weight: 400; text-align: left; padding: 3px 6px; }
+.bulk-table td { padding: 5px 6px; border-top: 1px solid #f0efec; overflow-wrap: anywhere; }
+.bulk-table td:first-child { width: 22px; }
+.bulk-table .st { font-size: 11.5px; }
+.bulk-table tr.ok .st { color: var(--ok); }
+.bulk-table tr.muted td { color: var(--muted); }
+.bulk-table tr.ng td { color: #a0a3aa; }
+.bulk-table tr.ng .st { color: var(--error); }
+.bulk-table .none { color: #a0a3aa; }
 
 /* ---- 書き間違えやすい語（mockups/v17 案3） ---- */
 .words-hint { display: block; margin: -4px 0 8px; line-height: 1.7; }

@@ -134,6 +134,21 @@ await withEdge(async (browser) => {
   const options = await page.evaluate(() => [...document.querySelectorAll('.sel option')].map((o) => o.textContent))
   check('公開すると前の年度は「終了」になる', options.join(',') === '2027年度（公開中）,2026年度（終了）', options.join(','))
 
+  // 先生の登録：メーリングリストの宛先をまとめて貼り付ける（mockups/v20 案3）
+  await clickButton('先生の登録')
+  await page.waitForSelector('.modal.members .member-list li')
+  const box = await page.$('.member-add textarea')
+  await box.type('文化 太郎 <t-bunka@bunka-wu.ac.jp>, "衣装 花子" <h-isho@bunka-wu.ac.jp>;\n22fac123@bunka-wu.ac.jp, someone@gmail.com')
+  await page.waitForSelector('.bulk-table tbody tr')
+  const read = await page.evaluate(() => [...document.querySelectorAll('.bulk-table tbody tr')].map((tr) => `${tr.className}:${tr.querySelector('.st').textContent}`))
+  check('貼り付けると、名前とアドレスを読み取り、学生・大学外のアドレスは登録しないと示す', read.join(',') === 'ok:新しく登録,ok:新しく登録,ng:学生のアドレスのため登録しない,ng:大学のアドレスでないため登録しない', read.join(','))
+  await page.screenshot({ path: `${OUT}/admin-members.png` })
+  await clickButton('2人を登録する')
+  await page.waitForFunction(() => document.querySelectorAll('.member-list li').length >= 4 && !document.querySelector('.bulk-table'))
+  const registered = await page.evaluate(() => [...document.querySelectorAll('.member-list li .who')].map((w) => w.textContent))
+  check('「2人を登録する」で、名前をメモにして先生として登録される', registered.some((w) => w.includes('t-bunka@bunka-wu.ac.jp') && w.includes('文化 太郎')) && registered.some((w) => w.includes('h-isho@bunka-wu.ac.jp')) && !registered.some((w) => w.includes('22fac123')))
+  await clickButton('閉じる')
+
   // 変更履歴
   await clickButton('変更履歴')
   await page.waitForSelector('.history li')

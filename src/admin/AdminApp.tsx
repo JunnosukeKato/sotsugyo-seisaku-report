@@ -510,7 +510,7 @@ export function AdminApp() {
         />
       )}
 
-      {dialog === 'members' && <MembersDialog me={state.user} onClose={() => setDialog(null)} />}
+      {dialog === 'members' && <MembersDialog me={state.user} studentIdPattern={draft.studentIdPattern} onClose={() => setDialog(null)} />}
 
       {dialog === 'newYear' && (
         <Modal title="新年度を作成" onClose={() => setDialog(null)}>

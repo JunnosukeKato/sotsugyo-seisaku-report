@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { summarize, type DriveState, type RemoteCopy } from '../drive/driveSync'
+import { UNIVERSITY_DOMAIN } from '../model/account'
 import type { Report } from '../model/types'
 import type { SaveState } from './useAutosave'
 
@@ -10,7 +11,7 @@ import type { SaveState } from './useAutosave'
  * - ConflictDialog・WipeDialog・ReloginDialog・OtherAccountDialog：確認の窓
  */
 
-const DOMAIN = (import.meta.env.VITE_GOOGLE_DOMAIN as string | undefined) || 'bunka-wu.ac.jp'
+const DOMAIN = UNIVERSITY_DOMAIN
 
 const cloud = (check: boolean) => (
   <svg className="drive-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.7} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

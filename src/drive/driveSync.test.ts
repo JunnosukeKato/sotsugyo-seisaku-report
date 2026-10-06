@@ -102,7 +102,7 @@ describe('ログインしたあと、どの原稿で始めるか', () => {
 
 describe('メールアドレスから学籍番号', () => {
   it('@ より前を大文字にする。学籍番号の形でなければ（教職員）null', async () => {
-    const { studentIdFromEmail } = await import('./driveSync')
+    const { studentIdFromEmail } = await import('../model/account')
     expect(studentIdFromEmail('22fac123@bunka-wu.ac.jp', null)).toBe('22FAC123')
     expect(studentIdFromEmail('23fa0123@bunka-wu.ac.jp', null)).toBe('23FA0123')
     expect(studentIdFromEmail('jun-kato@bunka-wu.ac.jp', null)).toBeNull()
