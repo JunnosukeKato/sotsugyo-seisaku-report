@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v17：書き間違えやすい語を管理ページで編集する</title>
+<style>
+  body { margin: 0; padding: 28px 32px 36px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 18px; font-size: 13px; color: #5d6068; line-height: 1.8; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  figure { margin: 0; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid #ecebe8; }
+  figcaption b { display: block; font-size: 15px; margin-bottom: 3px; }
+  figcaption span { font-size: 12px; color: #5d6068; line-height: 1.7; }
+  img { display: block; width: 100%; }
+</style>
+</head>
+<body>
+  <h1>書き間違えやすい語を、管理ページで追加・編集する</h1>
+  <p class="lead">どの案も、1行に「書き間違い・正しい語・重さ（エラー／注意）」を入れ、×で消し、「＋ 語を足す」で増やします。今の13語を最初から入れておきます。「反映」すると学生のツールのセルフチェックに使われます。</p>
+  <div class="grid">
+    <figure><figcaption><b>案1　左の欄に、表のまま置く（コースの下）</b><span>ほかの設定と同じ場所で、いつでも見えて編集できる。語が増えると、左の欄が長くなる</span></figcaption><img src="screens/a.png" alt=""></figure>
+    <figure><figcaption><b>案2　「詳細設定」の折りたたみの中に置く</b><span>ふだんは隠れていて、左の欄がすっきりする。あまり変えない設定と同じ扱い</span></figcaption><img src="screens/b.png" alt=""></figure>
+    <figure><figcaption><b>案3　ボタンから開く窓で編集する</b><span>左の欄には語の数だけ出し、編集は窓で行う。窓の中で、試しに文を入れて、どこが指摘されるかを確かめられる</span></figcaption><img src="screens/c.png" alt=""></figure>
+  </div>
+</body>
+</html>
