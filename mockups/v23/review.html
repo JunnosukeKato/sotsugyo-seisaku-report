@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v23：見直しの残り（見た目が変わるもの）</title>
+<style>
+  body { margin: 0; padding: 28px 32px 40px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  h2 { font-size: 17px; margin: 34px 0 4px; letter-spacing: 0.04em; }
+  h3 { font-size: 13.5px; margin: 14px 0 8px; color: #5d6068; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 13px; color: #5d6068; line-height: 1.8; max-width: 1150px; }
+  figure { margin: 0 0 16px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid #ecebe8; }
+  figcaption b { display: block; font-size: 15px; margin-bottom: 3px; }
+  figcaption span { font-size: 12.5px; color: #5d6068; line-height: 1.7; }
+  img { display: block; width: 100%; }
+  .row { display: grid; gap: 14px; align-items: start; }
+  .c2 { grid-template-columns: 1fr 1fr; }
+  .c3 { grid-template-columns: 1fr 1fr 1fr; }
+  .c4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .c5 { grid-template-columns: repeat(5, 1fr); }
+  .narrow img { max-width: 420px; margin: 0 auto; }
+  /* おすすめの印と理由 */
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: #2f3e75; color: #fff; font-size: 11.5px; font-style: normal; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  figure.is-rec { box-shadow: 0 0 0 2px #2f3e75, 0 2px 10px rgba(0, 0, 0, 0.08); }
+  .why { margin: 2px 0 8px; padding: 10px 14px; border-left: 3px solid #2f3e75; background: #f6f5f2; border-radius: 0 10px 10px 0; font-size: 13px; line-height: 1.8; max-width: 1150px; }
+  .why b { color: #2f3e75; }
+  /* 決めていただきたいことの一覧 */
+  .ask { margin: 0 0 8px; padding: 14px 18px 12px; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); max-width: 1150px; }
+  .ask h2 { margin: 0 0 8px; font-size: 15px; }
+  .ask ol { margin: 0; padding-left: 22px; font-size: 13.5px; line-height: 2; }
+  .ask ol span { color: #5d6068; font-size: 12.5px; }
+  .ask ol em { font-style: normal; color: #2f3e75; font-weight: 700; }
+  /* 画像の並び（1つの案の中で、長さや場面ごとに並べる） */
+  .strip { display: grid; gap: 1px; background: #ecebe8; }
+  .strip > div { background: #fff; }
+  .strip small { display: block; padding: 6px 12px 8px; font-size: 12px; color: #5d6068; }
+  .strip small b { color: #24262b; }
+  .strip small .ng { color: #b5443b; font-weight: 700; }
+  .s3 { grid-template-columns: 1fr 1fr 1fr; }
+  .s2 { grid-template-columns: 1fr 1fr; }
+  .login-strip { grid-template-columns: 1fr 1fr 0.36fr; align-items: start; }
+  .photo-strip { grid-template-columns: 1fr 0.62fr; align-items: start; }
+  .phone { padding: 10px; background: #faf9f7; }
+  .phone img { border-radius: 12px; border: 1px solid #ddd; }
+</style>
+</head>
+<body>
+  <h1>見直しの残り：見た目の案（v23）</h1>
+  <p class="lead">決めていただいたことのうち、画面の見た目が変わるところの案です。どの画面も、本物のツールに案の部品を仮に足して撮っています（まだツールには入っていません）。文や数字、アカウント（00zz0123@…）は例です。<b>おすすめ</b>の案には印を付けています。</p>
+
+  <div class="ask">
+    <h2>この v23 で決めていただきたいこと</h2>
+    <ol>
+      <li>表紙のサブタイトルが長いときの、小さくし方（案A／B／C）と、いちばん小さい大きさ <span>おすすめ：<em>案A</em>（行全体を小さく。いちばん小さくて 11pt）</span></li>
+      <li>共用パソコンのログインの窓の、後ろの見せ方（案A／B／C） <span>おすすめ：<em>案A</em>（後ろは無地）</span></li>
+      <li>表紙の学籍番号とログインしたアカウントが違うときの、知らせの文言（案A／B） <span>おすすめ：<em>案A</em>（3つから選ぶ）</span></li>
+      <li>紙面の欄にキーボードで移ったときの目印（案A／B／C） <span>おすすめ：<em>案A</em>（藍色の枠）</span></li>
+      <li>まだ薄い色と小さい文字の直し方（案A／B） <span>おすすめ：<em>案B</em>（説明の字を藍がかった灰色に・スマホの字をひと回り大きく）</span></li>
+      <li>スマホで、書く欄の道具が画面の外に隠れる件（案A／B／C） <span>おすすめ：<em>案A</em>（2段に折り返す）</span></li>
+      <li>スマホで、図・表・改ページを削除したあとの「戻す」（案A／B／C） <span>おすすめ：<em>案A</em>（画面の下に知らせ）</span></li>
+      <li>作品写真を外すボタンの置き場所と言葉（案A／B） <span>おすすめ：<em>案A</em>（図と同じ形で「差し替え」「外す」）</span></li>
+    </ol>
+  </div>
+
+  <!-- ① -->
+  <h2>① 表紙のサブタイトルが長いとき、自動で文字を小さくする</h2>
+  <p class="lead">今は、サブタイトルが長いと表紙の枠からはみ出します（映画・舞台衣装コースの「―〇〇の衣装制作―」なら、〇〇が10字をこえるあたりから）。どう小さくするかの案です。どの案も、いちばん小さくて <b>11pt</b>（本文の文字 10.5pt より小さくはしない）とし、それでも入らなければエラーにします。画像は表紙の題目のあたりを大きくしたもので、左から 8字・16字・26字です。</p>
+  <figure>
+    <figcaption><b>今</b><span>16字ではもう枠からはみ出し、右の線をこえる</span></figcaption>
+    <div class="strip s3">
+      <div><img src="screens/1-now-s.png" alt=""><small><b>8字</b>：22pt（入る）</small></div>
+      <div><img src="screens/1-now-m.png" alt=""><small><b>16字</b>：22pt　<span class="ng">はみ出す</span></small></div>
+      <div><img src="screens/1-now-l.png" alt=""><small><b>26字</b>：22pt　<span class="ng">はみ出す</span></small></div>
+    </div>
+  </figure>
+  <figure class="is-rec">
+    <figcaption><b>案A　行全体を、収まるまで小さくする<em class="rec">おすすめ</em></b><span>決まり文句（―　の衣装制作―）も入力部分も、同じ大きさのまま小さくする。0.5pt ずつ小さくし、入ったところで止める</span></figcaption>
+    <div class="strip s3">
+      <div><img src="screens/1-a-s.png" alt=""><small><b>8字</b>：22pt（そのまま）</small></div>
+      <div><img src="screens/1-a-m.png" alt=""><small><b>16字</b>：17.5pt</small></div>
+      <div><img src="screens/1-a-l.png" alt=""><small><b>26字</b>：12pt</small></div>
+    </div>
+  </figure>
+  <figure>
+    <figcaption><b>案B　入力した部分だけを小さくする</b><span>「―」「の衣装制作―」は 22pt のまま。行の中で大きさが混ざる。小さくできる幅が少ないので、26字はもう入らない</span></figcaption>
+    <div class="strip s3">
+      <div><img src="screens/1-b-s.png" alt=""><small><b>8字</b>：22pt（そのまま）</small></div>
+      <div><img src="screens/1-b-m.png" alt=""><small><b>16字</b>：入力部分だけ 15.5pt</small></div>
+      <div><img src="screens/1-b-l.png" alt=""><small><b>26字</b>：11pt でも <span class="ng">入らない（エラー）</span></small></div>
+    </div>
+  </figure>
+  <figure>
+    <figcaption><b>案C　まず字の間を詰め、それでも入らなければ小さくする</b><span>字の間を少しずつ詰め（いちばん詰めて 1字の 1/10）、それでも入らなければ小さくする。字は大きめに残るが、かなが詰まって見える</span></figcaption>
+    <div class="strip s3">
+      <div><img src="screens/1-c-s.png" alt=""><small><b>8字</b>：22pt（そのまま）</small></div>
+      <div><img src="screens/1-c-m.png" alt=""><small><b>16字</b>：字間を詰めて 19.5pt</small></div>
+      <div><img src="screens/1-c-l.png" alt=""><small><b>26字</b>：字間を詰めて 13.5pt</small></div>
+    </div>
+  </figure>
+  <div class="row c2">
+    <figure><figcaption><b>いちばん小さくしても入らないとき（案Aの形）</b><span>表紙のサブタイトルが赤くなり、右の欄の「表紙」にエラーが出る。あと何字短くすればよいかを出す（例は 32字）</span></figcaption><img src="screens/1-error.png" alt=""></figure>
+    <div></div>
+  </div>
+  <p class="why"><b>おすすめは案A</b>：行の中で文字の大きさがそろったままなので、表紙として自然に見えます。抄録の見出しの1行（指導教員の欄）でも同じやり方をしており、考え方がそろいます。この例の形（―〇〇の衣装制作―）なら、29字くらいまで入ります。案Bは大きさが混ざって落ち着かず、入る字数も少なくなります。案Cは字が大きく残りますが、かなが詰まって読みにくくなります。</p>
+
+  <!-- ② -->
+  <h2>② 共用パソコン：ログインの窓</h2>
+  <p class="lead">今のログインの窓は後ろが半透明なので、パソコン室などで、前の学生の原稿がうっすら見えてしまいます。決めていただいたとおり、①ログインが済むまで紙面を見せない、②前回のアカウント名をボタンに出し「別のアカウントでログイン」も置く、を入れた案です。左から、PC（前回のアカウントがあるとき）・PC（初めて・ないとき）・スマホです。</p>
+  <figure class="is-rec">
+    <figcaption><b>案A　後ろは無地にして、窓だけを出す<em class="rec">おすすめ</em></b><span>後ろはツールの台の色だけ。窓の中身は今と同じ形</span></figcaption>
+    <div class="strip login-strip">
+      <div><img src="screens/2-a-prev.png" alt=""><small>前回のアカウントがあるとき</small></div>
+      <div><img src="screens/2-a-none.png" alt=""><small>前回のアカウントがないとき（今と同じ文）</small></div>
+      <div class="phone"><img src="screens/2-a-phone.png" alt=""></div>
+    </div>
+  </figure>
+  <figure>
+    <figcaption><b>案B　表紙のような画面に、ツールの名前と説明を出す</b><span>報告書の表紙に見立てた紙に、名前・できること・ログインを置く。初めての人にも何のツールか分かる</span></figcaption>
+    <div class="strip login-strip">
+      <div><img src="screens/2-b-prev.png" alt=""><small>前回のアカウントがあるとき</small></div>
+      <div><img src="screens/2-b-none.png" alt=""><small>前回のアカウントがないとき</small></div>
+      <div class="phone"><img src="screens/2-b-phone.png" alt=""></div>
+    </div>
+  </figure>
+  <figure>
+    <figcaption><b>案C　窓は今のまま、後ろのツールを空にして隠す</b><span>ツールの形（ページの一覧・紙面・右の欄）は見えるが、原稿は読み込まない（白い紙だけ）</span></figcaption>
+    <div class="strip login-strip">
+      <div><img src="screens/2-c-prev.png" alt=""><small>前回のアカウントがあるとき</small></div>
+      <div><img src="screens/2-c-none.png" alt=""><small>前回のアカウントがないとき</small></div>
+      <div class="phone"><img src="screens/2-c-phone.png" alt=""></div>
+    </div>
+  </figure>
+  <p class="why"><b>おすすめは案A</b>：前の人の原稿が少しも見えず、窓の中のアカウントの確かめに目が行きます。毎回開く画面なので、案Bのような説明は2回目からは少しくどくなります。案Cは見慣れた形ですが、白い紙面が見えるため「原稿が消えた」と驚かせるおそれがあります。</p>
+
+  <!-- ③ -->
+  <h2>③ 表紙の学籍番号と、ログインしたアカウントが違うとき</h2>
+  <p class="lead">学籍番号を打ち間違えたとき、または共用パソコンでほかの人の原稿を開いてしまったときに、ログインのあとで知らせます（今の「別のアカウントの原稿があります」の窓と同じ形）。文言の案です。「このまま」を選んだら、同じ組み合わせでは二度と出しません。教職員のアカウントでは出しません。</p>
+  <div class="row c2">
+    <figure class="is-rec"><figcaption><b>案A　違うことを伝え、当てはまるものを3つから選ぶ<em class="rec">おすすめ</em></b><span>学籍番号を直す／別のアカウントでログインし直す／このまま続ける。それぞれ「どんなときか」を添える</span></figcaption><img src="screens/3-a.png" alt=""></figure>
+    <figure><figcaption><b>案B　打ち間違いではないかと問いかける</b><span>短くやわらかい。ほかの人の原稿だったときの道は、小さな説明だけ</span></figcaption><img src="screens/3-b.png" alt=""></figure>
+  </div>
+  <p class="why"><b>おすすめは案A</b>：共用パソコンでほかの人の原稿を開いてしまった場合にも、ボタン1つで正しい道（自分のアカウントで開き直す）に進めます。案Bは打ち間違いには分かりやすいですが、ほかの人の原稿のときに迷いやすくなります。</p>
+
+  <!-- ④ -->
+  <h2>④ 紙面の欄に、キーボード（Tab）で移ったときの目印</h2>
+  <p class="lead">マウスを使わない学生のため、紙面の欄（学籍番号・氏名・段落・図・作品写真の枠・抄録の「先生の許可が出た」ボタン）にも Tab で移れるようにします。そのとき、いまどこにいるかの目印の案です。上から、表紙の氏名・本文の段落・図です（PC の紙面の一部を切り抜いたもの）。マウスで押したときには出ません。</p>
+  <div class="row c3">
+    <figure class="is-rec">
+      <figcaption><b>案A　藍色の 2px の枠<em class="rec">おすすめ</em></b><span>右の欄の項目や保存のようすに Tab で移ったときと同じ印</span></figcaption>
+      <div class="strip"><div><img src="screens/4-a-field.png" alt=""><small>表紙の氏名</small></div><div><img src="screens/4-a-para.png" alt=""><small>本文の段落</small></div><div><img src="screens/4-a-figure.png" alt=""><small>図</small></div></div>
+    </figure>
+    <figure>
+      <figcaption><b>案B　薄い藍の背景と下線</b><span>紙面になじむが、短い欄（氏名など）では目立ちにくい。図は下の題の部分だけ色が付く</span></figcaption>
+      <div class="strip"><div><img src="screens/4-b-field.png" alt=""><small>表紙の氏名</small></div><div><img src="screens/4-b-para.png" alt=""><small>本文の段落</small></div><div><img src="screens/4-b-figure.png" alt=""><small>図</small></div></div>
+    </figure>
+    <figure>
+      <figcaption><b>案C　角の丸い枠と「Enterで書く」の札</b><span>押すと何が起きるかも分かる（図は「Enterで選ぶ」）。札が上の行に少し重なる</span></figcaption>
+      <div class="strip"><div><img src="screens/4-c-field.png" alt=""><small>表紙の氏名</small></div><div><img src="screens/4-c-para.png" alt=""><small>本文の段落</small></div><div><img src="screens/4-c-figure.png" alt=""><small>図</small></div></div>
+    </figure>
+  </div>
+  <p class="why"><b>おすすめは案A</b>：どの欄でもはっきり見え、ツールのほかの場所の目印と同じなので覚えることがありません。案Cの札は親切ですが、紙面の文字に重なることがあります（Enter で書けることは、はじめての案内で伝えられます）。</p>
+
+  <!-- ⑤ -->
+  <h2>⑤ まだ薄い色と小さい文字</h2>
+  <p class="lead">見直しで残った、読みにくい色と文字です。緑（右の欄の「1枚（目安 6枚まで）」など）、茶（注意の印・薄茶の知らせ）、紙面の「何を書くか」の薄い字、スマホの下のタブ・上の帯・ページ一覧の小さな字。左から 今・案A・案B です。数字は背景との差（4.5 以上が見やすさの基準）。</p>
+  <h3>色（右の欄。茶の文字を比べるため、「ドライブ保存を止めています」の知らせを出しています）</h3>
+  <div class="row c3 narrow">
+    <figure><figcaption><b>今</b><span>緑 #4b8a62（3.9）・茶 #9a6a12（薄茶の上で 4.2）</span></figcaption><img src="screens/5-side-now.png" alt=""></figure>
+    <figure><figcaption><b>案A</b><span>緑 #3f7a55（4.9）・茶 #8a5e0f（薄茶の上で 5.0）</span></figcaption><img src="screens/5-side-a.png" alt=""></figure>
+    <figure class="is-rec"><figcaption><b>案B<em class="rec">おすすめ</em></b><span>色は案Aと同じ</span></figcaption><img src="screens/5-side-b.png" alt=""></figure>
+  </div>
+  <h3>紙面の「何を書くか」の薄い字（ひな形の説明・図の枠）</h3>
+  <div class="row c3">
+    <figure><figcaption><b>今</b><span>灰色 #a8a8a8（2.4）。読みにくい</span></figcaption><img src="screens/5-page-now.png" alt=""></figure>
+    <figure><figcaption><b>案A　濃い灰色</b><span>#767676（4.5）。基準ちょうど。書いた本文（黒）と見分けやすさは、かっこ（　）だけ</span></figcaption><img src="screens/5-page-a.png" alt=""></figure>
+    <figure class="is-rec"><figcaption><b>案B　藍がかった灰色<em class="rec">おすすめ</em></b><span>#5f6b95（5.2）。読みやすく、色の違いで「書いた文ではなく説明」と分かる</span></figcaption><img src="screens/5-page-b.png" alt=""></figure>
+  </div>
+  <h3>スマホの小さな字（上の帯・下のタブ・ページ一覧。画面の一部を大きくしたもの）</h3>
+  <div class="row c3 narrow">
+    <figure><figcaption><b>今</b><span>上の帯・下のタブ 10.5px</span></figcaption><div class="strip"><div><img src="screens/5-ptop-now.png" alt=""></div><div><img src="screens/5-ptabs-now.png" alt=""></div></div></figure>
+    <figure><figcaption><b>案A</b><span>上の帯・下のタブ 12px</span></figcaption><div class="strip"><div><img src="screens/5-ptop-a.png" alt=""></div><div><img src="screens/5-ptabs-a.png" alt=""></div></div></figure>
+    <figure class="is-rec"><figcaption><b>案B<em class="rec">おすすめ</em></b><span>上の帯 12.5px・下のタブ 13px</span></figcaption><div class="strip"><div><img src="screens/5-ptop-b.png" alt=""></div><div><img src="screens/5-ptabs-b.png" alt=""></div></div></figure>
+  </div>
+  <div class="row c3 narrow">
+    <figure><figcaption><b>今</b><span>ページ一覧の名前 9.5px・横に5つ</span></figcaption><img src="screens/5-thumbs-now.png" alt=""></figure>
+    <figure><figcaption><b>案A</b><span>名前 11px・横に5つ</span></figcaption><img src="screens/5-thumbs-a.png" alt=""></figure>
+    <figure class="is-rec"><figcaption><b>案B<em class="rec">おすすめ</em></b><span>名前 12px・横に4つにして、ページの見本も大きく</span></figcaption><img src="screens/5-thumbs-b.png" alt=""></figure>
+  </div>
+  <p class="why"><b>おすすめは案B</b>：色はどちらも基準に届きます。違いは「何を書くか」の字と、スマホの字の大きさです。案Bは説明の字を藍がかった色にするので、読みやすく、しかも自分の書いた文と取り違えません。スマホは画面が小さいので、字をひと回り大きくし、ページ一覧は4つ並びにして見本も見やすくします。</p>
+
+  <!-- ⑥ -->
+  <h2>⑥ スマホ：書く欄の道具が、画面の外に隠れる</h2>
+  <p class="lead">スマホで段落を書いているとき、下の道具の右端の「戻す」が半分切れています。表のセルを書いているときは、「幅：そろえる」「戻す」が画面の外にあり、横にずらすと出てきますが、その印がありません。上が段落、下が表のセルを書いているところです（390×844 の画面）。</p>
+  <div class="row c4">
+    <figure><figcaption><b>今</b><span>「戻す」が切れる。表は「幅」「戻す」が見えない</span></figcaption><img src="screens/6-now-para.png" alt=""></figure>
+    <figure class="is-rec"><figcaption><b>案A　2段に折り返す<em class="rec">おすすめ</em></b><span>全部が見える。書く欄が1段分（約 36px）高くなる</span></figcaption><img src="screens/6-a-para.png" alt=""></figure>
+    <figure><figcaption><b>案B　右端をぼかして「›」の印</b><span>今の並びのまま、続きがあることを示す</span></figcaption><img src="screens/6-b-para.png" alt=""></figure>
+    <figure><figcaption><b>案C　よく使うものだけ出し、残りは「その他」</b><span>段落は「表を入れる ▾」に素材表をまとめ、4つに収める</span></figcaption><img src="screens/6-c-para.png" alt=""></figure>
+  </div>
+  <div class="row c4">
+    <figure><img src="screens/6-now-table.png" alt=""></figure>
+    <figure class="is-rec"><img src="screens/6-a-table.png" alt=""></figure>
+    <figure><img src="screens/6-b-table.png" alt=""></figure>
+    <figure><figcaption><span>表は「行」「列」「戻す」を出し、「その他」を押すと残りが出る（押したところ）</span></figcaption><img src="screens/6-c-table.png" alt=""></figure>
+  </div>
+  <p class="why"><b>おすすめは案A</b>：道具がすべて見えるので、探したり、ずらしたりしなくて済みます。書く欄は少し高くなりますが、紙面は書いている箇所に合わせて大きく表示しているので、困ることは少ないと考えます。案Bは「ずらせば出る」ことに気づかない学生が残り、案Cは「その他」の中を開くひと手間が増えます。</p>
+
+  <!-- ⑦ -->
+  <h2>⑦ スマホ：図・表・改ページを削除したあとの「戻す」</h2>
+  <p class="lead">スマホでは「戻す」が書く欄の中にしかないため、図・表・改ページを選んで「削除」したあと、すぐに戻す方法がありません（PC は道具の下にいつも「元に戻す」があります）。図を削除した直後の画面です。</p>
+  <div class="row c5">
+    <figure><figcaption><b>今</b><span>削除すると道具が消え、戻す手段が見えない</span></figcaption><img src="screens/7-now.png" alt=""></figure>
+    <figure class="is-rec"><figcaption><b>案A　下に知らせと「戻す」<em class="rec">おすすめ</em></b><span>「図を削除しました［戻す］」が 8秒ほど出て消える。ほかを触っても消える</span></figcaption><img src="screens/7-a.png" alt=""></figure>
+    <figure><figcaption><b>案B　選んだ物の道具に「戻す」</b><span>選んでいるとき（右端に「戻す」）</span></figcaption><img src="screens/7-b-before.png" alt=""></figure>
+    <figure><figcaption><b>案B（削除したあと）</b><span>同じ場所に「削除しました／戻す」が、ほかを触るまで残る</span></figcaption><img src="screens/7-b.png" alt=""></figure>
+    <figure><figcaption><b>案C　上の帯に、いつも「戻す」</b><span>PC の「元に戻す」と同じく、いつでも使える</span></figcaption><img src="screens/7-c.png" alt=""></figure>
+  </div>
+  <p class="why"><b>おすすめは案A</b>：消したことがはっきり分かり、押した指のすぐ近くで戻せます。スマホのアプリでよく見る形なので、学生も迷いません。読み終える前に消えないよう、長めに出します。案Cはいつでも使えて便利ですが、削除した場所（画面の下）から離れていて気づきにくいので、案Aとあわせて入れることもできます。</p>
+
+  <!-- ⑧ -->
+  <h2>⑧ 作品写真を外す</h2>
+  <p class="lead">今は、入れた作品写真を外す方法がなく、選び直すか並べ方を変えるしかありません。どの案も、写真を押すと「選んだ状態」（藍の枠と「1枚目」などの札）にし、道具に「外す」を出します（今は押すとすぐ写真を選ぶ画面が出ます。空の枠は今まで通り）。外した写真は「戻す」で戻せます。左が PC の道具、右がスマホです。</p>
+  <div class="row c2">
+    <figure class="is-rec">
+      <figcaption><b>案A　図と同じ形で、道具の上に「この写真：差し替え／外す」<em class="rec">おすすめ</em></b><span>図を選んだときの「この図：差し替え／もう1枚／削除」と同じ並び。スマホは写真を選んでいるあいだ、並べ方の代わりに出る</span></figcaption>
+      <div class="strip photo-strip"><div><img src="screens/8-a-pc.png" alt=""></div><div class="phone"><img src="screens/8-a-phone.png" alt=""></div></div>
+    </figure>
+    <figure>
+      <figcaption><b>案B　並べ方の下に「この写真を外す（枠を空にする）」</b><span>言葉で何が起きるかを書く。並べ方はそのまま見える。スマホは並べ方の上に、もう1本の帯で出る</span></figcaption>
+      <div class="strip photo-strip"><div><img src="screens/8-b-pc.png" alt=""></div><div class="phone"><img src="screens/8-b-phone.png" alt=""></div></div>
+    </figure>
+  </div>
+  <p class="why"><b>おすすめは案A</b>：図と同じ場所・同じ言葉なので、図で覚えた操作がそのまま使えます。案Bは言葉が丁寧ですが、PC の細い道具の中では文字が折り返して読みにくく、スマホでは帯が2本になって写真に重なります。</p>
+</body>
+</html>
