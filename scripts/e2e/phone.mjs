@@ -20,7 +20,7 @@ await withEdge(async (browser) => {
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
   await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36')
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
-  await page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+  await page.goto('http://localhost:5173/?nodrive', { waitUntil: 'networkidle0' })
   await page.evaluate(() => new Promise((r) => { const req = indexedDB.deleteDatabase('sotsugyo-seisaku-report'); req.onsuccess = req.onerror = req.onblocked = () => r() }))
   await page.reload({ waitUntil: 'networkidle0' })
   const ready = () =>

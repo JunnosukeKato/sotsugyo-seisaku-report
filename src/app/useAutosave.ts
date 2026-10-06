@@ -18,11 +18,12 @@ export function useAutosave() {
   const timer = useRef<number | undefined>(undefined)
   const pending = useRef<Report | null>(null)
   const lastSnapshot = useRef(0)
+  const stopped = useRef(false)
 
   const flush = useCallback(async () => {
     clearTimeout(timer.current)
     const report = pending.current
-    if (!report) return
+    if (!report || stopped.current) return
     pending.current = null
     try {
       await saveReport(report)
@@ -38,6 +39,7 @@ export function useAutosave() {
 
   const save = useCallback(
     (report: Report) => {
+      if (stopped.current) return
       clearTimeout(timer.current)
       pending.current = report
       setState({ status: 'saving' })
@@ -59,5 +61,12 @@ export function useAutosave() {
     }
   }, [flush])
 
-  return { state, save }
+  /** 保存をやめる（この端末から原稿を消すとき。消したあとに保存し直さないように） */
+  const stop = useCallback(() => {
+    stopped.current = true
+    clearTimeout(timer.current)
+    pending.current = null
+  }, [])
+
+  return { state, save, stop }
 }

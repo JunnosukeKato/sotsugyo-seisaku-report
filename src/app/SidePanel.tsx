@@ -5,6 +5,7 @@ import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import type { PageKind } from '../layout/measure'
 import { Icon } from './icons'
 import { AREA_LABELS, AREA_ORDER, daysUntil, formatDeadline } from './labels'
+import { DriveChipMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
 
 /**
@@ -16,6 +17,8 @@ interface Props {
   snap: EditorSnapshot
   config: YearConfig
   saveState: SaveState
+  /** ドライブに保存しているとき（ログイン必須）。保存のようすをドライブのものにする */
+  drive?: DriveControls
   onBackup: () => void
   onExport: () => void
   onReferences: () => void
@@ -240,7 +243,7 @@ export function Tally({ snap }: { snap: EditorSnapshot }) {
   )
 }
 
-export function SidePanel({ editor, snap, config, saveState, onBackup, onExport, onReferences }: Props) {
+export function SidePanel({ editor, snap, config, saveState, drive, onBackup, onExport, onReferences }: Props) {
   const errors = snap.findings.filter((f) => f.severity === 'error').length
   return (
     <aside className="side">
@@ -253,7 +256,7 @@ export function SidePanel({ editor, snap, config, saveState, onBackup, onExport,
           </div>
         </div>
         <div className="meta">
-          <SaveChip state={saveState} />
+          {drive ? <DriveChipMenu drive={drive} /> : <SaveChip state={saveState} />}
           <DeadlineChip deadline={config.deadline} />
         </div>
         <div className="links">

@@ -10,7 +10,7 @@ export const FOLDER_NAME = '卒業制作報告書'
 const FOLDER_MIME = 'application/vnd.google-apps.folder'
 const API = 'https://www.googleapis.com/drive/v3'
 const UPLOAD = 'https://www.googleapis.com/upload/drive/v3'
-const FILE_FIELDS = 'id,name,size,modifiedTime'
+const FILE_FIELDS = 'id,name,size,modifiedTime,appProperties'
 /** これより大きいファイルは、分けて送れる方式（resumable）で送る */
 const MULTIPART_LIMIT = 4 * 1024 * 1024
 
@@ -35,7 +35,7 @@ interface TokenResponse {
   error_description?: string
 }
 interface TokenClient {
-  requestAccessToken(options?: { prompt?: string }): void
+  requestAccessToken(options?: { prompt?: string; hint?: string }): void
 }
 interface Oauth2 {
   initTokenClient(config: {
@@ -78,9 +78,28 @@ function loadGis(): Promise<Oauth2> {
   return gisLoading
 }
 
-/** ログインして、ドライブへの保存の許可をもらう（Google の小さな窓が開く） */
-export async function signIn(clientId: string): Promise<Token> {
-  const oauth2 = await loadGis()
+/** ログインの部品を先に読み込んでおく（ボタンを押したときに、すぐ Google の窓を開けるように） */
+export function preloadGis(): Promise<void> {
+  return loadGis().then(() => undefined)
+}
+
+export interface SignInOptions {
+  /** select_account：アカウントを選ばせる（はじめて）。''：前に許可していれば、窓が一瞬出て閉じるだけ */
+  prompt?: 'select_account' | '' | 'consent'
+  /** 前にログインしたアカウント（メールアドレス） */
+  hint?: string
+}
+
+/**
+ * ログインして、ドライブへの保存の許可をもらう（Google の小さな窓が開く）。
+ * 窓はボタンを押したときにしか開けない（ブラウザが止める）ので、部品が読み込み済みなら、待たずにすぐ開く。
+ */
+export function signIn(clientId: string, options: SignInOptions = {}): Promise<Token> {
+  const ready = gis()
+  return ready ? requestToken(ready, clientId, options) : loadGis().then((oauth2) => requestToken(oauth2, clientId, options))
+}
+
+function requestToken(oauth2: Oauth2, clientId: string, options: SignInOptions): Promise<Token> {
   return new Promise((resolve, reject) => {
     const client = oauth2.initTokenClient({
       client_id: clientId,
@@ -94,7 +113,7 @@ export async function signIn(clientId: string): Promise<Token> {
       },
       error_callback: (e) => reject(explainPopupError(e.type, e.message)),
     })
-    client.requestAccessToken({ prompt: 'select_account' })
+    client.requestAccessToken({ prompt: options.prompt ?? 'select_account', ...(options.hint ? { hint: options.hint } : {}) })
   })
 }
 
@@ -177,6 +196,8 @@ export interface DriveFile {
   name: string
   size?: string
   modifiedTime: string
+  /** このツールが付けた情報（写真の ID・大きさなど） */
+  appProperties?: Record<string, string>
 }
 
 export interface Account {
@@ -197,26 +218,50 @@ export async function account(token: Token): Promise<Account> {
 export const quote = (s: string) => `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`
 
 async function list(token: Token, q: string): Promise<DriveFile[]> {
-  const params = new URLSearchParams({ q, fields: `files(${FILE_FIELDS})`, orderBy: 'modifiedTime desc', spaces: 'drive' })
-  const res = await call(token, `${API}/files?${params}`)
-  return (await res.json()).files ?? []
+  const files: DriveFile[] = []
+  let pageToken = ''
+  do {
+    const params = new URLSearchParams({ q, fields: `nextPageToken,files(${FILE_FIELDS})`, orderBy: 'modifiedTime desc', spaces: 'drive', pageSize: '1000' })
+    if (pageToken) params.set('pageToken', pageToken)
+    const body = await (await call(token, `${API}/files?${params}`)).json()
+    files.push(...(body.files ?? []))
+    pageToken = body.nextPageToken ?? ''
+  } while (pageToken)
+  return files
 }
 
-export async function findFolder(token: Token): Promise<string | null> {
-  const [folder] = await list(token, `name = ${quote(FOLDER_NAME)} and mimeType = ${quote(FOLDER_MIME)} and trashed = false`)
+/** フォルダを探す（parentId を省くとマイドライブ全体から。このツールが作ったものだけが見つかる） */
+export async function findFolder(token: Token, name = FOLDER_NAME, parentId?: string): Promise<string | null> {
+  const [folder] = await list(token, `name = ${quote(name)} and mimeType = ${quote(FOLDER_MIME)} and trashed = false${parentId ? ` and ${quote(parentId)} in parents` : ''}`)
   return folder?.id ?? null
 }
 
-/** 「卒業制作報告書」フォルダ（なければ作る） */
-export async function ensureFolder(token: Token): Promise<string> {
-  const found = await findFolder(token)
+/** フォルダ（なければ作る）。省いたら、マイドライブの「卒業制作報告書」フォルダ */
+export async function ensureFolder(token: Token, name = FOLDER_NAME, parentId?: string): Promise<string> {
+  const found = await findFolder(token, name, parentId)
   if (found) return found
   const res = await call(token, `${API}/files?fields=id`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json; charset=UTF-8' },
-    body: JSON.stringify({ name: FOLDER_NAME, mimeType: FOLDER_MIME }),
+    body: JSON.stringify({ name, mimeType: FOLDER_MIME, ...(parentId ? { parents: [parentId] } : {}) }),
   })
   return (await res.json()).id
+}
+
+/** フォルダの中のファイル（ゴミ箱のものは除く） */
+export function listChildren(token: Token, folderId: string): Promise<DriveFile[]> {
+  return list(token, `${quote(folderId)} in parents and trashed = false`)
+}
+
+/** ファイルの最後に変わった時刻。消えていたら null */
+export async function getModified(token: Token, fileId: string): Promise<string | null> {
+  try {
+    const body = await (await call(token, `${API}/files/${fileId}?fields=modifiedTime,trashed`)).json()
+    return body.trashed ? null : body.modifiedTime
+  } catch (e) {
+    if (e instanceof DriveError && e.code === 'missing') return null
+    throw e
+  }
 }
 
 export async function findFile(token: Token, folderId: string, name: string): Promise<DriveFile | null> {
@@ -238,8 +283,13 @@ export function multipartBody(metadata: object, content: Blob, boundary: string)
  * ファイルを保存する。fileId があれば上書き、なければ folderId のフォルダに新しく作る。
  * 大きいファイルは、分けて送れる方式で送る。
  */
-export async function saveFile(token: Token, file: { name: string; content: Blob; folderId: string; fileId?: string }): Promise<DriveFile> {
-  const metadata = file.fileId ? {} : { name: file.name, parents: [file.folderId], mimeType: file.content.type || 'application/octet-stream' }
+export async function saveFile(
+  token: Token,
+  file: { name: string; content: Blob; folderId: string; fileId?: string; appProperties?: Record<string, string> },
+): Promise<DriveFile> {
+  const metadata = file.fileId
+    ? {}
+    : { name: file.name, parents: [file.folderId], mimeType: file.content.type || 'application/octet-stream', ...(file.appProperties ? { appProperties: file.appProperties } : {}) }
   const target = file.fileId ? `${UPLOAD}/files/${file.fileId}` : `${UPLOAD}/files`
   const method = file.fileId ? 'PATCH' : 'POST'
   if (file.content.size > MULTIPART_LIMIT) {

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { deviceName } from './device'
 import { account, DriveError, ensureFolder, findFile, findFolder, FOLDER_NAME, readFile, revoke, saveFile, signIn, trashFile, type Account, type Token } from './driveApi'
 
 /**
@@ -39,12 +40,6 @@ const size = (bytes: number) => (bytes >= 1024 ** 4 ? `${(bytes / 1024 ** 4).toF
 const quotaText = (a: Account) =>
   `使用 ${size(a.usage)}／上限 ${a.limit ? `${size(a.limit)}${a.limit >= 10 * 1024 ** 4 ? '（大学全体で共有の容量。一人ひとりの上限はなし）' : ''}` : 'なし'}`
 
-function browserName(): string {
-  const ua = navigator.userAgent
-  const device = /iPhone/.test(ua) ? 'iPhone' : /iPad|Macintosh.*Mobile/.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1) ? 'iPad' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Macintosh/.test(ua) ? 'Mac' : 'その他'
-  const browser = /Edg\//.test(ua) ? 'Edge' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox\//.test(ua) ? 'Firefox' : /Safari\//.test(ua) ? 'Safari' : 'その他'
-  return `${device}・${browser}`
-}
 
 /** ログインが済んでいて、期限が切れていないこと */
 function usable(token: Token | null): Token {
@@ -57,7 +52,7 @@ const STEP_ACTIONS: Record<Exclude<StepKey, 'login'>, (token: Token | null) => P
   save: async (token) => {
     const t = usable(token)
     const folderId = await ensureFolder(t)
-    const write = (n: number) => new Blob([JSON.stringify({ kind: 'connection-test', count: n, savedAt: new Date().toISOString(), device: browserName() })], { type: 'application/json' })
+    const write = (n: number) => new Blob([JSON.stringify({ kind: 'connection-test', count: n, savedAt: new Date().toISOString(), device: deviceName() })], { type: 'application/json' })
     const existing = await findFile(t, folderId, SMALL_NAME)
     const first = await saveFile(t, { name: SMALL_NAME, folderId, content: write(1), fileId: existing?.id })
     await saveFile(t, { name: SMALL_NAME, folderId, content: write(2), fileId: first.id })
@@ -138,7 +133,7 @@ export function DriveTest() {
   // 結果の文（メールアドレスは、@ より後ろだけにする）
   const summary = [
     `ドライブ接続テスト ${testedAt}`,
-    `立場：${role || '（未選択）'}　端末：${browserName()}`,
+    `立場：${role || '（未選択）'}　端末：${deviceName()}`,
     `アカウント：${info ? `@${info.email.split('@')[1] ?? ''}` : '（未ログイン）'}`,
     ...STEPS.map((s, i) => {
       const r = results[s.key]

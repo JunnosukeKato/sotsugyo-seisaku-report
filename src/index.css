@@ -483,3 +483,68 @@ body.resizing .page-viewport { pointer-events: none; }
 .guide.narrow.step-course .g-tip, .guide.narrow.step-done .g-tip { top: auto; bottom: calc(8px + env(safe-area-inset-bottom)); }
 .guide.narrow .g-tip::before { display: none; }
 .guide.narrow .g-tip h2 { font-size: 17px; }
+
+/* ---- Google ドライブへの保存（mockups/v18 案3・v19 案A） ---- */
+.login-over, .login-over *, .drive-pop, .drive-pop * { box-sizing: border-box; }
+/* 開いたら、まず大学のアカウントでログイン（紙面の上に重ねる。後ろのツールは触れない） */
+.login-over { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; padding: 16px; background: rgba(236, 233, 228, 0.72); backdrop-filter: blur(3px); -webkit-backdrop-filter: blur(3px); }
+.login-card { width: 420px; max-width: 100%; background: #fff; border-radius: 18px; padding: 26px 28px 22px; box-shadow: 0 18px 50px rgba(20, 20, 30, 0.28); font-size: 14px; animation: sheet-up 0.22s ease; }
+.login-brand { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.login-mark { width: 44px; height: 44px; flex: none; border-radius: 12px; border: 1.5px solid var(--accent); color: var(--accent); display: grid; place-items: center; font-family: 'BIZ UDMincho', serif; font-size: 22px; }
+.login-brand b { display: block; font-family: 'BIZ UDMincho', serif; font-weight: 400; font-size: 21px; letter-spacing: 0.12em; }
+.login-brand div > span { font-size: 12px; color: var(--muted); letter-spacing: 0.06em; }
+.login-lead { font-size: 13.5px; line-height: 1.8; margin: 0 0 18px; color: #3f4249; }
+.login-btn { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; padding: 13px 16px; border-radius: 10px; border: 1px solid #c9cdd6; background: #fff; color: #1f1f1f; font-size: 15px; font-weight: 700; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08); cursor: pointer; }
+.login-btn:hover:not(:disabled) { background: #f7f8fb; border-color: #aab1c2; }
+.login-btn:disabled { opacity: 0.5; cursor: default; }
+.login-g { width: 20px; height: 20px; flex: none; }
+.login-small { font-size: 11.5px; color: var(--muted); line-height: 1.7; margin: 12px 0 0; }
+.login-err { background: var(--error-soft); color: var(--error); border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.7; margin: 0 0 14px; }
+.login-err small { display: block; color: #8b4a4a; font-size: 11.5px; }
+.login-warn { background: var(--warn-soft); color: var(--warn); border-radius: 10px; padding: 10px 12px; font-size: 13px; line-height: 1.7; margin: 0 0 14px; }
+.login-spin { display: flex; align-items: center; gap: 10px; font-weight: 700; margin-bottom: 8px; }
+.login-spin::before { content: ''; width: 16px; height: 16px; flex: none; border-radius: 50%; border: 2.5px solid var(--accent-soft); border-top-color: var(--accent); animation: login-spin 0.8s linear infinite; }
+@keyframes login-spin { to { transform: rotate(360deg); } }
+.login-progress { height: 6px; border-radius: 3px; background: #ecebe8; overflow: hidden; margin: 8px 0 0; }
+.login-progress i { display: block; height: 100%; background: var(--accent); border-radius: 3px; transition: width 0.2s ease; }
+.phone .login-card, .login-over .login-card { max-width: calc(100vw - 32px); }
+@media (max-width: 600px) { .login-card { padding: 22px 20px 18px; } }
+
+/* 保存のようす（右の欄の「自動保存」の代わり） */
+.drive-ic { width: 15px; height: 15px; flex: none; }
+.chip.ok { color: var(--ink); }
+.chip.ok .drive-ic { color: var(--ok); }
+.chip.warn { color: var(--warn); background: var(--warn-soft); }
+.chip .dot.warn { background: #d89a12; }
+.chip.ng u { color: var(--error); text-underline-offset: 2px; }
+.chip.click { cursor: pointer; box-shadow: inset 0 0 0 1px var(--line); background: #fff; }
+.chip.click.warn { background: var(--warn-soft); }
+.chip.click.ng { background: var(--error-soft); }
+.chip .caret { font-size: 9px; color: var(--muted); margin-left: -2px; }
+.drive-chip-wrap { position: relative; display: inline-flex; }
+/* ドライブの操作（PC は保存のようすの下に開く。スマホはメニューの中） */
+.drive-pop { position: absolute; z-index: 30; left: 0; top: calc(100% + 6px); width: min(300px, calc(var(--right-w, 320px) - 40px)); padding: 8px; background: #fff; border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 32px rgba(30, 25, 20, 0.2); display: grid; gap: 2px; font-size: 12.5px; }
+.drive-pop.inline { position: static; width: auto; box-shadow: none; margin-top: 12px; }
+.drive-pop .who { display: flex; gap: 8px; align-items: flex-start; padding: 6px 8px 4px; }
+.drive-pop .who .drive-ic { width: 20px; height: 20px; color: var(--ok); margin-top: 1px; }
+.drive-pop .who b { display: block; font-size: 13px; }
+.drive-pop .who small { color: var(--muted); font-size: 11.5px; overflow-wrap: anywhere; }
+.drive-pop .when { padding: 2px 8px 8px 36px; color: var(--muted); font-size: 11.5px; line-height: 1.6; border-bottom: 1px solid var(--line); margin-bottom: 4px; }
+.drive-pop .when em { display: block; font-style: normal; color: var(--error); margin-top: 4px; }
+.drive-pop button { border: 0; background: none; text-align: left; padding: 8px 10px; border-radius: 7px; font-size: 13px; color: var(--ink); cursor: pointer; }
+.drive-pop button:hover { background: var(--palette-hover); }
+.drive-pop button:first-of-type { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+/* 確認の窓 */
+.modal .drive-small { font-size: 12px; color: var(--muted); line-height: 1.7; margin: 0; }
+.modal .drive-err { margin: 0 0 10px; padding: 8px 12px; border-radius: 8px; background: var(--error-soft); color: var(--error); font-size: 13px; }
+.drive-two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 6px 0 4px; }
+.drive-two > div { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; display: grid; gap: 2px; font-size: 12.5px; color: var(--muted); }
+.drive-two > div b { color: var(--ink); font-size: 13.5px; display: flex; align-items: center; gap: 6px; }
+.drive-two > div.new { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+.drive-two em { font-style: normal; font-size: 10.5px; color: #fff; background: var(--accent); border-radius: 999px; padding: 1px 7px; }
+.drive-two .drive-ic { color: var(--ok); }
+@media (max-width: 600px) { .drive-two { grid-template-columns: 1fr; } }
+/* スマホの上の帯：保存のようすを短く */
+.p-top .chip .drive-ic { width: 14px; height: 14px; }
+.p-top .chip.click { box-shadow: none; background: none; }
+@media print { .login-over, .drive-pop { display: none !important; } }

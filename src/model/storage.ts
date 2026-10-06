@@ -92,6 +92,11 @@ export async function listSnapshots(): Promise<Snapshot[]> {
   return all.sort((a, b) => b.savedAt.localeCompare(a.savedAt))
 }
 
+/** この端末（ブラウザ）から、原稿・写真・控えをすべて消す（共用のパソコンで書き終えたとき） */
+export async function clearAll(): Promise<void> {
+  for (const name of ['report', 'images', 'snapshots']) await promisify((await store(name, 'readwrite')).clear())
+}
+
 /** 報告書で使われていない写真を消す（容量の節約） */
 export async function removeUnusedImages(report: Report): Promise<number> {
   const used = new Set(usedImageIds(report))

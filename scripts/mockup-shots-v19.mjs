@@ -151,7 +151,7 @@ async function open(browser, { phone = false } = {}) {
   if (phone) await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
   else await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1.5 })
   await stubConfig(page)
-  await page.goto('http://localhost:5173/', { waitUntil: 'networkidle0', timeout: 90000 })
+  await page.goto('http://localhost:5173/?nodrive', { waitUntil: 'networkidle0', timeout: 90000 })
   await ready(page, phone)
   await page.addStyleTag({ content: CSS })
   return { context, page }

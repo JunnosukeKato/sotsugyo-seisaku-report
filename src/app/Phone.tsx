@@ -6,6 +6,7 @@ import { Icon } from './icons'
 import { SelectionTools } from './Palette'
 import { CheckBody, DeadlineChip, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
 import { keepFocus, PAGE_CONTEXT, pageName } from './uiShared'
+import { DriveChip, DriveMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
 
 /**
@@ -194,6 +195,8 @@ interface Props {
   snap: EditorSnapshot
   config: YearConfig
   saveState: SaveState
+  /** ドライブに保存しているとき（ログイン必須） */
+  drive?: DriveControls
   onBackup: () => void
   onExport: () => void
   onReferences: () => void
@@ -201,7 +204,7 @@ interface Props {
 }
 
 /** スマホ版の、紙面のまわりの部品（紙面そのものは App の .stage） */
-export function PhoneChrome({ editor, snap, config, saveState, onBackup, onExport, onReferences, sheetHostRef }: Props) {
+export function PhoneChrome({ editor, snap, config, saveState, drive, onBackup, onExport, onReferences, sheetHostRef }: Props) {
   const [sheet, setSheet] = useState<SheetKind>(null)
   const close = () => setSheet(null)
   const errors = snap.findings.filter((f) => f.severity === 'error').length
@@ -215,7 +218,7 @@ export function PhoneChrome({ editor, snap, config, saveState, onBackup, onExpor
           <div className="title">{config.reportName}</div>
           <div className="sub">{pageName(snap)}</div>
         </div>
-        <SaveChip state={saveState} />
+        {drive ? <DriveChip drive={drive} compact /> : <SaveChip state={saveState} />}
         <button className="icon-btn" aria-label="メニュー（手順書・バックアップなど）" onClick={() => setSheet('menu')}>
           {PhoneIcon.menu}
         </button>
@@ -290,9 +293,10 @@ export function PhoneChrome({ editor, snap, config, saveState, onBackup, onExpor
       {sheet === 'menu' && (
         <Sheet title={config.reportName} extra={<span className="brand-sub">{config.fiscalYear}年度</span>} onClose={close}>
           <div className="meta">
-            <SaveChip state={saveState} />
+            {drive ? <DriveChip drive={drive} /> : <SaveChip state={saveState} />}
             <DeadlineChip deadline={config.deadline} />
           </div>
+          {drive && <DriveMenu drive={drive} inline onDone={close} />}
           {config.notice?.trim() && (
             <div className="notice">
               <b>学科からのお知らせ</b>

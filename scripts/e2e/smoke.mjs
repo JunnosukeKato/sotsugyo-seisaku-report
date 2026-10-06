@@ -23,7 +23,7 @@ await withEdge(async (browser) => {
   await stubConfig(page)
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
   await page.setViewport({ width: 1440, height: 900 })
-  await page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+  await page.goto('http://localhost:5173/?nodrive', { waitUntil: 'networkidle0' })
   await page.evaluate(() => new Promise((r) => { const req = indexedDB.deleteDatabase('sotsugyo-seisaku-report'); req.onsuccess = req.onerror = req.onblocked = () => r() }))
   await page.reload({ waitUntil: 'networkidle0' })
   const ready = () =>
