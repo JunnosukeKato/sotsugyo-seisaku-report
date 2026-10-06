@@ -34,6 +34,27 @@ function matches(text: string, re: RegExp) {
 const KATAKANA = 'ァ-ヶ'
 const KANJI = '\\u3400-\\u9fff々'
 
+/**
+ * 変換を間違えやすい語：[書き間違い, 正しい語, 説明, 重さ]
+ * - error：報告書ではまず使わない形（ほぼ確実に誤り）
+ * - warning：文脈によっては正しいこともある形（正しく使っているならそのままでよい）
+ */
+const MISCONVERSIONS: [string, string, string, Severity][] = [
+  ['見頃', '身頃', '服の胴の部分', 'error'],
+  ['身返し', '見返し', '前端などの裏に付ける布', 'error'],
+  ['見幅', '身幅', '', 'error'],
+  ['見丈', '身丈', '', 'error'],
+  ['再寸', '採寸', '', 'error'],
+  ['寸方', '寸法', '', 'error'],
+  ['友布', '共布', '同じ布', 'error'],
+  ['記事', '生地', '布のこと。雑誌などの記事のことなら、そのままでよい', 'warning'],
+  ['証明', '照明', '舞台の明かりのこと。「証明する」の意味なら、そのままでよい', 'warning'],
+  ['講演', '公演', '舞台の上演のこと。講演会のことなら、そのままでよい', 'warning'],
+  ['部隊', '舞台', '舞台のこと。軍などの部隊のことなら、そのままでよい', 'warning'],
+  ['意匠', '衣装', '衣装のこと。デザインの意味の「意匠」なら、そのままでよい', 'warning'],
+  ['衣裳', '衣装', '誤りではないが、学科の表記（衣装）にそろえる', 'warning'],
+]
+
 export const TEXT_RULES: TextRule[] = [
   {
     id: 'digit-fullwidth',
@@ -78,14 +99,16 @@ export const TEXT_RULES: TextRule[] = [
     title: '「製作」ではなく「制作」で統一する',
     find: (text) => matches(text, /製作/g).map(({ start, end }) => ({ start, end, replacement: '制作', detail: '「製作」→「制作」' })),
   },
-  {
-    // 服の胴の部分は「身頃」（前身頃・後ろ身頃）。「見頃」（花などの見ごろ）と書き間違えやすい
-    id: 'migoro',
-    severity: 'error',
-    source: 'supplementary',
-    title: '「見頃」ではなく「身頃」と書く',
-    find: (text) => matches(text, /見頃/g).map(({ start, end }) => ({ start, end, replacement: '身頃', detail: '「見頃」→「身頃」（服の胴の部分）' })),
-  },
+  // 服作り・舞台の言葉で、変換を間違えやすい語（「直す」で正しい語にする）
+  ...MISCONVERSIONS.map(
+    ([wrong, right, note, severity]): TextRule => ({
+      id: `word-${wrong}`,
+      severity,
+      source: 'supplementary',
+      title: `「${wrong}」ではなく「${right}」と書く`,
+      find: (text) => matches(text, new RegExp(wrong, 'g')).map(({ start, end }) => ({ start, end, replacement: right, detail: `「${wrong}」→「${right}」${note ? `（${note}）` : ''}` })),
+    }),
+  ),
   {
     id: 'honorific',
     severity: 'warning',

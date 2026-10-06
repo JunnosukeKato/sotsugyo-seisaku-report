@@ -123,11 +123,26 @@ describe('2025年度サンプルで見つかった違反', () => {
   })
 })
 
-describe('身頃', () => {
+describe('変換を間違えやすい語', () => {
   it('「見頃」は「身頃」に直す（前身頃・後ろ身頃）', () => {
-    const f = checkText('前見頃と後ろ見頃を縫い合わせた。').filter((x) => x.ruleId === 'migoro')
+    const f = checkText('前見頃と後ろ見頃を縫い合わせた。').filter((x) => x.ruleId === 'word-見頃')
     expect(f.map((x) => x.replacement)).toEqual(['身頃', '身頃'])
-    expect(checkText('前身頃を縫い合わせた。').some((x) => x.ruleId === 'migoro')).toBe(false)
+    expect(checkText('前身頃を縫い合わせた。').some((x) => x.ruleId === 'word-見頃')).toBe(false)
+  })
+
+  it('服作り・舞台の言葉の書き間違いを見つけて直す', () => {
+    const text = '再寸して寸方を決め、友布で身返しを作った。見幅と見丈を整え、記事を選んだ。証明の中の講演で、部隊に立つ意匠（衣裳）を確かめた。'
+    const fixed = checkText(text)
+      .filter((x) => x.ruleId.startsWith('word-'))
+      .sort((a, b) => b.start - a.start)
+      .reduce((t, f) => applyFix(t, { ...f, replacement: f.replacement! }), text)
+    expect(fixed).toBe('採寸して寸法を決め、共布で見返しを作った。身幅と身丈を整え、生地を選んだ。照明の中の公演で、舞台に立つ衣装（衣装）を確かめた。')
+  })
+
+  it('ほぼ確実に誤りの語はエラー、文脈によっては正しいこともある語は注意', () => {
+    const sev = (word: string) => checkText(`${word}を確かめた。`).find((x) => x.ruleId === `word-${word}`)?.severity
+    expect(['身返し', '見幅', '見丈', '再寸', '寸方', '友布', '見頃'].map(sev)).toEqual(Array(7).fill('error'))
+    expect(['記事', '証明', '講演', '部隊', '意匠', '衣裳'].map(sev)).toEqual(Array(6).fill('warning'))
   })
 })
 
