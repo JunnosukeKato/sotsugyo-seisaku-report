@@ -217,6 +217,7 @@ export default function App() {
           editor={editor}
           snap={snap}
           config={config}
+          onReferences={() => setDialog({ kind: 'references' })}
           saveState={autosave.state}
           onBackup={async () => setDialog({ kind: 'backup', snapshots: await listSnapshots() })}
           onExport={async () => {

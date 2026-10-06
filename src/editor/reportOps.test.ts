@@ -168,3 +168,53 @@ describe('図を入れる（書いている位置に（図n）、段落の下に
     expect(r.body[0].blocks.map((b) => b.type)).toEqual(['paragraph', 'paragraph'])
   })
 })
+
+describe('表を入れる・Enter で段落を分ける（段落の下の図・表）', () => {
+  const base = (): Report => ({
+    ...demoReport(),
+    body: [
+      {
+        id: 'c1',
+        title: '企画',
+        blocks: [
+          { type: 'paragraph', id: 'pa', content: [{ type: 'text', text: '袖を大きくした。帯を巻いた。' }] },
+          { type: 'paragraph', id: 'pb', content: [{ type: 'text', text: '次の段落。' }] },
+        ],
+      },
+    ],
+  })
+  const table = (id: string) => ({ type: 'materialTable' as const, id, caption: '', rows: [] })
+  const types = (r: Report) => r.body[0].blocks.map((b) => b.type)
+
+  it('表は、段落のすぐ下（すでにある図の後ろ）に入り、本文に（表n）が入る', () => {
+    let r = ops.insertRef(base(), 'pa', 8, 'f1')
+    r = ops.addFigureBelow(r, 'pa', { id: 'f1', imageId: 'i', caption: '' })
+    r = ops.insertRef(r, 'pa', 14 + 4, 't1')
+    r = ops.addTableBelow(r, 'pa', table('t1'))
+    expect(types(r)).toEqual(['paragraph', 'figureRow', 'materialTable', 'paragraph'])
+    expect(ops.findEditable(r, 'pa')?.text).toBe('袖を大きくした（図1）。帯を巻いた（表1）。')
+  })
+
+  it('段落の終わりで Enter：新しい段落は、その段落の下の図の後ろにできる（図は参照している段落に付いたまま）', () => {
+    let r = ops.insertRef(base(), 'pa', 8, 'f1')
+    r = ops.addFigureBelow(r, 'pa', { id: 'f1', imageId: 'i', caption: '' })
+    const all = ops.findEditable(r, 'pa')!.text
+    r = ops.split(r, 'pa', all, '').report
+    expect(types(r)).toEqual(['paragraph', 'figureRow', 'paragraph', 'paragraph'])
+  })
+
+  it('参照より前で分けたときは、図は参照のある後ろの段落に付く', () => {
+    let r = ops.insertRef(base(), 'pa', 14, 'f1') // 「帯を巻いた（図1）。」
+    r = ops.addFigureBelow(r, 'pa', { id: 'f1', imageId: 'i', caption: '' })
+    const all = ops.findEditable(r, 'pa')!.text
+    r = ops.split(r, 'pa', all.slice(0, 8), all.slice(8)).report
+    expect(types(r)).toEqual(['paragraph', 'paragraph', 'figureRow', 'paragraph'])
+  })
+
+  it('図・表のタイトルで Enter：そのまとまり（表）の下に段落ができる', () => {
+    let r = ops.addFigureBelow(base(), 'pa', { id: 'f1', imageId: 'i', caption: 'デザイン画' })
+    r = ops.split(r, 'f1', 'デザイン画', '').report
+    expect(types(r)).toEqual(['paragraph', 'figureRow', 'paragraph', 'paragraph'])
+    expect(ops.findEditable(r, 'f1')?.text).toBe('デザイン画')
+  })
+})

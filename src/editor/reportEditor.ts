@@ -148,22 +148,10 @@ export class ReportEditor {
         this.report = ops.setText(this.report, id, text)
         this.afterChange({ render: 'debounce', save: true })
       },
-      onCommit: (id, text, byKey) => {
-        this.clearShift()
-        this.report = ops.setText(this.report, id, text)
-        if (this.reportBeforeEdit && JSON.stringify(this.reportBeforeEdit) !== JSON.stringify(this.report)) this.pushHistory(this.reportBeforeEdit)
-        this.reportBeforeEdit = null
-        this.hideStyle.textContent = ''
-        // 図を入れた後、タイトルを Enter で確定したら、書いていた段落の続きに戻る
-        const back = this.returnTo?.from === id ? this.returnTo : null
-        if (this.returnTo?.from === id) this.returnTo = null
-        if (back && byKey) {
-          this.hideStyle.textContent = this.editingStyle(back.id)
-          this.pendingOpen = { id: back.id, caret: back.caret }
-        }
-        this.afterChange({ render: 'now', save: true })
-      },
+      onCommit: (id, text, byKey) => this.onCommitEdit(id, text, byKey),
       onSplit: (id, before, after) => {
+        // 図・表を入れた直後のタイトル：Enter で、書いていた段落の続きに戻る
+        if (this.returnTo?.from === id) return this.onCommitEdit(id, before + after, true)
         this.pushHistory(this.reportBeforeEdit ?? this.report)
         const result = ops.split(ops.setText(this.report, id, before + after), id, before, after)
         this.report = result.report
@@ -483,6 +471,23 @@ export class ReportEditor {
     this.shiftFollowing()
   }
 
+  /** 入力欄を閉じて、書いた文字を確定する */
+  private onCommitEdit(id: string, text: string, byKey: boolean): void {
+    this.clearShift()
+    this.report = ops.setText(this.report, id, text)
+    if (this.reportBeforeEdit && JSON.stringify(this.reportBeforeEdit) !== JSON.stringify(this.report)) this.pushHistory(this.reportBeforeEdit)
+    this.reportBeforeEdit = null
+    this.hideStyle.textContent = ''
+    // 図を入れた後、タイトルを Enter で確定したら、書いていた段落の続きに戻る
+    const back = this.returnTo?.from === id ? this.returnTo : null
+    if (this.returnTo?.from === id) this.returnTo = null
+    if (back && byKey) {
+      this.hideStyle.textContent = this.editingStyle(back.id)
+      this.pendingOpen = { id: back.id, caret: back.caret }
+    }
+    this.afterChange({ render: 'now', save: true })
+  }
+
   /** 後ろの文章をずらしている要素（組み直す・書き終えると元に戻す） */
   private shifted: HTMLElement[] = []
 
@@ -588,7 +593,8 @@ export class ReportEditor {
       text: editable.text,
       caret,
       styleSource,
-      enterCreatesParagraph: editable.kind === 'chapter' || editable.kind === 'subheading',
+      // 見出し・図表のタイトルの Enter は、その下に段落を作る（段落を足すボタンはない）
+      enterCreatesParagraph: ['chapter', 'subheading', 'figureCaption', 'tableCaption'].includes(editable.kind),
     }
   }
 
@@ -862,20 +868,18 @@ export class ReportEditor {
   }
 
   /**
-   * 図を入れる。段落を書いているときは、カーソルの位置に「（図n）」を入れ、その段落のすぐ下に図を置く（同じ段落の図はひとまとまり）。
-   * 写真を選んだら図のタイトルの入力欄を開き、Enter で段落の続きに戻る。
-   * 段落を書いていないときは、最後に触ったところの後ろに図を置く（本文での参照はあとで「図表を参照」で入れる）
+   * 図を入れる。必ず文中の入れたい位置で入れる：段落を書いているカーソルの位置に「（図n）」を入れ、その段落のすぐ下に図を置く
+   * （同じ段落の図はひとまとまり）。写真を選んだら図のタイトルの入力欄を開き、Enter で段落の続きに戻る
    */
   async addFigure(): Promise<void> {
-    const paragraphId = this.overlay.blockId
-    if (paragraphId && ops.findEditable(this.report, paragraphId)?.kind === 'paragraph') return this.insertFigureAtCaret(paragraphId)
-    // 写真を選んでいる間に入力欄が閉じるため、入れる位置を先に決めておく
-    const after = this.insertionAnchor()
-    this.marker.hidden = true
-    const imageId = await this.importImage('figure')
-    if (!imageId) return
-    const figureId = ops.newId('f')
-    this.insertAndEdit({ type: 'figureRow', id: ops.newId('r'), figures: [{ id: figureId, imageId, caption: '' }] }, figureId, after)
+    const paragraphId = this.editingParagraph()
+    if (paragraphId) return this.insertFigureAtCaret(paragraphId)
+  }
+
+  /** 本文の段落を書いているなら、その段落の ID */
+  private editingParagraph(): string | null {
+    const id = this.overlay.blockId
+    return id && ops.findEditable(this.report, id)?.kind === 'paragraph' ? id : null
   }
 
   private async insertFigureAtCaret(paragraphId: string): Promise<void> {
@@ -897,9 +901,22 @@ export class ReportEditor {
     this.reopenAfterRender(figureId, 0)
   }
 
+  /**
+   * 表を入れる。図と同じく、文中の入れたい位置に「（表n）」が入り、段落のすぐ下に表が入る。
+   * タイトルを書いて Enter を押すと、書いていた段落の続きに戻る
+   */
   addMaterialTable(): void {
+    const paragraphId = this.editingParagraph()
+    if (!paragraphId) return
+    const caret = this.overlay.caret
+    this.overlay.commit()
     const tableId = ops.newId('t')
-    this.insertAndEdit({ type: 'materialTable', id: tableId, caption: '使用素材表', rows: [{ id: ops.newId('m'), name: '', usage: '', swatchImageId: null }] }, `${tableId}`)
+    this.pushHistory(this.report)
+    let next = ops.insertRef(this.report, paragraphId, caret, tableId)
+    next = ops.addTableBelow(next, paragraphId, { type: 'materialTable', id: tableId, caption: '', rows: [{ id: ops.newId('m'), name: '', usage: '', swatchImageId: null }] })
+    this.report = next
+    this.returnTo = { from: tableId, id: paragraphId, caret: ops.refEnd(next, paragraphId, tableId) }
+    this.reopenAfterRender(tableId, 0)
   }
 
   // ---- 選んでいる図・表の操作 ----

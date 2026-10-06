@@ -203,6 +203,8 @@ export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
 }
 
 export function Palette({ editor, snap, onReferences }: Props) {
+  // 図・表は、段落を書いているとき（文中の入れたい位置にカーソルがあるとき）だけ入れられる
+  const writing = snap.editingKind === 'paragraph'
   const kind = snap.layout?.kinds[snap.page] ?? 'unknown'
   const context = PAGE_CONTEXT[kind]
   const preview = (on: boolean) => editor.previewInsert(on)
@@ -215,7 +217,6 @@ export function Palette({ editor, snap, onReferences }: Props) {
       {kind === 'body' && (
         <>
           <div className="group">
-            <Tool label="段落" icon={Icon.paragraph} title="段落を足す" onPreview={preview} onClick={() => editor.addParagraph()} />
             <Tool label="小見出し" icon={Icon.heading2} title="小見出し（ⅰ．）を足す" onPreview={preview} onClick={() => editor.addSubheading()} />
             <Tool label="大見出し" icon={Icon.heading1} title="大見出し（Ⅰ．）を足す" onPreview={preview} onClick={() => editor.addChapter()} />
             <Tool label="改ページ" icon={Icon.pageBreak} title="ここで改ページする（この後ろは次のページから始まります）" onPreview={preview} onClick={() => editor.addPageBreak()} />
@@ -224,12 +225,12 @@ export function Palette({ editor, snap, onReferences }: Props) {
             <Tool
               label="図を入れる"
               icon={Icon.figure}
-              title={snap.editingKind === 'paragraph' ? '書いている位置に「（図n）」が入り、この段落のすぐ下に図が入ります' : '図（写真）を入れる（段落を書いている途中で押すと、その位置に「（図n）」も入ります）'}
-              onPreview={snap.editingKind === 'paragraph' ? undefined : preview}
+              title="書いている位置に「（図n）」が入り、この段落のすぐ下に図が入ります"
+              disabled={!writing}
               onClick={() => void editor.addFigure()}
             />
-            <Tool label="素材表" icon={Icon.table} title="使用素材表を入れる" onPreview={preview} onClick={() => editor.addMaterialTable()} />
-            <Tool label="参考文献" icon={Icon.refs} title="引用・参考文献を編集する" onClick={onReferences} />
+            <Tool label="素材表" icon={Icon.table} title="書いている位置に「（表n）」が入り、この段落のすぐ下に表が入ります" disabled={!writing} onClick={() => editor.addMaterialTable()} />
+            {!writing && <div className="ctx-note">図・表は、文中の入れたい位置をクリックしてから押します</div>}
           </div>
         </>
       )}

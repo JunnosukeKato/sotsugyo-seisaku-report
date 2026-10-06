@@ -2,6 +2,7 @@
 // 使い方: node scripts/e2e/phone.mjs（開発サーバーが http://localhost:5173 で動いていること）
 import { mkdirSync } from 'node:fs'
 import { withEdge } from '../poc/edge.mjs'
+import { stubConfig } from './configStub.mjs'
 
 const OUT = 'poc-output/e2e-phone'
 mkdirSync(OUT, { recursive: true })
@@ -15,6 +16,7 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 await withEdge(async (browser) => {
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
+  await stubConfig(page)
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
   await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36')
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
@@ -107,16 +109,16 @@ await withEdge(async (browser) => {
   s = await snap()
   check('「完了」で書く欄が閉じ、紙面の表示が戻る', !s.editingId && !s.zoomed && !(await page.evaluate(() => document.querySelector('.edit-sheet').classList.contains('open'))))
 
-  // 追加：段落を足す
+  // 追加：小見出しを足す（段落は、書く欄で改行して分ける）
   await page.click('.p-nav .add')
   await page.waitForSelector('.sheet .add-grid')
   await shot('4-add')
   const before = s.report.body[0].blocks.length
-  await page.evaluate(() => [...document.querySelectorAll('.sheet .add-grid .tb')].find((b) => b.textContent.includes('段落')).click())
+  await page.evaluate(() => [...document.querySelectorAll('.sheet .add-grid .tb')].find((b) => b.textContent.includes('小見出し')).click())
   await page.waitForFunction(() => window.__editor.getSnapshot().editingId, { timeout: 30000 })
   await ready()
   s = await snap()
-  check('「追加」から段落を足すと、すぐ書ける', s.report.body.flatMap((c) => c.blocks).length > before && !!s.editingId)
+  check('「追加」から小見出しを足すと、すぐ書ける', s.report.body.flatMap((c) => c.blocks).length > before && !!s.editingId)
   await page.click('.edit-sheet .done')
   await ready()
 

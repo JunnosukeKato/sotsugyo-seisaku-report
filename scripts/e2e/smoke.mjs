@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { withEdge } from '../poc/edge.mjs'
+import { stubConfig } from './configStub.mjs'
 
 const OUT = 'poc-output/e2e'
 mkdirSync(OUT, { recursive: true })
@@ -19,6 +20,7 @@ await withEdge(async (browser) => {
   // 毎回まっさらな状態から始める（ブラウザ内の保存データを消す）
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
+  await stubConfig(page)
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
   await page.setViewport({ width: 1440, height: 900 })
   await page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
@@ -302,6 +304,41 @@ await withEdge(async (browser) => {
   const refsNow = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
   check('「図表を参照」で（図1）をもう一度入れられる', refsNow === 2 && !s.findings.some((x) => x.ruleId === 'figure-unreferenced'))
   await page.screenshot({ path: `${OUT}/2-figure.png` })
+
+  // ---- 図・表は、文中の入れたい位置で入れる（書いていないときは押せない） ----
+  const toolDisabled = (label) => page.evaluate((label) => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes(label))?.disabled, label)
+  check('段落を書いていないときは「図を入れる」「素材表」を押せない', (await toolDisabled('図を入れる')) === true && (await toolDisabled('素材表')) === true)
+  await clickBlock(firstParagraph)
+  await page.keyboard.press('End')
+  await clickPaletteButton('素材表')
+  await waitEditing(() => window.__editor.getSnapshot().editingKind === 'tableCaption')
+  await ready()
+  s = await snap()
+  const tableBlock = s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'materialTable' && b.id === s.editingId)
+  check('「素材表」で、書いている位置に（表n）が入り、表のタイトルを書く欄が開く（タイトルが空ならエラー）', !!tableBlock && s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.some((n) => n.type === 'ref' && n.targetId === tableBlock.id) && s.findings.some((x) => x.ruleId === 'required-text' && x.blockId === tableBlock.id), tableBlock?.id)
+  await page.keyboard.type('使用素材表')
+  await page.keyboard.press('Enter')
+  await waitEditing((id) => window.__editor.getSnapshot().editingId === id, firstParagraph)
+  check('表のタイトルを Enter で確定すると、書いていた段落の続きに戻る', true)
+  await page.keyboard.press('Escape')
+  await ready()
+  // 図のタイトルをクリックして Enter：その図の下に段落ができる（段落を足すボタンはない）
+  const figId = (await snap()).report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow').figures[0].id
+  const blocksBefore = (await snap()).report.body.flatMap((c) => c.blocks).length
+  await clickBlock(figId)
+  await page.keyboard.press('End')
+  await page.keyboard.press('Enter')
+  await waitEditing(() => window.__editor.getSnapshot().editingKind === 'paragraph')
+  await ready()
+  s = await snap()
+  const flat = s.report.body.flatMap((c) => c.blocks)
+  const groupIndex = flat.findIndex((b) => b.type === 'figureRow' && b.figures.some((f) => f.id === figId))
+  check('図のタイトルで Enter を押すと、その図の下に段落ができる', flat.length === blocksBefore + 1 && flat[groupIndex + 1]?.id === s.editingId, `${groupIndex}`)
+  await page.keyboard.press('Escape')
+  await ready()
+  // 空の段落は取り消す
+  await page.evaluate(() => window.__editor.undo())
+  await ready()
 
   // ---- 書いた文字が次のページへあふれたら、表示も追いかける ----
   await clickBlock(firstParagraph)

@@ -18,6 +18,7 @@ interface Props {
   saveState: SaveState
   onBackup: () => void
   onExport: () => void
+  onReferences: () => void
 }
 
 export function SaveChip({ state }: { state: SaveState }) {
@@ -192,7 +193,7 @@ export function Tally({ snap }: { snap: EditorSnapshot }) {
   )
 }
 
-export function SidePanel({ editor, snap, config, saveState, onBackup, onExport }: Props) {
+export function SidePanel({ editor, snap, config, saveState, onBackup, onExport, onReferences }: Props) {
   const errors = snap.findings.filter((f) => f.severity === 'error').length
   return (
     <aside className="side">
@@ -237,6 +238,12 @@ export function SidePanel({ editor, snap, config, saveState, onBackup, onExport 
           )}
         </div>
         <PageThumbs editor={editor} snap={snap} />
+        {/* 引用・参考文献はない報告書が多いため、使うときだけここから入れる（入れた後は、そのページをクリックして編集する） */}
+        {snap.report.references.length === 0 && (
+          <button className="add-refs" onClick={onReferences}>
+            ＋ 引用・参考文献を入れる（使うときだけ）
+          </button>
+        )}
       </section>
 
       <section className="sec check">

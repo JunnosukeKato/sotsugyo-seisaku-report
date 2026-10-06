@@ -121,6 +121,11 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
             {Icon.figure}図を入れる
           </button>
         )}
+        {snap.editingKind === 'paragraph' && (
+          <button onMouseDown={keepFocus} onClick={() => editor.addMaterialTable()}>
+            {Icon.table}素材表
+          </button>
+        )}
         <RefButtons editor={editor} snap={snap} />
         {removable && (
           <button
@@ -167,16 +172,18 @@ function AddTools({ editor, snap, onDone, onReferences }: { editor: ReportEditor
   )
   return (
     <>
-      <p className="sheet-hint">{pageName(snap)}の、最後に触ったところの後ろに入ります。</p>
+      <p className="sheet-hint">{pageName(snap)}の、最後に触ったところの後ろに入ります。段落は、書く欄で改行すると分かれます。</p>
       <div className="add-grid">
-        {tool('段落', Icon.paragraph, () => editor.addParagraph())}
         {tool('小見出し', Icon.heading2, () => editor.addSubheading())}
         {tool('大見出し', Icon.heading1, () => editor.addChapter())}
         {tool('改ページ', Icon.pageBreak, () => editor.addPageBreak())}
-        {tool('図を入れる', Icon.figure, () => void editor.addFigure())}
-        {tool('素材表', Icon.table, () => editor.addMaterialTable())}
-        {tool('参考文献', Icon.refs, onReferences)}
       </div>
+      <p className="sheet-hint">図・表は、文中の入れたい位置をタップして、書く欄の「図を入れる」「素材表」で入れます。</p>
+      {snap.report.references.length === 0 && (
+        <button className="add-refs" onClick={() => { onDone(); onReferences() }}>
+          ＋ 引用・参考文献を入れる（使うときだけ）
+        </button>
+      )}
     </>
   )
 }

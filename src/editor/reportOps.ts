@@ -204,13 +204,26 @@ export function split(report: Report, id: string, before: string, after: string)
       newId: created,
     }
   }
+  // 図・表のタイトル：そのまとまり（表）の下に段落を作る
+  const owner = report.body.flatMap((c) => c.blocks).find((b) => (b.type === 'figureRow' && b.figures.some((f) => f.id === id)) || (b.type === 'materialTable' && b.id === id))
+  if (owner) return { report: mapBody(report, (b) => (b === owner ? [b, paragraph(created, '')] : b)), newId: created }
+  for (const chapter of report.body) {
+    const i = chapter.blocks.findIndex((b) => b.id === id)
+    const b = chapter.blocks[i]
+    if (b?.type !== 'paragraph') continue
+    // 段落のすぐ下に付いている図・表：分けた後ろの部分がそれを参照していなければ、前の部分に付けたままにする
+    let end = i + 1
+    while (end < chapter.blocks.length && isAttachment(chapter.blocks[end])) end++
+    const attached = chapter.blocks.slice(i + 1, end)
+    const labels = attached.flatMap((a) => (a.type === 'figureRow' ? a.figures.map((f) => `図${num.numbers.get(f.id)}`) : [`表${num.numbers.get(a.id)}`]))
+    const keepWithBefore = attached.length > 0 && !labels.some((l) => after.includes(l))
+    const blocks = [...chapter.blocks]
+    if (keepWithBefore) blocks.splice(i, end - i, paragraph(b.id, before, num), ...attached, paragraph(created, after, num))
+    else blocks.splice(i, 1, paragraph(b.id, before, num), paragraph(created, after, num))
+    return { report: { ...report, body: report.body.map((c) => (c === chapter ? { ...c, blocks } : c)) }, newId: created }
+  }
   return {
-    report: mapBody(report, (b) => {
-      if (b.id !== id) return b
-      if (b.type === 'paragraph') return [paragraph(b.id, before, num), paragraph(created, after, num)]
-      if (b.type === 'subheading') return [{ ...b, title: before + after }, paragraph(created, '')]
-      return b
-    }),
+    report: mapBody(report, (b) => (b.id === id && b.type === 'subheading' ? [{ ...b, title: before + after }, paragraph(created, '')] : b)),
     newId: created,
   }
 }
@@ -397,6 +410,27 @@ export function addFigureBelow(report: Report, paragraphId: string, figure: Figu
       return { ...chapter, blocks }
     }),
   }
+}
+
+/** 表を、段落のすぐ下に入れる（その段落の下にすでに図・表があれば、その後ろ） */
+export function addTableBelow(report: Report, paragraphId: string, table: BodyBlock): Report {
+  return {
+    ...report,
+    body: report.body.map((chapter) => {
+      const i = chapter.blocks.findIndex((b) => b.id === paragraphId)
+      if (i < 0) return chapter
+      let at = i + 1
+      while (at < chapter.blocks.length && isAttachment(chapter.blocks[at])) at++
+      const blocks = [...chapter.blocks]
+      blocks.splice(at, 0, table)
+      return { ...chapter, blocks }
+    }),
+  }
+}
+
+/** 段落のすぐ下に付く図・表 */
+function isAttachment(b: BodyBlock | undefined): boolean {
+  return b?.type === 'figureRow' || b?.type === 'materialTable'
 }
 
 /** 図のまとまりの中の、ある図のすぐ後ろに図を加える（「もう1枚」） */
