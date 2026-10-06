@@ -38,6 +38,8 @@ function doGet() {
  * シートを作り、実行した人を管理者に登録し、初期値の年度設定を「公開中」で入れる。
  */
 function setup() {
+  // すでに管理者がいるときは、管理者だけが実行できる（管理ページから呼ばれて、誰でも管理者になれてしまわないように）
+  if (readMembers_().some((m) => m.role === ROLE_ADMIN)) requireAdmin_()
   const ss = SpreadsheetApp.getActiveSpreadsheet()
   const ensure = (name, header) => {
     let sheet = ss.getSheetByName(name)
@@ -304,7 +306,10 @@ function findYearRow_(year) {
   return -1
 }
 
-/** 管理者シートの一覧（役割が空なら管理者） */
+/**
+ * 管理者シートの一覧。役割は「管理者」「先生」のどちらか（役割の列がなかった頃の行＝空欄は管理者）。
+ * それ以外（書き間違いなど）の行は、使えないようにする（間違って管理者にならないように）
+ */
 function readMembers_() {
   const sheet = SpreadsheetApp.getActiveSpreadsheet().getSheetByName(SHEET_ADMINS)
   if (!sheet) return []
@@ -312,8 +317,11 @@ function readMembers_() {
     .getDataRange()
     .getValues()
     .slice(1)
-    .map((r) => ({ email: String(r[0]).trim(), memo: String(r[1] || ''), role: r[2] === ROLE_TEACHER ? ROLE_TEACHER : ROLE_ADMIN }))
-    .filter((m) => m.email)
+    .map((r) => {
+      const role = String(r[2] || '').trim()
+      return { email: String(r[0]).trim(), memo: String(r[1] || ''), role: role === ROLE_TEACHER ? ROLE_TEACHER : role === ROLE_ADMIN || role === '' ? ROLE_ADMIN : null }
+    })
+    .filter((m) => m.email && m.role)
 }
 
 /** その人の役割（管理者・先生）。登録されていなければ null */

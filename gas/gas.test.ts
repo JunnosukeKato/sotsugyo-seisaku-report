@@ -197,6 +197,29 @@ describe('管理ページ（admin-project）', () => {
     expect(() => gas.saveTemplates(2026, {})).toThrow(/登録された先生だけ/)
   })
 
+  it('管理者がいるあとは、登録していない人が setup を呼んでも管理者にならない', () => {
+    const gas = load('admin-project')
+    gas.setup()
+    user = 'student@example.ac.jp'
+    expect(() => gas.setup()).toThrow(/管理者だけ/)
+    expect(gas.getState()).toMatchObject({ role: null, years: [] })
+    user = 'kato@example.ac.jp'
+    expect(gas.getMembers().map((m: { email: string }) => m.email)).toEqual(['kato@example.ac.jp'])
+    // 管理者は、何度実行してもよい
+    expect(() => gas.setup()).not.toThrow()
+  })
+
+  it('役割の書き間違いは、管理者にも先生にもしない', () => {
+    const gas = load('admin-project')
+    gas.setup()
+    const sheet = spreadsheet.getSheetByName('管理者')!
+    sheet.rows.push(['typo@example.ac.jp', '', '管理社'], ['teacher@example.ac.jp', '', ' 先生 '])
+    user = 'typo@example.ac.jp'
+    expect(gas.getState()).toMatchObject({ role: null })
+    user = 'teacher@example.ac.jp'
+    expect(gas.getState()).toMatchObject({ role: 'teacher' })
+  })
+
   it('役割の列がない古い管理者シートは、管理者として扱う', () => {
     const gas = load('admin-project')
     gas.setup()
