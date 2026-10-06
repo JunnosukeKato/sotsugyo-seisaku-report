@@ -10,7 +10,7 @@ import { Icon } from './app/icons'
 import { Palette } from './app/Palette'
 import { PhoneChrome } from './app/Phone'
 import { useKeyboardInset, useNarrow, useSwipe, useWheelPaging } from './app/uiShared'
-import { SidePanel } from './app/SidePanel'
+import { SidePanel, PageColumn } from './app/SidePanel'
 import { StartGuide, type GuideStep } from './app/StartGuide'
 import { useAutosave } from './app/useAutosave'
 
@@ -171,6 +171,7 @@ export default function App() {
 
   return (
     <div className={`app${narrow ? ' phone' : ''}`}>
+      {!narrow && (ready ? <PageColumn editor={editor} snap={snap} /> : <aside className="thumbs-col" />)}
       <main className="stage" ref={stageRef}>
         <div className="page-scroller" ref={scrollerRef} />
         <div id="overlay-layer" ref={layerRef} />

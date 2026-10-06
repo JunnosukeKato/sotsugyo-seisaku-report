@@ -38,6 +38,23 @@ export function DeadlineChip({ deadline }: { deadline: string }) {
 
 const SHORT_NAMES: Record<PageKind, string> = { cover: '表紙', abstract: '抄録', toc: '目次', body: '本文', references: '参考文献', photos: '作品写真', unknown: '' }
 
+/** 画面の左端の、ページの一覧の欄（PC。PowerPoint と同じ形） */
+export function PageColumn({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
+  return (
+    <aside className="thumbs-col" aria-label="ページの一覧">
+      <div className="sec-h">
+        <span>ページ</span>
+        {snap.pageCount > 0 && (
+          <span className="pcount">
+            <b>{snap.page + 1}</b> / {snap.pageCount}
+          </span>
+        )}
+      </div>
+      <PageThumbs editor={editor} snap={snap} />
+    </aside>
+  )
+}
+
 /** ページ一覧。紙面を縮小した本物の見た目を出し、エラーのあるページに赤い点を付ける */
 export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; snap: EditorSnapshot; onPick?: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -60,6 +77,11 @@ export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; sna
       box.replaceChildren(clone)
     })
   }, [editor, snap.layout])
+
+  // 見ているページの見本が、一覧の中で見えるようにする
+  useEffect(() => {
+    ref.current?.querySelector('.t.on')?.scrollIntoView({ block: 'nearest' })
+  }, [snap.page])
 
   return (
     <div className="thumb-list" ref={ref}>
@@ -234,23 +256,14 @@ export function SidePanel({ editor, snap, config, saveState, onBackup, onExport,
         </div>
       )}
 
-      <section className="sec pages">
-        <div className="sec-h">
-          <span>ページ</span>
-          {snap.pageCount > 0 && (
-            <span className="pcount">
-              <b>{snap.page + 1}</b> / {snap.pageCount}
-            </span>
-          )}
-        </div>
-        <PageThumbs editor={editor} snap={snap} />
-        {/* 引用・参考文献はない報告書が多いため、使うときだけここから入れる（入れた後は、そのページをクリックして編集する） */}
-        {snap.report.references.length === 0 && (
+      {/* 引用・参考文献はない報告書が多いため、使うときだけここから入れる（入れた後は、そのページをクリックして編集する） */}
+      {snap.report.references.length === 0 && (
+        <div className="refs-link">
           <button className="add-refs" onClick={onReferences}>
             ＋ 引用・参考文献を入れる（使うときだけ）
           </button>
-        )}
-      </section>
+        </div>
+      )}
 
       <section className="sec check">
         <div className="sec-h">

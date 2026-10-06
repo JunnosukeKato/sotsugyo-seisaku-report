@@ -35,7 +35,17 @@ button:disabled { cursor: default; opacity: 0.4; }
 .spacer { flex: 1; }
 .ng { color: var(--error); }
 
-.app { height: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 312px; }
+.app { height: 100%; display: grid; grid-template-columns: 124px minmax(0, 1fr) 312px; }
+/* ページの一覧（画面の左端の欄。PowerPoint と同じ形。mockups/v15 案2） */
+.thumbs-col { display: flex; flex-direction: column; min-height: 0; background: var(--panel-bg); border-right: 1px solid var(--line); }
+.thumbs-col .sec-h { padding: 16px 14px 10px; margin: 0; white-space: nowrap; }
+.thumbs-col .thumb-list { flex: 1; grid-template-columns: 1fr; max-height: none; gap: 14px; padding: 4px 12px 18px; overflow-y: auto; }
+.thumbs-col .thumb-list .t { font-size: 10.5px; }
+.thumbs-col .mini { width: 84px; height: 119px; }
+.thumbs-col .mini .mini-page { transform: scale(0.10583); }
+.thumbs-col .thumb-list .t.has-error::after { right: calc(50% - 47px); }
+.refs-link { padding: 10px 20px 0; border-top: 1px solid var(--line); }
+.refs-link .add-refs { margin: 0 0 10px; }
 
 /* ---- 紙面を置く台 ---- */
 /* 紙面のまわりに空ける幅（左は道具と←、右は→の分）。紙面の倍率は editor/pageStage.ts が --s などに書き込む */
@@ -140,6 +150,11 @@ button:disabled { cursor: default; opacity: 0.4; }
 /* ---- 道具（紙面の左わき） ---- */
 .palette { position: absolute; z-index: 10; left: calc(50% - var(--page-w) / 2 - 104px); top: var(--page-top); width: 86px; display: flex; flex-direction: column; padding: 6px; background: rgba(255, 255, 255, 0.96); border: 1px solid var(--palette-line); border-radius: var(--r-lg); box-shadow: var(--float-shadow); }
 .stage.zoomed .palette { top: var(--inset-top); }
+/* 拡大：紙面を大きくするため左右の余白を狭め、道具は台の左端、ページ送りの矢印は下に置く（道具は紙面の左の余白に少し重なってもよい） */
+.stage.zoomed { --inset-side: 110px; }
+.stage.zoomed .palette { left: 12px; }
+.stage.zoomed .arrow.prev { left: 31px; top: auto; bottom: 20px; translate: none; }
+.stage.zoomed .arrow.next { left: auto; right: 31px; top: auto; bottom: 68px; translate: none; }
 .palette .group { display: flex; flex-direction: column; gap: 1px; }
 .palette .group + .group { border-top: 1px solid var(--palette-line); margin-top: 5px; padding-top: 5px; }
 .p-head { padding: 6px 2px 8px; text-align: center; }
@@ -390,7 +405,7 @@ button:disabled { cursor: default; opacity: 0.4; }
 /* ---- 印刷（PDFに保存）：紙面だけを、すべてのページを順に出す ---- */
 @media print {
   html, body, #root, .app, .stage { display: block !important; height: auto !important; overflow: visible !important; background: #fff !important; }
-  .side, .palette, .arrow, .zoom, #overlay-layer, .loading, .modal-backdrop, .popover-backdrop,
+  .side, .thumbs-col, .palette, .arrow, .zoom, #overlay-layer, .loading, .modal-backdrop, .popover-backdrop,
   .p-top, .p-nav, .pager, .sel-bar, .edit-sheet, .sheet, .scrim, .unzoom, .popover, .guide { display: none !important; }
   .page-scroller { position: static !important; overflow: visible !important; }
   .page-viewport:not(.front) { display: none !important; }
