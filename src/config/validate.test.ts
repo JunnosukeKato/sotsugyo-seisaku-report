@@ -30,4 +30,17 @@ describe('validateConfig', () => {
   it('学籍番号の形式が正規表現として正しくなければ公開できない', () => {
     expect(errors({ ...currentConfig, studentIdPattern: '([0-9' })).toEqual(['studentIdPattern'])
   })
+
+  it('書き間違えやすい語の空の行・同じ語の行は警告（公開は止めない）', () => {
+    const wordChecks = [
+      { wrong: '見頃', right: '身頃', severity: 'error' as const },
+      { wrong: '', right: '空', severity: 'error' as const },
+      { wrong: '同じ', right: '同じ', severity: 'warning' as const },
+    ]
+    const problems = validateConfig({ ...currentConfig, wordChecks })
+    expect(problems.map((p) => [p.severity, p.field])).toEqual([
+      ['warning', 'wordChecks.1'],
+      ['warning', 'wordChecks.2'],
+    ])
+  })
 })

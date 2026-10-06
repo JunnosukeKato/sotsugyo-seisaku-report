@@ -123,6 +123,31 @@ describe('管理ページ（admin-project）', () => {
     expect(gas.getHistory(2026)[0].action).toContain('下書きのひな形を保存')
   })
 
+  it('先生も書き間違えやすい語を保存できる（空の行・同じ語の行は捨てる）', () => {
+    const gas = load('admin-project')
+    gas.setup()
+    gas.addMember('sensei@example.ac.jp', '先生')
+    user = 'sensei@example.ac.jp'
+    const words = [
+      { wrong: ' 見頃 ', right: '身頃', note: '服の胴の部分', severity: 'error' },
+      { wrong: '記事', right: '生地', severity: 'warning' },
+      { wrong: '', right: '空', severity: 'error' },
+      { wrong: '同じ', right: '同じ', severity: 'error' },
+      { wrong: '芯地', right: '芯', severity: 'what' },
+    ]
+    const saved = gas.saveWordChecks(2026, words)
+    expect(saved.years[0].config.wordChecks).toEqual([
+      { wrong: '見頃', right: '身頃', note: '服の胴の部分', severity: 'error' },
+      { wrong: '記事', right: '生地', note: '', severity: 'warning' },
+      { wrong: '芯地', right: '芯', note: '', severity: 'error' },
+    ])
+    expect(saved.years[0].config.commonTitle).toBe(initialConfig.commonTitle)
+    expect(gas.getHistory(2026)[0].action).toBe('書き間違えやすい語を保存（3語）')
+    expect(() => gas.saveWordChecks(2026, 'x')).toThrow(/形が正しくありません/)
+    user = 'student@example.ac.jp'
+    expect(() => gas.saveWordChecks(2026, [])).toThrow(/登録された先生だけ/)
+  })
+
   it('登録していない人はひな形を保存できない。自分の登録は外せない', () => {
     const gas = load('admin-project')
     gas.setup()

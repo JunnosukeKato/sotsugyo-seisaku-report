@@ -98,6 +98,17 @@ export function createMockServer(): AdminServer {
         .history.filter((h) => h.year === year)
         .reverse()
     },
+    async saveWordChecks(year, words) {
+      await wait()
+      const store = load()
+      if (!roleOf(store)) throw new Error('登録された先生だけが使えます')
+      const row = store.years.find((y) => y.year === year)!
+      row.config.wordChecks = words
+      Object.assign(row, { updatedAt: new Date().toISOString(), updatedBy: USER })
+      record(store, year, `書き間違えやすい語を保存（${words.length}語）`, row.config)
+      save(store)
+      return state(store)
+    },
     async saveTemplates(year, templates) {
       await wait()
       const store = load()

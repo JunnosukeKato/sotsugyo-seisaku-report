@@ -144,6 +144,17 @@ describe('変換を間違えやすい語', () => {
     expect(['身返し', '見幅', '見丈', '再寸', '寸方', '友布', '見頃'].map(sev)).toEqual(Array(7).fill('error'))
     expect(['記事', '証明', '講演', '部隊', '意匠', '衣裳'].map(sev)).toEqual(Array(6).fill('warning'))
   })
+
+  it('管理ページで決めた一覧を渡すと、その語だけを指摘する（記号はそのままの文字として探す）', () => {
+    const words = [
+      { wrong: '芯地(仮)', right: '芯地', note: '仮は書かない', severity: 'warning' as const },
+      { wrong: 'ダーツ.', right: 'ダーツ', severity: 'error' as const },
+      { wrong: '', right: '空', severity: 'error' as const },
+    ]
+    const f = checkText('前見頃に芯地(仮)を貼り、ダーツを縫った。', words).filter((x) => x.ruleId.startsWith('word-'))
+    expect(f.map((x) => [x.ruleId, x.severity, x.replacement, x.detail])).toEqual([['word-芯地(仮)', 'warning', '芯地', '「芯地(仮)」→「芯地」（仮は書かない）']])
+    expect(checkText('前見頃を縫った。', []).some((x) => x.ruleId.startsWith('word-'))).toBe(false)
+  })
 })
 
 describe('その他', () => {

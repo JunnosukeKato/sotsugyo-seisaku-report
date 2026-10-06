@@ -3,7 +3,7 @@ import { contentToText, editables, numbering, type EditableKind } from '../edito
 import type { LayoutInfo } from '../layout/measure'
 import type { Report } from '../model/types'
 import { swatchColumn } from '../model/table'
-import { checkText, type TextFinding } from './textRules'
+import { checkText, DEFAULT_WORD_CHECKS, type TextFinding } from './textRules'
 import type { Severity } from './types'
 
 /**
@@ -57,11 +57,13 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   const findings: ReportFinding[] = []
   const num = numbering(report)
   const list = editables(report)
+  // 書き間違えやすい語：年度の設定にあればそれを、なければツールに入っている一覧を使う
+  const words = config.wordChecks ?? DEFAULT_WORD_CHECKS
 
   // ---- 文章のルール ----
   for (const e of list) {
     const area = AREA_OF_KIND[e.kind]
-    for (const f of checkText(e.text) as TextFinding[]) {
+    for (const f of checkText(e.text, words) as TextFinding[]) {
       if ((f.ruleId === 'taigen-dome' || f.ruleId === 'sentence-end') && !SENTENCE_KINDS.includes(e.kind)) continue
       findings.push({ ...f, area, blockId: e.id })
     }

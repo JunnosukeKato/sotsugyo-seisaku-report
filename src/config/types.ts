@@ -3,8 +3,20 @@
  * src/config/2026.json は、管理ページの設定を読み込めないときに使う初期値。
  * 値の根拠は「卒業制作報告書 作成の手順について」（手順書）。
  */
+/** 書き間違えやすい語（学生のセルフチェックで指摘し、「直す」で正しい語にする） */
+export interface WordCheck {
+  wrong: string
+  right: string
+  /** 説明（任意。指摘の詳しい説明に出す） */
+  note?: string
+  /** error：ほぼ確実に誤り。warning：文脈によっては正しいこともある */
+  severity: 'error' | 'warning'
+}
+
 export interface YearConfig {
   fiscalYear: number
+  /** 書き間違えやすい語の一覧。省略したら、ツールに入っている一覧（DEFAULT_WORD_CHECKS）を使う */
+  wordChecks?: WordCheck[]
   reportName: string
   /** 最終締切（YYYY-MM-DD） */
   deadline: string

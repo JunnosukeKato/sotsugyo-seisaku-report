@@ -1,17 +1,21 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import type { Course, YearConfig } from '../config'
+import { DEFAULT_WORD_CHECKS } from '../checker/textRules'
+import type { Course, WordCheck, YearConfig } from '../config'
 import { validateConfig } from '../config/validate'
 import { MembersDialog } from './Members'
 import { Preview } from './Preview'
 import { isMockServer, roleOf, server, type AdminState, type HistoryRow, type TemplateSet, type YearRow } from './server'
 import { TemplateEditor } from './TemplateEditor'
 import { templateSummary } from './templateText'
+import { WordsEditor } from './WordsEditor'
+import { wordSummary } from './wordsText'
 
 /**
  * 管理ページ（案2：設定と見本を並べる型）。デザインは mockups/admin-2.html。
  * 毎年変わる設定（共通の題目、コース、指導教員、締切など）を編集し、学生のツールに公開する。
  * コースごとの「下書きのひな形」は、コースのカードの「編集する」から編集する（mockups/v8 案1）。
- * 「先生」として登録された人には、ひな形だけを編集できる画面（TeacherView）を出す。
+ * 「書き間違えやすい語」は、ボタンから開く窓で編集する（mockups/v17 案3）。
+ * 「先生」として登録された人には、ひな形と書き間違えやすい語だけを編集できる画面（TeacherView）を出す。
  */
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
@@ -20,6 +24,19 @@ const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 function splitTemplate(template: string): [string, string] {
   const i = template.indexOf('{input}')
   return i < 0 ? [template, ''] : [template.slice(0, i), template.slice(i + '{input}'.length)]
+}
+
+/** 書き間違えやすい語の欄：見出しと、語の数を出すボタン（押すと窓が開く） */
+function WordsSection({ words, onOpen }: { words: WordCheck[]; onOpen: () => void }) {
+  return (
+    <>
+      <h2 className="words-head">書き間違えやすい語</h2>
+      <p className="hint words-hint">学生のセルフチェックで指摘し、「直す」で正しい語に置き換えられるようにします。</p>
+      <button className="words-btn" onClick={onOpen}>
+        書き間違えやすい語の一覧を編集<span>{wordSummary(words)}</span>
+      </button>
+    </>
+  )
 }
 
 function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
@@ -170,6 +187,7 @@ export function AdminApp() {
   const [focusedCourse, setFocusedCourse] = useState(0)
   const [dialog, setDialog] = useState<'newYear' | 'history' | 'members' | null>(null)
   const [editingTemplate, setEditingTemplate] = useState<number | null>(null)
+  const [editingWords, setEditingWords] = useState(false)
   const [history, setHistory] = useState<HistoryRow[]>([])
   const [newYear, setNewYear] = useState('')
 
@@ -241,7 +259,14 @@ export function AdminApp() {
         busy={busy}
         message={message}
         onSelectYear={(y) => select(state, y)}
-        onSave={(templates) => void run(row.status === '公開中' ? 'ひな形を保存し、学生のツールに反映しました' : 'ひな形を保存しました', () => server.saveTemplates(row.year, templates))}
+        onSave={(templates, words) =>
+          void run(row.status === '公開中' ? '保存し、学生のツールに反映しました' : '保存しました', async () => {
+            let saved: AdminState | null = null
+            if (Object.keys(templates).length || !words) saved = await server.saveTemplates(row.year, templates)
+            if (words) saved = await server.saveWordChecks(row.year, words)
+            return saved!
+          })
+        }
       />
     )
 
@@ -382,6 +407,8 @@ export function AdminApp() {
             ＋ コースを追加
           </button>
 
+          <WordsSection words={draft.wordChecks ?? DEFAULT_WORD_CHECKS} onOpen={() => setEditingWords(true)} />
+
           <details className="details">
             <summary>詳細設定（手順書が改訂されたときだけ変更）</summary>
             <div className="grid">
@@ -471,6 +498,18 @@ export function AdminApp() {
         />
       )}
 
+      {editingWords && (
+        <WordsEditor
+          words={draft.wordChecks ?? DEFAULT_WORD_CHECKS}
+          onClose={() => setEditingWords(false)}
+          onApply={(wordChecks) => {
+            set({ wordChecks })
+            setEditingWords(false)
+            setMessage({ kind: 'ok', text: '書き間違えやすい語を反映しました。「保存」を押すと学生のツールに届きます' })
+          }}
+        />
+      )}
+
       {dialog === 'members' && <MembersDialog me={state.user} onClose={() => setDialog(null)} />}
 
       {dialog === 'newYear' && (
@@ -528,7 +567,8 @@ export function AdminApp() {
 }
 
 /**
- * 先生の画面：コースの一覧と「下書きのひな形」の編集だけ。保存はひな形だけを送る（ほかの設定はサーバー側でも変えられない）
+ * 先生の画面：コースの一覧と「下書きのひな形」、書き間違えやすい語の編集だけ。
+ * 保存はひな形と書き間違えやすい語だけを送る（ほかの設定はサーバー側でも変えられない）
  */
 function TeacherView({
   state,
@@ -549,9 +589,11 @@ function TeacherView({
   busy: boolean
   message: { kind: 'ok' | 'ng'; text: string } | null
   onSelectYear: (year: number) => void
-  onSave: (templates: TemplateSet) => void
+  /** words は、書き間違えやすい語を変えたときだけ（変えていなければ null） */
+  onSave: (templates: TemplateSet, words: WordCheck[] | null) => void
 }) {
   const [editing, setEditing] = useState<number | null>(null)
+  const [editingWords, setEditingWords] = useState(false)
   const isPublished = row.status === '公開中'
   const save = () => {
     const templates: TemplateSet = {}
@@ -561,8 +603,9 @@ function TeacherView({
         templates[c.id] = { template: c.template, abstractExample: c.abstractExample ?? '' }
       }
     })
+    const words = draft.wordChecks && !same(draft.wordChecks, row.config.wordChecks) ? draft.wordChecks : null
     if (isPublished && !confirm('この年度は学生に公開中です。保存すると、すぐに学生のツールに反映されます（すでに書き始めた学生の原稿は変わりません）。保存しますか？')) return
-    onSave(templates)
+    onSave(templates, words)
   }
   return (
     <div className="admin">
@@ -588,7 +631,7 @@ function TeacherView({
         <span className="spacer" />
         <span className="user">{state.user}（先生）</span>
         <button className="btn primary" disabled={busy || !dirty} onClick={save}>
-          {isPublished ? 'ひな形を保存して学生に反映' : 'ひな形を保存'}
+          {isPublished ? '保存して学生に反映' : '保存'}
         </button>
       </header>
       <main className="teacher-main">
@@ -607,7 +650,18 @@ function TeacherView({
               <TemplateRow course={c} onEdit={() => setEditing(i)} />
             </div>
           ))}
+        <WordsSection words={draft.wordChecks ?? DEFAULT_WORD_CHECKS} onOpen={() => setEditingWords(true)} />
       </main>
+      {editingWords && (
+        <WordsEditor
+          words={draft.wordChecks ?? DEFAULT_WORD_CHECKS}
+          onClose={() => setEditingWords(false)}
+          onApply={(wordChecks) => {
+            setDraft({ ...draft, wordChecks })
+            setEditingWords(false)
+          }}
+        />
+      )}
       {editing !== null && draft.courses[editing] && (
         <TemplateEditor
           course={draft.courses[editing]}

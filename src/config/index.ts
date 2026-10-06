@@ -1,7 +1,7 @@
 import config2026 from './2026.json'
 import type { Course, YearConfig } from './types'
 
-export type { Course, TemplateBlock, YearConfig } from './types'
+export type { Course, TemplateBlock, WordCheck, YearConfig } from './types'
 
 // JSON の文字列（ひな形の部品の種類など）は型が広がるため、型を指定して読み込む
 export const currentConfig: YearConfig = config2026 as YearConfig

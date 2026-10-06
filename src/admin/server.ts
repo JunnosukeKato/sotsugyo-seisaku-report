@@ -1,4 +1,4 @@
-import type { TemplateBlock, YearConfig } from '../config'
+import type { TemplateBlock, WordCheck, YearConfig } from '../config'
 import { createMockServer } from './mockServer'
 
 /**
@@ -56,6 +56,8 @@ export interface AdminServer {
   createYear(fromYear: number, newYear: number): Promise<AdminState>
   getHistory(year: number): Promise<HistoryRow[]>
   saveTemplates(year: number, templates: TemplateSet): Promise<AdminState>
+  /** 書き間違えやすい語の一覧を保存する（管理者・先生） */
+  saveWordChecks(year: number, words: WordCheck[]): Promise<AdminState>
   getMembers(): Promise<Member[]>
   addMember(email: string, role: Member['role'], memo: string): Promise<Member[]>
   removeMember(email: string): Promise<Member[]>
@@ -88,6 +90,7 @@ function appsScriptServer(): AdminServer {
     createYear: (fromYear, newYear) => call('createYear', fromYear, newYear),
     getHistory: (year) => call('getHistory', year),
     saveTemplates: (year, templates) => call('saveTemplates', year, templates),
+    saveWordChecks: (year, words) => call('saveWordChecks', year, words),
     getMembers: () => call('getMembers'),
     addMember: (email, role, memo) => call('addMember', email, role, memo),
     removeMember: (email) => call('removeMember', email),

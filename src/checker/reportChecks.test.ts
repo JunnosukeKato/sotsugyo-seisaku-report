@@ -131,3 +131,13 @@ describe('手で書いた図表の番号', () => {
     expect(findings.some((x) => x.ruleId === 'manual-ref')).toBe(false)
   })
 })
+
+describe('書き間違えやすい語', () => {
+  it('年度の設定に一覧があればそれを使い、なければツールに入っている一覧を使う', () => {
+    const r = ops.setText(demoReport(), 'p1', '前見頃に芯地を貼った。')
+    const words = (config: typeof currentConfig) => checkReport(r, config).filter((x) => x.blockId === 'p1' && x.ruleId.startsWith('word-')).map((x) => x.ruleId)
+    expect(words({ ...currentConfig, wordChecks: undefined })).toEqual(['word-見頃'])
+    expect(words({ ...currentConfig, wordChecks: [{ wrong: '芯地', right: '接着芯', severity: 'warning' }] })).toEqual(['word-芯地'])
+    expect(words({ ...currentConfig, wordChecks: [] })).toEqual([])
+  })
+})

@@ -102,6 +102,34 @@ function saveTemplates(year, templates) {
   })
 }
 
+/**
+ * 書き間違えやすい語の一覧だけを保存する（先生も使える）。words は [{ wrong, right, note, severity }]。
+ * 書き間違いか正しい語が空の行、2つが同じ行は捨てる。
+ */
+function saveWordChecks(year, words) {
+  const user = requireTeacher_()
+  if (!Array.isArray(words)) throw new Error('書き間違えやすい語の形が正しくありません')
+  const clean = words
+    .map((w) => ({
+      wrong: String((w && w.wrong) || '').trim(),
+      right: String((w && w.right) || '').trim(),
+      note: String((w && w.note) || '').trim(),
+      severity: w && w.severity === 'warning' ? 'warning' : 'error',
+    }))
+    .filter((w) => w.wrong && w.right && w.wrong !== w.right)
+  return withLock_(() => {
+    const sheet = sheet_(SHEET_YEARS)
+    const rowIndex = findYearRow_(year)
+    if (rowIndex < 0) throw new Error(year + '年度の設定がありません')
+    const config = JSON.parse(sheet.getRange(rowIndex, 3).getValue())
+    config.wordChecks = clean
+    checkConfig_(config)
+    sheet.getRange(rowIndex, 3, 1, 3).setValues([[JSON.stringify(config), new Date(), user]])
+    appendHistory_(user, year, '書き間違えやすい語を保存（' + clean.length + '語）', config)
+    return getState()
+  })
+}
+
 /** 管理者と先生の一覧（管理者だけ） */
 function getMembers() {
   requireAdmin_()

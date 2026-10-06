@@ -1,3 +1,4 @@
+import type { WordCheck } from '../config/types'
 import type { Severity } from './types'
 
 /**
@@ -35,11 +36,11 @@ const KATAKANA = 'ァ-ヶ'
 const KANJI = '\\u3400-\\u9fff々'
 
 /**
- * 変換を間違えやすい語：[書き間違い, 正しい語, 説明, 重さ]
+ * 変換を間違えやすい語（ツールに入っている一覧。管理ページで年度ごとに追加・編集できる：YearConfig.wordChecks）
  * - error：報告書ではまず使わない形（ほぼ確実に誤り）
  * - warning：文脈によっては正しいこともある形（正しく使っているならそのままでよい）
  */
-const MISCONVERSIONS: [string, string, string, Severity][] = [
+const MISCONVERSIONS: [string, string, string, WordCheck['severity']][] = [
   ['見頃', '身頃', '服の胴の部分', 'error'],
   ['身返し', '見返し', '前端などの裏に付ける布', 'error'],
   ['見幅', '身幅', '', 'error'],
@@ -99,16 +100,6 @@ export const TEXT_RULES: TextRule[] = [
     title: '「製作」ではなく「制作」で統一する',
     find: (text) => matches(text, /製作/g).map(({ start, end }) => ({ start, end, replacement: '制作', detail: '「製作」→「制作」' })),
   },
-  // 服作り・舞台の言葉で、変換を間違えやすい語（「直す」で正しい語にする）
-  ...MISCONVERSIONS.map(
-    ([wrong, right, note, severity]): TextRule => ({
-      id: `word-${wrong}`,
-      severity,
-      source: 'supplementary',
-      title: `「${wrong}」ではなく「${right}」と書く`,
-      find: (text) => matches(text, new RegExp(wrong, 'g')).map(({ start, end }) => ({ start, end, replacement: right, detail: `「${wrong}」→「${right}」${note ? `（${note}）` : ''}` })),
-    }),
-  ),
   {
     id: 'honorific',
     severity: 'warning',
@@ -233,9 +224,30 @@ export const TEXT_RULES: TextRule[] = [
   },
 ]
 
-/** 1つの文字列にすべてのルールを当てる。位置の順に並べて返す */
-export function checkText(text: string): TextFinding[] {
-  return TEXT_RULES.flatMap((rule) =>
+export const DEFAULT_WORD_CHECKS: WordCheck[] = MISCONVERSIONS.map(([wrong, right, note, severity]) => ({ wrong, right, note, severity }))
+
+/** 書き間違えやすい語のルール（「直す」で正しい語にする） */
+function wordRules(words: WordCheck[]): TextRule[] {
+  return words
+    .filter((w) => w.wrong && w.right && w.wrong !== w.right)
+    .map((w) => ({
+      id: `word-${w.wrong}`,
+      severity: w.severity,
+      source: 'supplementary',
+      title: `「${w.wrong}」ではなく「${w.right}」と書く`,
+      find: (text: string) =>
+        matches(text, new RegExp(w.wrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')).map(({ start, end }) => ({
+          start,
+          end,
+          replacement: w.right,
+          detail: `「${w.wrong}」→「${w.right}」${w.note ? `（${w.note}）` : ''}`,
+        })),
+    }))
+}
+
+/** 1つの文字列にすべてのルールを当てる（書き間違えやすい語は words）。位置の順に並べて返す */
+export function checkText(text: string, words: WordCheck[] = DEFAULT_WORD_CHECKS): TextFinding[] {
+  return [...TEXT_RULES, ...wordRules(words)].flatMap((rule) =>
     rule.find(text).map((f) => ({ ruleId: rule.id, severity: rule.severity, source: rule.source, title: rule.title, ...f })),
   ).sort((a, b) => a.start - b.start || a.end - b.end)
 }

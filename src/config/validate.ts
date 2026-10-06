@@ -28,6 +28,10 @@ export function validateConfig(config: YearConfig): ConfigProblem[] {
     if (!config[field]?.trim()) error(field, `${label}を入力してください`)
   }
   if (!config.cover?.heading?.trim()) error('cover.heading', '表紙の見出しを入力してください')
+  for (const [i, w] of (config.wordChecks ?? []).entries()) {
+    if (!w.wrong?.trim() || !w.right?.trim()) warning(`wordChecks.${i}`, `書き間違えやすい語の${i + 1}行目に空の欄があります（その行は使いません）`)
+    else if (w.wrong.trim() === w.right.trim()) warning(`wordChecks.${i}`, `書き間違えやすい語「${w.wrong}」は、書き間違いと正しい語が同じです`)
+  }
   if (!config.cover?.titleLabel?.trim()) error('cover.titleLabel', '表紙の題目の見出しを入力してください')
   if (!config.abstract?.heading?.trim()) error('abstract.heading', '抄録の見出しを入力してください')
 
