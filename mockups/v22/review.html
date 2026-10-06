@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v22：見直しの相談事項（見た目が変わるもの）</title>
+<style>
+  body { margin: 0; padding: 28px 32px 40px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  h2 { font-size: 17px; margin: 30px 0 4px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 13px; color: #5d6068; line-height: 1.8; max-width: 1150px; }
+  figure { margin: 0 0 16px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid #ecebe8; }
+  figcaption b { display: block; font-size: 15px; margin-bottom: 3px; }
+  figcaption span { font-size: 12.5px; color: #5d6068; line-height: 1.7; }
+  img { display: block; width: 100%; }
+  .row { display: grid; gap: 14px; align-items: start; }
+  .c2 { grid-template-columns: 1fr 1fr; }
+  .c3 { grid-template-columns: 1fr 1fr 1fr; }
+  .c4 { grid-template-columns: 2fr 1fr 1fr; }
+  .narrow img { max-width: 420px; margin: 0 auto; }
+</style>
+</head>
+<body>
+  <h1>見直しの相談事項：見た目の案</h1>
+  <p class="lead">決めていただいた ①②③⑨ のうち、画面の見た目が変わるところの案です。文や数字は例です。</p>
+
+  <h2>① 下書きの PDF（エラーが残っていても、先生に途中経過を見せられる）</h2>
+  <div class="row c4">
+    <figure><figcaption><b>書き出しの窓</b><span>エラーの一覧の下に「下書きの PDF を書き出す」を足す。提出用（透かしなし）は今まで通りエラー0のときだけ</span></figcaption><img src="screens/1-export.png" alt=""></figure>
+    <figure><figcaption><b>透かし 案A　斜めに大きく「下書き」</b><span>どのページにも薄く入る。本文は読める</span></figcaption><img src="screens/1-wm-a.png" alt=""></figure>
+    <figure><figcaption><b>透かし 案B　ページの上に帯</b><span>上の余白に「下書き（提出用ではありません）」。本文に重ならない</span></figcaption><img src="screens/1-wm-b.png" alt=""></figure>
+  </div>
+
+  <h2>① 「確認済み」（手順書のルールではない「補助」の指摘を、学生がこのままにできる）</h2>
+  <div class="row c2 narrow">
+    <figure><figcaption><b>案A　指摘の下に「このままにする」</b><span>押すと、その指摘はエラーに数えず、下の「確認済み」にまとまる（いつでも戻せる）</span></figcaption><img src="screens/1-keep-a.png" alt=""></figure>
+    <figure><figcaption><b>案B　指摘の右に「確認した」のチェック</b><span>チェックを入れると、エラーに数えない</span></figcaption><img src="screens/1-keep-b.png" alt=""></figure>
+  </div>
+
+  <h2>② ドライブ保存を止める切り替え（管理ページ）と、止めているときの学生の画面</h2>
+  <div class="row c3">
+    <figure><figcaption><b>案A　年度の設定のいちばん上に置く</b><span>目立つので、障害のときにすぐ見つかる（画像は「止める」を選んだところ）</span></figcaption><img src="screens/2-admin-a.png" alt=""></figure>
+    <figure><figcaption><b>案B　「詳細設定」の中に置く</b><span>ふだんは隠れていて、間違って押しにくい</span></figcaption><img src="screens/2-admin-b.png" alt=""></figure>
+    <figure class="narrow"><figcaption><b>止めているときの学生の画面</b><span>ログインの窓は出ない。右の欄に、止めていることを出す</span></figcaption><img src="screens/2-student.png" alt=""></figure>
+  </div>
+
+  <h2>③ 同じパソコンで2つめのタブを開いたとき</h2>
+  <div class="row c2">
+    <figure><figcaption><b>案A　窓を重ねて、書けなくする</b><span>ログインの窓と同じ形。「こちらで続ける」を押すと、こちらで書け、もう一方のタブが書けなくなる</span></figcaption><img src="screens/3-tab-a.png" alt=""></figure>
+    <figure><figcaption><b>案B　上に帯を出して、見るだけにする</b><span>原稿は見られる（書けない）。「こちらで続ける」で切り替え</span></figcaption><img src="screens/3-tab-b.png" alt=""></figure>
+  </div>
+
+  <h2>⑨ 文字の濃さ・大きさと、エラー・注意の印（右の欄）</h2>
+  <div class="row c3 narrow">
+    <figure><figcaption><b>今</b><span>エラーと注意を、点の色（赤・黄）だけで分けている。説明の文字が薄く小さい</span></figcaption><img src="screens/9-now.png" alt=""></figure>
+    <figure><figcaption><b>案A　印の形で分ける（× と !）＋文字を濃く大きく</b><span>色が分かりにくい人も、形で見分けられる</span></figcaption><img src="screens/9-a.png" alt=""></figure>
+    <figure><figcaption><b>案B　「エラー」「注意」の文字を付ける＋文字を濃く大きく</b><span>いちばん分かりやすいが、少しにぎやかになる</span></figcaption><img src="screens/9-b.png" alt=""></figure>
+  </div>
+</body>
+</html>
