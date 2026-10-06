@@ -68,6 +68,17 @@ h1.chapter + h2.subheading {
   margin-top: 0;
 }
 
+/* 学生が入れた改ページ：この後ろは次のページから始める */
+.page-break {
+  break-after: page;
+  height: 0;
+}
+
+/* 小見出しの下に本文が3行以上入らないときは、小見出しごと次のページへ送る（見出しの下に1〜2行だけ残さない） */
+h2.subheading + p {
+  orphans: 3;
+}
+
 p {
   margin: 0;
   text-indent: calc(1em + ${LETTER_SPACING_PT}pt);

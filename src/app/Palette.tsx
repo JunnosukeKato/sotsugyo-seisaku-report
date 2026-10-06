@@ -139,6 +139,15 @@ export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
     )
   }
 
+  if (selection?.kind === 'pageBreak') {
+    return (
+      <div className="group ctx">
+        <div className="ctx-label">改ページ</div>
+        <Tool label="削除" icon={Icon.remove} danger title="この改ページを削除" onClick={() => editor.removeSelected()} />
+      </div>
+    )
+  }
+
   const tableId = selection?.kind === 'table' ? selection.id : editingId && (editingKind === 'tableCaption' || editingKind === 'tableCell') ? editor.tableIdOf(editingId) : null
   if (tableId) {
     return (
@@ -209,6 +218,7 @@ export function Palette({ editor, snap, onReferences }: Props) {
             <Tool label="段落" icon={Icon.paragraph} title="段落を足す" onPreview={preview} onClick={() => editor.addParagraph()} />
             <Tool label="小見出し" icon={Icon.heading2} title="小見出し（ⅰ．）を足す" onPreview={preview} onClick={() => editor.addSubheading()} />
             <Tool label="大見出し" icon={Icon.heading1} title="大見出し（Ⅰ．）を足す" onPreview={preview} onClick={() => editor.addChapter()} />
+            <Tool label="改ページ" icon={Icon.pageBreak} title="ここで改ページする（この後ろは次のページから始まります）" onPreview={preview} onClick={() => editor.addPageBreak()} />
           </div>
           <div className="group">
             <Tool

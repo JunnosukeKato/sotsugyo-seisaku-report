@@ -40,6 +40,7 @@ export type Selection =
   | { kind: 'figure'; id: string }
   | { kind: 'table'; id: string }
   | { kind: 'photos' }
+  | { kind: 'pageBreak'; id: string }
   | null
 
 export interface EditorSnapshot {
@@ -651,6 +652,9 @@ export class ReportEditor {
       return
     }
     const target = e.target as HTMLElement
+    // 改ページの印：選ぶ（道具の「削除」で消せる）
+    const pageBreak = target.closest<HTMLElement>('.page-break[data-block-id]')
+    if (pageBreak) return this.select({ kind: 'pageBreak', id: pageBreak.dataset.blockId! })
     // 空の項目は仮の文字（::before）しかないため、文字の位置からは特定できない。クリックした要素から探す
     const clickedBlock = target.closest<HTMLElement>('[data-block-id]')?.dataset.blockId
     const hit = this.renderer.pageView.offsetFromPoint(e.clientX, e.clientY) ?? (clickedBlock ? { blockId: clickedBlock, offset: 0 } : null)
@@ -715,6 +719,7 @@ export class ReportEditor {
     const s = this.selection
     if (s?.kind === 'figure') this.viewport.querySelector(`figure[data-figure-id="${CSS.escape(s.id)}"]`)?.classList.add('is-selected')
     if (s?.kind === 'table') this.renderer.pageView.fragments(s.id)[0]?.closest('.material-table')?.classList.add('is-selected')
+    if (s?.kind === 'pageBreak') this.renderer.pageView.fragments(s.id)[0]?.classList.add('is-selected')
   }
 
   // ---- 変更 ----
@@ -799,7 +804,7 @@ export class ReportEditor {
     const view = this.renderer.pageView
     const id = this.overlay.blockId ?? this.currentId
     if (id && view.fragments(id).some((f) => view.pageIndexOf(f) === this.page)) return id
-    const blocks = view.pages()[this.page]?.querySelectorAll<HTMLElement>('section.body [data-block-id]')
+    const blocks = view.pages()[this.page]?.querySelectorAll<HTMLElement>('section.body [data-block-id]:not(.page-break)')
     return blocks?.length ? blocks[blocks.length - 1].dataset.blockId! : id
   }
 
@@ -825,6 +830,15 @@ export class ReportEditor {
     this.pushHistory(this.report)
     this.report = ops.insertAfter(this.report, after, block)
     this.reopenAfterRender(editId, 0)
+  }
+
+  /** 改ページを入れる（足す位置の後ろ。この後ろは次のページから始まる） */
+  addPageBreak(): void {
+    const after = this.insertionAnchor()
+    const id = ops.newId('pb')
+    this.marker.hidden = true
+    this.update((r) => ops.insertAfter(r, after, { type: 'pageBreak', id }))
+    this.currentId = id
   }
 
   addParagraph(): void {

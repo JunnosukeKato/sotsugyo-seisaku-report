@@ -421,6 +421,47 @@ await withEdge(async (browser) => {
   check('図が入りきらないときは、図を次のページの上へ送り、後ろの文章でページの下まで埋める', f.deferred && f.group.page === f.anchor.page + 1 && f.group.top <= 26 && f.after[0].page === f.anchor.page && f.after[0].bottom >= 265, JSON.stringify(f))
   f = await setBody(100, true)
   check('章の残りの文章が少ないときは送らない（図が次の章の見出しより上に出ない）', !f.deferred && f.group.page === f.anchor.page + 1 && f.chapter2.page > f.group.page, JSON.stringify(f))
+
+  // ---- 改ページ：書いている段落の後ろに入れると、後ろは次のページから始まる。印は画面だけ ----
+  await page.evaluate(() => {
+    const kana = '本制作では、衣装の素材や形を検討し、舞台の上での見え方を確かめながら制作を進めた。'
+    const text = (n) => Array.from({ length: n }, (_, i) => kana[i % kana.length]).join('')
+    const body = [{ id: 'bc1', title: '制作過程', blocks: [{ type: 'paragraph', id: 'bpA', content: [{ type: 'text', text: text(300) }] }, { type: 'paragraph', id: 'bpB', content: [{ type: 'text', text: text(200) }] }] }]
+    window.__editor.update((r) => ({ ...r, body }))
+  })
+  await pause(300)
+  await ready()
+  await clickBlock('bpA')
+  await clickPaletteButton('改ページ')
+  await pause(300)
+  await ready()
+  const pageOfId = (id) => page.evaluate((id) => window.__editor.pageOfBlock(id), id)
+  s = await snap()
+  const breakId = s.report.body[0].blocks[1]?.id
+  check('「改ページ」を押すと、後ろの段落が次のページから始まる', s.report.body[0].blocks[1]?.type === 'pageBreak' && (await pageOfId('bpB')) === (await pageOfId('bpA')) + 1, JSON.stringify(s.report.body[0].blocks.map((b) => b.type)))
+  check('改ページでページの半分以上が空くと、セルフチェックで注意が出る', s.findings.some((x) => x.ruleId === 'page-break-gap' && x.blockId === breakId))
+  await page.pdf({ path: `${OUT}/pagebreak.pdf`, preferCSSPageSize: true, printBackground: true })
+  const pbDoc = await getDocument({ url: `${OUT}/pagebreak.pdf`, verbosity: 0 }).promise
+  let pbText = ''
+  for (let n = 1; n <= pbDoc.numPages; n++) pbText += (await (await pbDoc.getPage(n)).getTextContent()).items.map((it) => it.str).join('')
+  check('改ページの印は PDF に出ない', !pbText.includes('改ページ'))
+  // 印をクリックして選び、道具の「削除」で消す
+  await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), breakId)
+  await ready()
+  const mark = await page.evaluate((id) => {
+    const el = document.querySelector(`.page-viewport.front .page-break[data-block-id="${id}"]`)
+    const r = el.getBoundingClientRect()
+    const p = el.closest('[data-vivliostyle-page-container]').getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + (p.height / 297) * 6 }
+  }, breakId)
+  await page.mouse.click(mark.x, mark.y)
+  await pause(200)
+  const selected = (await page.evaluate(() => window.__editor.getSnapshot().selection))?.kind
+  await clickPaletteButton('削除')
+  await pause(300)
+  await ready()
+  s = await snap()
+  check('改ページの印をクリックして選び、「削除」で消せる', selected === 'pageBreak' && !s.report.body[0].blocks.some((b) => b.type === 'pageBreak') && (await pageOfId('bpB')) === (await pageOfId('bpA')), selected)
   await context.close()
 })
 

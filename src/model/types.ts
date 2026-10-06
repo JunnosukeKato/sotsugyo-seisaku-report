@@ -40,7 +40,13 @@ export interface Chapter {
   blocks: BodyBlock[]
 }
 
-export type BodyBlock = SubheadingBlock | ParagraphBlock | FigureRowBlock | MaterialTableBlock
+export type BodyBlock = SubheadingBlock | ParagraphBlock | FigureRowBlock | MaterialTableBlock | PageBreakBlock
+
+/** 改ページ（学生が好きな位置に入れる。この後ろは次のページから始まる） */
+export interface PageBreakBlock {
+  type: 'pageBreak'
+  id: string
+}
 
 /** 小見出し（ⅰ．ⅱ．…は自動で付く） */
 export interface SubheadingBlock {

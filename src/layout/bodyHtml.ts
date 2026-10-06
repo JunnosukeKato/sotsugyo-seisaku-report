@@ -109,6 +109,9 @@ function renderBlock(block: BodyBlock, numbers: Map<string, number>, tableIds: S
     }
     case 'materialTable':
       return renderMaterialTable(block, numbers.get(block.id)!, options)
+    case 'pageBreak':
+      // 画面では「改ページ」の印を出す（印は画面だけ。index.css）
+      return `<div class="page-break" data-block-id="${escapeHtml(block.id)}"></div>`
   }
 }
 

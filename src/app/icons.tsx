@@ -43,6 +43,7 @@ export const Icon = {
       <path d="M4 10h16M4 14.5h16M10 10v9M15 10v9" />
     </>,
   ),
+  pageBreak: svg(<path d="M6 3.5h12v6H6zM6 14.5h12v6H6zM3 12h2M7.5 12h2M12 12h2M16.5 12h2" />),
   refs: svg(<path d="M6 4.5h12v15H6zM9 8.5h6M9 12h6M9 15.5h4" />),
   ref: svg(
     <>

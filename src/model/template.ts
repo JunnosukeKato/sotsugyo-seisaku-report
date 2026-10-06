@@ -77,6 +77,7 @@ function shape(body: Chapter[]): string {
         if (b.type === 'paragraph') return { type: b.type, content: b.content.map((n) => (n.type === 'text' ? n.text : 'ref')).join(''), hint: b.hint ?? '' }
         if (b.type === 'subheading') return { type: b.type, title: b.title }
         if (b.type === 'figureRow') return { type: b.type, figures: b.figures.map((f) => [f.imageId, f.caption]) }
+        if (b.type === 'pageBreak') return { type: b.type }
         return { type: b.type, caption: b.caption, rows: b.rows.map((r) => [r.name, r.usage, r.swatchImageId]) }
       }),
     })),

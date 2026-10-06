@@ -172,6 +172,7 @@ function AddTools({ editor, snap, onDone, onReferences }: { editor: ReportEditor
         {tool('段落', Icon.paragraph, () => editor.addParagraph())}
         {tool('小見出し', Icon.heading2, () => editor.addSubheading())}
         {tool('大見出し', Icon.heading1, () => editor.addChapter())}
+        {tool('改ページ', Icon.pageBreak, () => editor.addPageBreak())}
         {tool('図を入れる', Icon.figure, () => void editor.addFigure())}
         {tool('素材表', Icon.table, () => editor.addMaterialTable())}
         {tool('参考文献', Icon.refs, onReferences)}

@@ -13,6 +13,7 @@ const layout = (over: Partial<LayoutInfo> = {}): LayoutInfo => ({
   abstractLines: 18,
   tocPageNumbers: {},
   figuresPerBodyPage: [],
+  pageBreaks: [],
   ...over,
 })
 
@@ -94,5 +95,13 @@ describe('checkReport', () => {
 
   it('画像が1ページあたりの目安より多いと警告する', () => {
     expect(ids(cleanReport(), layout({ bodyPages: 0 }))).toContain('figures-per-page')
+  })
+})
+
+describe('改ページ', () => {
+  it('改ページでページの半分以上が空いていると注意を出す（半分より少なければ出さない）', () => {
+    const report = demoReport()
+    expect(ids(report, layout({ pageBreaks: [{ id: 'pb1', page: 4, emptyRatio: 0.7 }] }))).toContain('page-break-gap')
+    expect(ids(report, layout({ pageBreaks: [{ id: 'pb1', page: 4, emptyRatio: 0.3 }] }))).not.toContain('page-break-gap')
   })
 })

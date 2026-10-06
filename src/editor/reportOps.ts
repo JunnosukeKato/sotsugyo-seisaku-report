@@ -123,6 +123,8 @@ export function editables(report: Report): Editable[] {
             return [{ id: b.id, kind: 'paragraph', text: contentToText(b.content, num) }]
           case 'figureRow':
             return b.figures.map((f) => ({ id: f.id, kind: 'figureCaption' as const, text: f.caption }))
+          case 'pageBreak':
+            return []
           case 'materialTable':
             return [
               { id: b.id, kind: 'tableCaption', text: b.caption },

@@ -31,7 +31,13 @@ export interface LayoutInfo {
   tocPageNumbers: Record<string, number>
   /** 本文の各ページにある図の数 */
   figuresPerBodyPage: number[]
+  /** 学生が入れた改ページと、そのページの空いている割合（0〜1。本文の領域のうち、改ページより下） */
+  pageBreaks: { id: string; page: number; emptyRatio: number }[]
 }
+
+/** 本文の領域（A4 の上下の余白 25mm を除く） */
+const CONTENT_TOP_MM = 25
+const CONTENT_BOTTOM_MM = 297 - 25
 
 function lineCount(element: Element): number {
   const range = document.createRange()
@@ -66,6 +72,14 @@ export function measureLayout(pages: HTMLElement[], chapters: Chapter[]): Layout
     abstractLines: abstractParagraphs.reduce((n, p) => n + lineCount(p), 0),
     tocPageNumbers,
     figuresPerBodyPage: pages.filter((_, i) => kinds[i] === 'body').map((page) => page.querySelectorAll('figure').length),
+    pageBreaks: pages.flatMap((page, i) =>
+      [...page.querySelectorAll<HTMLElement>('.page-break[data-block-id]')].map((el) => {
+        const p = page.getBoundingClientRect()
+        const top = ((el.getBoundingClientRect().top - p.top) / p.height) * 297
+        const emptyRatio = Math.max(0, Math.min(1, (CONTENT_BOTTOM_MM - top) / (CONTENT_BOTTOM_MM - CONTENT_TOP_MM)))
+        return { id: el.dataset.blockId!, page: i, emptyRatio }
+      }),
+    ),
   }
 }
 

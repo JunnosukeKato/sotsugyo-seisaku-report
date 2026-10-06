@@ -143,6 +143,21 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     }
   }
 
+  // 改ページ：ページの半分以上が空いている（ページ数を増やすためだけの改ページになっていないか）
+  for (const b of layout?.pageBreaks ?? []) {
+    if (b.emptyRatio > 0.5) {
+      findings.push({
+        ruleId: 'page-break-gap',
+        severity: 'warning',
+        source: 'supplementary',
+        title: '改ページで、ページの半分以上が空いている',
+        detail: `ページの約${Math.round(b.emptyRatio * 10) * 10}%が空いています。改ページが要るか確かめましょう`,
+        area: 'body',
+        blockId: b.id,
+      })
+    }
+  }
+
   // 図表：画像、本文中での参照（リンクになった参照も、手で書いた「表1」も、文字列として数える）
   const referenced = new Set<string>()
   for (const e of list.filter((x) => x.kind === 'paragraph')) {
