@@ -34,7 +34,10 @@ const initialClientId = () => {
   }
 }
 
-const gb = (bytes: number) => `${(bytes / 1024 ** 3).toFixed(bytes < 1024 ** 3 ? 2 : 1)}GB`
+const size = (bytes: number) => (bytes >= 1024 ** 4 ? `${(bytes / 1024 ** 4).toFixed(1)}TB` : `${(bytes / 1024 ** 3).toFixed(bytes < 1024 ** 3 ? 2 : 1)}GB`)
+/** 容量の文。上限がとても大きいときは、一人ひとりの上限ではなく大学全体で共有の容量 */
+const quotaText = (a: Account) =>
+  `使用 ${size(a.usage)}／上限 ${a.limit ? `${size(a.limit)}${a.limit >= 10 * 1024 ** 4 ? '（大学全体で共有の容量。一人ひとりの上限はなし）' : ''}` : 'なし'}`
 
 function browserName(): string {
   const ua = navigator.userAgent
@@ -129,7 +132,7 @@ export function DriveTest() {
     setToken(t)
     const a = await account(t)
     setInfo(a)
-    return `ログインできました（${a.email}）`
+    return 'ログインできました'
   }
 
   // 結果の文（メールアドレスは、@ より後ろだけにする）
@@ -141,8 +144,11 @@ export function DriveTest() {
       const r = results[s.key]
       return `${i + 1}. ${s.title}：${r ? `${r.ok ? '○' : '×'} ${r.message}${r.raw ? `［${r.raw}］` : ''}` : '（未実行）'}`
     }),
-    `容量：${info ? `使用 ${gb(info.usage)}／上限 ${info.limit ? gb(info.limit) : 'なし（または共有の上限）'}` : '（未確認）'}`,
-  ].join('\n')
+    `容量：${info ? quotaText(info) : '（未確認）'}`,
+  ]
+    .join('\n')
+    // 念のため、メールアドレスの @ より前は入れない
+    .replace(/[\w.+-]+@/g, '@')
 
   const copy = async () => {
     try {
@@ -206,7 +212,7 @@ export function DriveTest() {
 
       {info && (
         <p className="quota">
-          ドライブの容量：使用 {gb(info.usage)}／上限 {info.limit ? gb(info.limit) : 'なし（または大学全体で共有の上限）'}
+          ログイン中：{info.email}　ドライブの容量：{quotaText(info)}
         </p>
       )}
 
