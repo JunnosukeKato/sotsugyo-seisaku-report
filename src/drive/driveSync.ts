@@ -135,6 +135,25 @@ export function summarize(report: Report): { chars: number; figures: number; pho
   }
 }
 
+/** 学籍番号の形（手順書の例：23FA●●●・22FAC●●●）。管理ページで形式を決めていれば、そちらを使う */
+const DEFAULT_STUDENT_ID = /^\d{2}[A-Z]{2,3}\d{3,4}$/
+
+/**
+ * 学生のメールアドレスの @ より前は学籍番号（小文字）。大文字にして、学籍番号の形なら返す。
+ * 学籍番号の形でなければ（教職員のアカウント）null
+ */
+export function studentIdFromEmail(email: string | null, pattern: string | null): string | null {
+  const id = (email ?? '').split('@')[0].trim().toUpperCase()
+  if (!id) return null
+  let re = DEFAULT_STUDENT_ID
+  try {
+    if (pattern) re = new RegExp(pattern)
+  } catch {
+    // 形式が正しくなければ、手順書の例の形で見る
+  }
+  return re.test(id) ? id : null
+}
+
 /** 更新時刻のほかが同じ原稿か */
 const sameContent = (a: Report, b: Report) => JSON.stringify({ ...a, updatedAt: '' }) === JSON.stringify({ ...b, updatedAt: '' })
 

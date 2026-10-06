@@ -127,6 +127,8 @@ export interface DriveControls {
   /** この端末（ブラウザ）への保存 */
   local: SaveState
   lastSaved: Date | null
+  /** 教職員のアカウント（学籍番号の形でないアドレス）で試している */
+  staff: boolean
   onSaveNow: () => void
   onReload: () => void
   onWipe: () => void

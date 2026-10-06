@@ -259,6 +259,7 @@ export function SidePanel({ editor, snap, config, saveState, drive, onBackup, on
           {drive ? <DriveChipMenu drive={drive} /> : <SaveChip state={saveState} />}
           <DeadlineChip deadline={config.deadline} />
         </div>
+        {drive?.staff && <p className="staff-note">教職員のアカウントで試しています（学籍番号は自動で入りません）</p>}
         <div className="links">
           {config.handbookUrl && (
             <a className="link-btn" href={config.handbookUrl} target="_blank" rel="noreferrer">

@@ -3,7 +3,7 @@ import { currentConfig, findCourse, type YearConfig } from './config'
 import { loadConfig, type ConfigSource } from './config/remote'
 import { ReportEditor, type EditorSnapshot } from './editor/reportEditor'
 import { preloadGis } from './drive/driveApi'
-import { DriveSync, hasContent, type DriveState, type RemoteCopy, type Resolution } from './drive/driveSync'
+import { DriveSync, hasContent, studentIdFromEmail, type DriveState, type RemoteCopy, type Resolution } from './drive/driveSync'
 import { backupFileName, createBackup, readBackup } from './model/backup'
 import { createReport } from './model/newReport'
 import { allImages, clearAll, listSnapshots, loadReport, putImage, saveSnapshot, usedImageIds, type Snapshot } from './model/storage'
@@ -110,8 +110,17 @@ export default function App() {
   // はじめて開いたときは、コースを選ぶところから案内する（コースが1つだけなら学籍番号から）。コースを選んでいない原稿も、コースを選ぶ案内を出す
   const startGuide = useCallback((cfg: YearConfig, report: Report, isNew: boolean) => {
     if (!findCourse(cfg, report.basicInfo.courseId)) setGuide('course')
-    else if (isNew) setGuide('studentId')
+    else if (isNew) setGuide(report.basicInfo.studentId.trim() ? 'name' : 'studentId')
   }, [])
+
+  /** 学生のアカウントなら、表紙の学籍番号が空のときだけ、メールアドレスの学籍番号を入れる（学生は直せる） */
+  const prefillStudentId = useCallback(
+    (ed: ReportEditor) => {
+      const id = drive ? studentIdFromEmail(drive.getState().email, configRef.current.studentIdPattern) : null
+      if (id && !ed.getSnapshot().report.basicInfo.studentId.trim()) ed.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: id } }))
+    },
+    [drive],
+  )
 
   /** ドライブの原稿を開く（写真を読み込んでから、原稿を入れ替える。それまでの原稿は控えに残す） */
   const openRemote = useCallback(
@@ -138,7 +147,10 @@ export default function App() {
           setGate(null)
           const report = ed.getSnapshot().report
           drive.activate(r.kind === 'local' && r.upload ? report : undefined)
-          if (atLogin) startGuide(cfg, report, r.kind === 'new')
+          if (atLogin) {
+            prefillStudentId(ed)
+            startGuide(cfg, ed.getSnapshot().report, r.kind === 'new')
+          }
           else if (r.kind === 'local' && !r.upload) alert('ドライブの原稿は、この端末の原稿と同じです（最新です）')
           return
         }
@@ -146,7 +158,10 @@ export default function App() {
           await openRemote(ed, r.remote)
           setGate(null)
           drive.activate()
-          if (atLogin) startGuide(cfg, ed.getSnapshot().report, false)
+          if (atLogin) {
+            prefillStudentId(ed)
+            startGuide(cfg, ed.getSnapshot().report, false)
+          }
           return
         case 'conflict':
           setGate(null)
@@ -157,7 +172,7 @@ export default function App() {
           return
       }
     },
-    [drive, openRemote, startGuide],
+    [drive, openRemote, startGuide, prefillStudentId],
   )
 
   /** ログインしたあと：ドライブの原稿と比べて、どの原稿で始めるかを決める */
@@ -282,6 +297,7 @@ export default function App() {
           state: driveState,
           local: autosave.state,
           lastSaved: drive.lastSaved,
+          staff: !!driveState.email && !studentIdFromEmail(driveState.email, config.studentIdPattern),
           onSaveNow: () => {
             const ed = editorRef.current
             if (!ed) return
@@ -464,7 +480,7 @@ export default function App() {
           onStep={setGuide}
           onChooseCourse={(courseId) => {
             editor.changeCourseWithTemplate(courseId)
-            setGuide('studentId')
+            setGuide(editor.getSnapshot().report.basicInfo.studentId.trim() ? 'name' : 'studentId')
           }}
         />
       )}
@@ -488,9 +504,10 @@ export default function App() {
             await saveSnapshot(snap.report)
             const fresh = createReport(config)
             editor.replace(fresh)
+            prefillStudentId(editor)
             setDialog(null)
             // 作り直したら、はじめての案内からやり直す
-            setGuide(findCourse(config, fresh.basicInfo.courseId) ? 'studentId' : 'course')
+            startGuide(config, editor.getSnapshot().report, true)
           }}
           onClose={() => setDialog(null)}
         />
@@ -510,7 +527,10 @@ export default function App() {
               await openRemote(editor, driveDialog.remote)
               drive.activate()
               setDriveDialog(null)
-              if (driveDialog.atLogin) startGuide(config, editor.getSnapshot().report, false)
+              if (driveDialog.atLogin) {
+                prefillStudentId(editor)
+                startGuide(config, editor.getSnapshot().report, false)
+              }
             } catch (e) {
               alert(errorText(e))
             } finally {
@@ -527,7 +547,10 @@ export default function App() {
               drive.activate()
               await drive.overwrite(editor.getSnapshot().report)
               setDriveDialog(null)
-              if (driveDialog.atLogin) startGuide(config, editor.getSnapshot().report, false)
+              if (driveDialog.atLogin) {
+                prefillStudentId(editor)
+                startGuide(config, editor.getSnapshot().report, false)
+              }
             } catch (e) {
               alert(errorText(e))
             } finally {

@@ -547,4 +547,5 @@ body.resizing .page-viewport { pointer-events: none; }
 /* スマホの上の帯：保存のようすを短く */
 .p-top .chip .drive-ic { width: 14px; height: 14px; }
 .p-top .chip.click { box-shadow: none; background: none; }
+.staff-note { margin: 8px 0 0; font-size: 11px; color: var(--muted); }
 @media print { .login-over, .drive-pop { display: none !important; } }

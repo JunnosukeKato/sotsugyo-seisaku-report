@@ -297,6 +297,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, onBackup, 
             <DeadlineChip deadline={config.deadline} />
           </div>
           {drive && <DriveMenu drive={drive} inline onDone={close} />}
+          {drive?.staff && <p className="staff-note">教職員のアカウントで試しています（学籍番号は自動で入りません）</p>}
           {config.notice?.trim() && (
             <div className="notice">
               <b>学科からのお知らせ</b>

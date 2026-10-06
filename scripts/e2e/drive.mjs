@@ -22,7 +22,8 @@ function fakeDrive() {
   const files = new Map()
   let seq = 0
   let clock = Date.now()
-  const drive = { files, email: 'test@bunka-wu.ac.jp', failNext: null, logins: 0 }
+  // 学生のアカウント（@ より前は学籍番号の小文字）
+  const drive = { files, email: '22fac123@bunka-wu.ac.jp', failNext: null, logins: 0 }
   const now = () => new Date((clock += 1000)).toISOString()
   const meta = (f) => ({ id: f.id, name: f.name, size: String(f.content?.length ?? 0), modifiedTime: f.modifiedTime, appProperties: f.appProperties })
   const unquote = (s) => s.replace(/\\'/g, "'").replace(/\\\\/g, '\\')
@@ -176,8 +177,14 @@ await withEdge(async (browser) => {
   check('ログインすると窓が消え、はじめての人にはコースを選ぶ案内が出る', !!(await pc.page.$('.guide .g-opts button')))
   await clickText(pc.page, '.guide .g-opts button', 'コース')
   await editorReady(pc.page)
+  await pc.page.waitForSelector('.guide .g-tip h2')
+  check(
+    '学生のアカウントなら、表紙の学籍番号にメールアドレスの学籍番号（大文字）が入り、案内は氏名から',
+    (await pc.page.evaluate(() => window.__editor.getSnapshot().report.basicInfo.studentId)) === '22FAC123' && (await pc.page.$eval('.guide .g-tip h2', (e) => e.textContent)).includes('氏名'),
+  )
+  check('学生のアカウントでは、教職員の表示は出ない', !(await pc.page.$('.staff-note')))
   await clickText(pc.page, '.guide button', 'あとで入力する')
-  await setInfo(pc.page, { studentId: '23FA0123', name: '文化　花子' })
+  await setInfo(pc.page, { name: '文化　花子' })
   await savedChip(pc.page)
   check('書いた内容が、数秒後にドライブにも保存される', drive.report()?.report.basicInfo.name === '文化　花子')
   const folders = [...drive.files.values()].filter((f) => f.mimeType === 'application/vnd.google-apps.folder').map((f) => f.name)
@@ -236,8 +243,8 @@ await withEdge(async (browser) => {
   await editorReady(pc.page)
   await pc.page.click('.login-btn')
   await pc.page.waitForFunction(() => [...document.querySelectorAll('.modal h2')].some((h) => h.textContent.includes('別のアカウント')), { timeout: 30000 })
-  check('この端末に別のアカウントの原稿があるときは、知らせる', (await pc.page.$eval('.modal .lead', (e) => e.textContent)).includes('test@bunka-wu.ac.jp'))
-  drive.email = 'test@bunka-wu.ac.jp'
+  check('この端末に別のアカウントの原稿があるときは、知らせる', (await pc.page.$eval('.modal .lead', (e) => e.textContent)).includes('22fac123@bunka-wu.ac.jp'))
+  drive.email = '22fac123@bunka-wu.ac.jp'
   await clickText(pc.page, '.modal button', '前のアカウントでログインし直す')
   await pc.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {})
   await editorReady(pc.page)
@@ -253,6 +260,18 @@ await withEdge(async (browser) => {
   await pc.page.waitForSelector('.login-over .login-btn')
   check('「この端末から原稿を消す」で、この端末の原稿が消え、ログインの窓に戻る', (await localReport(pc.page)) === null && (await snapshotsOf(pc.page)).length === 0)
   check('この端末から消しても、ドライブの原稿は残る', drive.report()?.report.basicInfo.name === '文化　次郎')
+
+  // ---- 先生（学籍番号の形でないアドレス）は、試しに使える ----
+  drive.email = 'jun-kato@bunka-wu.ac.jp'
+  const staff = await device(browser, drive)
+  await staff.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+  await editorReady(staff.page)
+  await staff.page.click('.login-btn')
+  await gateClosed(staff.page)
+  const staffInfo = await staff.page.evaluate(() => ({ note: document.querySelector('.staff-note')?.textContent ?? '', meta: document.querySelector('.side .meta')?.textContent ?? '', modal: document.querySelector('.modal h2')?.textContent ?? '' }))
+  check('先生のアカウントでも使え、右の欄に「教職員のアカウントで試しています」と出る', staffInfo.note.includes('教職員'), JSON.stringify(staffInfo))
+  await staff.context.close()
+  drive.email = '22fac123@bunka-wu.ac.jp'
 
   // ---- インターネットにつながっていないとき ----
   await pc.page.setOfflineMode(true)
