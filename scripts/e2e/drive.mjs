@@ -262,7 +262,7 @@ await withEdge(async (browser) => {
   check('この端末から消しても、ドライブの原稿は残る', drive.report()?.report.basicInfo.name === '文化　次郎')
 
   // ---- 先生（学籍番号の形でないアドレス）は、試しに使える ----
-  drive.email = 'jun-kato@bunka-wu.ac.jp'
+  drive.email = 'staff-a@bunka-wu.ac.jp'
   const staff = await device(browser, drive)
   await staff.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
   await editorReady(staff.page)

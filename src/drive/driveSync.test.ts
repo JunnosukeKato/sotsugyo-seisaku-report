@@ -105,7 +105,7 @@ describe('メールアドレスから学籍番号', () => {
     const { studentIdFromEmail } = await import('../model/account')
     expect(studentIdFromEmail('22fac123@bunka-wu.ac.jp', null)).toBe('22FAC123')
     expect(studentIdFromEmail('23fa0123@bunka-wu.ac.jp', null)).toBe('23FA0123')
-    expect(studentIdFromEmail('jun-kato@bunka-wu.ac.jp', null)).toBeNull()
+    expect(studentIdFromEmail('staff-a@bunka-wu.ac.jp', null)).toBeNull()
     expect(studentIdFromEmail(null, null)).toBeNull()
     // 管理ページで形式を決めていれば、そちらで見る
     expect(studentIdFromEmail('23fa0123@bunka-wu.ac.jp', '^\\d{2}FA\\d{3}$')).toBeNull()
