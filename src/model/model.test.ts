@@ -8,6 +8,7 @@ import { backupFileName, BackupFormatError, createBackup, readBackup } from './b
 import { demoReport } from './demoReport'
 import { fitFigureSize, printDpi } from './images'
 import { migrateReport, UnsupportedDataError } from './migrate'
+import { bodyContentHtml } from '../layout/bodyHtml'
 import { createReport } from './newReport'
 import { listSnapshots, loadReport, putImage, getImage, saveReport, saveSnapshot, usedImageIds } from './storage'
 import { DATA_FORMAT_VERSION } from './types'
@@ -70,9 +71,9 @@ describe('下書きのひな形', () => {
   })
 
   it('コースを変えると、本文をそのコースのひな形に入れ替え、表紙と書いた抄録は残す', () => {
-    const report = { ...createReport(twoCourses, 'other'), basicInfo: { studentId: '23FA0001', name: '文化　花子', courseId: 'other', subtitleInput: 'X' } }
+    const report = { ...createReport(twoCourses, 'other'), basicInfo: { studentId: '00ZZ0001', name: '文化　花子', courseId: 'other', subtitleInput: 'X' } }
     const changed = applyCourseTemplate(report, twoCourses, 'film-stage-costume')
-    expect(changed.basicInfo).toMatchObject({ studentId: '23FA0001', name: '文化　花子', courseId: 'film-stage-costume' })
+    expect(changed.basicInfo).toMatchObject({ studentId: '00ZZ0001', name: '文化　花子', courseId: 'film-stage-costume' })
     expect(changed.body.map((c) => c.title)).toEqual(['企画・立案', '制作過程', 'まとめ'])
     expect(changed.abstract.paragraphs[0].hint).toContain('卒業イベント')
   })
@@ -90,6 +91,34 @@ describe('migrateReport', () => {
     const r = migrateReport({ formatVersion: 1, body: [], basicInfo: { name: '文化 花子' } })
     expect(r.basicInfo).toEqual({ studentId: '', name: '文化 花子', courseId: '', subtitleInput: '' })
     expect(r.workPhotos).toEqual({ layout: 1, imageIds: [] })
+  })
+
+  it('細工したファイルや壊れたファイルでも、形を確かめてから使う（紙面に HTML を入れられない・画面が止まらない）', () => {
+    const r = migrateReport({
+      formatVersion: 1,
+      body: [
+        {
+          id: 'c1',
+          title: 7,
+          blocks: [
+            { type: 'table', id: 't1', caption: '表', widths: 'x"><img src=x onerror=alert(1)>', rows: [{ id: 'r', cells: [{ id: 'c', text: 5 }] }] },
+            { type: 'paragraph', id: 'p1', content: [{ type: 'text', text: null }, { type: 'script', text: 'x' }] },
+            { type: 'unknown', id: 'u1' },
+          ],
+        },
+      ],
+      abstract: { paragraphs: [{ id: 'a1', content: 'x' }] },
+      references: [{ type: 'book', id: 'b1', pages: 3 }],
+    })
+    const [table, paragraph] = r.body[0].blocks
+    expect(r.body[0].title).toBe('')
+    expect(r.body[0].blocks).toHaveLength(2)
+    expect(table).toMatchObject({ type: 'table', widths: 'equal', rows: [{ cells: [{ text: '', imageId: null }] }] })
+    expect(paragraph).toMatchObject({ type: 'paragraph', content: [{ type: 'text', text: '' }] })
+    expect(r.abstract.paragraphs[0].content).toEqual([{ type: 'text', text: '' }])
+    expect(r.references[0]).toMatchObject({ type: 'book', pages: '' })
+    const html = bodyContentHtml(r.body, { imageSrc: () => '', figureSize: () => ({ widthMm: 10, heightMm: 10 }) })
+    expect(html).not.toContain('onerror')
   })
 
   it('新しい版のデータや報告書でないデータは読み込まない', () => {
@@ -116,7 +145,7 @@ describe('バックアップ', () => {
   })
 
   it('ファイル名に学籍番号と日時が入る', () => {
-    expect(backupFileName(demoReport(), new Date(2026, 9, 5, 14, 32))).toBe('卒業制作報告書_バックアップ_23FA0123_20261005-1432.json')
+    expect(backupFileName(demoReport(), new Date(2026, 9, 5, 14, 32))).toBe('卒業制作報告書_バックアップ_00ZZ0123_20261005-1432.json')
   })
 })
 
@@ -134,6 +163,14 @@ describe('自動保存（IndexedDB）', () => {
     const snapshots = await listSnapshots()
     expect(snapshots).toHaveLength(20)
     expect(snapshots[0].savedAt).toBe('2026-10-05T00:00:21Z')
+  })
+
+  it('入れ替える前の原稿の控え（選ばなかった原稿など）は、10分ごとの控えに押し出されない', async () => {
+    await saveSnapshot({ ...demoReport(), title: '選ばなかった原稿' } as never, '2026-10-04T00:00:00Z', true)
+    for (let i = 0; i < 25; i++) await saveSnapshot(demoReport(), `2026-10-06T00:00:${String(i).padStart(2, '0')}Z`)
+    const snapshots = await listSnapshots()
+    expect(snapshots.some((s) => s.savedAt === '2026-10-04T00:00:00Z' && s.keep)).toBe(true)
+    expect(snapshots.filter((s) => !s.keep)).toHaveLength(20)
   })
 
   it('報告書で使っている写真の ID を集める', () => {

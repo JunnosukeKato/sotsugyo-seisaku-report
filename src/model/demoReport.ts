@@ -54,7 +54,7 @@ export function demoReport(): Report {
   return {
     formatVersion: DATA_FORMAT_VERSION,
     fiscalYear: 2026,
-    basicInfo: { studentId: '23FA0123', name: '文化　花子', courseId: 'film-stage-costume', subtitleInput: 'シンドバッド' },
+    basicInfo: { studentId: '00ZZ0123', name: '文化　花子', courseId: 'film-stage-costume', subtitleInput: 'シンドバッド' },
     abstract: {
       paragraphs: [
         p('a1', '本制作報告書は、卒業イベント「シンドバッド」において、筆者が制作したシンドバッドの衣装についてである。七つの航海を経て成長していく主人公の姿を、衣装で表すことを目標とした。'),

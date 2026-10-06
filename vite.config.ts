@@ -1,5 +1,5 @@
 import react from '@vitejs/plugin-react'
-import { defineConfig } from 'vite'
+import { configDefaults, defineConfig } from 'vitest/config'
 
 // https://vite.dev/config/
 export default defineConfig({
@@ -11,5 +11,9 @@ export default defineConfig({
       // 学生用ツールと、Google ドライブの接続テストのページ
       input: { main: 'index.html', driveTest: 'drive-test.html' },
     },
+  },
+  test: {
+    // 試しや見直しで作ったもの（poc-output、git に入らない）のテストは、単体テストに含めない
+    exclude: [...configDefaults.exclude, 'poc-output/**'],
   },
 })

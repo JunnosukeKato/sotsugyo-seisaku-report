@@ -53,7 +53,7 @@ await withEdge(async (browser) => {
     const ready = () => page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !s.turning }, { timeout: 90000 })
     await ready()
     await page.addStyleTag({ content: '.guide { display: none !important; }' })
-    await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: '23FA0123', name: '文化　花子', subtitleInput: 'シンドバッド' } })))
+    await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: '00ZZ0123', name: '文化　花子', subtitleInput: 'シンドバッド' } })))
     await new Promise((r) => setTimeout(r, 300))
     await ready()
     await page.evaluate(() => window.__editor.goToArea('abstract'))

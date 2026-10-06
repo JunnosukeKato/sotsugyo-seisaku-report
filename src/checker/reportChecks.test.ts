@@ -63,6 +63,13 @@ describe('checkReport', () => {
     expect(ids(r, layout()).filter((x) => x === 'required-field')).toHaveLength(4)
   })
 
+  it('氏名の姓と名の間が半角の空白なら、全角に直せる', () => {
+    const r = { ...cleanReport(), basicInfo: { ...cleanReport().basicInfo, name: '文化 花子' } }
+    const f = checkReport(r, currentConfig, layout()).find((x) => x.ruleId === 'name-space')
+    expect(f).toMatchObject({ blockId: 'basic:name', start: 2, end: 3, replacement: '　' })
+    expect(ids({ ...r, basicInfo: { ...r.basicInfo, name: '文化　花子' } }, layout())).not.toContain('name-space')
+  })
+
   it('抄録の字数・行数・ページ数を判定する', () => {
     const r = cleanReport()
     expect(abstractCharCount(r)).toBe(704)

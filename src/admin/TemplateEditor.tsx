@@ -108,8 +108,19 @@ interface Props {
 let keyCounter = 0
 const withKeys = (list: TemplateBlock[]) => list.map((block) => ({ key: ++keyCounter, block }))
 
+/** 編集を始めるひな形（ないときは標準のひな形）。崩れたひな形でも画面が止まらないよう、知らない種類の部品は外し、名前や説明は文字にそろえる */
+function startBlocks(template: unknown): TemplateBlock[] {
+  if (!Array.isArray(template) || template.length === 0) return DEFAULT_TEMPLATE
+  return template.flatMap((b: unknown) => {
+    const type = b && typeof b === 'object' ? (b as { type?: unknown }).type : undefined
+    if (typeof type !== 'string' || !Object.prototype.hasOwnProperty.call(NEW_BLOCKS, type)) return []
+    const text: unknown = textOf(b as TemplateBlock)
+    return [withText(NEW_BLOCKS[type as TemplateBlock['type']], typeof text === 'string' ? text : '')]
+  })
+}
+
 export function TemplateEditor({ course, config, onApply, onClose }: Props) {
-  const [rows, setRows] = useState(() => withKeys(course.template && course.template.length ? course.template : DEFAULT_TEMPLATE))
+  const [rows, setRows] = useState(() => withKeys(startBlocks(course.template)))
   const [abstractExample, setAbstractExample] = useState(course.abstractExample ?? '')
   const [selected, setSelected] = useState(0)
   const [focusKey, setFocusKey] = useState<number | null>(null)

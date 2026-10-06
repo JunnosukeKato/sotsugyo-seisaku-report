@@ -47,10 +47,10 @@ await withEdge(async (browser) => {
   await wait(300)
   await shot('1a-guide')
   check('案内の欄をタップすると、下の書く欄で入力できる', (await snap()).editingId === 'basic:studentId')
-  await page.keyboard.type('23FA0123')
+  await page.keyboard.type('00ZZ0123')
   await page.click('.edit-sheet .done')
   await page.waitForSelector('.guide.step-name')
-  check('学籍番号を書き終えると、氏名の案内に進む', (await snap()).report.basicInfo.studentId === '23FA0123')
+  check('学籍番号を書き終えると、氏名の案内に進む', (await snap()).report.basicInfo.studentId === '00ZZ0123')
   await page.click('.g-later')
   await ready()
 

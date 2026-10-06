@@ -11,7 +11,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 const cloud = (check) =>
   `<svg class="v18-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18.5h10.5a4 4 0 0 0 .7-7.94A6 6 0 0 0 6.6 9.6 4.5 4.5 0 0 0 7 18.5z"/>${check ? '<path d="M9.4 13.7l2 2 3.6-3.7"/>' : ''}</svg>`
-const EMAIL = '23fa0123@bunka-wu.ac.jp'
+const EMAIL = '00zz0123@bunka-wu.ac.jp'
 
 // 撮影で使う部品（ページの中に渡す）
 const H = {
@@ -212,7 +212,7 @@ async function open(browser, { phone = false, guide = false } = {}) {
   await ready(page, phone)
   await page.addStyleTag({ content: guide ? CSS.replace('.guide { display: none !important; }', '') : CSS })
   if (!guide) {
-    await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: '23FA0123', name: '文化　花子', subtitleInput: 'シンドバッド' } })))
+    await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: '00ZZ0123', name: '文化　花子', subtitleInput: 'シンドバッド' } })))
     await sleep(400)
     await ready(page, phone)
   }

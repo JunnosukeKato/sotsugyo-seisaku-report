@@ -253,11 +253,11 @@ export function listChildren(token: Token, folderId: string): Promise<DriveFile[
   return list(token, `${quote(folderId)} in parents and trashed = false`)
 }
 
-/** ファイルの最後に変わった時刻。消えていたら null */
-export async function getModified(token: Token, fileId: string): Promise<string | null> {
+/** ファイル（フォルダ）の最後に変わった時刻と、このツールが付けた情報。消えていたり、ゴミ箱に入っていたら null */
+export async function getFileState(token: Token, fileId: string): Promise<{ modifiedTime: string; appProperties?: Record<string, string> } | null> {
   try {
-    const body = await (await call(token, `${API}/files/${fileId}?fields=modifiedTime,trashed`)).json()
-    return body.trashed ? null : body.modifiedTime
+    const body = await (await call(token, `${API}/files/${fileId}?fields=modifiedTime,trashed,appProperties`)).json()
+    return body.trashed ? null : { modifiedTime: body.modifiedTime, appProperties: body.appProperties }
   } catch (e) {
     if (e instanceof DriveError && e.code === 'missing') return null
     throw e
@@ -288,7 +288,9 @@ export async function saveFile(
   file: { name: string; content: Blob; folderId: string; fileId?: string; appProperties?: Record<string, string> },
 ): Promise<DriveFile> {
   const metadata = file.fileId
-    ? {}
+    ? file.appProperties
+      ? { appProperties: file.appProperties }
+      : {}
     : { name: file.name, parents: [file.folderId], mimeType: file.content.type || 'application/octet-stream', ...(file.appProperties ? { appProperties: file.appProperties } : {}) }
   const target = file.fileId ? `${UPLOAD}/files/${file.fileId}` : `${UPLOAD}/files`
   const method = file.fileId ? 'PATCH' : 'POST'

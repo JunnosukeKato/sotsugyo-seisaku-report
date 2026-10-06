@@ -53,7 +53,8 @@ export interface AdminServer {
   getState(): Promise<AdminState>
   /** expectedUpdatedAt：画面を開いたときの更新日時（そのあとにほかの人が保存していたら、保存せずに知らせる） */
   saveYear(config: YearConfig, expectedUpdatedAt?: string): Promise<AdminState>
-  publishYear(year: number): Promise<AdminState>
+  /** expectedUpdatedAt：画面を開いたときの更新日時（そのあとにほかの人が保存していたら、見ていない内容を公開しないよう、公開せずに知らせる） */
+  publishYear(year: number, expectedUpdatedAt?: string): Promise<AdminState>
   createYear(fromYear: number, newYear: number): Promise<AdminState>
   getHistory(year: number): Promise<HistoryRow[]>
   saveTemplates(year: number, templates: TemplateSet): Promise<AdminState>
@@ -61,8 +62,11 @@ export interface AdminServer {
   saveNotices(year: number, notices: Record<string, string>): Promise<AdminState>
   /** 書き間違えやすい語の一覧を保存する（管理者・先生） */
   saveWordChecks(year: number, words: WordCheck[]): Promise<AdminState>
-  /** 先生の画面の保存：ひな形・お知らせ・書き間違えやすい語を、まとめて1回で */
-  saveTeacherEdits(year: number, edits: { templates?: TemplateSet; notices?: Record<string, string>; words?: WordCheck[] }): Promise<AdminState>
+  /**
+   * 先生の画面の保存：ひな形・お知らせ・書き間違えやすい語を、まとめて1回で。
+   * expectedUpdatedAt：画面を開いたときの更新日時（そのあとにほかの人が保存していたら、保存せずに知らせる）
+   */
+  saveTeacherEdits(year: number, edits: { templates?: TemplateSet; notices?: Record<string, string>; words?: WordCheck[] }, expectedUpdatedAt?: string): Promise<AdminState>
   getMembers(): Promise<Member[]>
   addMember(email: string, role: Member['role'], memo: string): Promise<Member[]>
   /** まとめて登録する（すでに登録されている人は、そのまま） */
@@ -93,13 +97,13 @@ function appsScriptServer(): AdminServer {
   return {
     getState: () => call('getState'),
     saveYear: (config, expectedUpdatedAt) => call('saveYear', config, expectedUpdatedAt ?? null),
-    publishYear: (year) => call('publishYear', year),
+    publishYear: (year, expectedUpdatedAt) => call('publishYear', year, expectedUpdatedAt ?? null),
     createYear: (fromYear, newYear) => call('createYear', fromYear, newYear),
     getHistory: (year) => call('getHistory', year),
     saveTemplates: (year, templates) => call('saveTemplates', year, templates),
     saveWordChecks: (year, words) => call('saveWordChecks', year, words),
     saveNotices: (year, notices) => call('saveNotices', year, notices),
-    saveTeacherEdits: (year, edits) => call('saveTeacherEdits', year, edits),
+    saveTeacherEdits: (year, edits, expectedUpdatedAt) => call('saveTeacherEdits', year, edits, expectedUpdatedAt ?? null),
     getMembers: () => call('getMembers'),
     addMember: (email, role, memo) => call('addMember', email, role, memo),
     addMembers: (entries, role) => call('addMembers', entries, role),

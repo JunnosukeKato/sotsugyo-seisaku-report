@@ -7,7 +7,7 @@ import { DriveSync, hasContent, type DriveState, type RemoteCopy, type Resolutio
 import { studentIdFromEmail } from './model/account'
 import { backupFileName, createBackup, readBackup } from './model/backup'
 import { createReport } from './model/newReport'
-import { allImages, clearAll, listSnapshots, loadReport, putImage, saveSnapshot, usedImageIds, type Snapshot } from './model/storage'
+import { allImages, clearAll, listSnapshots, loadReport, keepSnapshot, putImage, usedImageIds, type Snapshot } from './model/storage'
 import type { Report } from './model/types'
 import { BackupDialog, CourseChangeDialog, CourseMenu, ExportDialog, ReferencesDialog } from './app/dialogs'
 import { ConflictDialog, LoginGate, OtherAccountDialog, ReloginDialog, WipeDialog, type DriveControls, type GateState } from './app/DriveUi'
@@ -143,6 +143,9 @@ export default function App() {
     if (report.fiscalYear === configRef.current.fiscalYear) return
     const yearConfig = report.fiscalYear === publishedRef.current.fiscalYear ? publishedRef.current : await loadYearConfig(report.fiscalYear)
     if (!yearConfig) return
+    // 読めた設定に原稿のコースがない（同梱の初期値しか読めなかったなど）なら、コースのある今の設定のままにする
+    const courseId = report.basicInfo.courseId
+    if (courseId && !findCourse(yearConfig, courseId) && findCourse(configRef.current, courseId)) return
     configRef.current = yearConfig
     setConfig(yearConfig)
     ed.setConfig(yearConfig)
@@ -154,7 +157,7 @@ export default function App() {
       if (!drive) return
       setGate({ kind: 'loading' })
       const current = ed.getSnapshot().report
-      if (hasContent(current)) await saveSnapshot(current)
+      if (hasContent(current)) await keepSnapshot(current)
       ed.addImages(await drive.downloadImages(remote.report, (done, total) => setGate({ kind: 'loading', done, total })))
       ed.replace(remote.report)
       drive.adopt(remote, ed.getSnapshot().report)
@@ -167,7 +170,6 @@ export default function App() {
   const applyResolution = useCallback(
     async (ed: ReportEditor, r: Resolution, atLogin: boolean) => {
       if (!drive) return
-      const cfg = configRef.current
       switch (r.kind) {
         case 'new':
         case 'local': {
@@ -176,7 +178,7 @@ export default function App() {
           drive.activate(r.kind === 'local' && r.upload ? report : undefined)
           if (atLogin) {
             prefillStudentId(ed)
-            startGuide(cfg, ed.getSnapshot().report, r.kind === 'new')
+            startGuide(configRef.current, ed.getSnapshot().report, r.kind === 'new')
           }
           else if (r.kind === 'local' && !r.upload) alert('ドライブの原稿は、この端末の原稿と同じです（最新です）')
           return
@@ -187,7 +189,8 @@ export default function App() {
           drive.activate()
           if (atLogin) {
             prefillStudentId(ed)
-            startGuide(cfg, ed.getSnapshot().report, false)
+            // ドライブの原稿の年度に切り替えたあとの設定で決める
+            startGuide(configRef.current, ed.getSnapshot().report, false)
           }
           return
         case 'conflict':
@@ -239,7 +242,10 @@ export default function App() {
         const saved = await loadReport()
         localAtStart.current = saved
         // 原稿は、書き始めた年度の設定で開く（新年度を公開しても、前年度の学生の表紙が新年度の題目・教員に変わらないように）
-        const loaded = (saved && saved.fiscalYear !== published.fiscalYear && (await loadYearConfig(saved.fiscalYear))) || published
+        // ただし、読めた年度の設定に原稿のコースがない（同梱の初期値しか読めなかったなど）なら、コースのある公開中の設定で開く
+        const yearConfig = saved && saved.fiscalYear !== published.fiscalYear ? await loadYearConfig(saved.fiscalYear) : null
+        const savedCourse = saved?.basicInfo.courseId
+        const loaded = yearConfig && !(savedCourse && !findCourse(yearConfig, savedCourse) && findCourse(published, savedCourse)) ? yearConfig : published
         setConfig(loaded)
         setConfigSource(source)
         configRef.current = loaded
@@ -277,6 +283,30 @@ export default function App() {
     }
     document.addEventListener('visibilitychange', onHide)
     return () => document.removeEventListener('visibilitychange', onHide)
+  }, [drive])
+
+  /** 「PDFを書き出す」：紙面を組み直し終えてから窓を開く（長い原稿では数秒かかるので、その間は「確かめています…」と出す） */
+  const [exporting, setExporting] = useState(false)
+  const startExport = async () => {
+    if (!editor || exporting) return
+    setExporting(true)
+    try {
+      editor.commitEditing()
+      await editor.render()
+      setDialog({ kind: 'export' })
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  // ドライブに送れていない変更があるまま閉じようとしたら、ブラウザの確認を出す（ほかの端末で古い原稿が開いたり、共用のパソコンで次の人に消されたりしないように）
+  useEffect(() => {
+    if (!drive) return
+    const warn = (e: BeforeUnloadEvent) => {
+      if (!stoppedRef.current && drive.unsent) e.preventDefault()
+    }
+    window.addEventListener('beforeunload', warn)
+    return () => window.removeEventListener('beforeunload', warn)
   }, [drive])
 
   // 別の端末が、この端末より後にドライブに保存した：どちらで続けるかを選んでもらう
@@ -368,6 +398,8 @@ export default function App() {
         return
       }
       if (dialog || driveDialog || guide === 'course' || isTyping(e.target) || e.altKey) return
+      // スマホの下から出る欄など、窓の中で押したキーでは、ページを送らない
+      if (e.target instanceof Element && e.target.closest('[aria-modal="true"]')) return
       if (e.key === 'ArrowRight' || e.key === 'PageDown') {
         e.preventDefault()
         editor.nextPage()
@@ -393,7 +425,7 @@ export default function App() {
       try {
         const { report, images, savedAt } = readBackup(await file.text())
         if (!confirm(`${new Date(savedAt).toLocaleString('ja-JP')} に保存したバックアップで、今の原稿を置き換えますか？\n（今の原稿は自動の控えに残します）`)) return
-        await saveSnapshot(snap.report)
+        await keepSnapshot(snap.report)
         await Promise.all(images.map(putImage))
         editor.addImages(images)
         editor.replace(report)
@@ -470,11 +502,8 @@ export default function App() {
           sheetHostRef={sheetHostRef}
           onReferences={() => setDialog({ kind: 'references' })}
           onBackup={async () => setDialog({ kind: 'backup', snapshots: await listSnapshots() })}
-          onExport={async () => {
-            editor.commitEditing()
-            await editor.render()
-            setDialog({ kind: 'export' })
-          }}
+          exporting={exporting}
+          onExport={startExport}
         />
       ) : ready ? (
         <SidePanel
@@ -486,11 +515,8 @@ export default function App() {
           drive={driveStopped ? undefined : driveControls}
           driveStopped={driveStopped}
           onBackup={async () => setDialog({ kind: 'backup', snapshots: await listSnapshots() })}
-          onExport={async () => {
-            editor.commitEditing()
-            await editor.render()
-            setDialog({ kind: 'export' })
-          }}
+          exporting={exporting}
+          onExport={startExport}
         />
       ) : (
         <aside className="side" />
@@ -508,7 +534,7 @@ export default function App() {
             setDialog(null)
           }}
           onReplace={async () => {
-            await saveSnapshot(snap.report)
+            await keepSnapshot(snap.report)
             editor.changeCourseWithTemplate(dialog.courseId)
             setDialog(null)
           }}
@@ -524,6 +550,12 @@ export default function App() {
           step={guide}
           onStep={setGuide}
           onChooseCourse={(courseId) => {
+            // 本文を書き始めている原稿（設定が読めずにコースが見つからなかったときなど）は、確かめずに本文を入れ替えない
+            if (editor.bodyWritten()) {
+              setGuide(null)
+              setDialog({ kind: 'courseChange', courseId })
+              return
+            }
             editor.changeCourseWithTemplate(courseId)
             setGuide(editor.getSnapshot().report.basicInfo.studentId.trim() ? 'name' : 'studentId')
           }}
@@ -535,19 +567,20 @@ export default function App() {
       {dialog?.kind === 'export' && snap && editor && <ExportDialog editor={editor} findings={snap.findings} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'backup' && editor && snap && (
         <BackupDialog
+          driveStopped={driveStopped}
           snapshots={dialog.snapshots}
           onSaveBackup={() => void saveBackup()}
           onRestoreFile={(file) => void restoreFile(file)}
           onRestoreSnapshot={async (s) => {
             if (!confirm(`${new Date(s.savedAt).toLocaleString('ja-JP')} の控えに戻しますか？`)) return
-            await saveSnapshot(snap.report)
+            await keepSnapshot(snap.report)
             editor.replace(s.report)
             await matchYear(editor, s.report)
             setDialog(null)
           }}
           onStartOver={async () => {
             if (!confirm('今の原稿を消して、最初から作り直しますか？\n（今の原稿は自動の控えに残します）')) return
-            await saveSnapshot(snap.report)
+            await keepSnapshot(snap.report)
             // 作り直すときは、公開中の年度で作る（前年度の原稿だった学生も、新年度で書き直せる）
             const fresh = createReport(publishedRef.current)
             editor.replace(fresh)
@@ -583,7 +616,7 @@ export default function App() {
               setDriveDialog(null)
               if (driveDialog.atLogin) {
                 prefillStudentId(editor)
-                startGuide(config, editor.getSnapshot().report, false)
+                startGuide(configRef.current, editor.getSnapshot().report, false)
               }
             } catch (e) {
               alert(errorText(e))
@@ -599,14 +632,14 @@ export default function App() {
               if (login) await login
               // ドライブの原稿は、写真ごとこの端末の控えに残す（あとで戻せるように）
               await drive.downloadImages(driveDialog.remote.report)
-              await saveSnapshot(driveDialog.remote.report)
+              await keepSnapshot(driveDialog.remote.report)
               drive.activate()
               // 選ばなかったドライブの原稿のファイルに上書きする（原稿のファイルを2つにしない）
               await drive.overwrite(editor.getSnapshot().report, driveDialog.remote)
               setDriveDialog(null)
               if (driveDialog.atLogin) {
                 prefillStudentId(editor)
-                startGuide(config, editor.getSnapshot().report, false)
+                startGuide(configRef.current, editor.getSnapshot().report, false)
               }
             } catch (e) {
               alert(errorText(e))

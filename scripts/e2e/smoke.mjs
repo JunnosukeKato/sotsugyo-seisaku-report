@@ -57,7 +57,7 @@ await withEdge(async (browser) => {
   check('コースを選ぶと、そのコースの下書きが本文に入り、学籍番号の入力が始まる', !!s.report.basicInfo.courseId && s.report.body.length > 0 && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'paragraph' && b.hint), s.report.basicInfo.courseId)
   const noticeText = () => page.evaluate(() => document.querySelector('.side .notice')?.textContent ?? '')
   check('右の欄に、自分のコースのお知らせが出る', (await noticeText()).includes('映画・舞台衣装デザイナー コースからのお知らせ') && (await noticeText()).includes('衣装コースへのお知らせ'), await noticeText())
-  await page.keyboard.type('23FA0123')
+  await page.keyboard.type('00ZZ0123')
   await page.keyboard.press('Enter')
   await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:name', { timeout: 30000 })
   await page.keyboard.type('文化　花子')
@@ -78,7 +78,7 @@ await withEdge(async (browser) => {
   await page.evaluate(() => [...document.querySelectorAll('.g-actions button')].find((b) => b.textContent.includes('閉じる')).click())
   await ready()
   s = await snap()
-  check('案内に沿って、表紙の学籍番号・氏名・サブタイトルを入力できる', s.report.basicInfo.studentId === '23FA0123' && s.report.basicInfo.name === '文化　花子' && s.report.basicInfo.subtitleInput === 'シンドバッド' && !(await page.$('.guide')), JSON.stringify(s.report.basicInfo))
+  check('案内に沿って、表紙の学籍番号・氏名・サブタイトルを入力できる', s.report.basicInfo.studentId === '00ZZ0123' && s.report.basicInfo.name === '文化　花子' && s.report.basicInfo.subtitleInput === 'シンドバッド' && !(await page.$('.guide')), JSON.stringify(s.report.basicInfo))
   check('表紙の未入力の指摘が消える', !s.findings.some((f) => f.ruleId === 'required-field'))
 
   // ---- 1ページずつの表示とページ送り ----
@@ -160,7 +160,7 @@ await withEdge(async (browser) => {
     await ready()
   }
   s = await snap()
-  check('表紙の入力は、コースを変えても残る', s.report.basicInfo.studentId === '23FA0123' && s.report.basicInfo.name === '文化　花子' && s.report.basicInfo.subtitleInput === 'シンドバッド', JSON.stringify(s.report.basicInfo))
+  check('表紙の入力は、コースを変えても残る', s.report.basicInfo.studentId === '00ZZ0123' && s.report.basicInfo.name === '文化　花子' && s.report.basicInfo.subtitleInput === 'シンドバッド', JSON.stringify(s.report.basicInfo))
 
   // ---- 抄録：先生の許可が出てから書く（それまでは案内とボタンだけ。字数のチェックはしない） ----
   const abstractId = s.report.abstract.paragraphs[0].id

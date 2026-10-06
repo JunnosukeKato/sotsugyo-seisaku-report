@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useRef, useState, type ReactNode } from 'react'
 import type { YearConfig } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { findEditable, type EditableKind } from '../editor/reportOps'
@@ -8,6 +8,7 @@ import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, PageThumbs, Sa
 import { keepFocus, PAGE_CONTEXT, pageName } from './uiShared'
 import { DriveChip, DriveMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
+import { useDialogFocus } from './useDialogFocus'
 
 /**
  * スマホ版の画面（mockups/v7 案2「下から書く欄が出る」）。
@@ -43,17 +44,23 @@ const FIELD_LABELS: Record<string, string> = { 'basic:studentId': '学籍番号'
 
 type SheetKind = 'pages' | 'add' | 'check' | 'menu' | null
 
-/** 画面の下から出る欄（ページ一覧・追加・チェック・メニュー） */
+/**
+ * 画面の下から出る欄（ページ一覧・追加・チェック・メニュー）。
+ * 窓と同じく、開くと中に移り、Tab で外に出ず、Esc で閉じ、閉じると開く前の場所（下のタブなど）に戻る
+ */
 function Sheet({ title, extra, onClose, children }: { title: string; extra?: ReactNode; onClose: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLElement>(null)
+  useDialogFocus(ref, onClose)
   return (
     <>
       <div className="scrim" onClick={onClose} />
-      <section className="sheet" role="dialog" aria-label={title}>
+      <section className="sheet" role="dialog" aria-modal="true" aria-label={title} ref={ref}>
         <div className="grab" />
         <header className="sheet-head">
           <h2>{title}</h2>
           {extra}
-          <button className="sheet-close" onClick={onClose} aria-label="閉じる">
+          {/* close：開いたときは「×」ではなく、中の最初の操作できるものに移る（useDialogFocus） */}
+          <button className="sheet-close close" onClick={onClose} aria-label="閉じる">
             ×
           </button>
         </header>
@@ -201,12 +208,14 @@ interface Props {
   driveStopped?: boolean
   onBackup: () => void
   onExport: () => void
+  /** 「PDFを書き出す」を押して、紙面を確かめている途中 */
+  exporting?: boolean
   onReferences: () => void
   sheetHostRef: React.RefObject<HTMLDivElement | null>
 }
 
 /** スマホ版の、紙面のまわりの部品（紙面そのものは App の .stage） */
-export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, onReferences, sheetHostRef }: Props) {
+export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onReferences, sheetHostRef }: Props) {
   const [sheet, setSheet] = useState<SheetKind>(null)
   const close = () => setSheet(null)
   const errors = snap.findings.filter((f) => f.severity === 'error').length
@@ -261,8 +270,9 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
         <button onClick={() => setSheet('check')}>
           {PhoneIcon.check}チェック{errors > 0 && <i className="badge">{errors}</i>}
         </button>
-        <button onClick={onExport}>
-          {Icon.pdf}PDF
+        <button onClick={onExport} disabled={exporting}>
+          {Icon.pdf}
+          {exporting ? '確認中…' : 'PDF'}
         </button>
       </nav>
 

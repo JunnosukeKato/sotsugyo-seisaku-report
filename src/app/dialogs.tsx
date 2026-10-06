@@ -55,6 +55,8 @@ export function CourseMenu({ config, rect, current, onSelect, onClose }: { confi
           <button
             key={c.id}
             className={c.id === current ? 'on' : ''}
+            // 読み上げでも、いま選んでいるコースが分かるようにする
+            aria-current={c.id === current ? 'true' : undefined}
             onClick={() => {
               // 先に閉じる（選んだ後に確かめる画面を出すことがあるため）
               onClose()
@@ -338,6 +340,7 @@ export function ExportDialog({ editor, findings, onClose }: { editor: ReportEdit
 
 export function BackupDialog({
   snapshots,
+  driveStopped = false,
   onSaveBackup,
   onRestoreFile,
   onRestoreSnapshot,
@@ -345,25 +348,42 @@ export function BackupDialog({
   onClose,
 }: {
   snapshots: Snapshot[]
+  /** 管理ページでドライブ保存を止めている（説明の文を、この端末にだけ保存される、に変える） */
+  driveStopped?: boolean
   onSaveBackup: () => void
   onRestoreFile: (file: File) => void
   onRestoreSnapshot: (s: Snapshot) => void
   onStartOver: () => void
   onClose: () => void
 }) {
+  const fileRef = useRef<HTMLInputElement>(null)
   return (
     <Modal title="バックアップと復元" onClose={onClose}>
       <p className="lead">
-        原稿は、書くたびに（書くのをやめて約1秒後に）このブラウザの中へ自動で保存され、大学のアカウントでログインしているあいだは Google ドライブにも保存されます（別の端末では、ログインすると続きが開きます）。バックアップファイルは、念のための控えとして、ときどき保存しておくと安心です。
+        {driveStopped
+          ? '原稿は、書くたびに（書くのをやめて約1秒後に）このブラウザの中へ自動で保存されます。いまはドライブへの保存を止めているため（学科の判断）、原稿はこの端末にだけ保存されます。バックアップファイルは、念のための控えとして、ときどき保存しておくと安心です。'
+          : '原稿は、書くたびに（書くのをやめて約1秒後に）このブラウザの中へ自動で保存され、大学のアカウントでログインしているあいだは Google ドライブにも保存されます（別の端末では、ログインすると続きが開きます）。バックアップファイルは、念のための控えとして、ときどき保存しておくと安心です。'}
       </p>
       <div className="backup-actions">
         <button className="primary" onClick={onSaveBackup}>
           バックアップファイルを保存
         </button>
-        <label className="file-button">
+        {/* キーボードでも選べるよう、ふつうのボタンからファイルを選ぶ画面を開く */}
+        <button className="file-button" onClick={() => fileRef.current?.click()}>
           バックアップファイルから復元
-          <input type="file" accept=".json,application/json" hidden onChange={(e) => e.target.files?.[0] && onRestoreFile(e.target.files[0])} />
-        </label>
+        </button>
+        <input
+          ref={fileRef}
+          type="file"
+          accept=".json,application/json"
+          hidden
+          onChange={(e) => {
+            const file = e.target.files?.[0]
+            // 選んだファイルを空に戻す（確かめる画面で「キャンセル」したあと、同じファイルを選び直せるように）
+            e.target.value = ''
+            if (file) onRestoreFile(file)
+          }}
+        />
       </div>
       <h3>自動の控え（誤って消したときに戻せる版。10分ごとに残します）</h3>
       {snapshots.length === 0 ? (

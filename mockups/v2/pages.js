@@ -12,7 +12,7 @@ export function pagesHtml() {
         <div class="st">―シンドバッドの衣装制作―</div>
         <div class="dep">国際文化学部・国際ファッション文化学科</div>
         <div class="crs">映画・舞台衣装デザイナー コース</div>
-        <div class="id">学籍番号　23FA0123</div>
+        <div class="id">学籍番号　00ZZ0123</div>
         <div class="nm">氏　名：　文化　花子</div>
         <div class="univ">文 化 学 園 大 学</div>
       </div>
@@ -20,7 +20,7 @@ export function pagesHtml() {
     `<div class="page" data-name="抄録">
       <div class="abs-h">2026年度　卒業制作　抄録</div>
       <div class="abs-row"><span>国際文化学部　国際ファッション文化学科</span><span>映画・舞台衣装デザイナー　コース</span></div>
-      <div class="abs-row short">学籍番号　23FA0123　氏名　文化　花子</div>
+      <div class="abs-row short">学籍番号　00ZZ0123　氏名　文化　花子</div>
       <div class="abs-row right">（指導教員　文化 太郎、学園 花子　）</div>
       <div class="abs-t">卒業イベント「シンドバッド」について</div>
       <div class="abs-st">―シンドバッドの衣装制作―</div>

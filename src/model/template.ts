@@ -1,4 +1,5 @@
 import { findCourse, type TemplateBlock, type YearConfig } from '../config'
+import { templateProblems } from '../config/validate'
 import { materialTable } from './table'
 import type { BodyBlock, Chapter, ParagraphBlock, Report } from './types'
 
@@ -24,44 +25,53 @@ export function emptyParagraph(hint?: string): ParagraphBlock {
   return { type: 'paragraph', id: newId('p'), content: [{ type: 'text', text: '' }], ...(hint ? { hint } : {}) }
 }
 
-/** そのコースのひな形（なければ標準のひな形） */
+/** そのコースのひな形（なければ標準のひな形。形が崩れていても標準のひな形） */
 export function courseTemplate(config: YearConfig, courseId: string): TemplateBlock[] {
   const template = findCourse(config, courseId)?.template
-  return template && template.some((b) => b.type === 'chapter') ? template : DEFAULT_TEMPLATE
+  return Array.isArray(template) && template.length > 0 && templateProblems(template).length === 0 ? template : DEFAULT_TEMPLATE
 }
+
+/** 部品の文字の項目（崩れたひな形で、項目がない・文字でないときは空） */
+const textOf = (value: unknown): string => (typeof value === 'string' ? value : '')
 
 /** 抄録の欄に薄く出す書き出しの例 */
 export function abstractHint(config: YearConfig, courseId: string): string {
-  const example = findCourse(config, courseId)?.abstractExample?.trim() || config.abstract.openingExample
+  const example = textOf(findCourse(config, courseId)?.abstractExample).trim() || config.abstract.openingExample
   return `書き出しの例：${example}……`
 }
 
-/** ひな形から本文を作る。大見出しより前の部品は、名前のない大見出しにまとめる。中身のない大見出しには空の段落を入れる */
+/**
+ * ひな形から本文を作る。大見出しより前の部品は、名前のない大見出しにまとめる。中身のない大見出しには空の段落を入れる。
+ * 崩れたひな形（名前や説明がない部品、知らない種類の部品）でも止まらない（知らない種類の部品は使わない）
+ */
 export function bodyFromTemplate(template: TemplateBlock[]): Chapter[] {
   const chapters: Chapter[] = []
   const current = (): Chapter => {
     if (chapters.length === 0) chapters.push({ id: newId('c'), title: '', blocks: [] })
     return chapters[chapters.length - 1]
   }
-  for (const block of template) {
+  for (const block of Array.isArray(template) ? template : []) {
+    if (!block || typeof block !== 'object') continue
     if (block.type === 'chapter') {
-      chapters.push({ id: newId('c'), title: block.title, blocks: [] })
+      chapters.push({ id: newId('c'), title: textOf(block.title), blocks: [] })
       continue
     }
     let body: BodyBlock
     switch (block.type) {
       case 'subheading':
-        body = { type: 'subheading', id: newId('s'), title: block.title }
+        body = { type: 'subheading', id: newId('s'), title: textOf(block.title) }
         break
       case 'paragraph':
-        body = emptyParagraph(block.hint.trim() || undefined)
+        body = emptyParagraph(textOf(block.hint).trim() || undefined)
         break
       case 'figure':
-        body = { type: 'figureRow', id: newId('r'), figures: [{ id: newId('f'), imageId: '', caption: block.caption }] }
+        body = { type: 'figureRow', id: newId('r'), figures: [{ id: newId('f'), imageId: '', caption: textOf(block.caption) }] }
         break
       case 'materialTable':
-        body = materialTable(newId('t'), newId, block.caption)
+        body = materialTable(newId('t'), newId, textOf(block.caption))
         break
+      default:
+        continue
     }
     current().blocks.push(body)
   }

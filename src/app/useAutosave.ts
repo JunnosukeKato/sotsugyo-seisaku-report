@@ -7,6 +7,8 @@ export type SaveState = { status: 'idle' } | { status: 'saving' } | { status: 's
 const SAVE_DELAY_MS = 800
 /** 控え（誤って消したときに戻せる版）を残す間隔 */
 const SNAPSHOT_INTERVAL_MS = 10 * 60 * 1000
+/** 保存できなかったときに、保存し直すまで */
+const RETRY_MS = 5000
 
 /**
  * 報告書が変わるたびに、少し待ってから（書くのをやめて約1秒後に）ブラウザ内に保存する。
@@ -20,7 +22,7 @@ export function useAutosave() {
   const lastSnapshot = useRef(0)
   const stopped = useRef(false)
 
-  const flush = useCallback(async () => {
+  const flush = useCallback(async function run(): Promise<void> {
     clearTimeout(timer.current)
     const report = pending.current
     if (!report || stopped.current) return
@@ -34,6 +36,10 @@ export function useAutosave() {
       setState({ status: 'saved', at: new Date() })
     } catch (e) {
       setState({ status: 'error', message: String(e) })
+      // 保存できなかった版は残しておき、少したってから保存し直す（その間に書いた新しい版があれば、そちらを保存する）
+      pending.current ??= report
+      clearTimeout(timer.current)
+      timer.current = window.setTimeout(() => void run(), RETRY_MS)
     }
   }, [])
 

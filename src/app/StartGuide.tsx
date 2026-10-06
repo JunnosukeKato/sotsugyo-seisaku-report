@@ -1,8 +1,9 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type RefObject } from 'react'
 import type { YearConfig } from '../config'
 import { findCourse } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { FIELD_IDS } from '../layout/document'
+import { useDialogFocus } from './useDialogFocus'
 
 /**
  * はじめて使う学生への案内（mockups/v8 案3「表紙の上で順に案内する」）。
@@ -26,6 +27,33 @@ const STEP_LABELS: [GuideStep, string][] = [
   ['subtitle', 'サブタイトル'],
 ]
 
+/**
+ * コースを選ぶ段階の間だけ、案内を窓として扱う（開くと案内の見出しに移り、Tab で裏のボタンへ行かない。Esc では閉じない）。
+ * 段階が変わって外れると、開く前の場所に戻る
+ */
+function CourseStepFocus({ tip }: { tip: RefObject<HTMLDivElement | null> }) {
+  const target = useRef<HTMLDivElement | null>(null)
+  // 案内より上に出る窓（「別のタブで開いています」など）がすでに開いていれば、そちらを優先する（案内に移さない・Tab を案内に閉じ込めない）。
+  // useDialogFocus より前に書く（同じ部品の useEffect は書いた順に動く。この時点では案内の ref も入っている）
+  useEffect(() => {
+    target.current = document.querySelector('[aria-modal="true"]:not(.g-tip)') ? null : tip.current
+  }, [tip])
+  useDialogFocus(target)
+  return null
+}
+
+/**
+ * 見出しにいるときの Shift+Tab：案内の最後のボタンへ（見出しは Tab の順に入らないため、そのままだと裏へ出てしまう）
+ */
+function wrapToLast(e: KeyboardEvent<HTMLElement>) {
+  if (e.key !== 'Tab' || !e.shiftKey) return
+  const buttons = e.currentTarget.closest('.g-tip')?.querySelectorAll<HTMLElement>('button:not([disabled])')
+  const last = buttons?.[buttons.length - 1]
+  if (!last) return
+  e.preventDefault()
+  last.focus()
+}
+
 interface Props {
   editor: ReportEditor
   snap: EditorSnapshot
@@ -43,6 +71,7 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
   const [rect, setRect] = useState<DOMRect | null>(null)
   const tipRef = useRef<HTMLDivElement>(null)
   const prevEditing = useRef<string | null>(null)
+  const titleId = useId()
 
   // 案内している欄の位置。PC で入力欄が開いていれば、入力欄に光を当てる（紙面の仮の文字より広いことがある）。
   // 紙面の組み直し・画面の大きさ・キーボード・文字の読み込みなどで位置が変わるため、毎フレーム確かめ、変わったときだけ動かす
@@ -104,6 +133,9 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
   const pad = 8
   const close = () => onStep(null)
   const index = STEP_LABELS.findIndex(([s]) => s === step)
+  // コースを選ぶ段階の見出し：開いたときはここに移る（読み上げで、案内の初めから読まれるように）。
+  // 最初のコースのボタンに移すと、そのコースを選んでいるように見えてしまうため、見出しにする（見出しの枠は出さない。CSS）
+  const courseTitle = { id: titleId, tabIndex: -1, 'data-autofocus': true, onKeyDown: wrapToLast }
 
   const body = (() => {
     switch (step) {
@@ -112,7 +144,7 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
         if (configMissing)
           return (
             <>
-              <h2>コースの一覧を読み込めませんでした</h2>
+              <h2 {...courseTitle}>コースの一覧を読み込めませんでした</h2>
               <p>通信の状態を確かめて、ページを読み込み直してください。</p>
               <div className="g-actions">
                 <button className="primary" onClick={() => location.reload()}>
@@ -123,7 +155,7 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
           )
         return (
           <>
-            <h2>はじめに、コースを選んでください</h2>
+            <h2 {...courseTitle}>はじめに、コースを選んでください</h2>
             <p>選んだコースの下書き（章立てと、それぞれに書くことの説明）が本文に入ります。そのあと、表紙の項目を順に案内します。</p>
             <div className="g-opts">
               {config.courses
@@ -140,21 +172,21 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
       case 'studentId':
         return (
           <>
-            <h2>学籍番号を入力してください</h2>
+            <h2 id={titleId}>学籍番号を入力してください</h2>
             <p>{narrow ? '光っている欄をタップして入力し、「完了」を押します。' : '入力したら Enter で次へ進みます。'}</p>
           </>
         )
       case 'name':
         return (
           <>
-            <h2>氏名を入力してください</h2>
+            <h2 id={titleId}>氏名を入力してください</h2>
             <p>姓と名の間は、全角の空白を入れます（例：文化　花子）。{narrow ? '欄をタップして入力します。' : ''}</p>
           </>
         )
       case 'subtitle':
         return (
           <>
-            <h2>サブタイトルを入力してください</h2>
+            <h2 id={titleId}>サブタイトルを入力してください</h2>
             <p>
               「{subtitleBefore}〇〇{subtitleAfter}」の〇〇の部分だけを入力します。前後は自動で付きます。
               {narrow ? '欄をタップして入力します。' : ''}
@@ -164,11 +196,12 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
       case 'done':
         return (
           <>
-            <h2>表紙ができました</h2>
+            <h2 id={titleId}>表紙ができました</h2>
             <p>次は本文を書きます（抄録は、本文を書き終えて先生の許可が出てから書きます）。紙面の薄い字は「ここに何を書くか」の説明で、書き始めると消えます（PDFには出ません）。</p>
             <div className="g-actions">
-              <button className="primary" onClick={() => { close(); editor.nextPage() }}>
-                次のページへ
+              {/* 表紙の次は抄録・目次のページなので、本文の最初のページへ移る */}
+              <button className="primary" onClick={() => { close(); editor.goToArea('body') }}>
+                本文へ進む
               </button>
               <button onClick={close}>閉じる</button>
             </div>
@@ -181,15 +214,24 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
   const typingOnPhone = narrow && !!field && snap.editingId === field
   return (
     <div className={`guide step-${step}${narrow ? ' narrow' : ''}`}>
-      {/* コースを選ぶまでは、ほかの操作をできないようにする */}
+      {/* コースを選ぶまでは、ほかの操作をできないようにする（指・マウスは g-block、キーボードと読み上げは CourseStepFocus と aria-modal） */}
       {step === 'course' && <div className="g-block" />}
+      {step === 'course' && <CourseStepFocus tip={tipRef} />}
       {typingOnPhone ? null : rect ? (
         <div className="g-spot" style={{ left: rect.left - pad, top: rect.top - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 }} />
       ) : (
         <div className="g-dim" />
       )}
       {/* 案内の中を押しても入力欄から文字のカーソルが外れないようにする（外れると次の段階へ進み、案内が動いてしまう） */}
-      <div className="g-tip" ref={tipRef} role="dialog" aria-label="はじめての案内" onMouseDown={(e) => e.preventDefault()}>
+      <div
+        className="g-tip"
+        ref={tipRef}
+        role="dialog"
+        aria-modal={step === 'course' ? true : undefined}
+        aria-label="はじめての案内"
+        aria-describedby={titleId}
+        onMouseDown={(e) => e.preventDefault()}
+      >
         {step !== 'done' && (
           <div className="g-steps">
             {STEP_LABELS.map(([s, label], i) => (

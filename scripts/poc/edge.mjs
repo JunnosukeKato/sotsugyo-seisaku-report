@@ -6,7 +6,8 @@ import { join } from 'node:path'
 import puppeteer from 'puppeteer-core'
 
 const EDGE = 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
-const PORT = 9333
+// 同時に複数の確かめを動かすときは、EDGE_PORT で別のポートにする（ブラウザのデータの置き場所も分かれる）
+const PORT = Number(process.env.EDGE_PORT ?? 9333)
 
 async function waitForDevtools() {
   for (let i = 0; i < 50; i++) {
@@ -23,7 +24,7 @@ async function waitForDevtools() {
 export async function withEdge(fn) {
   const edge = spawn(
     EDGE,
-    ['--headless', '--disable-gpu', '--no-first-run', `--user-data-dir=${join(tmpdir(), 'sotsugyo-poc-edge')}`, `--remote-debugging-port=${PORT}`, 'about:blank'],
+    ['--headless', '--disable-gpu', '--no-first-run', `--user-data-dir=${join(tmpdir(), PORT === 9333 ? 'sotsugyo-poc-edge' : `sotsugyo-poc-edge-${PORT}`)}`, `--remote-debugging-port=${PORT}`, 'about:blank'],
     { stdio: 'ignore' },
   )
   try {

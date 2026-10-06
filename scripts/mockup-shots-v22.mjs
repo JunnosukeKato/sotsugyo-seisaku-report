@@ -76,7 +76,7 @@ async function openStudent(browser) {
           ? { ...c, blocks: c.blocks.map((b, j) => (b.type === 'paragraph' && j === c.blocks.findIndex((x) => x.type === 'paragraph') ? { ...b, content: [{ type: 'text', text: '主人公の衣装は、物語の舞台となる砂漠の色を取り入れました。監督からは「もっと軽やかにしてほしいです」という意見があった' }] } : b)) }
           : c,
       )
-      return { ...r, basicInfo: { ...r.basicInfo, studentId: '23FA0123', name: '文化　花子', subtitleInput: 'シンドバッド', courseId: 'film-stage-costume' }, body }
+      return { ...r, basicInfo: { ...r.basicInfo, studentId: '00ZZ0123', name: '文化　花子', subtitleInput: 'シンドバッド', courseId: 'film-stage-costume' }, body }
     }),
   )
   await sleep(500)

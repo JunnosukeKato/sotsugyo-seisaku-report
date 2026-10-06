@@ -40,6 +40,18 @@ function WordsSection({ words, onOpen }: { words: WordCheck[]; onOpen: () => voi
   )
 }
 
+/** ソースコードの場所（AGPL-3.0。管理者・先生・登録されていない人のどの画面にも出す） */
+function SourceLink() {
+  if (!import.meta.env.VITE_SOURCE_URL) return null
+  return (
+    <p className="source">
+      <a href={import.meta.env.VITE_SOURCE_URL} target="_blank" rel="noreferrer">
+        このツールのソースコード（AGPL-3.0）
+      </a>
+    </p>
+  )
+}
+
 function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="f">
@@ -170,7 +182,7 @@ function NoticeField({ course, onChange }: { course: Course; onChange: (notice: 
     <label className="notice-field">
       <span className="l">このコースの学生へのお知らせ（任意）</span>
       <textarea className="in" rows={2} value={course.notice ?? ''} placeholder="例：12月4日（金）の中間発表では、本文の下書きを印刷して持ってきてください" onChange={(e) => onChange(e.target.value)} />
-      <span className="hint">このコースの学生のツールの、セルフチェック欄の上に表示されます</span>
+      <span className="hint">このコースの学生のツールの、セルフチェック欄の上に表示されます。インターネット上の誰でも読めます。個人の情報（連絡先など）は書かないでください</span>
     </label>
   )
 }
@@ -257,9 +269,12 @@ export function AdminApp() {
   if (!role)
     return (
       <div className="admin-loading">
-        このページは、登録された管理者と先生だけが使えます。
-        <br />
-        ログイン中：{state.user || '（不明）'}
+        <div>
+          このページは、登録された管理者と先生だけが使えます。
+          <br />
+          ログイン中：{state.user || '（不明）'}
+          <SourceLink />
+        </div>
       </div>
     )
   if (!draft || !row) return <div className="admin-loading">年度設定がありません。</div>
@@ -276,8 +291,9 @@ export function AdminApp() {
         onSelectYear={(y) => select(state, y)}
         onSave={(templates, words, notices) =>
           // ひな形・お知らせ・書き間違えやすい語を、まとめて1回で保存する（途中で失敗して一部だけ保存されないように）
+          // 画面を開いたときの更新日時も送る（そのあとにほかの先生などが保存していたら、その変更を消さないよう保存しない）
           void run(row.status === '公開中' ? '保存し、学生のツールに反映しました' : '保存しました', () =>
-            server.saveTeacherEdits(row.year, { templates, notices, ...(words ? { words } : {}) }),
+            server.saveTeacherEdits(row.year, { templates, notices, ...(words ? { words } : {}) }, row.updatedAt),
           )
         }
       />
@@ -304,9 +320,11 @@ export function AdminApp() {
     if (errors.length) return setMessage({ kind: 'ng', text: 'エラーを直してから公開してください' })
     const current = state.years.find((y) => y.status === '公開中')
     if (!confirm(`${draft.fiscalYear}年度の設定を学生に公開しますか？${current ? `\n今公開中の${current.year}年度は「終了」になります。` : ''}`)) return
+    // 画面を開いたあとにほかの人が保存していたら、見ていない内容を公開しないよう、公開せずに知らせる
     void run(`${draft.fiscalYear}年度を学生に公開しました`, async () => {
-      if (dirty) await server.saveYear(draft, row.updatedAt)
-      return server.publishYear(draft.fiscalYear)
+      let updatedAt = row.updatedAt
+      if (dirty) updatedAt = (await server.saveYear(draft, row.updatedAt)).years.find((y) => y.year === draft.fiscalYear)?.updatedAt ?? updatedAt
+      return server.publishYear(draft.fiscalYear, updatedAt)
     })
   }
 
@@ -420,7 +438,7 @@ export function AdminApp() {
           <WordsSection words={draft.wordChecks ?? DEFAULT_WORD_CHECKS} onOpen={() => setEditingWords(true)} />
 
           <details className="details">
-            <summary>詳細設定（手順書が改訂されたときだけ変更）</summary>
+            <summary>詳細設定（手順書の改訂・Google の障害のとき）</summary>
             {/* Google の障害や大学の設定変更で学生がログインできないときだけ止める（mockups/v22 ② 案B） */}
             <div className={`drive-switch${draft.driveSave === 'off' ? ' off' : ''}`}>
               <span className="l">学生のドライブ保存</span>
@@ -489,13 +507,7 @@ export function AdminApp() {
               </Field>
             </div>
           </details>
-          {import.meta.env.VITE_SOURCE_URL && (
-            <p className="source">
-              <a href={import.meta.env.VITE_SOURCE_URL} target="_blank" rel="noreferrer">
-                このツールのソースコード（AGPL-3.0）
-              </a>
-            </p>
-          )}
+          <SourceLink />
         </section>
 
         <section className="stage">
@@ -685,6 +697,7 @@ function TeacherView({
             </div>
           ))}
         <WordsSection words={draft.wordChecks ?? DEFAULT_WORD_CHECKS} onOpen={() => setEditingWords(true)} />
+        <SourceLink />
       </main>
       {editingWords && (
         <WordsEditor

@@ -23,7 +23,7 @@ function fakeDrive() {
   let seq = 0
   let clock = Date.now()
   // 学生のアカウント（@ より前は学籍番号の小文字）
-  const drive = { files, email: '22fac123@bunka-wu.ac.jp', failNext: null, logins: 0 }
+  const drive = { files, email: '00zz901@bunka-wu.ac.jp', failNext: null, logins: 0 }
   const now = () => new Date((clock += 1000)).toISOString()
   const meta = (f) => ({ id: f.id, name: f.name, size: String(f.content?.length ?? 0), modifiedTime: f.modifiedTime, appProperties: f.appProperties })
   const unquote = (s) => s.replace(/\\'/g, "'").replace(/\\\\/g, '\\')
@@ -67,7 +67,10 @@ function fakeDrive() {
     if (upload && method === 'PATCH') {
       const f = files.get(upload[1])
       if (!f) return [404, { error: { code: 404, errors: [{ reason: 'notFound' }] } }]
-      f.content = multipart(body, headers['content-type']).content
+      const { metadata, content } = multipart(body, headers['content-type'])
+      f.content = content
+      // 本物のドライブと同じく、appProperties は足し合わせる
+      if (metadata.appProperties) f.appProperties = { ...f.appProperties, ...metadata.appProperties }
       f.modifiedTime = now()
       return [200, meta(f)]
     }
@@ -180,7 +183,7 @@ await withEdge(async (browser) => {
   await pc.page.waitForSelector('.guide .g-tip h2')
   check(
     '学生のアカウントなら、表紙の学籍番号にメールアドレスの学籍番号（大文字）が入り、案内は氏名から',
-    (await pc.page.evaluate(() => window.__editor.getSnapshot().report.basicInfo.studentId)) === '22FAC123' && (await pc.page.$eval('.guide .g-tip h2', (e) => e.textContent)).includes('氏名'),
+    (await pc.page.evaluate(() => window.__editor.getSnapshot().report.basicInfo.studentId)) === '00ZZ901' && (await pc.page.$eval('.guide .g-tip h2', (e) => e.textContent)).includes('氏名'),
   )
   check('学生のアカウントでは、教職員の表示は出ない', !(await pc.page.$('.staff-note')))
   await clickText(pc.page, '.guide button', 'あとで入力する')
@@ -247,8 +250,8 @@ await withEdge(async (browser) => {
   await editorReady(pc.page)
   await pc.page.click('.login-btn')
   await pc.page.waitForFunction(() => [...document.querySelectorAll('.modal h2')].some((h) => h.textContent.includes('別のアカウント')), { timeout: 30000 })
-  check('この端末に別のアカウントの原稿があるときは、知らせる', (await pc.page.$eval('.modal .lead', (e) => e.textContent)).includes('22fac123@bunka-wu.ac.jp'))
-  drive.email = '22fac123@bunka-wu.ac.jp'
+  check('この端末に別のアカウントの原稿があるときは、知らせる', (await pc.page.$eval('.modal .lead', (e) => e.textContent)).includes('00zz901@bunka-wu.ac.jp'))
+  drive.email = '00zz901@bunka-wu.ac.jp'
   await clickText(pc.page, '.modal button', '前のアカウントでログインし直す')
   await pc.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {})
   await editorReady(pc.page)
@@ -275,7 +278,7 @@ await withEdge(async (browser) => {
   const staffInfo = await staff.page.evaluate(() => ({ note: document.querySelector('.staff-note')?.textContent ?? '', meta: document.querySelector('.side .meta')?.textContent ?? '', modal: document.querySelector('.modal h2')?.textContent ?? '' }))
   check('先生のアカウントでも使え、右の欄に「教職員のアカウントで試しています」と出る', staffInfo.note.includes('教職員'), JSON.stringify(staffInfo))
   await staff.context.close()
-  drive.email = '22fac123@bunka-wu.ac.jp'
+  drive.email = '00zz901@bunka-wu.ac.jp'
 
   // ---- 管理ページでドライブ保存を止めているとき（Google の障害など。mockups/v22 ②） ----
   config.driveSave = 'off'

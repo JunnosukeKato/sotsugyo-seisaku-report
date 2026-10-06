@@ -46,6 +46,7 @@ export class ReportRenderer {
     }
     this.buffers = [make(), make()]
     this.buffers[0].element.classList.add('front')
+    hideBack(this.buffers[1].element, true)
   }
 
   /** いま見えている紙面 */
@@ -103,6 +104,8 @@ export class ReportRenderer {
     this.setCurrent(back.view, page)
     back.element.classList.add('front')
     front.element.classList.remove('front')
+    hideBack(back.element, false)
+    hideBack(front.element, true)
     this.frontIndex = 1 - this.frontIndex
   }
 
@@ -173,6 +176,16 @@ export class ReportRenderer {
       setTimeout(finish, 1500)
     })
   }
+}
+
+/**
+ * 裏側の表示枠（見えていない・古い内容のこともある）を、読み上げにも Tab にも出さない。
+ * 出しておくと、読み上げで紙面が2回（片方は古い内容で）読まれてしまう
+ */
+function hideBack(element: HTMLElement, hidden: boolean): void {
+  element.inert = hidden
+  if (hidden) element.setAttribute('aria-hidden', 'true')
+  else element.removeAttribute('aria-hidden')
 }
 
 function reducedMotion(): boolean {

@@ -29,6 +29,20 @@ describe('年度の設定を読み込む', () => {
     expect((await loadYearConfig(2026, API))?.commonTitle).toBe('2026年度の題目')
   })
 
+  it('コースのひな形が崩れていても設定全体は捨てず、そのコースだけ標準のひな形にする（控えも直したもの）', async () => {
+    const course = { ...currentConfig.courses[0], template: [{ type: 'chapter', title: '概要' }, { type: 'paragraph' }] as never }
+    years.set(2026, { ...currentConfig, fiscalYear: 2026, commonTitle: '配信の題目', courses: [course] })
+    const { config, source } = await loadConfig(API)
+    expect(source).toBe('remote')
+    expect(config.commonTitle).toBe('配信の題目')
+    expect(config.courses[0].template).toBeUndefined()
+    expect(JSON.parse(memory.get('sotsugyo-seisaku-report-config')!).courses[0].template).toBeUndefined()
+    // 題目がないなど、設定全体の問題があれば、使わない（同梱の初期値で動く）
+    years.set(2026, { ...currentConfig, fiscalYear: 2026, commonTitle: '' })
+    memory.clear()
+    expect(await loadConfig(API)).toMatchObject({ source: 'bundled' })
+  })
+
   it('読めなければ、前に控えた設定。なければ同梱の初期値（同じ年度のときだけ）、それもなければ null', async () => {
     years.set(2026, { ...currentConfig, fiscalYear: 2026, commonTitle: '控えた題目' })
     await loadYearConfig(2026, API)

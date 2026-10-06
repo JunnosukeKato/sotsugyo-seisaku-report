@@ -119,6 +119,8 @@ export class ReportEditor {
   private renderTimer: number | undefined
   private renderMs = 0
   private pendingOpen: { id: string; caret: number } | null = null
+  /** 入力欄を開いたまま書く先を移し、紙面を組み直すのを待っている（anchor：その間、後ろの文章をずらす基準のブロック） */
+  private continuing: { id: string; anchor: string | null } | null = null
   /** 「図を入れる」の後、図のタイトルを Enter で確定したら、書いていた段落のこの位置に戻る */
   private returnTo: { from: string; id: string; caret: number } | null = null
   private currentId: string | null = null
@@ -167,7 +169,7 @@ export class ReportEditor {
         // 前の段落に「。」を自動で付けたときは覚えておく（すぐ Backspace でつなぎ直したら、元に戻す）
         const kind = ops.findEditable(this.report, id)?.kind
         this.autoPeriod = (kind === 'paragraph' || kind === 'abstractParagraph') && ops.withPeriod(before) !== before ? { prevId: id, newId: result.newId, original: before } : null
-        this.reopenAfterRender(result.newId, 0)
+        this.continueWriting(result.newId, 0, { ghostOf: id })
       },
       onMergeBackward: (id, text) => {
         // Enter の直後に Backspace でつなぎ直した：自動で付けた「。」を取り消して、元の文に戻す
@@ -181,12 +183,21 @@ export class ReportEditor {
         }
         this.pushHistory(this.reportBeforeEdit ?? this.report)
         this.report = result.report
-        this.reopenAfterRender(result.targetId, result.caret)
+        this.continueWriting(result.targetId, result.caret, { alsoHide: id })
       },
       onNavigate: (id, text, direction) => {
         this.report = ops.setText(this.report, id, text)
         const next = ops.neighbor(this.report, id, direction)
-        this.reopenAfterRender(next?.id ?? id, direction === 'prev' ? (next?.text.length ?? 0) : 0)
+        this.continueWriting(next?.id ?? id, direction === 'prev' ? (next?.text.length ?? 0) : 0)
+      },
+      onTab: (id, text, backward) => {
+        // 表のセル：Tab で隣のセルへ（最後のセルでは書き終わる）
+        this.report = ops.setText(this.report, id, text)
+        const table = this.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'table' && b.rows.some((r) => r.cells.some((c) => c.id === id)))
+        const cells = table?.type === 'table' ? table.rows.flatMap((r) => r.cells) : []
+        const next = cells[cells.findIndex((c) => c.id === id) + (backward ? -1 : 1)]
+        if (next) this.continueWriting(next.id, next.text.length)
+        else this.onCommitEdit(id, text, true)
       },
       onPasteParagraphs: (id, paragraphs, caretInLast) => {
         this.pushHistory(this.reportBeforeEdit ?? this.report)
@@ -363,8 +374,12 @@ export class ReportEditor {
     }
     this.markSelection()
     this.runChecks()
-    // 続けてもう一度組み直す場合や、開く予定の箇所がまだ紙面にない場合は、次の組版の後で開く
-    if (this.pendingOpen && !this.renderAgain && this.renderer.pageView.fragments(this.pendingOpen.id).length > 0) {
+    // 入力欄を開いたまま書く先を移していた：組み直した紙面に、その箇所が出たら合わせる
+    const continuing = this.continuing
+    if (continuing && this.overlay.blockId === continuing.id && this.renderer.pageView.fragments(continuing.id).length > 0) {
+      this.settleContinued(continuing.id)
+    } else if (this.pendingOpen && !this.renderAgain && this.renderer.pageView.fragments(this.pendingOpen.id).length > 0) {
+      // 続けてもう一度組み直す場合や、開く予定の箇所がまだ紙面にない場合は、次の組版の後で開く
       const { id, caret } = this.pendingOpen
       this.pendingOpen = null
       this.openEditor(id, caret)
@@ -541,6 +556,7 @@ export class ReportEditor {
   /** 入力欄を閉じて、書いた文字を確定する */
   private onCommitEdit(id: string, text: string, byKey: boolean): void {
     this.clearShift()
+    if (this.continuing?.id === id) this.continuing = null
     this.report = ops.setText(this.report, id, text)
     if (this.reportBeforeEdit && JSON.stringify(this.reportBeforeEdit) !== JSON.stringify(this.report)) this.pushHistory(this.reportBeforeEdit)
     this.reportBeforeEdit = null
@@ -568,7 +584,9 @@ export class ReportEditor {
     // 行が増えるのは段落（見出し・表紙の項目などは1行）
     if (!id || this.overlay.inSheet || this.overlay.kind !== 'paragraph') return
     const view = this.renderer.pageView
-    const last = view.fragments(id).at(-1)
+    // 組み直すのを待っているあいだ（段落を分けた・つなげた直後）は、元の段落の後ろをずらす
+    const anchor = (this.continuing?.id === id && this.continuing.anchor) || id
+    const last = view.fragments(anchor).at(-1)
     // 段落が次のページへ続いているときは、このページに後ろの文章はない
     if (!last || view.pageIndexOf(last) !== this.page) return
     const lastRect = last.getBoundingClientRect()
@@ -699,6 +717,46 @@ export class ReportEditor {
       : `${selector} { visibility: hidden !important; }`
   }
 
+  /**
+   * 段落を分けた・つなげた・↑↓で移ったとき：紙面を組み直すのを待たずに、入力欄を開いたまま書く先を移す。
+   * 組み直しは長い原稿だと数秒かかり、待つ間に打った文字が消えていたため。組み直したら正しい位置へ動かす（render の終わり）。
+   * ghostOf：分けた前の段落（組み直すまで、入力欄の上に仮に表示する）。alsoHide：つなげて無くなった段落（組み直すまで隠す）
+   */
+  private continueWriting(id: string, caret: number, how: { ghostOf?: string; alsoHide?: string } = {}): void {
+    const editable = ops.findEditable(this.report, id)
+    if (!editable || !this.overlay.blockId) return this.reopenAfterRender(id, caret)
+    const kind = this.overlayKind(editable.kind)
+    const view = this.renderer.pageView
+    const fragment = view.fragments(id)[0]
+    // まだ紙面にない段落（分けた後ろ）は、同じ種類の段落の書体を写す
+    const kinds = fragment ? null : new Map(ops.editables(this.report).map((e) => [e.id, e.kind]))
+    const styleSource = fragment ?? [...document.querySelectorAll<HTMLElement>('.page-viewport.front [data-block-id]')].find((el) => kinds?.get(el.dataset.blockId!) === editable.kind)
+    const ghost = how.ghostOf ? (ops.findEditable(this.report, how.ghostOf)?.text ?? '') : undefined
+    this.overlay.continueIn({ blockId: id, kind, text: editable.text, caret, styleSource }, ghost)
+    const placement = fragment ? this.overlayPlacement(id) : null
+    if (placement) this.overlay.moveTo(placement)
+    this.continuing = { id, anchor: how.ghostOf ?? how.alsoHide ?? null }
+    this.pendingOpen = null
+    this.currentId = id
+    this.selection = null
+    this.reportBeforeEdit = this.report
+    const hidden = this.overlay.inSheet ? [id] : [id, how.ghostOf, how.alsoHide].filter((x): x is string => !!x)
+    this.hideStyle.textContent = hidden.map((x) => this.editingStyle(x)).join('\n')
+    this.markSelection()
+    this.shiftFollowing()
+    this.afterChange({ render: 'now', save: true })
+  }
+
+  /** 組み直した紙面に、書いている箇所が出た：入力欄を正しい位置・書体に合わせる（continueWriting のあと） */
+  private settleContinued(id: string): void {
+    this.continuing = null
+    this.overlay.settle(this.renderer.pageView.fragments(id)[0])
+    this.hideStyle.textContent = this.editingStyle(id)
+    this.followCaret()
+    if (this.overlay.inSheet) this.revealEditing()
+    this.refreshHighlights()
+  }
+
   private reopenAfterRender(id: string, caret: number): void {
     this.hideStyle.textContent = this.editingStyle(id)
     this.pendingOpen = { id, caret }
@@ -760,7 +818,26 @@ export class ReportEditor {
     }
     if (target.closest('section.photos')) return this.select({ kind: 'photos' })
     if (target.closest('section.references')) return this.callbacks.onReferencesClick()
+    // スマホ：紙面の欄は小さく、少しずれて押すと開かなかった。指の幅ほどの近さにある欄を開く
+    const near = this.overlay.inSheet ? this.nearestEditable(e.clientX, e.clientY, 18) : null
+    if (near === FIELD_IDS.course) return this.callbacks.onCourseClick(this.renderer.pageView.fragments(near)[0].getBoundingClientRect())
+    if (near) return this.openEditor(near, ops.findEditable(this.report, near)?.text.length ?? 0)
     this.select(null)
+  }
+
+  /** 見えているページで、(x, y) から within 以内（画面の px）にある、いちばん近い書ける欄 */
+  private nearestEditable(x: number, y: number, within: number): string | null {
+    const page = this.renderer.pageView.pages()[this.page]
+    let best: { id: string; d: number } | null = null
+    for (const el of page?.querySelectorAll<HTMLElement>('[data-block-id]') ?? []) {
+      const id = el.dataset.blockId!
+      if (id !== FIELD_IDS.course && !ops.findEditable(this.report, id)) continue
+      const r = el.getBoundingClientRect()
+      if (!r.width && !r.height) continue
+      const d = Math.hypot(Math.max(r.left - x, 0, x - r.right), Math.max(r.top - y, 0, y - r.bottom))
+      if (d <= within && (!best || d < best.d)) best = { id, d }
+    }
+    return best?.id ?? null
   }
 
   select(selection: Selection): void {
@@ -990,7 +1067,8 @@ export class ReportEditor {
     next = ops.addTableBelow(next, paragraphId, kind === 'material' ? materialTable(tableId, ops.newId) : blankTable(tableId, ops.newId))
     this.report = next
     this.returnTo = { from: tableId, id: paragraphId, caret: ops.refEnd(next, paragraphId, tableId) }
-    this.reopenAfterRender(tableId, 0)
+    // 仮のタイトル（素材表の「使用素材表」）があれば、その後ろから書く（前に付け足してしまわないように）
+    this.reopenAfterRender(tableId, ops.findEditable(next, tableId)?.text.length ?? 0)
   }
 
   // ---- 選んでいる図・表の操作 ----
@@ -1015,6 +1093,9 @@ export class ReportEditor {
     const newFigure = { id: ops.newId('f'), imageId, caption: '' }
     this.pushHistory(this.report)
     this.report = ops.insertRefAfterRef(ops.addFigureAfter(this.report, figureId, newFigure), figureId, newFigure.id)
+    // タイトルを書いて Enter を押したら、1枚目と同じく、その図を参照している段落の続きに戻る
+    const paragraph = this.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'paragraph' && b.content.some((n) => n.type === 'ref' && n.targetId === newFigure.id))
+    if (paragraph) this.returnTo = { from: newFigure.id, id: paragraph.id, caret: ops.refEnd(this.report, paragraph.id, newFigure.id) }
     this.reopenAfterRender(newFigure.id, 0)
   }
 
@@ -1214,6 +1295,22 @@ export class ReportEditor {
     if (this.overlay.blockId) this.overlay.commit()
     for (const h of Object.values(this.highlights)) h.clear()
     for (const el of this.viewport.querySelectorAll('.is-selected')) el.classList.remove('is-selected')
+    // 「PDFを書き出す」の窓を通らずに、ブラウザの印刷（Ctrl+P など）で出したとき：エラーが残っていれば下書き（透かし入り）にする。
+    // 提出用に見える PDF が、エラーを残したまま出ないように。ファイル名のもとになるページの題も合わせる
+    const fromDialog = document.title === this.pdfTitle || document.title === `${this.pdfTitle}_下書き`
+    if (fromDialog) return
+    const draft = this.findings.some((f) => f.severity === 'error')
+    const title = document.title
+    document.title = draft ? `${this.pdfTitle}_下書き` : this.pdfTitle
+    document.documentElement.classList.toggle('print-draft', draft)
+    window.addEventListener(
+      'afterprint',
+      () => {
+        document.title = title
+        document.documentElement.classList.remove('print-draft')
+      },
+      { once: true },
+    )
   }
 
   get pdfTitle(): string {

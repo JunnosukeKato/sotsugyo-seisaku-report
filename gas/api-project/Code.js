@@ -25,10 +25,11 @@ function authorize() {
 }
 
 function doGet(e) {
-  const year = e && e.parameter && e.parameter.year
+  const year = e && e.parameter ? e.parameter.year : undefined
   let body
   try {
-    body = readConfig_(year)
+    // 年度の指定は、西暦4桁の数字だけ（それ以外は、シートも控えも読まずに断る）
+    body = year !== undefined && !/^\d{4}$/.test(String(year)) ? { ok: false, error: '年度の指定が正しくありません' } : readConfig_(year)
   } catch (err) {
     body = { ok: false, error: String(err && err.message ? err.message : err) }
   }
@@ -43,8 +44,22 @@ function readConfig_(year) {
 
   const rows = SpreadsheetApp.openById(sheetId_()).getSheetByName('年度設定').getDataRange().getValues().slice(1)
   const row = year ? rows.find((r) => String(r[0]) === String(year) && r[1] !== '準備中') : rows.find((r) => r[1] === '公開中')
-  const body = row ? { ok: true, year: Number(row[0]), config: JSON.parse(row[2]), updatedAt: new Date(row[3]).toISOString() } : { ok: false, error: '公開中の年度設定がありません' }
-  // 学生が一斉に開いても負担にならないよう、1分だけ控えておく（管理ページで公開した内容は1分以内に反映される）
+  const body = row ? bodyOf_(row) : { ok: false, error: '公開中の年度設定がありません' }
+  // 学生が一斉に開いても負担にならないよう、1分だけ控えておく（管理ページで公開した内容は1分以内に反映される）。
+  // 行が壊れているときの返事も控える（学生のツールは、前に読み込んだ設定か同梱の初期値で動く）
   cache.put(key, JSON.stringify(body), 60)
   return body
+}
+
+/** 年度設定の行から返事を作る。設定の JSON が書き損じで読めなければ ok: false（更新日時が読めないだけなら、設定は返す） */
+function bodyOf_(row) {
+  let config = null
+  try {
+    config = JSON.parse(row[2])
+  } catch (e) {
+    config = null
+  }
+  if (!config || typeof config !== 'object' || Array.isArray(config)) return { ok: false, error: Number(row[0]) + '年度の設定が壊れていて読めません。管理者に知らせてください' }
+  const date = new Date(row[3])
+  return { ok: true, year: Number(row[0]), config: config, updatedAt: isNaN(date.getTime()) ? null : date.toISOString() }
 }

@@ -87,6 +87,9 @@ export function useWheelPaging(target: React.RefObject<HTMLElement | null>, scro
     }
     const onWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) return // 画面の拡大・縮小
+      // 道具の中を上下に動かせるとき（表を選んでいて、道具が画面に入りきらない）は、道具を動かす
+      const palette = e.target instanceof Element ? e.target.closest('.palette') : null
+      if (palette && palette.scrollHeight > palette.clientHeight) return
       const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? sc.clientHeight : 1
       const dx = e.deltaX * unit
       const dy = e.deltaY * unit

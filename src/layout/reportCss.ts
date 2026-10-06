@@ -48,6 +48,11 @@ body {
   orphans: 1;
 }
 
+/* 長い URL など、途中で折り返せない英数字の並びも、紙の右端で切れないよう、行の終わりで折り返す */
+p, li {
+  overflow-wrap: anywhere;
+}
+
 h1, h2 {
   font: inherit;
   margin: 0;

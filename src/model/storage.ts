@@ -12,6 +12,8 @@ const DB_NAME = 'sotsugyo-seisaku-report'
 const DB_VERSION = 1
 const REPORT_KEY = 'current'
 const MAX_SNAPSHOTS = 20
+/** 入れ替える前の原稿の控え（選ばなかった原稿など）は、これとは別に最大10件残す */
+const MAX_KEPT_SNAPSHOTS = 10
 
 export interface StoredImage {
   id: string
@@ -23,6 +25,8 @@ export interface StoredImage {
 export interface Snapshot {
   savedAt: string
   report: Report
+  /** 入れ替える前の原稿の控え（押し出されない） */
+  keep?: boolean
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null
@@ -98,14 +102,21 @@ export async function deleteImage(id: string): Promise<void> {
   await promisify((await store('images', 'readwrite')).delete(id))
 }
 
-/** 控えを保存し、古いものは消す */
-export async function saveSnapshot(report: Report, savedAt = new Date().toISOString()): Promise<void> {
-  await promisify((await store('snapshots', 'readwrite')).put({ savedAt, report }))
-  const keys = (await promisify((await store('snapshots', 'readonly')).getAllKeys())) as string[]
-  const old = keys.sort().slice(0, Math.max(0, keys.length - MAX_SNAPSHOTS))
+/**
+ * 控えを保存し、古いものは消す。
+ * keep：選ばなかった原稿・作り直す前の原稿など、入れ替える前の原稿の控え。10分ごとの控えに押し出されて消えないよう、別に数える
+ */
+export async function saveSnapshot(report: Report, savedAt = new Date().toISOString(), keep = false): Promise<void> {
+  await promisify((await store('snapshots', 'readwrite')).put({ savedAt, report, ...(keep ? { keep } : {}) }))
+  const all = (await promisify((await store('snapshots', 'readonly')).getAll())) as Snapshot[]
+  const oldest = (list: Snapshot[], max: number) => list.sort((a, b) => a.savedAt.localeCompare(b.savedAt)).slice(0, Math.max(0, list.length - max))
+  const old = [...oldest(all.filter((x) => !x.keep), MAX_SNAPSHOTS), ...oldest(all.filter((x) => x.keep), MAX_KEPT_SNAPSHOTS)]
   const s = await store('snapshots', 'readwrite')
-  await Promise.all(old.map((k) => promisify(s.delete(k))))
+  await Promise.all(old.map((x) => promisify(s.delete(x.savedAt))))
 }
+
+/** 入れ替える前の原稿の控え（押し出されない控え）を保存する */
+export const keepSnapshot = (report: Report) => saveSnapshot(report, new Date().toISOString(), true)
 
 export async function listSnapshots(): Promise<Snapshot[]> {
   const all = (await promisify((await store('snapshots', 'readonly')).getAll())) as Snapshot[]

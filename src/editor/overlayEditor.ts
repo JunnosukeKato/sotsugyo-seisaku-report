@@ -25,6 +25,8 @@ export interface OverlayCallbacks {
   onNavigate(blockId: string, text: string, direction: 'prev' | 'next'): void
   /** 複数行を貼り付けた（行ごとに段落にする） */
   onPasteParagraphs(blockId: string, paragraphs: string[], caretInLast: number): void
+  /** 表のセルで Tab（Shift+Tab）を押した（隣のセルへ移る） */
+  onTab?(blockId: string, text: string, backward: boolean): void
   /** 紙面に重ねた入力欄の大きさが変わった（行が増えた・減った。日本語の変換中も呼ぶ） */
   onResize?(): void
 }
@@ -53,6 +55,20 @@ export interface OverlayTarget extends OverlayPlacement {
 
 const COPIED_STYLES = ['fontFamily', 'fontSize', 'lineHeight', 'letterSpacing', 'textIndent', 'textAlign', 'fontWeight'] as const
 
+/** キーボードで書く欄からここへ移っても、書き終わりにしない（道具の「図を入れる」などを、書いていた位置で使えるように） */
+const KEEP_OPEN = '.palette, .es-tools'
+
+/** 段落を分けた直後に、前の段落を仮に表示する要素の見た目（入力欄と同じ書体・位置で、押せない） */
+const GHOST_STYLE: Partial<CSSStyleDeclaration> = {
+  position: 'absolute',
+  pointerEvents: 'none',
+  transformOrigin: '0 0',
+  background: '#fff',
+  color: '#000',
+  whiteSpace: 'pre-wrap',
+  lineBreak: 'strict',
+}
+
 export class OverlayEditor {
   readonly element: HTMLDivElement
   private readonly layer: HTMLElement
@@ -68,6 +84,11 @@ export class OverlayEditor {
   private clipBox = { top: 0, left: 0, width: 0, height: 0 }
   /** ページの範囲の中での、入力欄の位置 */
   private offset = { top: 0, left: 0 }
+  /** 段落を分けた直後、紙面を組み直すまで前の段落を仮に表示する要素 */
+  private readonly ghost: HTMLDivElement
+  /** キーボードで道具へ移っているあいだ、書いていたカーソルの位置（書く欄に戻ったら、そこから続ける） */
+  private parkedCaret: number | null = null
+  private unwatchParked: (() => void) | null = null
 
   /**
    * @param layer 入力欄を置く層（紙面の表示領域に重ねる）
@@ -88,7 +109,11 @@ export class OverlayEditor {
     this.element.setAttribute('aria-multiline', 'true')
     this.element.setAttribute('aria-label', '書く欄')
     this.element.spellcheck = false
-    this.clip.append(this.element)
+    this.ghost = document.createElement('div')
+    this.ghost.className = 'overlay-ghost'
+    this.ghost.hidden = true
+    this.ghost.setAttribute('aria-hidden', 'true')
+    this.clip.append(this.element, this.ghost)
     layer.append(this.clip)
 
     this.element.addEventListener('compositionstart', () => (this.composingNow = true))
@@ -101,7 +126,17 @@ export class OverlayEditor {
     })
     this.element.addEventListener('keydown', (e) => this.onKeyDown(e))
     this.element.addEventListener('paste', (e) => this.onPaste(e))
-    this.element.addEventListener('blur', () => this.commit())
+    this.element.addEventListener('blur', (e) => {
+      const next = e.relatedTarget instanceof Element ? e.relatedTarget : null
+      if (this.target && next?.closest(KEEP_OPEN)) this.park()
+      else this.commit()
+    })
+    this.element.addEventListener('focus', () => {
+      if (this.parkedCaret === null) return
+      const caret = this.parkedCaret
+      this.unpark()
+      this.setCaret(caret)
+    })
     scroller.addEventListener('scroll', () => this.place())
     new ResizeObserver(() => {
       if (this.target && !this.sheetHost) this.callbacks.onResize?.()
@@ -154,6 +189,11 @@ export class OverlayEditor {
   }
 
   get caret(): number {
+    if (this.parkedCaret !== null && document.activeElement !== this.element) return this.parkedCaret
+    return this.caretInElement()
+  }
+
+  private caretInElement(): number {
     const sel = getSelection()
     if (!sel || !sel.rangeCount || !this.element.contains(sel.anchorNode)) return this.text.length
     const range = sel.getRangeAt(0).cloneRange()
@@ -163,6 +203,8 @@ export class OverlayEditor {
   }
 
   open(target: OverlayTarget): void {
+    this.unpark()
+    this.hideGhost()
     this.target = target
     this.element.dataset.kind = target.kind
     this.element.textContent = target.text
@@ -170,14 +212,99 @@ export class OverlayEditor {
       // 下の欄で書く：書体などは画面用（CSS）のまま。スマホでキーボードを出すには、タップの処理の中で欄を見せて入力欄に移る必要がある
       this.sheetHost.closest('.edit-sheet')?.classList.add('open')
     } else {
-      const computed = getComputedStyle(target.styleSource)
-      for (const key of COPIED_STYLES) this.element.style[key] = computed[key]
-      if (target.kind !== 'paragraph') this.element.style.textIndent = '0'
+      this.copyStyle(target.styleSource, target.kind)
       this.clip.hidden = false
       this.moveTo(target)
     }
     this.element.focus({ preventScroll: true })
     this.setCaret(target.caret)
+  }
+
+  /**
+   * 入力欄を開いたまま、書く先を別のブロックへ移す（段落を分けた・つなげた・↑↓で移った・表のセルで Tab を押したとき）。
+   * 紙面を組み直してから開き直すと、長い原稿では数秒かかり、その間に打った文字が消えていたため。
+   * 組み直したら、呼び出し側が settle と moveTo で正しい位置・書体に合わせる。
+   * ghost：分けた前の段落の文字。組み直すまで入力欄のあった位置に仮に表示し、入力欄はそのすぐ下へずらす
+   */
+  continueIn(next: { blockId: string; kind: OverlayKind; text: string; caret: number; styleSource?: HTMLElement }, ghost?: string): void {
+    if (!this.target) return
+    this.unpark()
+    if (ghost !== undefined && !this.sheetHost) {
+      const g = this.ghost
+      g.style.cssText = this.element.style.cssText
+      Object.assign(g.style, GHOST_STYLE)
+      g.textContent = ghost
+      g.hidden = false
+      this.offset = { ...this.offset, top: this.offset.top + g.offsetHeight * this.scale }
+    }
+    const kindChanged = next.kind !== this.target.kind
+    this.target = { ...this.target, blockId: next.blockId, kind: next.kind, text: next.text, caret: next.caret, enterCreatesParagraph: false }
+    this.element.dataset.kind = next.kind
+    if (next.styleSource && !this.sheetHost) {
+      this.copyStyle(next.styleSource, next.kind)
+      // 見出しの後ろに段落を作ったとき：段落の左端と幅に合わせる
+      if (kindChanged) {
+        const r = next.styleSource.getBoundingClientRect()
+        const clip = this.clip.getBoundingClientRect()
+        this.offset = { ...this.offset, left: r.left - clip.left }
+        this.element.style.width = `${Math.max(40, r.width / this.scale)}px`
+      }
+    }
+    this.element.textContent = next.text
+    this.place()
+    this.element.focus({ preventScroll: true })
+    this.setCaret(next.caret)
+  }
+
+  /** 組み直した紙面の書体に合わせ、仮に表示していた前の段落を消す（continueIn のあと） */
+  settle(styleSource: HTMLElement | undefined): void {
+    this.hideGhost()
+    if (this.target && styleSource && !this.sheetHost) this.copyStyle(styleSource, this.target.kind)
+  }
+
+  private copyStyle(source: HTMLElement, kind: OverlayKind): void {
+    const computed = getComputedStyle(source)
+    for (const key of COPIED_STYLES) this.element.style[key] = computed[key]
+    if (kind !== 'paragraph') this.element.style.textIndent = '0'
+  }
+
+  private hideGhost(): void {
+    this.ghost.hidden = true
+    this.ghost.textContent = ''
+  }
+
+  /**
+   * キーボード（Tab）で道具へ移った：書き終わりにせず、カーソルの位置を覚えておく。
+   * 道具でも書く欄でもない所へ移ったら、書き終わりにする
+   */
+  private park(): void {
+    this.parkedCaret = this.caretInElement()
+    this.unwatchParked?.()
+    const onFocusIn = (e: FocusEvent) => {
+      const el = e.target instanceof Element ? e.target : null
+      if (el === this.element || el?.closest(KEEP_OPEN)) return
+      this.commit()
+    }
+    const onFocusOut = (e: FocusEvent) => {
+      // フォーカスを受け取らない所（紙面の余白など）を押して、道具からフォーカスが外れた
+      if (e.relatedTarget === null && e.target instanceof Element && e.target.closest(KEEP_OPEN)) {
+        setTimeout(() => {
+          if (document.activeElement === document.body) this.commit()
+        })
+      }
+    }
+    document.addEventListener('focusin', onFocusIn)
+    document.addEventListener('focusout', onFocusOut)
+    this.unwatchParked = () => {
+      document.removeEventListener('focusin', onFocusIn)
+      document.removeEventListener('focusout', onFocusOut)
+    }
+  }
+
+  private unpark(): void {
+    this.parkedCaret = null
+    this.unwatchParked?.()
+    this.unwatchParked = null
   }
 
   /**
@@ -222,6 +349,8 @@ export class OverlayEditor {
   /** 確定せずに閉じる（呼び出し側がデータを処理済みのとき） */
   private close(): void {
     this.target = null
+    this.unpark()
+    this.hideGhost()
     this.clip.hidden = true
     this.sheetHost?.closest('.edit-sheet')?.classList.remove('open')
   }
@@ -285,21 +414,33 @@ export class OverlayEditor {
       // 表のセルの中の改行は、そのまま入れる
     } else if (e.key === 'Enter' && (kind === 'paragraph' || this.target.enterCreatesParagraph)) {
       e.preventDefault()
-      this.close()
-      this.callbacks.onSplit(blockId, text.slice(0, caret), text.slice(caret))
+      this.handOff(() => this.callbacks.onSplit(blockId, text.slice(0, caret), text.slice(caret)))
+    } else if (e.key === 'Tab' && kind === 'cell' && this.callbacks.onTab) {
+      e.preventDefault()
+      const onTab = this.callbacks.onTab
+      this.handOff(() => onTab(blockId, text, e.shiftKey))
     } else if (e.key === 'Enter') {
       e.preventDefault()
       this.closingByKey = true
       this.element.blur()
     } else if (e.key === 'Backspace' && kind === 'paragraph' && caret === 0 && collapsed) {
       e.preventDefault()
-      this.close()
-      this.callbacks.onMergeBackward(blockId, text)
+      this.handOff(() => this.callbacks.onMergeBackward(blockId, text))
     } else if (kind !== 'cell' && ((e.key === 'ArrowUp' && this.caretOnEdgeLine('first')) || (e.key === 'ArrowDown' && this.caretOnEdgeLine('last')))) {
       e.preventDefault()
-      this.close()
-      this.callbacks.onNavigate(blockId, text, e.key === 'ArrowUp' ? 'prev' : 'next')
+      const direction = e.key === 'ArrowUp' ? 'prev' : 'next'
+      this.handOff(() => this.callbacks.onNavigate(blockId, text, direction))
     }
+  }
+
+  /**
+   * 段落を分けた・つなげたなどを呼び出し側に任せる。呼び出し側が書く先を移した（continueIn・open）ら開いたまま、
+   * 移さなかった（組み直してから開き直す）ら、書いた内容は呼び出し側が受け取り済みなので、確定せずに閉じる
+   */
+  private handOff(fn: () => void): void {
+    const before = this.target
+    fn()
+    if (this.target === before) this.close()
   }
 
   private caretOnEdgeLine(edge: 'first' | 'last'): boolean {
@@ -325,7 +466,6 @@ export class OverlayEditor {
     paragraphs[0] = text.slice(0, caret) + paragraphs[0]
     const caretInLast = paragraphs[paragraphs.length - 1].length
     paragraphs[paragraphs.length - 1] += text.slice(caret)
-    this.close()
-    this.callbacks.onPasteParagraphs(blockId, paragraphs, caretInLast)
+    this.handOff(() => this.callbacks.onPasteParagraphs(blockId, paragraphs, caretInLast))
   }
 }

@@ -1,3 +1,24 @@
+const DEVICE_KEY = 'sotsugyo-seisaku-report-device'
+/** ブラウザに覚えておけないときの、このタブだけの印 */
+const tabId = crypto.randomUUID()
+
+/**
+ * この端末（ブラウザ）の印。ドライブの原稿を最後に保存したのがこの端末かを見分ける
+ * （送れたのに返事が届かなかったとき、自分の保存を「別の端末の保存」と間違えないように）
+ */
+export function deviceId(): string {
+  try {
+    let id = localStorage.getItem(DEVICE_KEY)
+    if (!id) {
+      id = crypto.randomUUID()
+      localStorage.setItem(DEVICE_KEY, id)
+    }
+    return id
+  } catch {
+    return tabId
+  }
+}
+
 /** この端末の名前（例：iPhone・Safari）。どの端末で保存した原稿かを見せるのに使う */
 export function deviceName(): string {
   const ua = navigator.userAgent

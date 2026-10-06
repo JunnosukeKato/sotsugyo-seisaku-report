@@ -125,7 +125,7 @@ await withEdge(async (browser) => {
     await page.goto('http://localhost:5173/?nodrive', { waitUntil: 'networkidle0', timeout: 90000 })
     await page.waitForFunction(() => window.__editor?.getSnapshot()?.layout && !window.__editor.getSnapshot().rendering, { timeout: 90000 })
     await page.addStyleTag({ content: STUDENT_CSS })
-    await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: '23FA0123', name: '文化　花子', subtitleInput: 'シンドバッド', courseId: 'film-stage-costume' } })))
+    await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: '00ZZ0123', name: '文化　花子', subtitleInput: 'シンドバッド', courseId: 'film-stage-costume' } })))
     await sleep(600)
     await page.evaluate(inject, T)
     await sleep(300)

@@ -23,15 +23,18 @@ interface Props {
   driveStopped?: boolean
   onBackup: () => void
   onExport: () => void
+  /** 「PDFを書き出す」を押して、紙面を確かめている途中 */
+  exporting?: boolean
   onReferences: () => void
 }
 
+/** 保存のようす。role="status"：変わったら、読み上げでも（話の切れ目で）知らせる */
 export function SaveChip({ state }: { state: SaveState }) {
   const title = '原稿はこのブラウザに自動で保存されます'
-  if (state.status === 'saving') return <span className="chip saved" title={title}><i className="dot busy" />保存しています…</span>
-  if (state.status === 'error') return <span className="chip saved ng" title={state.message}><i className="dot ng" />保存できません。バックアップを保存してください</span>
+  if (state.status === 'saving') return <span className="chip saved" role="status" title={title}><i className="dot busy" />保存しています…</span>
+  if (state.status === 'error') return <span className="chip saved ng" role="status" title={state.message}><i className="dot ng" />保存できません。バックアップを保存してください</span>
   const at = state.status === 'saved' ? ` ${state.at.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}` : ''
-  return <span className="chip saved" title={title}><i className="dot" />自動保存{at}</span>
+  return <span className="chip saved" role="status" title={title}><i className="dot" />自動保存{at}</span>
 }
 
 /** 管理ページでドライブ保存を止めているとき（mockups/v22 ②） */
@@ -113,12 +116,17 @@ export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; sna
           key={i}
           className={`t${i === snap.page ? ' on' : ''}${errorPages.has(i) ? ' has-error' : ''}`}
           title={`${name}（${i + 1}ページ目）${errorPages.has(i) ? '：エラーがあります' : ''}`}
+          // 読み上げの名前（縮小した紙面の中の文字まで読まないように、短い名前を付ける）
+          aria-label={`${name}（${i + 1}ページ目）${errorPages.has(i) ? 'エラーあり' : ''}`}
           aria-current={i === snap.page ? 'page' : undefined}
+          // スマホの「ページ一覧」の欄を開いたときは、見ているページに移る（useDialogFocus）
+          data-autofocus={onPick && i === snap.page ? true : undefined}
           onClick={() => {
             onPick?.()
             void editor.goToPage(i)
           }}>
-          <span className="mini" />
+          {/* 縮小した紙面は見た目だけ（読み上げない・中のボタンにも移らない） */}
+          <span className="mini" aria-hidden="true" inert />
           {name}
         </button>
       ))}
@@ -153,19 +161,9 @@ function activeKind(f: ReportFinding, snap: EditorSnapshot): 'here' | 'block' | 
 
 function Issue({ finding, editor, onPick, active }: { finding: ReportFinding; editor: ReportEditor; onPick?: () => void; active?: 'here' | 'block' | null }) {
   return (
+    // 行のどこを押しても、その箇所へ移る（「直す」「このままにする」は、それぞれの働きだけ）
     <li
       className={`issue ${finding.severity}${active ? ` active ${active}` : ''}`}
-      // キーボードでも選べるようにする（Tab で移り、Enter でその箇所へ）
-      tabIndex={0}
-      role="button"
-      aria-label={`${finding.severity === 'error' ? 'エラー' : '注意'}：${finding.title}${finding.detail ? `（${finding.detail}）` : ''}`}
-      onKeyDown={(e) => {
-        if (e.target === e.currentTarget && (e.key === 'Enter' || e.key === ' ')) {
-          e.preventDefault()
-          onPick?.()
-          void editor.goToFinding(finding)
-        }
-      }}
       onClick={() => {
         onPick?.()
         void editor.goToFinding(finding)
@@ -174,13 +172,14 @@ function Issue({ finding, editor, onPick, active }: { finding: ReportFinding; ed
       onMouseLeave={() => editor.focusFinding(null)}
     >
       <i className="dot" />
-      <div>
-        <div className="ttl">
+      {/* キーボードでは、題名の部分のボタンに Tab で移り、Enter でその箇所へ（押すと上の li の onClick が働く） */}
+      <button type="button" className="go" aria-label={`${finding.severity === 'error' ? 'エラー' : '注意'}：${finding.title}${finding.detail ? `（${finding.detail}）` : ''}`}>
+        <span className="ttl">
           {finding.title}
           <span className="src">{finding.source === 'guide' ? '手順書' : '補助'}</span>
-        </div>
-        {finding.detail && <div className="detail">{finding.detail}</div>}
-      </div>
+        </span>
+        {finding.detail && <span className="detail">{finding.detail}</span>}
+      </button>
       {finding.replacement !== undefined ? (
         <button
           className="fix"
@@ -228,7 +227,9 @@ export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEdit
   // 書いている（選んでいる）箇所の指摘が変わったら、その指摘が一覧の見えるところに来るようにする
   const here = findings.filter((f) => activeKind(f, snap) === 'here').map((f) => `${f.ruleId}:${f.blockId}:${f.start}`).join('|')
   useEffect(() => {
-    if (here) listRef.current?.querySelector('.issue.here')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+    // 「動きを減らす」設定のときは、すっと動かさず、すぐに移す
+    const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
+    if (here) listRef.current?.querySelector('.issue.here')?.scrollIntoView({ block: 'nearest', behavior })
   }, [here])
   const chars = abstractCharCount(report)
   const { minChars, maxChars, minLines, maxLines } = config.abstract
@@ -307,7 +308,7 @@ export function Tally({ snap }: { snap: EditorSnapshot }) {
   )
 }
 
-export function SidePanel({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, onReferences }: Props) {
+export function SidePanel({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onReferences }: Props) {
   const errors = snap.findings.filter((f) => f.severity === 'error').length
   return (
     <aside className="side">
@@ -357,8 +358,9 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
       </section>
 
       <footer className="side-foot">
-        <button className="export" disabled={snap.rendering && !snap.layout} onClick={onExport}>
-          {Icon.pdf}PDFを書き出す
+        <button className="export" disabled={(snap.rendering && !snap.layout) || exporting} onClick={onExport}>
+          {Icon.pdf}
+          {exporting ? '確かめています…' : 'PDFを書き出す'}
         </button>
         <p>{errors > 0 ? `エラーが${errors}件あります。0にしてから書き出しましょう` : '提出用のPDFを書き出せます'}</p>
         <SourceNotice />

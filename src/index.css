@@ -159,6 +159,9 @@ body.resizing .page-viewport { pointer-events: none; }
 /* ---- 道具（紙面の左わき） ---- */
 .palette { position: absolute; z-index: 10; left: calc(50% - var(--page-w) / 2 - 104px); top: var(--page-top); width: 86px; display: flex; flex-direction: column; padding: 6px; background: rgba(255, 255, 255, 0.96); border: 1px solid var(--palette-line); border-radius: var(--r-lg); box-shadow: var(--float-shadow); }
 .stage.zoomed .palette { top: var(--inset-top); }
+/* 図・表を選んでいるとき：それでも画面の下にはみ出すなら、道具の中を上下に動かせるようにする（このときは横に開くメニューはない） */
+.palette.compact { max-height: calc(100% - var(--page-top) - 12px); overflow-y: auto; }
+.stage.zoomed .palette.compact { max-height: calc(100% - var(--inset-top) - 12px); }
 /* 拡大：紙面を大きくするため左右の余白を狭め、道具は台の左端、ページ送りの矢印は下に置く（道具は紙面の左の余白に少し重なってもよい） */
 .stage.zoomed { --inset-side: 110px; }
 .stage.zoomed .palette { left: 12px; }
@@ -276,6 +279,9 @@ body.resizing .page-viewport { pointer-events: none; }
 .issue .dot::before { content: '×'; }
 .issue.warning .dot { background: var(--warn); border-radius: 3px; transform: rotate(45deg) scale(0.86); }
 .issue.warning .dot::before { content: '!'; transform: rotate(-45deg); }
+/* 題名の部分のボタン（キーボード・読み上げ用）。見た目は前の文字のまま（ボタンの枠や背景は出さない） */
+.issue .go { display: block; min-width: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; -webkit-appearance: none; appearance: none; }
+.issue .ttl, .issue .detail { display: block; }
 .issue .ttl { font-size: 13px; font-weight: 700; line-height: 1.5; }
 .issue .src { display: inline-block; white-space: nowrap; margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: var(--chip-bg); font-size: 10.5px; font-weight: 400; color: var(--muted); vertical-align: 1px; }
 .issue .detail { font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.6; }
@@ -306,7 +312,7 @@ body.resizing .page-viewport { pointer-events: none; }
 .modal button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
 .modal button.danger { color: var(--error); }
 .modal button.link { border: 0; padding: 0; color: var(--accent); text-decoration: underline; background: none; }
-.row-buttons { display: flex; gap: 8px; align-items: center; margin-top: 18px; }
+.row-buttons { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 18px; }
 .error-list { line-height: 1.9; padding-left: 20px; margin: 0; }
 .error-list .detail { color: var(--muted); font-size: 12px; }
 .checklist { display: grid; gap: 8px; margin: 6px 0 14px; }
@@ -321,9 +327,16 @@ body.resizing .page-viewport { pointer-events: none; }
 .ref-card { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; }
 .ref-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
 .ref-head select { font: inherit; padding: 4px 6px; }
-.ref-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.field { display: grid; gap: 3px; font-size: 12px; color: var(--muted); }
-.field input { font: inherit; font-size: 14px; color: var(--ink); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+.ref-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 8px; }
+.field { display: grid; gap: 3px; min-width: 0; font-size: 12px; color: var(--muted); }
+.field input { min-width: 0; font: inherit; font-size: 14px; color: var(--ink); padding: 6px 8px; border: 1px solid var(--line); border-radius: 6px; }
+/* 狭い画面（スマホ）：引用・参考文献の項目は1列に並べ、窓の下のボタンは折り返す（右に寄せる） */
+@media (max-width: 600px) {
+  .ref-fields { grid-template-columns: minmax(0, 1fr); }
+  .row-buttons { justify-content: flex-end; }
+}
+/* スマホ：入力欄の文字を 16px にする（それより小さいと、iPhone が入力するときに画面を勝手に拡大する） */
+.app.phone .field input, .app.phone .ref-head select { font-size: 16px; }
 .ref-preview { margin-top: 8px; font-family: 'BIZ UDMincho', serif; font-size: 13px; background: var(--panel-bg); border-radius: 6px; padding: 6px 8px; }
 .popover-backdrop { position: fixed; inset: 0; z-index: 40; }
 .popover { position: fixed; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(30, 25, 20, 0.18); padding: 6px; display: grid; min-width: 240px; max-width: calc(100vw - 16px); }
@@ -557,14 +570,27 @@ body.resizing .page-viewport { pointer-events: none; }
 
 /* ---- キーボード・タッチ・動きを減らす設定への配慮（見た目はほとんど変えない） ---- */
 /* キーボードで操作しているときの、いまの場所の枠 */
-.issue:focus-visible, .chip.click:focus-visible, .thumb-list .t:focus-visible, .drive-pop button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chip.click:focus-visible, .thumb-list .t:focus-visible, .drive-pop button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* セルフチェックの指摘：題名のボタンに移ったときも、前と同じく行全体に枠を出す（:has を知らないブラウザでも、ほかの枠が消えないよう、別に書く） */
+.issue:has(.go:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
+@supports selector(:has(a)) { .issue .go:focus-visible { outline: none; } }
+/* はじめての案内の見出し（開いたときに移る場所。押すものではないので、枠は出さない） */
+.g-tip h2[tabindex]:focus { outline: none; }
 /* 小さいボタンも、指で押しやすいよう、押せる範囲だけを広げる */
 .issue .fix, .pager button, .sheet-close, .icon-btn { position: relative; }
 .issue .fix::after { content: ''; position: absolute; inset: -10px -8px; }
 .pager button::after, .sheet-close::after { content: ''; position: absolute; inset: -4px; }
+/* 書く欄の「完了」・案内の「あとで入力する」・「引用・参考文献を入れる」・窓の中のボタン・「手順書」「バックアップ」：高さ 44px ほどまで広げる
+   （となりのボタンと重ならないよう、横には広げないか、少しだけ。枠線のあるボタンは、枠線の内側から測るので 1px 多めに） */
+.es-head .done, .g-later, .add-refs, .modal button:not(.link), .g-actions button, .link-btn { position: relative; }
+.es-head .done::after { content: ''; position: absolute; inset: -9px -6px -6px; }
+.g-later::after, .add-refs::after { content: ''; position: absolute; inset: -16px -8px; }
+.modal button:not(.link)::after { content: ''; position: absolute; inset: -9px 0; }
+.g-actions button::after { content: ''; position: absolute; inset: -8px 0; }
+.link-btn::after { content: ''; position: absolute; inset: -7px 0; }
 /* 「動きを減らす」設定のときは、下から出る欄や案内の動きを止める */
 @media (prefers-reduced-motion: reduce) {
-  .sheet, .edit-sheet, .login-card, .g-tip { animation: none !important; }
+  .sheet, .edit-sheet, .login-card, .g-tip, .popover.course-menu { animation: none !important; }
   .g-spot, .login-progress i { transition: none !important; }
   * { scroll-behavior: auto !important; }
 }
@@ -582,7 +608,8 @@ body.resizing .page-viewport { pointer-events: none; }
 
 /* ---- 下書きの PDF（どのページにも「下書き」の透かし。mockups/v22 ① 案A） ---- */
 .draft-box { margin: 14px 0 0; padding: 12px 14px; border-radius: 10px; background: #f6f4ef; border: 1px solid var(--line); font-size: 13px; line-height: 1.7; }
-.draft-box b { display: block; margin-bottom: 2px; }
+/* 見出しの太字だけを1行にする（印刷の手順の中の太字は、文の中にそのまま置く） */
+.draft-box > b { display: block; margin-bottom: 2px; }
 .draft-box ul { margin: 6px 0; padding-left: 20px; font-size: 12.5px; color: var(--muted); }
 .draft-box button { margin-top: 6px; }
 @media print {

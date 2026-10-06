@@ -1,6 +1,6 @@
 import { currentConfig } from '.'
 import type { YearConfig } from './types'
-import { validateConfig } from './validate'
+import { repairConfig, validateConfig } from './validate'
 
 /**
  * 管理ページで公開された年度設定を読み込む。
@@ -15,19 +15,23 @@ const CACHE_KEY = 'sotsugyo-seisaku-report-config'
 const TIMEOUT_MS = 15000
 const ATTEMPTS = 2
 
-function usable(config: unknown): config is YearConfig {
-  if (!config || typeof config !== 'object') return false
+/**
+ * 使える設定にして返す（使えなければ null）。崩れたコースのひな形・お知らせなどは外して使う
+ * （1つのコースのひな形が崩れていても、設定全体は捨てない。そのコースは標準のひな形になる）
+ */
+function usable(config: unknown): YearConfig | null {
+  if (!config || typeof config !== 'object') return null
   try {
-    return validateConfig(config as YearConfig).every((p) => p.severity !== 'error')
+    const repaired = repairConfig(config as YearConfig)
+    return validateConfig(repaired).every((p) => p.severity !== 'error') ? repaired : null
   } catch {
-    return false
+    return null
   }
 }
 
 function readCache(key = CACHE_KEY): YearConfig | null {
   try {
-    const cached = JSON.parse(localStorage.getItem(key) ?? 'null')
-    return usable(cached) ? cached : null
+    return usable(JSON.parse(localStorage.getItem(key) ?? 'null'))
   } catch {
     return null
   }
@@ -39,13 +43,14 @@ async function fetchConfig(apiUrl: string | undefined, year: number | null, cach
     try {
       const response = await fetch(`${apiUrl}?action=config${year ? `&year=${year}` : ''}`, { signal: AbortSignal.timeout(TIMEOUT_MS) })
       const body = await response.json()
-      if (body?.ok && usable(body.config) && (!year || body.config.fiscalYear === year)) {
+      const config = body?.ok ? usable(body.config) : null
+      if (config && (!year || config.fiscalYear === year)) {
         try {
-          localStorage.setItem(cacheKey, JSON.stringify(body.config))
+          localStorage.setItem(cacheKey, JSON.stringify(config))
         } catch {
           // 控えを残せなくても、今回は読み込んだ設定で動く
         }
-        return body.config
+        return config
       }
     } catch {
       // 通信できないときは試し直し、それでもだめなら控えか初期値を使う

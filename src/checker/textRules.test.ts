@@ -49,6 +49,14 @@ describe('である調', () => {
     expect(fixAll('難しい工程でした。')).toBe('難しい工程であった。')
   })
 
+  it('「難しかったです」「かわいいです」「広げたいです」は、「である」に置き換えると誤った日本語になるので、自動では直さない', () => {
+    for (const text of ['難しかったです。', 'かわいいです。', '広げたいです。', '重かったでした。']) {
+      const [f] = checkText(text)
+      expect(f.ruleId).toBe('desu-masu')
+      expect(f.replacement).toBeUndefined()
+    }
+  })
+
   it('「ますます」のような語は指摘しない', () => {
     expect(ids('ますます華やかになった。')).toEqual([])
   })
@@ -63,10 +71,13 @@ describe('一人称', () => {
     expect(ids('私服と私物を参考にした。')).toEqual([])
   })
 
-  it('「私たち」は指摘するが自動では直さない', () => {
-    const [f] = checkText('私たちが制作した。')
-    expect(f.ruleId).toBe('first-person')
-    expect(f.replacement).toBeUndefined()
+  it('「私たち」「私達」「我々」は指摘するが自動では直さない。「わたくし」は「筆者」に直せる', () => {
+    for (const text of ['私たちが制作した。', '私達が制作した。', '我々が制作した。']) {
+      const [f] = checkText(text)
+      expect(f.ruleId).toBe('first-person')
+      expect(f.replacement).toBeUndefined()
+    }
+    expect(fixAll('わたくしが担当した。')).toBe('筆者が担当した。')
   })
 })
 

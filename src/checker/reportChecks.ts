@@ -96,24 +96,30 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   if (!findCourse(config, basicInfo.courseId)) {
     findings.push(guide('required-field', 'error', 'コースが選ばれていない', 'cover', { blockId: 'basic:course' }))
   }
+  // 姓と名の間は全角の空白（はじめての案内でも、そう伝えている）。半角の空白なら、全角に直せる
+  const halfSpace = basicInfo.name.search(/(?<=\S) +(?=\S)/)
+  if (halfSpace >= 0) {
+    const end = basicInfo.name.slice(halfSpace).search(/[^ ]/) + halfSpace
+    findings.push(
+      guide('name-space', 'warning', '姓と名の間は全角の空白にする', 'cover', { blockId: 'basic:name', start: halfSpace, end, replacement: '　', detail: '半角の空白 → 全角の空白（例：文化　花子）' }),
+    )
+  }
   if (config.studentIdPattern && basicInfo.studentId.trim() && !new RegExp(config.studentIdPattern).test(basicInfo.studentId.trim())) {
     findings.push(guide('student-id-format', 'warning', '学籍番号の形式を確認する', 'cover', { blockId: 'basic:studentId' }))
   }
 
   // ---- 抄録 ----
-  // 抄録は、先生の許可が出てから書く。書き始めるまでは字数・行数を確かめず、まだ書いていないことだけを知らせる
+  // 抄録は、先生の許可が出てから書く。書き始めるまでは字数・行数を確かめず、まだ書いていないことだけを知らせる。
+  // 抄録のない報告書は提出できないので、エラーにする（途中経過を先生に見せるときは、下書きの PDF で出せる）
   const chars = abstractCharCount(report)
   const { minChars, maxChars, minLines, maxLines } = config.abstract
   const abstractStarted = report.abstract.started !== false
   if (!abstractStarted) {
-    findings.push({
-      ruleId: 'abstract-not-started',
-      severity: 'warning',
-      source: 'supplementary',
-      title: '抄録はまだ書いていない',
-      detail: '本文を書き終えて、先生のチェックで許可が出たら、抄録のページの「先生の許可が出た」を押して書き始めます',
-      area: 'abstract',
-    })
+    findings.push(
+      guide('abstract-not-started', 'error', '抄録はまだ書いていない', 'abstract', {
+        detail: '本文を書き終えて、先生のチェックで許可が出たら、抄録のページの「先生の許可が出た」を押して書き始めます（それまでの途中経過は、下書きの PDF で先生に見せられます）',
+      }),
+    )
   }
   if (abstractStarted && (chars < minChars || chars > maxChars)) {
     findings.push(

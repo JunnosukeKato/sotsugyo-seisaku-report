@@ -7,7 +7,7 @@ import { documentCss } from '../../src/layout/documentCss'
 import { createReport } from '../../src/model/newReport'
 
 const report = createReport(currentConfig)
-report.basicInfo = { ...report.basicInfo, studentId: '23FA0123', name: '文化　花子', subtitleInput: 'シンドバッド' }
+report.basicInfo = { ...report.basicInfo, studentId: '00ZZ0123', name: '文化　花子', subtitleInput: 'シンドバッド' }
 report.abstract.paragraphs[0].content = [
   { type: 'text', text: '本制作報告書は、卒業イベント「シンドバッド」において、筆者が制作したシンドバッドの衣装についてである。七つの航海を経て成長していく主人公の姿を、衣装で表すことを目標とした。中東の伝統的な装いをもとに、航海の力強さと冒険心を表すデザインを考えた。' },
 ]

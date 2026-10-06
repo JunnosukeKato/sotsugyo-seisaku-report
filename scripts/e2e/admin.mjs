@@ -122,6 +122,7 @@ await withEdge(async (browser) => {
   await teacher.goto('http://localhost:5173/admin.html?as=teacher', { waitUntil: 'networkidle0' })
   await teacher.waitForSelector('.teacher-main')
   check('先生には、ひな形の一覧だけの画面が出る（年度の設定の欄は出ない）', !(await teacher.$('.form')) && (await teacher.$$('.teacher-main .tpl-row')).length > 0)
+  check('先生の画面にも、ソースコードの場所のリンクが出る（AGPL）', await teacher.evaluate(() => !!document.querySelector('.teacher-main .source a')?.href))
   await teacher.evaluate(() => document.querySelector('.teacher-main .tpl-row button').click())
   await teacher.waitForSelector('.tpl-modal')
   await teacher.evaluate(() => [...document.querySelectorAll('.tpl-modal .row input')].at(-1).focus())
@@ -176,7 +177,7 @@ await withEdge(async (browser) => {
   await clickButton('先生の登録')
   await page.waitForSelector('.modal.members .member-list li')
   const box = await page.$('.member-add textarea')
-  await box.type('文化 太郎 <t-bunka@bunka-wu.ac.jp>, "衣装 花子" <h-isho@bunka-wu.ac.jp>;\n22fac123@bunka-wu.ac.jp, someone@gmail.com')
+  await box.type('文化 太郎 <t-bunka@bunka-wu.ac.jp>, "衣装 花子" <h-isho@bunka-wu.ac.jp>;\n00zz901@bunka-wu.ac.jp, someone@gmail.com')
   await page.waitForSelector('.bulk-table tbody tr')
   const read = await page.evaluate(() => [...document.querySelectorAll('.bulk-table tbody tr')].map((tr) => `${tr.className}:${tr.querySelector('.st').textContent}`))
   check('貼り付けると、名前とアドレスを読み取り、学生・大学外のアドレスは登録しないと示す', read.join(',') === 'ok:新しく登録,ok:新しく登録,ng:学生のアドレスのため登録しない,ng:大学のアドレスでないため登録しない', read.join(','))
@@ -184,7 +185,7 @@ await withEdge(async (browser) => {
   await clickButton('2人を登録する')
   await page.waitForFunction(() => document.querySelectorAll('.member-list li').length >= 4 && !document.querySelector('.bulk-table'))
   const registered = await page.evaluate(() => [...document.querySelectorAll('.member-list li .who')].map((w) => w.textContent))
-  check('「2人を登録する」で、名前をメモにして先生として登録される', registered.some((w) => w.includes('t-bunka@bunka-wu.ac.jp') && w.includes('文化 太郎')) && registered.some((w) => w.includes('h-isho@bunka-wu.ac.jp')) && !registered.some((w) => w.includes('22fac123')))
+  check('「2人を登録する」で、名前をメモにして先生として登録される', registered.some((w) => w.includes('t-bunka@bunka-wu.ac.jp') && w.includes('文化 太郎')) && registered.some((w) => w.includes('h-isho@bunka-wu.ac.jp')) && !registered.some((w) => w.includes('00zz901')))
   await clickButton('閉じる')
 
   // 変更履歴

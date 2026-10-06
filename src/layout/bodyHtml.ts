@@ -134,7 +134,7 @@ function renderTable(block: TableBlock, number: number, options: BodyRenderOptio
   const [head, ...body] = block.rows
   const thead = head ? `<thead><tr>${head.cells.map((c) => cellHtml(c, true)).join('')}</tr></thead>` : ''
   const tbody = `<tbody>${body.map((r) => `<tr>${r.cells.map((c) => cellHtml(c, false)).join('')}</tr>`).join('')}</tbody>`
-  return `<div class="data-table" data-table-id="${escapeHtml(block.id)}"><p class="table-caption">${captionHtml('表', number, block.caption, block.id)}</p><table class="widths-${block.widths}">${thead}${tbody}</table></div>`
+  return `<div class="data-table" data-table-id="${escapeHtml(block.id)}"><p class="table-caption">${captionHtml('表', number, block.caption, block.id)}</p><table class="widths-${block.widths === 'auto' ? 'auto' : 'equal'}">${thead}${tbody}</table></div>`
 }
 
 /**

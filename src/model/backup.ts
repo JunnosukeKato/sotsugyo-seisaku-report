@@ -70,7 +70,7 @@ export function readBackup(text: string): { report: Report; images: StoredImage[
   }
 }
 
-/** バックアップファイルの名前（例：卒業制作報告書_バックアップ_23FA0123_20261005-1432.json） */
+/** バックアップファイルの名前（例：卒業制作報告書_バックアップ_00ZZ0123_20261005-1432.json） */
 export function backupFileName(report: Report, now = new Date()): string {
   const pad = (n: number) => String(n).padStart(2, '0')
   const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`

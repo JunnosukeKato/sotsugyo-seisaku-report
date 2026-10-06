@@ -212,13 +212,16 @@ export function Palette({ editor, snap, onReferences }: Props) {
   const kind = snap.layout?.kinds[snap.page] ?? 'unknown'
   const context = PAGE_CONTEXT[kind]
   const preview = (on: boolean) => editor.previewInsert(on)
+  // 図・表・改ページを選んでいる（表のセルや図のタイトルを書いている）ときは、その物の道具だけを出す
+  // （本文に足す道具まで並べると、ノートパソコンの画面では表の「削除」「元に戻す」が下にはみ出して押せなかったため）
+  const onObject = !!snap.selection || ['tableCell', 'tableCaption', 'figureCaption'].includes(snap.editingKind ?? '')
   return (
-    <nav className="palette" aria-label="道具">
+    <nav className={`palette${onObject ? ' compact' : ''}`} aria-label="道具">
       <div className="p-head">
         <b>{context.name}</b>
         <span>{context.hint}</span>
       </div>
-      {kind === 'body' && (
+      {kind === 'body' && !onObject && (
         <>
           <div className="group">
             <Tool label="小見出し" icon={Icon.heading2} title="小見出し（ⅰ．）を足す" onPreview={preview} onClick={() => editor.addSubheading()} />

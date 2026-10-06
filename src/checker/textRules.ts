@@ -90,6 +90,10 @@ export const TEXT_RULES: TextRule[] = [
       matches(text, /(でしょう|でした|です|ました|ません|ます)(?=[。、」）！？]|$)/g)
         .filter(({ start }) => !quoted(text, start))
         .map(({ match, start, end }) => {
+        // 「難しかったです」「かわいいです」「広げたいです」：「である」に置き換えると誤った日本語になるので、自動では直さない
+        if ((match[0] === 'です' || match[0] === 'でした') && /[いた]$/.test(text.slice(0, start))) {
+          return { start, end, detail: `「${match[0]}」を取るか、言い換える（例：「難しかったです」→「難しかった」）` }
+        }
         const fixes: Record<string, string> = { です: 'である', でした: 'であった' }
         const replacement = fixes[match[0]]
         return { start, end, replacement, detail: replacement ? `「${match[0]}」→「${replacement}」` : `「${match[0]}」を「である」調に直す` }
@@ -101,10 +105,10 @@ export const TEXT_RULES: TextRule[] = [
     source: 'guide',
     title: '一人称は「筆者」にする',
     find: (text) =>
-      matches(text, /私たち|わたしたち|僕たち|僕ら|私(?![服物立鉄語的有見案事情設費淑信])|わたし|僕/g)
+      matches(text, /私たち|私達|わたしたち|僕たち|僕達|僕ら|我々|われわれ|わたくし|私(?![服物立鉄語的有見案事情設費淑信])|わたし|僕/g)
         .filter(({ start }) => !quoted(text, start))
         .map(({ match, start, end }) => {
-        const plural = /たち|ら$/.test(match[0])
+        const plural = /たち|達|ら$|我々|われわれ/.test(match[0])
         return plural
           ? { start, end, detail: `「${match[0]}」→「筆者ら」など` }
           : { start, end, replacement: '筆者', detail: `「${match[0]}」→「筆者」` }

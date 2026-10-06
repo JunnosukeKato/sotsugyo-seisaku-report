@@ -1,8 +1,8 @@
 import { migrateReport } from '../model/migrate'
 import { getImage, putImage, usedImageIds, type StoredImage } from '../model/storage'
 import type { Report } from '../model/types'
-import { deviceName } from './device'
-import { account, DriveError, ensureFolder, findFile, getModified, listChildren, readFile, saveFile, signIn, type DriveFile, type Token } from './driveApi'
+import { deviceId, deviceName } from './device'
+import { account, DriveError, ensureFolder, findFile, getFileState, listChildren, readFile, saveFile, signIn, type DriveFile, type Token } from './driveApi'
 
 /**
  * 原稿を Google ドライブにも保存する（mockups/v18 案3・v19 案A）。
@@ -135,8 +135,12 @@ export function summarize(report: Report): { chars: number; figures: number; pho
   }
 }
 
-/** 更新時刻のほかが同じ原稿か */
-const sameContent = (a: Report, b: Report) => JSON.stringify({ ...a, updatedAt: '' }) === JSON.stringify({ ...b, updatedAt: '' })
+/** 項目の並び順によらない文字列（同じ中身かを比べる） */
+const stable = (value: unknown) =>
+  JSON.stringify(value, (_key, x) => (x && typeof x === 'object' && !Array.isArray(x) ? Object.fromEntries(Object.entries(x).sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))) : x))
+
+/** 更新時刻のほかが同じ原稿か（形式をそろえてから比べる。項目の並び順や、前の版の形式の違いでは「違う」としない） */
+export const sameContent = (a: Report, b: Report) => stable({ ...migrateReport(a), updatedAt: '' }) === stable({ ...migrateReport(b), updatedAt: '' })
 
 const asDriveError = (e: unknown) => (e instanceof DriveError ? e : new DriveError('unknown', 'ドライブでエラーが起きました', String(e)))
 
@@ -181,6 +185,11 @@ export class DriveSync {
 
   get tokenValid(): boolean {
     return !!this.token && this.token.expiresAt - EXPIRY_MARGIN_MS > Date.now()
+  }
+
+  /** ドライブに送れていない変更があるか（許可切れ・電波なし・別の端末の保存を待っている、送っている途中など） */
+  get unsent(): boolean {
+    return this.active && !!this.link && (!!this.pending || !!this.running)
   }
 
   /** 最後にドライブに保存した（読み込んだ）時刻 */
@@ -245,14 +254,22 @@ export class DriveSync {
     if (!file) return local ? { kind: 'local', upload: true } : { kind: 'new' }
     if (!local) return { kind: 'remote', remote: await this.readRemote(file) }
     const sameFile = link.reportFileId === file.id
+    // 最後にドライブに保存したのがこの端末なら（送れたのに返事が届かなかったなど）、別の端末の保存ではない
+    const own = sameFile && file.appProperties?.writer === deviceId()
+    if (own && file.modifiedTime !== link.remoteModified) {
+      link.remoteModified = file.modifiedTime
+      if (file.appProperties?.updatedAt === local.updatedAt) link.syncedUpdatedAt = local.updatedAt
+      writeLink(link)
+    }
     const localChanged = local.updatedAt !== link.syncedUpdatedAt
     // この端末の原稿が、最後にドライブに送った版より古い（この端末への保存だけが失敗していた）。古い方で上書きしない
-    const localStale = !!link.syncedUpdatedAt && local.updatedAt < link.syncedUpdatedAt
-    if (sameFile && file.modifiedTime === link.remoteModified && !localStale) return { kind: 'local', upload: localChanged }
+    const sentUpdatedAt = own ? file.appProperties?.updatedAt : link.syncedUpdatedAt
+    const localStale = !!sentUpdatedAt && local.updatedAt < sentUpdatedAt
+    if (sameFile && file.modifiedTime === link.remoteModified && !localStale) return { kind: 'local', upload: localChanged || (await this.photosToSend(local)) }
     const remote = await this.readRemote(file)
     if (sameContent(local, remote.report)) {
       this.adopt(remote, local)
-      return { kind: 'local', upload: false }
+      return { kind: 'local', upload: await this.photosToSend(local) }
     }
     if ((sameFile && (!localChanged || localStale)) || !hasContent(local)) return { kind: 'remote', remote }
     return { kind: 'conflict', remote }
@@ -292,11 +309,59 @@ export class DriveSync {
   }
 
   private async loadPhotoList(): Promise<void> {
+    const files = await listChildren(this.need(), this.link!.photosFolderId)
     this.photos.clear()
-    for (const file of await listChildren(this.need(), this.link!.photosFolderId)) {
+    for (const file of files) {
       const id = file.appProperties?.imageId
       if (id && !this.photos.has(id)) this.photos.set(id, file)
     }
+  }
+
+  /** 原稿で使っている写真のうち、この端末にあってドライブにないもの（ドライブで写真をゴミ箱に入れたなど）があるか */
+  private async photosToSend(report: Report): Promise<boolean> {
+    for (const id of new Set(usedImageIds(report))) if (!this.photos.has(id) && (await getImage(id))) return true
+    return false
+  }
+
+  /**
+   * フォルダがゴミ箱に入っていたら（消えていたら）、入れ直すフォルダを用意する（ゴミ箱の中に保存し続けないように）。
+   * 変わったら true
+   */
+  private async checkFolders(token: Token): Promise<boolean> {
+    const link = this.link!
+    let moved = false
+    if ((await getFileState(token, link.folderId)) === null) {
+      link.folderId = await ensureFolder(token)
+      link.photosFolderId = await ensureFolder(token, PHOTOS_FOLDER, link.folderId)
+      moved = true
+    } else if ((await getFileState(token, link.photosFolderId)) === null) {
+      link.photosFolderId = await ensureFolder(token, PHOTOS_FOLDER, link.folderId)
+      moved = true
+    }
+    if (moved) {
+      writeLink(link)
+      await this.loadPhotoList()
+    }
+    return moved
+  }
+
+  /**
+   * 原稿のファイルを新しく作る前に（はじめて送るとき・ドライブで原稿のファイルやフォルダをゴミ箱に入れたとき）、
+   * ほかの端末がすでに作った原稿がないか確かめる。あれば、そのファイルに保存する先を合わせ、
+   * force でなければ true（上書きせずに、どちらで続けるかを選んでもらう）
+   */
+  private async findExisting(token: Token, force: boolean): Promise<boolean> {
+    const link = this.link!
+    delete link.reportFileId
+    delete link.remoteModified
+    await this.checkFolders(token)
+    const file = await findFile(token, link.folderId, REPORT_NAME)
+    if (file) link.reportFileId = file.id
+    // この端末が作った（作れたのに返事が届かなかった）ファイルなら、そのまま続けて保存する
+    const own = file?.appProperties?.writer === deviceId()
+    if (own) link.remoteModified = file.modifiedTime
+    writeLink(link)
+    return !!file && !force && !own
   }
 
   /** 原稿で使っている写真のうち、この端末にないものをドライブから読み込む */
@@ -329,11 +394,15 @@ export class DriveSync {
     this.setStatus({ kind: 'saved', at: new Date(remote.modifiedTime) })
   }
 
-  /** 始める（ここから、原稿が変わるたびにドライブに送る）。upload：この端末の原稿を、すぐ送る */
+  /** 始める（ここから、原稿が変わるたびにドライブに送る）。upload：この端末の原稿（とドライブにない写真）を、すぐ送る */
   activate(upload?: Report): void {
     this.active = true
     if (this.state.status.kind === 'idle' && this.lastSaved) this.setStatus({ kind: 'saved', at: this.lastSaved })
-    if (upload) this.schedule(upload, 0)
+    if (upload && this.link) {
+      this.pending = upload
+      clearTimeout(this.timer)
+      this.timer = window.setTimeout(() => void this.flush(), 0)
+    }
   }
 
   /** 原稿が変わった：書くのをやめて少したったら、ドライブに送る */
@@ -362,17 +431,20 @@ export class DriveSync {
 
   /**
    * この端末の原稿で、ドライブの原稿を上書きする（どちらで続けるかを選んだとき）。
-   * remote：選ばなかったドライブの原稿。そのファイルに上書きする（新しく作ると、原稿のファイルが2つになる）
+   * remote：選ばなかったドライブの原稿。そのファイルに上書きする（新しく作ると、原稿のファイルが2つになる）。
+   * 選ぶ窓を出したあとに、別の端末がさらに保存していたら、上書きせずに、もう一度選んでもらう（その版を確かめずに消さないように）。
+   * remote がない（ドライブに原稿がなかった）ときは、そのまま送る
    */
   async overwrite(report: Report, remote?: RemoteCopy): Promise<void> {
     clearTimeout(this.timer)
     while (this.running) await this.running
     if (remote && this.link) {
-      this.link.reportFileId = remote.fileId
+      // 選んだ時点のドライブの原稿を、見た版として覚えておく（すぐ送れなくても、つながってから同じ窓を出し直さない）
+      Object.assign(this.link, { reportFileId: remote.fileId, remoteModified: remote.modifiedTime })
       writeLink(this.link)
     }
     this.pending = null
-    this.running = this.upload(report, true)
+    this.running = this.upload(report, !remote)
     try {
       await this.running
     } finally {
@@ -407,24 +479,34 @@ export class DriveSync {
     this.setStatus({ kind: 'saving' })
     try {
       const token = this.token!
-      /** 別の端末が、この端末より後に保存していないか（していたら、上書きせずに、どちらで続けるかを選んでもらう） */
+      /**
+       * 別の端末が、この端末より後に保存していないか（していたら、上書きせずに、どちらで続けるかを選んでもらう）。
+       * force：選ぶ窓で「この端末の原稿」を選んだあとなど、比べずに上書きする
+       */
       const changedElsewhere = async () => {
-        if (!link.reportFileId || force) return false
-        const modified = await getModified(token, link.reportFileId)
-        if (modified === null) {
-          delete link.reportFileId
+        // はじめて送る・ドライブで原稿のファイルをゴミ箱に入れた：作る前に、ほかの端末が作った原稿がないか確かめる
+        if (!link.reportFileId) return this.findExisting(token, force)
+        const state = await getFileState(token, link.reportFileId)
+        if (state === null) return this.findExisting(token, force)
+        if (force || state.modifiedTime === link.remoteModified) return false
+        // 最後に保存したのがこの端末（送れたのに返事が届かなかった）なら、別の端末の保存ではない
+        if (state.appProperties?.writer === deviceId()) {
+          link.remoteModified = state.modifiedTime
           return false
         }
-        return modified !== link.remoteModified
+        return true
       }
       if (await changedElsewhere()) {
         this.keep(report)
         this.setStatus({ kind: 'conflict' })
         return
       }
+      const toSend: string[] = []
+      for (const id of new Set(usedImageIds(report))) if (!this.photos.has(id)) toSend.push(id)
+      // 写真を送る前に、写真のフォルダがゴミ箱に入っていないか確かめる
+      if (toSend.length && (await this.checkFolders(token))) toSend.splice(0, toSend.length, ...toSend.filter((id) => !this.photos.has(id)))
       let sentPhotos = 0
-      for (const id of new Set(usedImageIds(report))) {
-        if (this.photos.has(id)) continue
+      for (const id of toSend) {
         const image = await getImage(id)
         if (!image) continue
         const file = await saveFile(token, {
@@ -443,7 +525,9 @@ export class DriveSync {
         return
       }
       const content = new Blob([JSON.stringify({ kind: KIND, savedAt: new Date().toISOString(), device: deviceName(), report })], { type: 'application/json' })
-      const saved = await saveFile(token, { name: REPORT_NAME, folderId: link.folderId, content, fileId: link.reportFileId })
+      // どの端末が、どの版を保存したかを付けておく（返事が届かなかったとき、自分の保存だと分かるように）
+      const appProperties = { writer: deviceId(), updatedAt: report.updatedAt }
+      const saved = await saveFile(token, { name: REPORT_NAME, folderId: link.folderId, content, fileId: link.reportFileId, appProperties })
       Object.assign(link, { reportFileId: saved.id, remoteModified: saved.modifiedTime, syncedUpdatedAt: report.updatedAt })
       writeLink(link)
       this.setStatus({ kind: 'saved', at: new Date() })
@@ -461,13 +545,23 @@ export class DriveSync {
     }
   }
 
-  /** この端末から原稿を消す前に、ドライブに送り終える。送れたら true */
+  /**
+   * この端末から原稿を消す前に、ドライブに送り終える。送れたら true。
+   * 写真もドライブにそろっているか確かめ直す（ドライブで写真をゴミ箱に入れていたら、送り直す。端末から消したあと、どこにも残らないように）
+   */
   async finish(current: Report): Promise<boolean> {
-    if (current.updatedAt !== this.link?.syncedUpdatedAt) {
+    if (!this.link || !this.tokenValid) return false
+    try {
+      await this.checkFolders(this.token!)
+      await this.loadPhotoList()
+    } catch {
+      return false
+    }
+    if (current.updatedAt !== this.link.syncedUpdatedAt || (await this.photosToSend(current))) {
       this.pending = current
       await this.flush()
     }
-    return !!this.link && current.updatedAt === this.link.syncedUpdatedAt
+    return !!this.link && current.updatedAt === this.link.syncedUpdatedAt && !(await this.photosToSend(current))
   }
 
   /** この端末とドライブのつながりを忘れる（この端末から原稿を消したとき） */

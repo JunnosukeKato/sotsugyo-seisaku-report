@@ -304,7 +304,8 @@ export function ConflictDialog({
   onChooseRemote: () => void
   onChooseLocal: () => void
 }) {
-  const remoteNewer = remote.savedAt >= local.updatedAt
+  // どちらも「最後に書いた時刻」で比べる（ドライブに送った時刻と比べると、送るのが遅れただけで「新しい」になる）
+  const remoteNewer = remote.report.updatedAt >= local.updatedAt
   // 必ずどちらかを選んでもらうので、Esc では閉じない
   const ref = useRef<HTMLDivElement>(null)
   useDialogFocus(ref)

@@ -172,7 +172,7 @@ await withEdge(async (browser) => {
   for (const [key, inject] of Object.entries(STATES)) {
     const { context, page } = await open(browser)
     if (key === 'relogin') {
-      await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: '23FA0123', name: '文化　花子', subtitleInput: 'シンドバッド' } })))
+      await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: '00ZZ0123', name: '文化　花子', subtitleInput: 'シンドバッド' } })))
       await sleep(400)
       await ready(page)
     }

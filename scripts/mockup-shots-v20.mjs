@@ -8,14 +8,14 @@ const OUT = 'mockups/v20/screens'
 mkdirSync(OUT, { recursive: true })
 
 // 貼り付けた例（メーリングリストの宛先の形。名前はすべて架空）
-const PASTED = '文化 太郎 <t-bunka@bunka-wu.ac.jp>, "衣装 花子" <h-isho@bunka-wu.ac.jp>, 舞台 次郎 <j-butai@bunka-wu.ac.jp>;\n22fac123@bunka-wu.ac.jp, someone@gmail.com'
+const PASTED = '文化 太郎 <t-bunka@bunka-wu.ac.jp>, "衣装 花子" <h-isho@bunka-wu.ac.jp>, 舞台 次郎 <j-butai@bunka-wu.ac.jp>;\n00zz901@bunka-wu.ac.jp, someone@gmail.com'
 
 // 読み取った結果
 const ROWS = [
   { on: true, name: '文化 太郎', email: 't-bunka@bunka-wu.ac.jp', state: '新しく登録', kind: 'ok' },
   { on: true, name: '衣装 花子', email: 'h-isho@bunka-wu.ac.jp', state: '新しく登録', kind: 'ok' },
   { on: false, name: '舞台 次郎', email: 'j-butai@bunka-wu.ac.jp', state: '登録済み（先生）', kind: 'muted' },
-  { on: false, name: '', email: '22fac123@bunka-wu.ac.jp', state: '学生のアドレスのため登録しない', kind: 'ng' },
+  { on: false, name: '', email: '00zz901@bunka-wu.ac.jp', state: '学生のアドレスのため登録しない', kind: 'ng' },
   { on: false, name: '', email: 'someone@gmail.com', state: '大学のアドレスでないため登録しない', kind: 'ng' },
 ]
 
