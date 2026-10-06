@@ -31,6 +31,11 @@ export interface BasicInfo {
 /** 抄録の本文。段落ごとに持つ（書き出しの1字下げは自動） */
 export interface AbstractSection {
   paragraphs: ParagraphBlock[]
+  /**
+   * 抄録を書き始めたか。抄録は、本文を書き終えて先生のチェックで許可が出てから書く（学生が「先生の許可が出た」を押す）。
+   * false の間は、抄録の欄に案内とボタンを出し、抄録の字数・行数のチェックはしない。省略したら書き始めている
+   */
+  started?: boolean
 }
 
 /** 大見出し（Ⅰ．Ⅱ．…は自動で付く） */

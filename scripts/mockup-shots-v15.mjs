@@ -73,7 +73,7 @@ await withEdge(async (browser) => {
     const context = await browser.createBrowserContext()
     const page = await context.newPage()
     await stubConfig(page)
-    await page.setViewport({ width: 1440, height: 900, deviceScaleFactor: 1.5 })
+    await page.setViewport({ width: Number(process.env.W ?? 1440), height: Number(process.env.H ?? 900), deviceScaleFactor: 1.5 })
     await page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
     const ready = () => page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !s.turning }, { timeout: 90000 })
     await ready()
@@ -85,7 +85,7 @@ await withEdge(async (browser) => {
     await ready()
     if (inject) await page.evaluate(inject, VERTICAL)
     await new Promise((r) => setTimeout(r, 1200))
-    await page.screenshot({ path: `${OUT}/${key}.png` })
+    await page.screenshot({ path: `${OUT}/${key}${process.env.W ? '-' + process.env.W : ''}.png` })
     console.log(`${OUT}/${key}.png`)
     await context.close()
   }

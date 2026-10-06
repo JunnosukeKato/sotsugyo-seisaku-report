@@ -25,7 +25,13 @@ describe('createReport', () => {
     expect(blocks[4].type === 'figureRow' && blocks[4].figures[0]).toMatchObject({ imageId: '', caption: 'デザイン画' })
     expect(report.abstract.paragraphs[0].hint).toContain('本制作報告書は、卒業イベント')
     const ids = checkReport(report, currentConfig).map((f) => f.ruleId)
-    expect(ids).toEqual(expect.arrayContaining(['required-field', 'abstract-length', 'figure-image', 'swatch-image', 'photos-required', 'paragraph-empty']))
+    expect(ids).toEqual(expect.arrayContaining(['required-field', 'figure-image', 'swatch-image', 'photos-required', 'paragraph-empty']))
+    // 抄録は、先生の許可が出てから書く：書き始めるまでは字数を確かめず、まだ書いていないことだけを知らせる
+    expect(report.abstract.started).toBe(false)
+    expect(ids).toContain('abstract-not-started')
+    expect(ids).not.toContain('abstract-length')
+    const started = { ...report, abstract: { ...report.abstract, started: true } }
+    expect(checkReport(started, currentConfig).map((f) => f.ruleId)).toContain('abstract-length')
   })
 })
 

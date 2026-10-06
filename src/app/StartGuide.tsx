@@ -165,7 +165,7 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
         return (
           <>
             <h2>表紙ができました</h2>
-            <p>次のページから、抄録と本文を書きます。紙面の薄い字は「ここに何を書くか」の説明で、書き始めると消えます（PDFには出ません）。</p>
+            <p>次は本文を書きます（抄録は、本文を書き終えて先生の許可が出てから書きます）。紙面の薄い字は「ここに何を書くか」の説明で、書き始めると消えます（PDFには出ません）。</p>
             <div className="g-actions">
               <button className="primary" onClick={() => { close(); editor.nextPage() }}>
                 次のページへ

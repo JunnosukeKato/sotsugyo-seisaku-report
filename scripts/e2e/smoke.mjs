@@ -159,9 +159,16 @@ await withEdge(async (browser) => {
   s = await snap()
   check('表紙の入力は、コースを変えても残る', s.report.basicInfo.studentId === '23FA0123' && s.report.basicInfo.name === '文化　花子' && s.report.basicInfo.subtitleInput === 'シンドバッド', JSON.stringify(s.report.basicInfo))
 
-  // ---- 抄録 ----
+  // ---- 抄録：先生の許可が出てから書く（それまでは案内とボタンだけ。字数のチェックはしない） ----
   const abstractId = s.report.abstract.paragraphs[0].id
-  await clickBlock(abstractId)
+  await page.evaluate(() => window.__editor.goToArea('abstract'))
+  await ready()
+  const lockShown = await page.evaluate(() => !!document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current [data-abstract-start]'))
+  check('抄録は、はじめは案内と「先生の許可が出た」ボタンだけで、字数のチェックは出ない', lockShown && s.findings.some((f) => f.ruleId === 'abstract-not-started') && !s.findings.some((f) => f.ruleId === 'abstract-length'))
+  const startBox = await page.evaluate(() => { const r = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current [data-abstract-start]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  await page.mouse.click(startBox.x, startBox.y)
+  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 30000 }, abstractId)
+  check('「先生の許可が出た」を押すと、抄録を書き始められる', (await snap()).report.abstract.started === true)
   const sentence = '本制作報告書は、卒業イベントにおいて筆者が制作した衣装についてである。'
   await typeAndCommit(sentence.repeat(19), 'Escape')
   s = await snap()

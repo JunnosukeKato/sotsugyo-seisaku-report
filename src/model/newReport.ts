@@ -15,7 +15,7 @@ export function createReport(config: YearConfig, courseId?: string): Report {
     formatVersion: DATA_FORMAT_VERSION,
     fiscalYear: config.fiscalYear,
     basicInfo: { studentId: '', name: '', courseId: course, subtitleInput: '' },
-    abstract: { paragraphs: [emptyParagraph(abstractHint(config, course))] },
+    abstract: { paragraphs: [emptyParagraph(abstractHint(config, course))], started: false },
     body: bodyFromTemplate(courseTemplate(config, course)),
     references: [],
     workPhotos: { layout: 1, imageIds: [] },

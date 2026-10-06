@@ -149,13 +149,19 @@ export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEdit
     <>
       <div className="meters">
         <Meter label="本文のページ数" value={`${bodyPages} / ${config.body.minPages}ページ以上`} ok={bodyPages >= config.body.minPages} ratio={bodyPages / config.body.minPages} />
-        <Meter label="抄録の文字数" value={`${chars}字（${minChars}〜${maxChars}）`} ok={chars >= minChars && chars <= maxChars} ratio={chars / maxChars} />
-        <Meter
-          label="抄録の行数"
-          value={`${layout?.abstractLines ?? 0}行（${minLines}〜${maxLines}）`}
-          ok={!!layout && layout.abstractLines >= minLines && layout.abstractLines <= maxLines}
-          ratio={(layout?.abstractLines ?? 0) / maxLines}
-        />
+        {report.abstract.started === false ? (
+          <Meter label="抄録" value="先生の許可が出てから書きます" ok ratio={0} />
+        ) : (
+          <>
+            <Meter label="抄録の文字数" value={`${chars}字（${minChars}〜${maxChars}）`} ok={chars >= minChars && chars <= maxChars} ratio={chars / maxChars} />
+            <Meter
+              label="抄録の行数"
+              value={`${layout?.abstractLines ?? 0}行（${minLines}〜${maxLines}）`}
+              ok={!!layout && layout.abstractLines >= minLines && layout.abstractLines <= maxLines}
+              ratio={(layout?.abstractLines ?? 0) / maxLines}
+            />
+          </>
+        )}
         <Meter label="図の枚数" value={`${figures}枚（目安 ${figureMax}枚まで）`} ok={figures <= figureMax} ratio={figures / figureMax} />
       </div>
       {findings.length === 0 ? (

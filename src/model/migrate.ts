@@ -12,6 +12,14 @@ export class UnsupportedDataError extends Error {}
 
 type Raw = Record<string, unknown>
 
+/** 抄録：「書き始めたか」がない前の版の原稿は、抄録をすでに書いていれば書き始めているとみなす（書いた抄録を隠さない） */
+function migrateAbstract(abstract: Raw): Report['abstract'] {
+  const paragraphs = Array.isArray(abstract.paragraphs) ? (abstract.paragraphs as Report['abstract']['paragraphs']) : []
+  const written = paragraphs.some((p) => p.content?.some((n) => n.type !== 'text' || n.text.trim()))
+  if (typeof abstract.started === 'boolean') return { paragraphs, started: abstract.started || written }
+  return written ? { paragraphs } : { paragraphs, started: false }
+}
+
 /** 作品写真：3枚の並べ方はなくしたため、4枚にする（写真は残る） */
 function migratePhotos(photos: Raw): Report['workPhotos'] {
   const layout = photos.layout === 3 ? 4 : (([1, 2, 4, 6] as const).find((n) => n === photos.layout) ?? 1)
@@ -44,7 +52,7 @@ export function migrateReport(input: unknown): Report {
     formatVersion: DATA_FORMAT_VERSION,
     fiscalYear: typeof raw.fiscalYear === 'number' ? raw.fiscalYear : 0,
     basicInfo: { studentId: str(basic.studentId), name: str(basic.name), courseId: str(basic.courseId), subtitleInput: str(basic.subtitleInput) },
-    abstract: { paragraphs: Array.isArray(abstract.paragraphs) ? (abstract.paragraphs as Report['abstract']['paragraphs']) : [] },
+    abstract: migrateAbstract(abstract),
     body: raw.body as Report['body'],
     references: Array.isArray(raw.references) ? (raw.references as Report['references']) : [],
     workPhotos: migratePhotos(photos),

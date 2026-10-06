@@ -99,7 +99,11 @@ export function abstractHtml(report: Report, config: YearConfig): string {
   const studentPart = `学籍番号　${basicInfo.studentId}　　氏名　${basicInfo.name}`
   const advisorPart = `（指導教員　${advisors}　）`
   const rowFontPt = abstractRowFontPt(studentPart, advisorPart)
-  const paragraphs = report.abstract.paragraphs
+  // 書き始めるまでは、抄録の欄に案内と「先生の許可が出た」ボタンを出す（画面だけ。PDF では空欄）
+  const locked = report.abstract.started === false
+  const paragraphs = locked
+    ? `<div class="abstract-lock"><b>抄録は、本文を書き終えて、先生のチェックで許可が出てから書きます。</b><span>許可が出たら、下のボタンを押してください（それまで、このページは PDF では空欄のままです）。</span><span class="abstract-start" data-abstract-start>先生の許可が出た（抄録を書き始める）</span></div>`
+    : report.abstract.paragraphs
     .map((p) => {
       const text = p.content.map((n) => (n.type === 'text' ? n.text : '')).join('')
       const placeholder = p.hint ? `（${p.hint}）` : '（クリックして抄録を入力）'

@@ -14,14 +14,6 @@ const PARAGRAPHS = [
   '素材は、光沢のあるサテンと、張りのあるリネンを組み合わせた。サテンは照明を受けて輝き、航海の華やかさを表す。',
 ]
 
-// 紙面の上で、エラーのある行の位置（画面座標）を求める
-const errorRects = () => {
-  const h = CSS.highlights.get('issue-error')
-  const rects = []
-  for (const r of h ?? []) for (const c of r.getClientRects()) if (c.width > 0) rects.push({ top: c.top, bottom: c.bottom, left: c.left })
-  return rects
-}
-
 const VARIANTS = {
   now: null,
   // 案1：文字そのものを濃く示す（太い下線と、はっきりした背景）
@@ -32,8 +24,9 @@ const VARIANTS = {
     document.head.append(s)
   },
   // 案2：今の波線に加えて、行の左の余白に赤い印（遠目にもどこにあるかわかる）
-  b: (rectsSrc) => {
-    const rects = eval(rectsSrc)()
+  b: () => {
+    const rects = []
+    for (const r of CSS.highlights.get('issue-error') ?? []) for (const c of r.getClientRects()) if (c.width > 0) rects.push({ top: c.top, bottom: c.bottom })
     const page = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current').getBoundingClientRect()
     const seen = new Set()
     for (const r of rects) {
@@ -117,7 +110,7 @@ await withEdge(async (browser) => {
     await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfBlock('ep1'), 'none'))
     await ready()
     if (key !== 'now') await page.addStyleTag({ content: EMPTY_CAPTION })
-    if (inject) await page.evaluate(inject, `(${errorRects.toString()})`)
+    if (inject) await page.evaluate(inject)
     await page.evaluate(() => [...document.querySelectorAll('.side .igroup')].find((g) => g.querySelector('.ig-h')?.textContent.startsWith('本文'))?.scrollIntoView({ block: 'start' }))
     await new Promise((r) => setTimeout(r, 300))
     await page.screenshot({ path: `${OUT}/${key}.png` })

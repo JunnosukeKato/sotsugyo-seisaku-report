@@ -401,6 +401,7 @@ button:disabled { cursor: default; opacity: 0.4; }
   .page-viewport [data-photo-slot]:empty::before { content: none !important; }
   .page-viewport [data-photo-slot] { outline: none !important; }
   .page-viewport .page-break::after { content: none !important; }
+  .page-viewport .abstract-lock { display: none !important; }
   .page-viewport .is-selected { outline: none !important; }
   .page-viewport [data-block-id='basic:course'] { text-decoration: none !important; }
 }

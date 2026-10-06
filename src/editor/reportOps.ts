@@ -112,7 +112,8 @@ export function editables(report: Report): Editable[] {
   const num = numbering(report)
   return [
     ...EDITABLE_FIELDS.map((f) => ({ id: FIELD_PREFIX + f, kind: 'field' as const, text: report.basicInfo[f] })),
-    ...report.abstract.paragraphs.map((p) => ({ id: p.id, kind: 'abstractParagraph' as const, text: contentToText(p.content, num) })),
+    // 抄録は、書き始めるまで（先生の許可が出るまで）書けない
+    ...(report.abstract.started === false ? [] : report.abstract.paragraphs).map((p) => ({ id: p.id, kind: 'abstractParagraph' as const, text: contentToText(p.content, num) })),
     ...report.body.flatMap((c) => [
       { id: c.id, kind: 'chapter' as const, text: c.title },
       ...c.blocks.flatMap((b): Editable[] => {

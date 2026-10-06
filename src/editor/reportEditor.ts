@@ -658,6 +658,8 @@ export class ReportEditor {
       return
     }
     const target = e.target as HTMLElement
+    // 抄録の「先生の許可が出た」
+    if (target.closest('[data-abstract-start]')) return this.startAbstract()
     // 改ページの印：選ぶ（道具の「削除」で消せる）
     const pageBreak = target.closest<HTMLElement>('.page-break[data-block-id]')
     if (pageBreak) return this.select({ kind: 'pageBreak', id: pageBreak.dataset.blockId! })
@@ -836,6 +838,17 @@ export class ReportEditor {
     this.pushHistory(this.report)
     this.report = ops.insertAfter(this.report, after, block)
     this.reopenAfterRender(editId, 0)
+  }
+
+  /** 抄録を書き始める（先生の許可が出た）。抄録の最初の段落を開く */
+  startAbstract(): void {
+    if (this.report.abstract.started !== false) return
+    if (this.overlay.blockId) this.overlay.commit()
+    this.pushHistory(this.report)
+    this.report = { ...this.report, abstract: { ...this.report.abstract, started: true } }
+    const first = this.report.abstract.paragraphs[0]
+    if (first) this.reopenAfterRender(first.id, 0)
+    else this.afterChange({ render: 'now', save: true })
   }
 
   /** 改ページを入れる（足す位置の後ろ。この後ろは次のページから始まる） */

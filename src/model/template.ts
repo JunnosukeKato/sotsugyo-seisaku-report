@@ -103,6 +103,6 @@ export function applyCourseTemplate(report: Report, config: YearConfig, courseId
     ...report,
     basicInfo: { ...report.basicInfo, courseId },
     body: bodyFromTemplate(courseTemplate(config, courseId)),
-    abstract: abstractEmpty(report) ? { paragraphs: [emptyParagraph(abstractHint(config, courseId))] } : report.abstract,
+    abstract: abstractEmpty(report) ? { ...report.abstract, paragraphs: [emptyParagraph(abstractHint(config, courseId))] } : report.abstract,
   }
 }

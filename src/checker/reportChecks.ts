@@ -84,16 +84,28 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   }
 
   // ---- 抄録 ----
+  // 抄録は、先生の許可が出てから書く。書き始めるまでは字数・行数を確かめず、まだ書いていないことだけを知らせる
   const chars = abstractCharCount(report)
   const { minChars, maxChars, minLines, maxLines } = config.abstract
-  if (chars < minChars || chars > maxChars) {
+  const abstractStarted = report.abstract.started !== false
+  if (!abstractStarted) {
+    findings.push({
+      ruleId: 'abstract-not-started',
+      severity: 'warning',
+      source: 'supplementary',
+      title: '抄録はまだ書いていない',
+      detail: '本文を書き終えて、先生のチェックで許可が出たら、抄録のページの「先生の許可が出た」を押して書き始めます',
+      area: 'abstract',
+    })
+  }
+  if (abstractStarted && (chars < minChars || chars > maxChars)) {
     findings.push(
       guide('abstract-length', 'error', `抄録は${minChars}〜${maxChars}字にする`, 'abstract', {
         detail: `現在 ${chars}字（${chars < minChars ? `あと${minChars - chars}字` : `${chars - maxChars}字多い`}）`,
       }),
     )
   }
-  if (layout) {
+  if (layout && abstractStarted) {
     if (layout.abstractPages > 1) {
       findings.push(guide('abstract-one-page', 'error', '抄録は1ページに収める', 'abstract', { detail: `現在 ${layout.abstractPages}ページ` }))
     }
