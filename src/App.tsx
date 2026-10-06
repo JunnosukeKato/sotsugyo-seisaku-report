@@ -9,7 +9,7 @@ import { BackupDialog, CourseChangeDialog, CourseMenu, ExportDialog, ReferencesD
 import { Icon } from './app/icons'
 import { Palette } from './app/Palette'
 import { PhoneChrome } from './app/Phone'
-import { useKeyboardInset, useNarrow, useSwipe } from './app/uiShared'
+import { useKeyboardInset, useNarrow, useSwipe, useWheelPaging } from './app/uiShared'
 import { SidePanel } from './app/SidePanel'
 import { StartGuide, type GuideStep } from './app/StartGuide'
 import { useAutosave } from './app/useAutosave'
@@ -68,6 +68,8 @@ export default function App() {
   const hasLayout = !!snap?.layout
   useKeyboardInset()
   useSwipe(stageRef, editor, narrow)
+  // ホイールでページを送る（コースを選ぶ案内や、画面の上に出る窓が開いている間は送らない）
+  useWheelPaging(stageRef, scrollerRef, editor, !dialog && guide !== 'course')
   useEffect(() => {
     if (editor && hasLayout) editor.setSheetHost(narrow ? sheetHostRef.current : null)
   }, [editor, narrow, hasLayout])

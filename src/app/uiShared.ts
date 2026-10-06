@@ -57,6 +57,72 @@ export function useKeyboardInset(): void {
 }
 
 /** 紙面を指で左右にはらうと、ページをめくる */
+/** これより間が空いたら、ホイールの別の操作とみなす（ミリ秒） */
+const WHEEL_GESTURE_GAP_MS = 180
+/** ページを送るのに必要な回転の量（px。マウスのホイールなら1目盛りで届く） */
+const WHEEL_TURN_PX = 50
+
+/**
+ * マウスのホイール（タッチパッドの2本指）でページを送る。下（右）へ回すと次のページ、上（左）へ回すと前のページ。
+ * 1回の操作（間が空くまでの一続きの回転）で1ページ。タッチパッドの指を離したあとの惰性では続けて送らない。
+ * 紙面をスクロールできるとき（拡大など）は、ふつうにスクロールし、端まで来てから改めて回したときだけ送る。
+ */
+export function useWheelPaging(target: React.RefObject<HTMLElement | null>, scroller: React.RefObject<HTMLElement | null>, editor: ReportEditor | null, enabled: boolean): void {
+  useEffect(() => {
+    const el = target.current
+    const sc = scroller.current
+    if (!el || !sc || !editor || !enabled) return
+    let last = 0
+    let sum = 0
+    let mode: 'turn' | 'scroll' | 'done' = 'turn'
+    // めくっている間に回されたら、めくり終わってから送る（1回分だけ覚えておく）
+    let busy = false
+    let queued = 0
+    const turn = async (dir: number) => {
+      if (busy) {
+        queued = dir
+        return
+      }
+      busy = true
+      try {
+        await editor.goToPage(editor.getSnapshot().page + dir)
+      } finally {
+        busy = false
+      }
+      if (queued) {
+        const next = queued
+        queued = 0
+        void turn(next)
+      }
+    }
+    const onWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) return // 画面の拡大・縮小
+      const unit = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? sc.clientHeight : 1
+      const dx = e.deltaX * unit
+      const dy = e.deltaY * unit
+      const d = Math.abs(dx) > Math.abs(dy) ? dx : dy
+      if (!d) return
+      const now = performance.now()
+      if (now - last > WHEEL_GESTURE_GAP_MS) {
+        // 新しい操作：縦にスクロールできる余地があれば、ふつうにスクロールする
+        const atEdge = d > 0 ? sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 2 : sc.scrollTop <= 1
+        sum = 0
+        mode = Math.abs(dy) >= Math.abs(dx) && !atEdge ? 'scroll' : 'turn'
+      }
+      last = now
+      if (mode === 'scroll') return
+      e.preventDefault()
+      if (mode === 'done') return
+      sum += d
+      if (Math.abs(sum) < WHEEL_TURN_PX) return
+      mode = 'done'
+      void turn(sum > 0 ? 1 : -1)
+    }
+    el.addEventListener('wheel', onWheel, { passive: false })
+    return () => el.removeEventListener('wheel', onWheel)
+  }, [target, scroller, editor, enabled])
+}
+
 export function useSwipe(target: React.RefObject<HTMLElement | null>, editor: ReportEditor | null, enabled: boolean): void {
   const start = useRef<{ x: number; y: number } | null>(null)
   useEffect(() => {

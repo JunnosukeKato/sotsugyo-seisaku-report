@@ -94,6 +94,44 @@ await withEdge(async (browser) => {
   const fitWidth = await page.evaluate(() => document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current').getBoundingClientRect().width)
   check('「拡大」で紙面が大きくなり、「全体」で戻る', zoomedWidth > fitWidth * 1.1, `${Math.round(fitWidth)}px → ${Math.round(zoomedWidth)}px`)
 
+  // ---- マウスのホイールでページを送る ----
+  const pause = (ms = 400) => new Promise((r) => setTimeout(r, ms))
+  const stageCenter = await page.evaluate(() => { const r = document.querySelector('.page-scroller').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  await page.mouse.move(stageCenter.x, stageCenter.y)
+  await page.mouse.wheel({ deltaY: 100 })
+  await pause()
+  await ready()
+  check('ホイールを下へ1目盛り回すと、次のページへめくれる', (await snap()).page === 1)
+  await pause()
+  // タッチパッドのように細かく続けて回しても（指を離したあとの惰性を含めて）、1ページだけ送る
+  for (let i = 0; i < 30; i++) {
+    await page.mouse.wheel({ deltaY: 25 })
+    await pause(16)
+  }
+  await pause()
+  await ready()
+  check('細かく続けて回しても、1回の操作では1ページだけ送る', (await snap()).page === 2, `${(await snap()).page}ページ目`)
+  await page.evaluate(() => window.__editor.goToPage(0, 'none'))
+  await ready()
+  // 拡大しているときは、まず紙面をスクロールし、端まで来てから改めて回したときだけ送る
+  await page.click('.zoom button:last-child')
+  await ready()
+  await page.mouse.move(stageCenter.x, stageCenter.y)
+  await page.mouse.wheel({ deltaY: 300 })
+  await pause()
+  const zoomScroll = await page.evaluate(() => document.querySelector('.page-scroller').scrollTop)
+  check('拡大しているときは、ホイールで紙面がスクロールする（ページは送らない）', zoomScroll > 0 && (await snap()).page === 0, `${zoomScroll}px`)
+  await page.evaluate(() => { const sc = document.querySelector('.page-scroller'); sc.scrollTop = sc.scrollHeight })
+  await pause()
+  await page.mouse.wheel({ deltaY: 100 })
+  await pause()
+  await ready()
+  check('拡大しているときは、下の端まで来てから回すと次のページへ送る', (await snap()).page === 1)
+  await page.click('.zoom button:first-child')
+  await ready()
+  await page.evaluate(() => window.__editor.goToPage(0, 'none'))
+  await ready()
+
   // ---- 表紙 ----
   await clickBlock('basic:studentId')
   check('表紙の学籍番号をクリックすると入力欄が開く', (await snap()).editingId === 'basic:studentId')
