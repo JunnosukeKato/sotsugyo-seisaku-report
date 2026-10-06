@@ -73,11 +73,31 @@ export function coverHtml(report: Report, config: YearConfig): string {
 </section>`
 }
 
+/** 抄録の見出しの1行（学籍番号・氏名と指導教員）の幅。本文の幅 150mm に収まる文字の大きさを選ぶ */
+const ABSTRACT_ROW_WIDTH_MM = 150
+const PT_TO_MM = 25.4 / 72
+const ABSTRACT_ROW_SIZES_PT = [10, 9.5, 9, 8.5, 8]
+
+/** 文字列の幅（全角を1、半角を0.5として数える） */
+export function textUnits(text: string): number {
+  return [...text].reduce((n, c) => n + (/[\u0020-\u007e\uff61-\uff9f]/.test(c) ? 0.5 : 1), 0)
+}
+
+/** 左右に振り分けた2つの文字列が1行に収まる文字の大きさ（pt）。間に全角2字分のすき間を空ける */
+export function abstractRowFontPt(left: string, right: string): number {
+  const units = textUnits(left) + textUnits(right) + 2
+  return ABSTRACT_ROW_SIZES_PT.find((pt) => units * pt * PT_TO_MM <= ABSTRACT_ROW_WIDTH_MM) ?? ABSTRACT_ROW_SIZES_PT[ABSTRACT_ROW_SIZES_PT.length - 1]
+}
+
 export function abstractHtml(report: Report, config: YearConfig): string {
   const course = findCourse(config, report.basicInfo.courseId)
   const [subtitleBefore, subtitleAfter] = course ? course.subtitleTemplate.split('{input}') : ['', '']
   const { basicInfo } = report
   const advisors = course ? course.advisors.join('、') : ''
+  // 学籍番号・氏名（左）と指導教員（右）は1行にまとめる。長いときは文字を少し小さくする
+  const studentPart = `学籍番号　${basicInfo.studentId}　　氏名　${basicInfo.name}`
+  const advisorPart = `（指導教員　${advisors}　）`
+  const rowFontPt = abstractRowFontPt(studentPart, advisorPart)
   const paragraphs = report.abstract.paragraphs
     .map((p) => {
       const text = p.content.map((n) => (n.type === 'text' ? n.text : '')).join('')
@@ -89,8 +109,7 @@ export function abstractHtml(report: Report, config: YearConfig): string {
 <div class="head">
 <div class="el h">${config.fiscalYear}年度　${escapeHtml(config.abstract.heading)}</div>
 <div class="el row row2"><span>${escapeHtml(config.faculty)}　${escapeHtml(config.department)}</span><span class="course-part">${escapeHtml(course?.name ?? '')}　コース</span></div>
-<div class="el row row3">学籍番号　${escapeHtml(basicInfo.studentId)}　氏名　${escapeHtml(basicInfo.name)}</div>
-<div class="el row row4">（指導教員　${escapeHtml(advisors)}　）</div>
+<div class="el row row3" style="font-size:${rowFontPt}pt"><span class="student">${escapeHtml(studentPart)}</span><span class="advisors">${escapeHtml(advisorPart)}</span></div>
 <div class="el title">${escapeHtml(config.commonTitle)}</div>
 <div class="el subtitle">${escapeHtml(subtitleBefore ?? '')}${escapeHtml(basicInfo.subtitleInput)}${escapeHtml(subtitleAfter ?? '')}</div>
 </div>

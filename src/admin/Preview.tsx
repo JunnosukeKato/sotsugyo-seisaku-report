@@ -34,7 +34,7 @@ body { margin: 0; padding: 16px; background: #eef0f3; display: flex; gap: 16px; 
 .abstract .head .subtitle { color: #9aa1ad; }
 /* 年度設定から入る部分 */
 .cover .year, .cover .heading, .cover .label, .cover .title, .cover .department, .cover .course, .cover .university,
-.abstract .head .h, .abstract .head .row2, .abstract .head .row4, .abstract .head .title { background: #fff3b0; }
+.abstract .head .h, .abstract .head .row2, .abstract .head .row3 .advisors, .abstract .head .title { background: #fff3b0; }
 `
 
 export function Preview({ config, courseId }: { config: YearConfig; courseId: string }) {

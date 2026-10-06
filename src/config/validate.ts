@@ -53,6 +53,8 @@ export function validateConfig(config: YearConfig): ConfigProblem[] {
     names.set(c.name.trim(), (names.get(c.name.trim()) ?? 0) + 1)
     if (!c.subtitleTemplate.includes('{input}')) error(field, `「${c.name || `${i + 1}番目のコース`}」のサブタイトルの形式に、学生が入力する部分（{input}）がありません`)
     if (!c.hidden && c.advisors.filter((x) => x.trim()).length === 0) warning(field, `「${c.name || `${i + 1}番目のコース`}」の指導教員が登録されていません`)
+    // 抄録の見出しは、学籍番号・氏名と指導教員を1行に収める（3名までを想定）
+    if (c.advisors.filter((x) => x.trim()).length > 3) warning(field, `「${c.name || `${i + 1}番目のコース`}」の指導教員が4名以上です。抄録の見出しの1行に収めるため、文字が小さくなります`)
     // 下書きのひな形（ないときは標準のひな形を使うので、なくてもよい）
     if (c.template) {
       const label = `「${c.name || `${i + 1}番目のコース`}」の下書きのひな形`

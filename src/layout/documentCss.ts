@@ -64,16 +64,16 @@ section.body { counter-reset: page 1; }
 
 /* ---- 抄録（10.5pt、横40字、行送り23pt。上部はテンプレートの配置） ---- */
 .abstract { font-family: ${MINCHO}; }
-.abstract .head { position: relative; height: 59mm; letter-spacing: 0; text-indent: 0; line-height: 1; }
+.abstract .head { position: relative; height: 51mm; letter-spacing: 0; text-indent: 0; line-height: 1; }
 .abstract .head .el { position: absolute; white-space: nowrap; }
 .abstract .head .h { top: 2.15mm; left: 0; width: 150mm; text-align: center; font-size: 14pt; }
 .abstract .head .row { left: 0; width: 150mm; font-size: 10pt; }
 .abstract .head .row2 { top: 11.4mm; display: flex; justify-content: space-between; border-bottom: 0.75pt solid #000; padding-bottom: 1.2mm; }
 .abstract .head .row2 .course-part { padding-right: 3.6mm; }
-.abstract .head .row3 { top: 19.9mm; width: auto; border-bottom: 0.75pt solid #000; padding: 0 6mm 1.2mm 0; }
-.abstract .head .row4 { top: 27.9mm; left: auto; right: 0; width: auto; border-bottom: 0.75pt solid #000; padding: 0 0 1.2mm 8mm; }
-.abstract .head .title { top: 35.65mm; left: 0; font-size: 14pt; }
-.abstract .head .subtitle { top: 44.8mm; left: 0; font-size: 12pt; }
+/* 学籍番号・氏名（左）と指導教員（右）を1行に。文字の大きさは長さに合わせて document.ts が決める */
+.abstract .head .row3 { top: 19.9mm; display: flex; justify-content: space-between; border-bottom: 0.75pt solid #000; padding-bottom: 1.2mm; }
+.abstract .head .title { top: 28.1mm; left: 0; font-size: 14pt; }
+.abstract .head .subtitle { top: 37.25mm; left: 0; font-size: 12pt; }
 .abstract .body p {
   font-size: ${ABSTRACT_FONT_PT}pt;
   line-height: ${ABSTRACT_LINE_PITCH_PT}pt;
