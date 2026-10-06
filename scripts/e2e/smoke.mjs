@@ -206,6 +206,35 @@ await withEdge(async (browser) => {
   const i = blocks.findIndex((b) => b.id === firstParagraph)
   check('Enter で段落が分かれる', blocks[i + 1]?.type === 'paragraph' && blocks[i + 1].content.map((n) => n.text ?? '').join('') === '次の段落である。')
 
+  // ---- 「。」を付けずに Enter：前の段落の終わりに「。」が付く。すぐ Backspace でつなぎ直すと元に戻る ----
+  const second = blocks[i + 1].id
+  const paraText = (id) => snap().then((x) => x.report.body.flatMap((c) => c.blocks).find((b) => b.id === id).content.map((n) => n.text ?? '').join(''))
+  await clickBlock(second)
+  await page.keyboard.press('End')
+  await page.keyboard.type('そして袖を広げた')
+  await page.keyboard.press('Enter')
+  await page.waitForFunction((id) => { const e = window.__editor.getSnapshot().editingId; return e && e !== id }, { timeout: 30000 }, second)
+  await ready()
+  check('「。」を付けずに Enter で段落を分けると、前の段落の終わりに「。」が付く', (await paraText(second)) === '次の段落である。そして袖を広げた。', await paraText(second))
+  await page.keyboard.press('Backspace')
+  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 30000 }, second)
+  await page.keyboard.press('Escape')
+  await ready()
+  check('すぐ Backspace でつなぎ直すと、自動で付けた「。」は取り消される', (await paraText(second)) === '次の段落である。そして袖を広げた', await paraText(second))
+  // 文末に「。」がない段落はエラー。カーソルをその箇所に置くと、右の一覧でその指摘が目立つ
+  s = await snap()
+  const endFinding = s.findings.find((x) => x.ruleId === 'sentence-end' && x.blockId === second)
+  await clickBlock(second)
+  await page.keyboard.press('End')
+  await pause(400)
+  const activeTitle = await page.evaluate(() => document.querySelector('.side .issue.active.here .ttl')?.textContent ?? '')
+  check('文末に「。」がない段落はエラーになり、カーソルを置くと右の一覧でその指摘が目立つ', !!endFinding && activeTitle.includes('文末に「。」を付ける'), activeTitle)
+  await page.keyboard.press('Escape')
+  await ready()
+  await page.evaluate((id) => { const f = window.__editor.getSnapshot().findings.find((x) => x.ruleId === 'sentence-end' && x.blockId === id); window.__editor.applyFinding(f) }, second)
+  await ready()
+  check('「直す」で文末に「。」が付く', (await paraText(second)) === '次の段落である。そして袖を広げた。', await paraText(second))
+
   // ---- 書いていて行が増えたら、紙面を組み直す前から、後ろの段落が下へずれて見える（入力欄に隠れない） ----
   await clickBlock(firstParagraph)
   await page.keyboard.press('End')
@@ -300,16 +329,16 @@ await withEdge(async (browser) => {
   const refsLeft = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
   check('図を消すと、本文のその図への（図n）も消える', s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow').figures.length === 1 && refsLeft === 1)
 
-  // ---- 図を参照する（もう一度） ----
+  // ---- 前に入れた図を、もう一度指す：番号を（図1）と書くと、確定したときに図とつながる ----
   await clickBlock(firstParagraph)
   await page.keyboard.press('End')
-  await page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('図表を参照')).click())
-  await page.evaluate(() => [...document.querySelectorAll('.palette .side-menu button')].find((b) => b.textContent.includes('図1')).click())
+  await page.keyboard.press('ArrowLeft')
+  await page.keyboard.type('（図1）')
   await page.keyboard.press('Escape')
   await ready()
   s = await snap()
   const refsNow = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
-  check('「図表を参照」で（図1）をもう一度入れられる', refsNow === 2 && !s.findings.some((x) => x.ruleId === 'figure-unreferenced'))
+  check('（図1）と書くと、確定したときに図とつながる（番号が変わっても自動でそろう）', refsNow === 2 && !s.findings.some((x) => x.ruleId === 'figure-unreferenced' || x.ruleId === 'manual-ref'))
   await page.screenshot({ path: `${OUT}/2-figure.png` })
 
   // ---- 図・表は、文中の入れたい位置で入れる（書いていないときは押せない） ----

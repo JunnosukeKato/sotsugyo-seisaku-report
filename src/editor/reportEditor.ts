@@ -66,6 +66,8 @@ export interface EditorSnapshot {
   turning: boolean
   /** スマホ：下の欄で書いているか */
   sheet: boolean
+  /** 書いている欄のカーソルの位置（書いていなければ null） */
+  caret: number | null
   version: number
 }
 
@@ -100,6 +102,9 @@ export class ReportEditor {
   private readonly layer: HTMLElement
   private readonly marker: HTMLDivElement
   private readonly hideStyle: HTMLStyleElement
+  private caretPos = 0
+  /** Enter で段落を分けたときに、前の段落へ自動で付けた「。」（直後の Backspace で元に戻すため） */
+  private autoPeriod: { prevId: string; newId: string; original: string } | null = null
   private readonly images = new Map<string, ImageEntry>()
   private readonly listeners = new Set<() => void>()
   private history: Report[] = []
@@ -156,10 +161,17 @@ export class ReportEditor {
         this.pushHistory(this.reportBeforeEdit ?? this.report)
         const result = ops.split(ops.setText(this.report, id, before + after), id, before, after)
         this.report = result.report
+        // 前の段落に「。」を自動で付けたときは覚えておく（すぐ Backspace でつなぎ直したら、元に戻す）
+        const kind = ops.findEditable(this.report, id)?.kind
+        this.autoPeriod = (kind === 'paragraph' || kind === 'abstractParagraph') && ops.withPeriod(before) !== before ? { prevId: id, newId: result.newId, original: before } : null
         this.reopenAfterRender(result.newId, 0)
       },
       onMergeBackward: (id, text) => {
-        const result = ops.mergeBackward(ops.setText(this.report, id, text), id, text)
+        // Enter の直後に Backspace でつなぎ直した：自動で付けた「。」を取り消して、元の文に戻す
+        const auto = this.autoPeriod?.newId === id ? this.autoPeriod : null
+        this.autoPeriod = null
+        const base = auto ? ops.setText(this.report, auto.prevId, auto.original) : this.report
+        const result = ops.mergeBackward(ops.setText(base, id, text), id, text)
         if (!result) {
           this.openEditor(id, 0)
           return
@@ -192,6 +204,15 @@ export class ReportEditor {
       this.notify()
     })
 
+    // カーソルが動いたら知らせる（右の一覧で、カーソルのある箇所の指摘を示すため）
+    document.addEventListener('selectionchange', () => {
+      if (!this.overlay.blockId || this.overlay.composing) return
+      const caret = this.overlay.caret
+      if (caret !== this.caretPos) {
+        this.caretPos = caret
+        this.notify()
+      }
+    })
     scroller.addEventListener('click', (e) => this.onClick(e))
     scroller.addEventListener('pointerdown', (e) => this.onPhotoPointerDown(e))
     scroller.addEventListener('dragstart', (e) => {
@@ -235,6 +256,7 @@ export class ReportEditor {
       zoomed: this.stage.zoomed,
       turning: this.turning !== null,
       sheet: this.overlay.inSheet,
+      caret: this.overlay.blockId ? this.caretPos : null,
       version: this.version,
     }
     return this.snapshotCache
@@ -643,13 +665,6 @@ export class ReportEditor {
     this.hideStyle.textContent = this.editingStyle(id)
     this.pendingOpen = { id, caret }
     this.afterChange({ render: 'now', save: true })
-  }
-
-  /** カーソルの位置に「（図1）」などを入れる */
-  insertReference(targetId: string): void {
-    const n = ops.numbering(this.report)
-    const label = `${n.tableIds.has(targetId) ? '表' : '図'}${n.numbers.get(targetId)}`
-    this.overlay.insertText(`（${label}）`)
   }
 
   commitEditing(): void {

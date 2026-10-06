@@ -48,12 +48,6 @@ export const Icon = {
   colRemove: svg(<path d="M4 5h9v14H4zM8.5 5v14M14.5 12h6" />),
   image: svg(<path d="M4.5 5.5h15v13h-15zM4.5 15.5l4-4 3.5 3.5 2.5-2.5 5 4M15 9.5h.01" />),
   refs: svg(<path d="M6 4.5h12v15H6zM9 8.5h6M9 12h6M9 15.5h4" />),
-  ref: svg(
-    <>
-      <path d="M7.5 4.5c-3.3 4.2-3.3 10.8 0 15M16.5 4.5c3.3 4.2 3.3 10.8 0 15" />
-      <rect x="9" y="9" width="6" height="6" rx="1" />
-    </>,
-  ),
   replace: svg(
     <>
       <rect x="4" y="6" width="12" height="11" rx="1.5" />

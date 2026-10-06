@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import type { YearConfig } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
-import { findEditable, numbering, type EditableKind } from '../editor/reportOps'
+import { findEditable, type EditableKind } from '../editor/reportOps'
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
 import { CheckBody, DeadlineChip, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
@@ -62,38 +62,6 @@ function Sheet({ title, extra, onClose, children }: { title: string; extra?: Rea
   )
 }
 
-/** 段落を書いているとき：カーソルの位置に「（図1）」などを入れる */
-function RefButtons({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
-  const [open, setOpen] = useState(false)
-  const n = numbering(snap.report)
-  const items = [
-    ...[...n.figureByNumber.entries()].map(([num, id]) => ({ id, label: `図${num}` })),
-    ...[...n.tableByNumber.entries()].map(([num, id]) => ({ id, label: `表${num}` })),
-  ]
-  if (snap.editingKind !== 'paragraph') return null
-  return (
-    <>
-      <button onMouseDown={keepFocus} disabled={items.length === 0} onClick={() => setOpen(!open)}>
-        {Icon.ref}図表を参照
-      </button>
-      {open &&
-        items.map((item) => (
-          <button
-            key={item.id}
-            className="chip-btn"
-            onMouseDown={keepFocus}
-            onClick={() => {
-              editor.insertReference(item.id)
-              setOpen(false)
-            }}
-          >
-            （{item.label}）
-          </button>
-        ))}
-    </>
-  )
-}
-
 /** 下から出る書く欄。入力欄そのもの（.overlay-editor）は、編集の中核が host の中に入れる */
 function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: EditorSnapshot; hostRef: React.RefObject<HTMLDivElement | null> }) {
   const id = snap.editingId
@@ -135,7 +103,6 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
             {Icon.table}素材表
           </button>
         )}
-        <RefButtons editor={editor} snap={snap} />
         {tableId && (
           <>
             <button onMouseDown={keepFocus} onClick={() => editor.addTableRow(tableId)}>

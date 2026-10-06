@@ -125,7 +125,7 @@ describe('2025年度サンプルで見つかった違反', () => {
 
 describe('その他', () => {
   it('テンプレートの仮の文字はエラー', () => {
-    expect(ids('―●●●の衣装制作―')).toEqual(['placeholder'])
+    expect(ids('―●●●の衣装制作―').filter((id) => id !== 'sentence-end')).toEqual(['placeholder'])
     expect(ids('筆者が担当したのは、～～～である。')).toEqual(['placeholder'])
   })
 

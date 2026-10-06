@@ -103,6 +103,26 @@ export const TEXT_RULES: TextRule[] = [
       }),
   },
   {
+    // 段落の終わりには「。」を付ける（段落だけに当てる。見出しや図表のタイトルには当てない）
+    id: 'sentence-end',
+    severity: 'error',
+    source: 'supplementary',
+    title: '文末に「。」を付ける',
+    find: (text) => {
+      const t = text.replace(/[\s　]+$/, '')
+      if (!t || /[。！？!?]$/.test(t)) return []
+      return [{ start: t.length - 1, end: t.length, replacement: `${t[t.length - 1]}。`, detail: '段落の終わりに「。」がない' }]
+    },
+  },
+  {
+    // 「。。」のように続いた句点は1つにする（確定するときにも自動で1つにする）
+    id: 'period-repeat',
+    severity: 'error',
+    source: 'supplementary',
+    title: '「。」が続いている',
+    find: (text) => matches(text, /。{2,}/g).map(({ start, end }) => ({ start, end, replacement: '。', detail: '「。」を1つにする' })),
+  },
+  {
     id: 'taigen-dome',
     severity: 'warning',
     source: 'guide',

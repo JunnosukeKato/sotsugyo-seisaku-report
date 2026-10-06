@@ -62,7 +62,7 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   for (const e of list) {
     const area = AREA_OF_KIND[e.kind]
     for (const f of checkText(e.text) as TextFinding[]) {
-      if (f.ruleId === 'taigen-dome' && !SENTENCE_KINDS.includes(e.kind)) continue
+      if ((f.ruleId === 'taigen-dome' || f.ruleId === 'sentence-end') && !SENTENCE_KINDS.includes(e.kind)) continue
       findings.push({ ...f, area, blockId: e.id })
     }
   }
@@ -168,7 +168,7 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     })
   }
 
-  // 図表の番号を手で書いている：「図を入れる」「図表を参照」で入れた（図n）は図表とつながっていて、番号が自動でそろう。
+  // 図表の番号を手で書いている：「図を入れる」「表を入れる」で入れた（図n）は図表とつながっていて、番号が自動でそろう。
   // 手で書いた（図n）も、その番号の図表があれば確定したときにつながる。つながらずに文字のまま残ったものを知らせる
   const manual = /[（(]\s*([図表])\s*([0-9０-９]+)\s*[）)]|(?<![㐀-鿿々])([図表])([0-9０-９]+)/g
   for (const block of report.body.flatMap((c) => c.blocks)) {
@@ -256,7 +256,7 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
             blockId: e.id,
             start: m.index,
             end: m.index + m[0].length,
-            detail: '図は「図を入れる」、表は「表を入れる」で入れます。ほかの図表を指すときは「図表を参照」で入れます',
+            detail: '図は「図を入れる」、表は「表を入れる」で入れます。前に入れた図表を指すときは、その番号を（図1）のように書くと自動でつながります',
           }),
         )
     }

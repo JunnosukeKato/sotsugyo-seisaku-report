@@ -112,10 +112,21 @@ function Meter({ label, value, ok, ratio }: { label: string; value: string; ok: 
   )
 }
 
-function Issue({ finding, editor, onPick }: { finding: ReportFinding; editor: ReportEditor; onPick?: () => void }) {
+/**
+ * 書いている（選んでいる）箇所の指摘か。here：カーソルがその箇所にある・選んでいる図表の指摘、block：書いている欄のほかの指摘
+ */
+function activeKind(f: ReportFinding, snap: EditorSnapshot): 'here' | 'block' | null {
+  const selected = snap.selection && snap.selection.kind !== 'photos' ? snap.selection.id : null
+  if (f.blockId && f.blockId === selected) return 'here'
+  if (!f.blockId || f.blockId !== snap.editingId) return null
+  if (f.start === undefined || f.end === undefined || snap.caret === null) return 'here'
+  return snap.caret >= f.start && snap.caret <= f.end ? 'here' : 'block'
+}
+
+function Issue({ finding, editor, onPick, active }: { finding: ReportFinding; editor: ReportEditor; onPick?: () => void; active?: 'here' | 'block' | null }) {
   return (
     <li
-      className={`issue ${finding.severity}`}
+      className={`issue ${finding.severity}${active ? ` active ${active}` : ''}`}
       onClick={() => {
         onPick?.()
         void editor.goToFinding(finding)
@@ -162,6 +173,12 @@ export function SourceNotice() {
 /** セルフチェックの中身（進み具合のメーターと、場所ごとにまとめた指摘）。PC は右の欄、スマホは下から出る欄に置く */
 export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEditor; snap: EditorSnapshot; config: YearConfig; onPick?: () => void }) {
   const { findings, layout, report } = snap
+  const listRef = useRef<HTMLDivElement>(null)
+  // 書いている（選んでいる）箇所の指摘が変わったら、その指摘が一覧の見えるところに来るようにする
+  const here = findings.filter((f) => activeKind(f, snap) === 'here').map((f) => `${f.ruleId}:${f.blockId}:${f.start}`).join('|')
+  useEffect(() => {
+    if (here) listRef.current?.querySelector('.issue.here')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
+  }, [here])
   const chars = abstractCharCount(report)
   const { minChars, maxChars, minLines, maxLines } = config.abstract
   const bodyPages = layout?.bodyPages ?? 0
@@ -186,6 +203,7 @@ export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEdit
         )}
         <Meter label="図の枚数" value={`${figures}枚（目安 ${figureMax}枚まで）`} ok={figures <= figureMax} ratio={figures / figureMax} />
       </div>
+      <div ref={listRef}>
       {findings.length === 0 ? (
         <div className="empty">✓ 指摘はありません。PDFを書き出せます。</div>
       ) : (
@@ -200,13 +218,14 @@ export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEdit
               </div>
               <ul className="issues">
                 {items.map((f, i) => (
-                  <Issue key={`${f.ruleId}-${f.blockId}-${f.start}-${i}`} finding={f} editor={editor} onPick={onPick} />
+                  <Issue key={`${f.ruleId}-${f.blockId}-${f.start}-${i}`} finding={f} editor={editor} onPick={onPick} active={activeKind(f, snap)} />
                 ))}
               </ul>
             </div>
           )
         })
       )}
+      </div>
     </>
   )
 }

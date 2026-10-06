@@ -73,12 +73,26 @@ describe('図表の参照', () => {
 })
 
 describe('split / mergeBackward / replaceWithParagraphs', () => {
-  it('抄録でも段落を分けたりつなげたりできる', () => {
+  it('抄録でも段落を分けたりつなげたりできる（分けた前の段落の終わりは「。」にする）', () => {
     const { report: splitted, newId } = ops.split(report, 'a3', '制作を通して、', '学んだ。')
+    expect(text(splitted, 'a3')).toBe('制作を通して。')
     expect(text(splitted, newId)).toBe('学んだ。')
     const merged = ops.mergeBackward(splitted, newId, '学んだ。')!
     expect(merged.targetId).toBe('a3')
-    expect(text(merged.report, 'a3')).toBe('制作を通して、学んだ。')
+    expect(text(merged.report, 'a3')).toBe('制作を通して。学んだ。')
+  })
+
+  it('Enter で分けると、前の段落に「。」がなければ付ける。続いた「。」は1つにする', () => {
+    const r = ops.split(report, 'a3', '袖を大きくした', '帯を巻いた。').report
+    expect(text(r, 'a3')).toBe('袖を大きくした。')
+    expect(text(ops.setText(report, 'a3', '袖を大きくした。。'), 'a3')).toBe('袖を大きくした。')
+    expect(ops.withPeriod('本当に？')).toBe('本当に？')
+    expect(ops.withPeriod('')).toBe('')
+  })
+
+  it('文末（「。」のない段落の終わり）に図を入れると、後ろに「。」を付ける', () => {
+    const r = ops.insertRef(ops.setText(report, 'p4', '袖を大きくした'), 'p4', 7, 'f1')
+    expect(text(r, 'p4')).toBe('袖を大きくした（図1）。')
   })
 
   it('抄録の最初の段落ではつなげない', () => {

@@ -267,6 +267,9 @@ body.resizing .page-viewport { pointer-events: none; }
 .issues { list-style: none; margin: 0; padding: 0; }
 .issue { display: grid; grid-template-columns: 8px 1fr auto; gap: 10px; align-items: start; margin: 0 -4px; padding: 10px 4px; border-bottom: 1px solid var(--line); border-radius: 6px; cursor: pointer; }
 .issue:hover { background: var(--chip-bg); }
+/* 書いている（選んでいる）箇所の指摘：カーソルのある箇所ははっきり、同じ欄のほかの指摘はうすく */
+.issue.active.here { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.issue.active.block { background: rgba(47, 62, 117, 0.045); }
 .issue .dot { width: 7px; height: 7px; margin-top: 6px; border-radius: 50%; background: var(--error); }
 .issue.warning .dot { background: var(--warn); }
 .issue .ttl { font-size: 13px; font-weight: 700; line-height: 1.5; }

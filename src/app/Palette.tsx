@@ -1,6 +1,5 @@
 import { useState, type ReactNode } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
-import { numbering } from '../editor/reportOps'
 import { PHOTO_ARRANGEMENTS, photoGrid } from '../model/photos'
 import { Icon } from './icons'
 import { keepFocus, PAGE_CONTEXT } from './uiShared'
@@ -50,38 +49,6 @@ function Tool({
       {icon}
       <span>{label}</span>
     </button>
-  )
-}
-
-/** 段落を書いているとき：カーソルの位置に「（図1）」などを入れる */
-function ReferenceMenu({ editor, snap }: Omit<Props, 'onReferences'>) {
-  const [open, setOpen] = useState(false)
-  const n = numbering(snap.report)
-  const items = [
-    ...[...n.figureByNumber.entries()].map(([num, id]) => ({ id, label: `図${num}` })),
-    ...[...n.tableByNumber.entries()].map(([num, id]) => ({ id, label: `表${num}` })),
-  ]
-  return (
-    <div className="menu-wrap">
-      <Tool label="図表を参照" icon={Icon.ref} title={items.length ? '文中に（図1）などを入れる' : 'まだ図・表がありません'} disabled={items.length === 0} onClick={() => setOpen(!open)} />
-      {open && (
-        <div className="side-menu" onMouseLeave={() => setOpen(false)}>
-          <div className="side-menu-title">カーソルの位置に入れる</div>
-          {items.map((item) => (
-            <button
-              key={item.id}
-              onMouseDown={keepFocus}
-              onClick={() => {
-                editor.insertReference(item.id)
-                setOpen(false)
-              }}
-            >
-              （{item.label}）
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
   )
 }
 
@@ -216,7 +183,6 @@ export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
     return (
       <div className="group ctx">
         <div className="ctx-label">この段落</div>
-        <ReferenceMenu editor={editor} snap={snap} />
         <Tool label="削除" icon={Icon.remove} danger title="この段落を削除" onClick={remove} />
       </div>
     )

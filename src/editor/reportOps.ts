@@ -99,7 +99,18 @@ export function textToContent(text: string, num: Numbering): InlineNode[] {
 
 /** 段落の書き出しの1字下げは自動で付くため、入力された先頭の空白と改行は取り除く */
 export function normalizeParagraph(text: string): string {
-  return text.replace(/[\r\n]/g, '').replace(/^[\s　]+/, '')
+  // 続いた「。」は1つにする
+  return text.replace(/[\r\n]/g, '').replace(/^[\s　]+/, '').replace(/。{2,}/g, '。')
+}
+
+/**
+ * 段落の終わりに「。」がなければ付ける（Enter で段落を分けたとき）。「、」で終わっていれば「。」に置き換える。
+ * 空の段落・「！」「？」で終わる段落はそのまま
+ */
+export function withPeriod(text: string): string {
+  const t = text.replace(/[\s　]+$/, '')
+  if (!t || /[。！？!?]$/.test(t)) return text
+  return /[、，,]$/.test(t) ? `${t.slice(0, -1)}。` : `${t}。`
 }
 
 function paragraph(id: string, text: string, num?: Numbering): ParagraphBlock {
@@ -188,7 +199,7 @@ export function split(report: Report, id: string, before: string, after: string)
   const ai = abstract.findIndex((p) => p.id === id)
   if (ai >= 0) {
     const paragraphs = [...abstract]
-    paragraphs.splice(ai, 1, paragraph(id, before), paragraph(created, after))
+    paragraphs.splice(ai, 1, paragraph(id, withPeriod(before)), paragraph(created, after))
     return { report: { ...report, abstract: { paragraphs } }, newId: created }
   }
   const num = numbering(report)
@@ -212,8 +223,10 @@ export function split(report: Report, id: string, before: string, after: string)
     const labels = attached.flatMap((a) => (a.type === 'figureRow' ? a.figures.map((f) => `図${num.numbers.get(f.id)}`) : [`表${num.numbers.get(a.id)}`]))
     const keepWithBefore = attached.length > 0 && !labels.some((l) => after.includes(l))
     const blocks = [...chapter.blocks]
-    if (keepWithBefore) blocks.splice(i, end - i, paragraph(b.id, before, num), ...attached, paragraph(created, after, num))
-    else blocks.splice(i, 1, paragraph(b.id, before, num), paragraph(created, after, num))
+    // 分けた前の段落の終わりに「。」がなければ付ける
+    const first = paragraph(b.id, withPeriod(before), num)
+    if (keepWithBefore) blocks.splice(i, end - i, first, ...attached, paragraph(created, after, num))
+    else blocks.splice(i, 1, first, paragraph(created, after, num))
     return { report: { ...report, body: report.body.map((c) => (c === chapter ? { ...c, blocks } : c)) }, newId: created }
   }
   return {
@@ -351,7 +364,8 @@ function findParagraph(report: Report, id: string): ParagraphBlock | undefined {
 
 /**
  * 段落の文字位置 offset（いまの番号での表示の文字数）に、図表への参照「（図n）」を入れる。
- * 文末の「。」の直後なら「〜（図n）。」となるよう「。」の前に入れる（手順書の書き方）
+ * 文末の「。」の直後なら「〜（図n）。」となるよう「。」の前に入れる（手順書の書き方）。
+ * 「。」のない段落の終わりなら、後ろに「。」を付ける
  */
 export function insertRef(report: Report, paragraphId: string, offset: number, targetId: string): Report {
   const paragraph = findParagraph(report, paragraphId)
@@ -382,6 +396,8 @@ export function insertRef(report: Report, paragraphId: string, offset: number, t
     pos += length
   }
   if (!placed) content.push(ref)
+  // 段落の終わり（「。」のない文末）に入れたときは、後ろに「。」を付ける
+  if (content[content.length - 1] === ref) content.push({ type: 'text', text: '。' })
   return mapBody(report, (b) => (b.id === paragraphId ? { ...paragraph, content } : b))
 }
 
