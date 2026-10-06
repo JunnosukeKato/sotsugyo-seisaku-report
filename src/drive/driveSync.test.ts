@@ -23,6 +23,8 @@ vi.stubGlobal('navigator', { onLine: true, userAgent: 'test', maxTouchPoints: 0 
 // 偽物のドライブ：remote にある原稿を返す
 let remote: { id: string; modifiedTime: string; report: Report } | null = null
 let email = 'test@bunka-wu.ac.jp'
+/** ドライブに保存した（作った・上書きした）ファイル */
+const saved: { name: string; fileId?: string }[] = []
 vi.mock('./driveApi', async (importOriginal) => {
   const original = await importOriginal<typeof import('./driveApi')>()
   return {
@@ -33,7 +35,10 @@ vi.mock('./driveApi', async (importOriginal) => {
     listChildren: async () => [],
     findFile: async () => (remote ? { id: remote.id, name: '原稿.json', modifiedTime: remote.modifiedTime } : null),
     readFile: async () => new Blob([JSON.stringify({ kind: 'sotsugyo-seisaku-report-drive', savedAt: remote!.modifiedTime, device: 'iPhone・Safari', report: remote!.report })]),
-    saveFile: async (_t: unknown, file: { name: string }) => ({ id: remote?.id ?? 'new-file', name: file.name, modifiedTime: '2026-10-06T10:00:00.000Z' }),
+    saveFile: async (_t: unknown, file: { name: string; fileId?: string }) => {
+      saved.push({ name: file.name, fileId: file.fileId })
+      return { id: file.fileId ?? 'new-file', name: file.name, modifiedTime: '2026-10-06T10:00:00.000Z' }
+    },
     getModified: async () => remote?.modifiedTime ?? null,
   }
 })
@@ -88,6 +93,25 @@ describe('ログインしたあと、どの原稿で始めるか', () => {
     expect((await drive.compare(local)).kind).toBe('remote')
     // 両方が変わった
     expect((await drive.compare(edited)).kind).toBe('conflict')
+  })
+
+  it('この端末への保存だけが失敗していた（端末の原稿が、最後に送った版より古い）ときは、ドライブの原稿を開く', async () => {
+    remote = { id: 'r1', modifiedTime: '2026-10-06T09:00:00.000Z', report: written('次郎') }
+    const drive = await loggedIn()
+    await drive.resolve(written('次郎'))
+    const stale = { ...written('花'), updatedAt: '2026-10-06T01:00:00.000Z' }
+    expect((await drive.compare(stale)).kind).toBe('remote')
+  })
+
+  it('ログインしたときに「この端末の原稿で続ける」を選ぶと、ドライブの原稿のファイルに上書きする（ファイルを2つにしない）', async () => {
+    remote = { id: 'r1', modifiedTime: '2026-10-06T09:00:00.000Z', report: written('次郎') }
+    const drive = await loggedIn()
+    const r = await drive.resolve(written('花子'))
+    expect(r.kind).toBe('conflict')
+    saved.length = 0
+    drive.activate()
+    await drive.overwrite(written('花子'), r.kind === 'conflict' ? r.remote : undefined)
+    expect(saved.filter((x) => x.name === '原稿.json')).toEqual([{ name: '原稿.json', fileId: 'r1' }])
   })
 
   it('この端末に別のアカウントの原稿があれば知らせる（ドライブに送っていない変更があるかも）', async () => {

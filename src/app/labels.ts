@@ -22,9 +22,11 @@ export function pageLabels(kinds: PageKind[]): string[] {
   })
 }
 
+/** 締切まで何日か（日付で数える。締切の当日は 0、過ぎたら負） */
 export function daysUntil(deadline: string, today = new Date()): number {
-  const end = new Date(`${deadline}T23:59:59`)
-  return Math.ceil((end.getTime() - today.getTime()) / 86400000)
+  const end = new Date(`${deadline}T00:00:00`)
+  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate())
+  return Math.round((end.getTime() - start.getTime()) / 86400000)
 }
 
 export function formatDeadline(deadline: string): string {

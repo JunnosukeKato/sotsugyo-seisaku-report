@@ -280,8 +280,23 @@ export class ReportEditor {
   private async importImage(purpose: 'figure' | 'swatch' | 'photo'): Promise<string | null> {
     const file = await this.callbacks.pickImage(purpose)
     if (!file) return null
-    const stored = await importImage(file, ops.newId('img'), purpose === 'photo' ? PHOTO_MAX_PX : FIGURE_MAX_PX)
-    await putImage(stored)
+    let stored: StoredImage
+    try {
+      stored = await importImage(file, ops.newId('img'), purpose === 'photo' ? PHOTO_MAX_PX : FIGURE_MAX_PX)
+    } catch {
+      // 写真として読めない（パソコンで iPhone の HEIC を選んだ、壊れたファイルなど）。黙って何もしないと、押しても動かないように見える
+      alert(
+        `「${file.name}」を写真として読み込めませんでした。\n` +
+          'iPhone の写真（HEIC）は、パソコンでは読めないことがあります。JPEG か PNG にしてから選んでください（iPhone の「設定」→「カメラ」→「フォーマット」で「互換性優先」にすると JPEG で撮れます）。',
+      )
+      return null
+    }
+    try {
+      await putImage(stored)
+    } catch (e) {
+      alert(`写真をこの端末に保存できませんでした（空き容量が足りない可能性があります）。\n${e instanceof Error ? e.message : String(e)}`)
+      return null
+    }
     this.addImages([stored])
     return stored.id
   }

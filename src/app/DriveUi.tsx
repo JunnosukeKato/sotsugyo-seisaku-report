@@ -143,6 +143,15 @@ export function DriveChip({ drive, compact, onClick }: { drive: DriveControls; c
   const { status } = drive.state
   const props = { onClick, role: onClick ? 'button' : undefined, title: '原稿は、この端末とあなたの Google ドライブに保存されます' }
   const click = onClick ? ' click' : ''
+  // この端末（ブラウザ）への保存が失敗している：ドライブにつながっていても隠さずに出す（古い原稿が端末に残るため）
+  if (drive.local.status === 'error') {
+    return (
+      <span className={`chip ng${click}`} {...props} title={`この端末（ブラウザ）に保存できていません：${drive.local.message}`}>
+        <i className="dot ng" />
+        {compact ? '保存エラー' : 'この端末に保存できていません'}
+      </span>
+    )
+  }
   switch (status.kind) {
     case 'saving':
       return (
@@ -172,7 +181,7 @@ export function DriveChip({ drive, compact, onClick }: { drive: DriveControls; c
       return (
         <span className={`chip ng${click}`} {...props} title={status.kind === 'error' ? status.message : undefined}>
           <i className="dot ng" />
-          {compact ? '未保存' : status.kind === 'expired' ? (
+          {compact ? 'ドライブ未保存' : status.kind === 'expired' ? (
             <>
               ドライブに保存できません　<u>ログインし直す</u>
             </>
@@ -215,6 +224,7 @@ export function DriveMenu({ drive, inline, onDone }: { drive: DriveControls; inl
         {lastSaved ? `最後にドライブに保存：${formatTime(lastSaved)}` : 'まだドライブに保存していません'}
         <br />
         この端末（ブラウザ）にも保存しています
+        {drive.local.status === 'error' && <em>この端末（ブラウザ）に保存できていません。ページを読み込み直してください（ドライブには保存しています）。</em>}
         {status.kind === 'offline' && <em>電波がないため、ドライブには送れていません。つながったら自動で送ります。</em>}
         {status.kind === 'error' && <em>{status.message}</em>}
       </div>
@@ -340,7 +350,7 @@ export function WipeDialog({ lastSaved, busy, onConfirm, onClose }: { lastSaved:
 }
 
 /** 書いている途中で、Google の許可が切れたとき */
-export function ReloginDialog({ busy, error, onLogin }: { busy: boolean; error: string | null; onLogin: () => void }) {
+export function ReloginDialog({ busy, error, onLogin, onLater }: { busy: boolean; error: string | null; onLogin: () => void; onLater: () => void }) {
   return (
     <div className="modal-backdrop">
       <div className="modal" role="dialog" aria-label="もう一度ログインしてください">
@@ -349,9 +359,12 @@ export function ReloginDialog({ busy, error, onLogin }: { busy: boolean; error: 
         </header>
         <p className="lead">ドライブへの保存を続けるため、ログインし直してください（Google の決まりで、1時間ごとに必要です）。</p>
         {error && <p className="drive-err">{error}</p>}
-        <p className="drive-small">押すまでのあいだも、書いた内容はこの端末に保存しています。</p>
+        <p className="drive-small">押すまでのあいだも、書いた内容はこの端末に保存しています。「あとで」を選んでも、右の欄の赤い表示から、いつでもログインし直せます。</p>
         <div className="row-buttons">
           <span className="spacer" />
+          <button disabled={busy} onClick={onLater}>
+            あとで
+          </button>
           <button className="primary" disabled={busy} onClick={onLogin}>
             {busy ? 'ログインしています…' : 'ログインし直す'}
           </button>

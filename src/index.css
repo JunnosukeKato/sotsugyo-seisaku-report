@@ -364,7 +364,8 @@ body.resizing .page-viewport { pointer-events: none; }
 .seg { display: flex; flex-direction: column; gap: 3px; padding: 2px 4px 4px; }
 .seg button { border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 5px 0; font-size: 9.5px; letter-spacing: -0.03em; white-space: nowrap; color: var(--ink); }
 .seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
-.ctx-note { display: none; }
+/* スマホの下の道具では、説明の小さな文字は出さない（PC の道具では出す） */
+.sel-bar .ctx-note { display: none; }
 .sel-bar .tb { width: auto; padding: 6px 10px; }
 .sel-bar .layouts { display: flex; padding: 0; }
 .sel-bar .lay { padding: 6px 10px; border-color: var(--line); }

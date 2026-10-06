@@ -92,6 +92,8 @@ export default function App() {
   const [driveDialog, setDriveDialog] = useState<DriveDialog>(null)
   const [driveBusy, setDriveBusy] = useState(false)
   const [reloginError, setReloginError] = useState<string | null>(null)
+  /** 「もう一度ログイン」の窓を「あとで」にした（しばらく出さない） */
+  const [reloginLater, setReloginLater] = useState(false)
   const editorRef = useRef<ReportEditor | null>(null)
   const configRef = useRef<YearConfig>(currentConfig)
   /** 開いたときに、この端末にあった原稿（なければ null） */
@@ -176,14 +178,20 @@ export default function App() {
     [drive, openRemote, startGuide, prefillStudentId],
   )
 
-  /** ログインしたあと：ドライブの原稿と比べて、どの原稿で始めるかを決める */
+  /**
+   * ログインしたあと：ドライブの原稿と比べて、どの原稿で始めるかを決める。
+   * ログインの完了と紙面の準備がほぼ同時だと2回呼ばれることがあるので、1回だけにする（2回だとフォルダが2つできることがある）
+   */
+  const entering = useRef(false)
   const enter = useCallback(
     async (ed: ReportEditor) => {
-      if (!drive) return
+      if (!drive || entering.current) return
+      entering.current = true
       setGate({ kind: 'loading' })
       try {
         await applyResolution(ed, await drive.resolve(localAtStart.current), true)
       } catch (e) {
+        entering.current = false
         setGate({ kind: 'error', message: errorText(e) })
       }
     },
@@ -523,8 +531,11 @@ export default function App() {
           atLogin={driveDialog.atLogin}
           busy={driveBusy}
           onChooseRemote={async () => {
+            // 窓を開いたまま許可が切れていたら、先にログインし直す（Google の窓は、押した直後にしか開けない）
+            const login = drive.tokenValid ? null : drive.login()
             setDriveBusy(true)
             try {
+              if (login) await login
               await openRemote(editor, driveDialog.remote)
               drive.activate()
               setDriveDialog(null)
@@ -540,13 +551,16 @@ export default function App() {
             }
           }}
           onChooseLocal={async () => {
+            const login = drive.tokenValid ? null : drive.login()
             setDriveBusy(true)
             try {
+              if (login) await login
               // ドライブの原稿は、写真ごとこの端末の控えに残す（あとで戻せるように）
               await drive.downloadImages(driveDialog.remote.report)
               await saveSnapshot(driveDialog.remote.report)
               drive.activate()
-              await drive.overwrite(editor.getSnapshot().report)
+              // 選ばなかったドライブの原稿のファイルに上書きする（原稿のファイルを2つにしない）
+              await drive.overwrite(editor.getSnapshot().report, driveDialog.remote)
               setDriveDialog(null)
               if (driveDialog.atLogin) {
                 prefillStudentId(editor)
@@ -598,7 +612,18 @@ export default function App() {
           }}
         />
       )}
-      {drive && !gate && !driveDialog && driveState?.status.kind === 'expired' && <ReloginDialog busy={driveBusy} error={reloginError} onLogin={onRelogin} />}
+      {drive && !gate && !driveDialog && !reloginLater && driveState?.status.kind === 'expired' && (
+        <ReloginDialog
+          busy={driveBusy}
+          error={reloginError}
+          onLogin={onRelogin}
+          onLater={() => {
+            // 10分は窓を出さない（右の欄の赤い表示から、いつでもログインし直せる）
+            setReloginLater(true)
+            window.setTimeout(() => setReloginLater(false), 10 * 60 * 1000)
+          }}
+        />
+      )}
     </div>
   )
 }

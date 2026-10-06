@@ -231,8 +231,12 @@ await withEdge(async (browser) => {
   await pc.page.waitForFunction(() => [...document.querySelectorAll('.modal h2')].some((h) => h.textContent.includes('もう一度ログイン')), { timeout: 30000 })
   check('Google の許可が切れたら、もう一度ログインする窓が出る', true)
   check('ログインし直すまでも、この端末には保存している', (await localReport(pc.page))?.basicInfo.subtitleInput === '許可が切れたあと')
-  await clickText(pc.page, '.modal button', 'ログインし直す')
+  // 「あとで」を選ぶと窓は閉じ、右の欄の赤い表示から、いつでもログインし直せる
+  await clickText(pc.page, '.modal button', 'あとで')
   await pc.page.waitForFunction(() => ![...document.querySelectorAll('.modal h2')].some((h) => h.textContent.includes('もう一度ログイン')), { timeout: 30000 })
+  check('「あとで」で窓が閉じ、右の欄に「ログインし直す」が赤く残る', (await pc.page.$eval('.drive-chip-wrap .chip', (e) => e.className + e.textContent)).includes('ng'))
+  await pc.page.click('.drive-chip-wrap .chip')
+  await clickText(pc.page, '.drive-pop button', 'ログインし直す')
   await savedChip(pc.page)
   check('ログインし直すと、ドライブへの保存が続く', drive.report()?.report.basicInfo.subtitleInput === '許可が切れたあと')
 

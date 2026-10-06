@@ -48,6 +48,7 @@ export function DeadlineChip({ deadline }: { deadline: string }) {
   const days = daysUntil(deadline)
   const title = `最終締切 ${formatDeadline(deadline)}`
   if (days < 0) return <span className="chip deadline ng" title={title}>締切を過ぎています</span>
+  if (days === 0) return <span className="chip deadline ng" title={title}>今日が締切です</span>
   return <span className="chip deadline" title={title}>締切まで <b>{days}</b> 日</span>
 }
 

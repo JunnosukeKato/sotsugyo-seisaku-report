@@ -347,6 +347,8 @@ await withEdge(async (browser) => {
   // ---- 図・表は、文中の入れたい位置で入れる（書いていないときは押せない） ----
   const toolDisabled = (label) => page.evaluate((label) => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes(label))?.disabled, label)
   check('段落を書いていないときは「図を入れる」「表を入れる」を押せない', (await toolDisabled('図を入れる')) === true && (await toolDisabled('表を入れる')) === true)
+  const paletteNote = await page.evaluate(() => { const n = [...document.querySelectorAll('.palette .ctx-note')].find((e) => e.textContent.includes('図・表')); return n && getComputedStyle(n).display !== 'none' ? n.textContent : '' })
+  check('押せないときは、その理由（入れたい位置をクリックしてから）が道具に出る', paletteNote.includes('入れたい位置をクリック'), paletteNote)
   await clickBlock(firstParagraph)
   await page.keyboard.press('End')
   await clickPaletteButton('表を入れる')

@@ -246,22 +246,37 @@ export class DriveSync {
     if (!local) return { kind: 'remote', remote: await this.readRemote(file) }
     const sameFile = link.reportFileId === file.id
     const localChanged = local.updatedAt !== link.syncedUpdatedAt
-    if (sameFile && file.modifiedTime === link.remoteModified) return { kind: 'local', upload: localChanged }
+    // この端末の原稿が、最後にドライブに送った版より古い（この端末への保存だけが失敗していた）。古い方で上書きしない
+    const localStale = !!link.syncedUpdatedAt && local.updatedAt < link.syncedUpdatedAt
+    if (sameFile && file.modifiedTime === link.remoteModified && !localStale) return { kind: 'local', upload: localChanged }
     const remote = await this.readRemote(file)
     if (sameContent(local, remote.report)) {
       this.adopt(remote, local)
       return { kind: 'local', upload: false }
     }
-    if ((sameFile && !localChanged) || !hasContent(local)) return { kind: 'remote', remote }
+    if ((sameFile && (!localChanged || localStale)) || !hasContent(local)) return { kind: 'remote', remote }
     return { kind: 'conflict', remote }
   }
 
   /** ドライブの最新の原稿（別の端末が保存したとき、どちらで続けるかを選ぶのに使う） */
   async fetchRemote(): Promise<RemoteCopy | null> {
-    const file = await findFile(this.need(), this.link!.folderId, REPORT_NAME)
-    if (!file) return null
-    await this.loadPhotoList()
-    return this.readRemote(file)
+    try {
+      const file = await findFile(this.need(), this.link!.folderId, REPORT_NAME)
+      if (!file) return null
+      await this.loadPhotoList()
+      return await this.readRemote(file)
+    } catch (e) {
+      // 許可が切れていたら、もう一度ログインしてもらう（ログインし直すと、送り直して、また確かめる）
+      if (e instanceof DriveError && e.code === 'expired') this.expire()
+      throw e
+    }
+  }
+
+  /** 許可が切れた：もう一度ログインしてもらう */
+  private expire(): void {
+    this.token = null
+    writeSession(null)
+    this.setStatus({ kind: 'expired' })
   }
 
   private async readRemote(file: DriveFile): Promise<RemoteCopy> {
@@ -345,10 +360,17 @@ export class DriveSync {
     }
   }
 
-  /** この端末の原稿で、ドライブの原稿を上書きする（どちらで続けるかを選んだとき） */
-  async overwrite(report: Report): Promise<void> {
+  /**
+   * この端末の原稿で、ドライブの原稿を上書きする（どちらで続けるかを選んだとき）。
+   * remote：選ばなかったドライブの原稿。そのファイルに上書きする（新しく作ると、原稿のファイルが2つになる）
+   */
+  async overwrite(report: Report, remote?: RemoteCopy): Promise<void> {
     clearTimeout(this.timer)
     while (this.running) await this.running
+    if (remote && this.link) {
+      this.link.reportFileId = remote.fileId
+      writeLink(this.link)
+    }
     this.pending = null
     this.running = this.upload(report, true)
     try {
@@ -370,30 +392,37 @@ export class DriveSync {
 
   private async upload(report: Report, force = false): Promise<void> {
     const link = this.link!
-    if (!this.tokenValid) {
-      this.keep(report)
-      this.setStatus({ kind: 'expired' })
-      return
-    }
+    // 電波がないときは、ログインもできないので先に見る（つながってから、許可が切れていればログインしてもらう）
     if (!navigator.onLine) {
       this.keep(report)
       this.setStatus({ kind: 'offline' })
       this.retryLater()
       return
     }
+    if (!this.tokenValid) {
+      this.keep(report)
+      this.setStatus({ kind: 'expired' })
+      return
+    }
     this.setStatus({ kind: 'saving' })
     try {
       const token = this.token!
-      if (link.reportFileId && !force) {
+      /** 別の端末が、この端末より後に保存していないか（していたら、上書きせずに、どちらで続けるかを選んでもらう） */
+      const changedElsewhere = async () => {
+        if (!link.reportFileId || force) return false
         const modified = await getModified(token, link.reportFileId)
-        if (modified === null) delete link.reportFileId
-        else if (modified !== link.remoteModified) {
-          // 別の端末が、この端末より後に保存した。上書きせずに、どちらで続けるかを選んでもらう
-          this.keep(report)
-          this.setStatus({ kind: 'conflict' })
-          return
+        if (modified === null) {
+          delete link.reportFileId
+          return false
         }
+        return modified !== link.remoteModified
       }
+      if (await changedElsewhere()) {
+        this.keep(report)
+        this.setStatus({ kind: 'conflict' })
+        return
+      }
+      let sentPhotos = 0
       for (const id of new Set(usedImageIds(report))) {
         if (this.photos.has(id)) continue
         const image = await getImage(id)
@@ -405,6 +434,13 @@ export class DriveSync {
           appProperties: { imageId: id, widthPx: String(image.widthPx), heightPx: String(image.heightPx) },
         })
         this.photos.set(id, file)
+        sentPhotos++
+      }
+      // 写真を送っているあいだに、別の端末が保存していないか（写真が多いと時間がかかるため、もう一度見る）
+      if (sentPhotos && (await changedElsewhere())) {
+        this.keep(report)
+        this.setStatus({ kind: 'conflict' })
+        return
       }
       const content = new Blob([JSON.stringify({ kind: KIND, savedAt: new Date().toISOString(), device: deviceName(), report })], { type: 'application/json' })
       const saved = await saveFile(token, { name: REPORT_NAME, folderId: link.folderId, content, fileId: link.reportFileId })
@@ -414,11 +450,8 @@ export class DriveSync {
     } catch (e) {
       this.keep(report)
       const err = asDriveError(e)
-      if (err.code === 'expired') {
-        this.token = null
-        writeSession(null)
-        this.setStatus({ kind: 'expired' })
-      } else if (err.code === 'network') {
+      if (err.code === 'expired') this.expire()
+      else if (err.code === 'network') {
         this.setStatus({ kind: 'offline' })
         this.retryLater()
       } else {

@@ -36,8 +36,22 @@ function openDb(): Promise<IDBDatabase> {
       if (!db.objectStoreNames.contains('images')) db.createObjectStore('images', { keyPath: 'id' })
       if (!db.objectStoreNames.contains('snapshots')) db.createObjectStore('snapshots', { keyPath: 'savedAt' })
     }
-    request.onsuccess = () => resolve(request.result)
-    request.onerror = () => reject(request.error)
+    request.onsuccess = () => {
+      const db = request.result
+      // つながりが切れたら（iPhone の Safari で起きることがある）、次に使うときにつなぎ直す
+      db.onclose = () => {
+        dbPromise = null
+      }
+      db.onversionchange = () => {
+        db.close()
+        dbPromise = null
+      }
+      resolve(db)
+    }
+    request.onerror = () => {
+      dbPromise = null
+      reject(request.error)
+    }
   })
   return dbPromise
 }
@@ -50,7 +64,13 @@ function promisify<T>(request: IDBRequest<T>): Promise<T> {
 }
 
 async function store(name: string, mode: IDBTransactionMode): Promise<IDBObjectStore> {
-  return (await openDb()).transaction(name, mode).objectStore(name)
+  try {
+    return (await openDb()).transaction(name, mode).objectStore(name)
+  } catch {
+    // つながりが使えなくなっていた：一度だけ、つなぎ直してやり直す
+    dbPromise = null
+    return (await openDb()).transaction(name, mode).objectStore(name)
+  }
 }
 
 export async function loadReport(): Promise<Report | null> {
