@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v16：表（画像を入れられる表と、列の幅）</title>
+<style>
+  body { margin: 0; padding: 28px 32px 36px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 18px; font-size: 13px; color: #5d6068; line-height: 1.8; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  figure { margin: 0; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+  figcaption { padding: 14px 18px 12px; border-bottom: 1px solid #ecebe8; min-height: 74px; }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 4px; }
+  figcaption span { font-size: 12.5px; color: #5d6068; line-height: 1.7; }
+  .shot { display: flex; gap: 14px; padding: 18px 16px 22px; background: #f1efeb; align-items: flex-start; }
+  /* 道具（この表） */
+  .pal { width: 92px; flex: none; background: #fff; border: 1px solid #dedbd5; border-radius: 12px; padding: 6px; box-shadow: 0 4px 14px rgba(0,0,0,0.06); }
+  .pal .lbl { font-size: 10px; color: #2f3e75; font-weight: 700; text-align: center; padding: 3px 0 4px; letter-spacing: 0.08em; }
+  .pal .tb { display: block; text-align: center; font-size: 10.5px; padding: 6px 0; border-radius: 8px; color: #24262b; }
+  .pal .tb i { display: block; font-style: normal; font-size: 15px; line-height: 1.1; color: #6a6e78; }
+  .pal .sep { border-top: 1px solid #ecebe8; margin: 4px 2px; }
+  .pal .seg { display: flex; flex-direction: column; gap: 3px; padding: 2px; }
+  .pal .seg span { font-size: 10px; text-align: center; padding: 5px 0; border: 1px solid #dedbd5; border-radius: 7px; }
+  .pal .seg span.on { border-color: #2f3e75; background: #eef0f8; color: #2f3e75; font-weight: 700; }
+  .pal .tb.hot { background: #eef0f8; color: #2f3e75; font-weight: 700; }
+  /* 紙面 */
+  .paper { flex: 1; background: #fff; padding: 22px 22px 26px; box-shadow: 0 0 0 1px #dedbd5; font-family: 'BIZ UDMincho', 'Yu Mincho', serif; font-size: 12px; position: relative; }
+  .paper p { margin: 0 0 10px; line-height: 1.75; text-indent: 1em; }
+  .cap { text-align: center; margin: 4px 0 6px; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { border: 1px solid #000; padding: 4px 5px; font-weight: 400; text-align: center; vertical-align: middle; font-size: 11px; line-height: 1.5; }
+  .sw { display: block; margin: 0 auto 3px; width: 46px; height: 34px; }
+  .sel { outline: 2px solid #2f3e75; outline-offset: -2px; background: #eef0f8; }
+  .handle { position: absolute; top: -4px; bottom: -4px; width: 7px; margin-left: -3.5px; background: rgba(47, 62, 117, 0.25); border-left: 2px solid #2f3e75; cursor: col-resize; }
+  .tip { position: absolute; padding: 3px 8px; border-radius: 10px; background: rgba(36,38,43,0.8); color: #fff; font: 600 10px/1.5 'BIZ UDPGothic', sans-serif; white-space: nowrap; }
+  .alt { margin-top: 10px; font-family: 'BIZ UDPGothic', sans-serif; font-size: 10.5px; color: #5d6068; }
+  .alt table { margin-top: 4px; }
+  .note { margin: 18px 0 0; background: #fff; border-radius: 14px; padding: 14px 18px; font-size: 13px; line-height: 1.9; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+</style>
+</head>
+<body>
+  <h1>表（素材表に限らない表。セルに画像も入れられる）と、列の幅のそろえ方</h1>
+  <p class="lead">
+    「表を入れる」で、文中の位置に（表n）が入り、段落のすぐ下に表が入ります（図と同じ）。入れるときに「空の表」か「素材表のひな形（名称・使用箇所・生地見本）」を選びます。<br>
+    行と列は、書いているセルの下・右に足せます。セルには文字と画像（生地見本など）を入れられ、画像はセルの幅に合わせて縮めます。違うのは「列の幅」の決め方です。
+  </p>
+
+  <div class="cards">
+    <figure>
+      <figcaption><b>案A　ボタンで切り替える</b><span>「列の幅」を「そろえる（同じ幅）」と「中身に合わせる」から選ぶだけ。いちばん簡単</span></figcaption>
+      <div class="shot">
+        <div class="pal">
+          <div class="lbl">この表</div>
+          <div class="tb"><i>＋</i>行を足す</div>
+          <div class="tb"><i>＋</i>列を足す</div>
+          <div class="tb"><i>▣</i>画像を入れる</div>
+          <div class="tb"><i>−</i>行・列を消す</div>
+          <div class="sep"></div>
+          <div class="lbl">列の幅</div>
+          <div class="seg"><span class="on">そろえる</span><span>中身に合わせる</span></div>
+        </div>
+        <div class="paper">
+          <p>袖には張りのあるリネンを使った（表1）。</p>
+          <div class="cap">表1.使用した生地</div>
+          <table>
+            <tr><th>名称</th><th>使用箇所</th><th>生地見本</th></tr>
+            <tr><td>サテン</td><td>上着・袖</td><td><svg class="sw"><rect width="46" height="34" fill="#7a2e3a"/></svg></td></tr>
+            <tr><td>リネン</td><td>袖の裏地</td><td><svg class="sw"><rect width="46" height="34" fill="#d9c3a5"/></svg></td></tr>
+          </table>
+          <div class="alt">「中身に合わせる」にすると：
+            <table style="table-layout:auto"><tr><th>名称</th><th>使用箇所</th><th>生地見本</th></tr><tr><td>サテン</td><td>上着・袖（表地）と帯</td><td>…</td></tr></table>
+          </div>
+        </div>
+      </div>
+    </figure>
+
+    <figure>
+      <figcaption><b>案B　線をつかんで幅を変える</b><span>列の境目の線をつかんで、好きな幅にする（Word と同じ）。「幅をそろえる」で同じ幅に戻せる</span></figcaption>
+      <div class="shot">
+        <div class="pal">
+          <div class="lbl">この表</div>
+          <div class="tb"><i>＋</i>行を足す</div>
+          <div class="tb"><i>＋</i>列を足す</div>
+          <div class="tb"><i>▣</i>画像を入れる</div>
+          <div class="tb"><i>−</i>行・列を消す</div>
+          <div class="sep"></div>
+          <div class="tb hot"><i>⇹</i>幅をそろえる</div>
+        </div>
+        <div class="paper">
+          <p>袖には張りのあるリネンを使った（表1）。</p>
+          <div class="cap">表1.使用した生地</div>
+          <div style="position:relative">
+            <table>
+              <colgroup><col style="width:24%"><col style="width:46%"><col style="width:30%"></colgroup>
+              <tr><th>名称</th><th>使用箇所</th><th>生地見本</th></tr>
+              <tr><td>サテン</td><td>上着・袖（表地）と帯</td><td><svg class="sw"><rect width="46" height="34" fill="#7a2e3a"/></svg></td></tr>
+              <tr><td>リネン</td><td>袖の裏地</td><td><svg class="sw"><rect width="46" height="34" fill="#d9c3a5"/></svg></td></tr>
+            </table>
+            <div class="handle" style="left:24%"></div>
+            <div class="tip" style="left:calc(24% - 52px);top:-26px">⇔ つかんで幅を変える</div>
+          </div>
+        </div>
+      </div>
+    </figure>
+
+    <figure>
+      <figcaption><b>案C　列ごとに幅を選ぶ</b><span>書いているセルの列の幅を「狭い・ふつう・広い」から選ぶ。細かくは決めず、きれいにそろう</span></figcaption>
+      <div class="shot">
+        <div class="pal">
+          <div class="lbl">この表</div>
+          <div class="tb"><i>＋</i>行を足す</div>
+          <div class="tb"><i>＋</i>列を足す</div>
+          <div class="tb"><i>▣</i>画像を入れる</div>
+          <div class="tb"><i>−</i>行・列を消す</div>
+          <div class="sep"></div>
+          <div class="lbl">この列の幅</div>
+          <div class="seg"><span>狭い</span><span>ふつう</span><span class="on">広い</span></div>
+        </div>
+        <div class="paper">
+          <p>袖には張りのあるリネンを使った（表1）。</p>
+          <div class="cap">表1.使用した生地</div>
+          <table>
+            <colgroup><col style="width:25%"><col style="width:50%"><col style="width:25%"></colgroup>
+            <tr><th>名称</th><th class="sel">使用箇所</th><th>生地見本</th></tr>
+            <tr><td>サテン</td><td class="sel">上着・袖（表地）と帯</td><td><svg class="sw"><rect width="46" height="34" fill="#7a2e3a"/></svg></td></tr>
+            <tr><td>リネン</td><td class="sel">袖の裏地</td><td><svg class="sw"><rect width="46" height="34" fill="#d9c3a5"/></svg></td></tr>
+          </table>
+        </div>
+      </div>
+    </figure>
+  </div>
+
+  <div class="note">
+    どの案も共通：表のタイトルは表の上（手順書の形「表1.タイトル」）。1行目は見出しの行（太さはそのまま、中央そろえ）。いまの「素材表」は、この表のひな形の1つになります（管理ページのひな形の「素材表」もそのまま使えます）。<br>
+    セルの画像は、セルの幅いっぱいまでに縮め、縦長の写真が大きくなりすぎないよう高さの上限（例：40mm）を設けます。
+  </div>
+</body>
+</html>

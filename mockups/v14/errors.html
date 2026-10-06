@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v14：エラーの箇所の見せ方</title>
+<style>
+  body { margin: 0; padding: 28px 32px 36px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 18px; font-size: 13px; color: #5d6068; line-height: 1.8; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  figure { margin: 0; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid #ecebe8; }
+  figcaption b { display: block; font-size: 15px; margin-bottom: 3px; }
+  figcaption span { font-size: 12px; color: #5d6068; line-height: 1.7; }
+  .now figcaption b { color: #8a8c91; }
+  img { display: block; width: 100%; }
+</style>
+</head>
+<body>
+  <h1>エラー・注意の箇所を、紙面の上で気づきやすくする</h1>
+  <p class="lead">例：「私は」（一人称）、「１５世紀」（全角の数字）、タイトルを入れていない図。<br>案1〜3 共通：タイトルなどの空欄は、赤い点線の枠と赤い字（「図のタイトルを入力」）で示す（今は灰色の「クリックして入力」）。</p>
+  <div class="grid">
+    <figure class="now"><figcaption><b>今</b><span>細い波線と、うすい色。空いているタイトルは灰色の字</span></figcaption><img src="screens/now.png" alt=""></figure>
+    <figure><figcaption><b>案1　文字そのものを濃く示す</b><span>太い下線と、はっきりした赤の背景・赤い字。直すところが文中で目立つ</span></figcaption><img src="screens/a.png" alt=""></figure>
+    <figure><figcaption><b>案2　行の左の余白に赤い印</b><span>今の波線に加えて、エラーのある行の左に●。ページ全体を見たときに、どこにあるかがすぐわかる</span></figcaption><img src="screens/b.png" alt=""></figure>
+    <figure><figcaption><b>案3　余白に番号札＋右の一覧にも同じ番号</b><span>エラーのある行の左に番号。右のセルフチェックの一覧にも同じ番号を付け、どの指摘がどこかを対応させる</span></figcaption><img src="screens/c.png" alt=""></figure>
+  </div>
+</body>
+</html>

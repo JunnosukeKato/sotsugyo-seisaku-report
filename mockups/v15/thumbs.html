@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v15：ページの一覧を左に</title>
+<style>
+  body { margin: 0; padding: 28px 32px 36px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 18px; font-size: 13px; color: #5d6068; line-height: 1.8; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  figure { margin: 0; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid #ecebe8; }
+  figcaption b { display: block; font-size: 15px; margin-bottom: 3px; }
+  figcaption span { font-size: 12px; color: #5d6068; line-height: 1.7; }
+  .now figcaption b { color: #8a8c91; }
+  img { display: block; width: 100%; }
+</style>
+</head>
+<body>
+  <h1>ページの一覧を左に縦に並べる（PowerPoint のように）</h1>
+  <p class="lead">どの案も、右の欄はセルフチェックが上に来て、指摘が多く見えるようになります。一覧の見本は今より大きくなります。</p>
+  <div class="grid">
+    <figure class="now"><figcaption><b>今</b><span>右の欄の上に、横に並べた小さな一覧</span></figcaption><img src="screens/now.png" alt=""></figure>
+    <figure><figcaption><b>案1　紙面の左の空いているところに縦一列</b><span>道具は紙面のすぐ左のまま。紙面の大きさは変わらない（画面の幅が狭いパソコンでは、紙面が少し小さくなる）</span></figcaption><img src="screens/a.png" alt=""></figure>
+    <figure><figcaption><b>案2　画面の左端に一覧の欄（PowerPoint と同じ形）</b><span>左・中央・右の3つの欄になる。いつも同じ場所にあってわかりやすいが、紙面は少し小さくなる</span></figcaption><img src="screens/b.png" alt=""></figure>
+    <figure><figcaption><b>案3　一覧を紙面のすぐ左、道具を紙面の右わきへ</b><span>一覧と紙面が近く、ページを行き来しやすい。道具は右側になる</span></figcaption><img src="screens/c.png" alt=""></figure>
+  </div>
+</body>
+</html>
