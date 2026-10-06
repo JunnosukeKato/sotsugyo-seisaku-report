@@ -13,6 +13,7 @@ import { useKeyboardInset, useNarrow, useSwipe, useWheelPaging } from './app/uiS
 import { SidePanel, PageColumn } from './app/SidePanel'
 import { StartGuide, type GuideStep } from './app/StartGuide'
 import { useAutosave } from './app/useAutosave'
+import { usePanelWidths } from './app/usePanelWidths'
 
 const noopSubscribe = () => () => {}
 const nullSnapshot = () => null
@@ -66,6 +67,7 @@ export default function App() {
   const snap = useSyncExternalStore(editor?.subscribe ?? noopSubscribe, editor?.getSnapshot ?? nullSnapshot) as EditorSnapshot | null
   // スマホ（画面の幅が狭いとき）は、並べ方と書き方を変える
   const narrow = useNarrow()
+  const panels = usePanelWidths()
   const hasLayout = !!snap?.layout
   useKeyboardInset()
   useSwipe(stageRef, editor, narrow)
@@ -170,8 +172,21 @@ export default function App() {
   const ready = editor && snap
 
   return (
-    <div className={`app${narrow ? ' phone' : ''}`}>
+    <div className={`app${narrow ? ' phone' : ''}`} style={narrow ? undefined : panels.style}>
       {!narrow && (ready ? <PageColumn editor={editor} snap={snap} /> : <aside className="thumbs-col" />)}
+      {/* 左右の欄の境目：つかんで動かすと幅が変わる。ダブルクリックで元の幅 */}
+      {!narrow &&
+        (['left', 'right'] as const).map((side) => (
+          <div
+            key={side}
+            className={`resize-handle ${side}`}
+            role="separator"
+            aria-orientation="vertical"
+            title="つかんで動かすと、欄の幅が変わります（ダブルクリックで元の幅）"
+            onPointerDown={(e) => panels.startDrag(side, e)}
+            onDoubleClick={() => panels.reset(side)}
+          />
+        ))}
       <main className="stage" ref={stageRef}>
         <div className="page-scroller" ref={scrollerRef} />
         <div id="overlay-layer" ref={layerRef} />

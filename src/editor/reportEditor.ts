@@ -299,6 +299,7 @@ export class ReportEditor {
       this.layout = result.layout
       this.page = Math.max(0, Math.min(this.page, result.layout.kinds.length - 1))
       this.renderer.swap(this.page)
+      this.markPrintSkip()
     } finally {
       this.rendering = false
     }
@@ -839,6 +840,12 @@ export class ReportEditor {
     this.pushHistory(this.report)
     this.report = ops.insertAfter(this.report, after, block)
     this.reopenAfterRender(editId, 0)
+  }
+
+  /** 抄録を書き始めるまでは、抄録のページを PDF（印刷）に入れない（画面には、案内と「先生の許可が出た」ボタンを出す） */
+  private markPrintSkip(): void {
+    const skip = this.report.abstract.started === false
+    this.renderer.pageView.pages().forEach((page, i) => page.classList.toggle('print-skip', skip && this.layout?.kinds[i] === 'abstract'))
   }
 
   /** 抄録を書き始める（先生の許可が出た）。抄録の最初の段落を開く */

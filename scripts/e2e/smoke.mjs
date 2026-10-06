@@ -531,6 +531,38 @@ await withEdge(async (browser) => {
   await ready()
   s = await snap()
   check('改ページの印をクリックして選び、「削除」で消せる', selected === 'pageBreak' && !s.report.body[0].blocks.some((b) => b.type === 'pageBreak') && (await pageOfId('bpB')) === (await pageOfId('bpA')), selected)
+
+  // ---- 左右の欄の境目をつかんで、幅を変える（ダブルクリックで元の幅） ----
+  const colWidth = (sel) => page.evaluate((sel) => Math.round(document.querySelector(sel).getBoundingClientRect().width), sel)
+  const dragHandle = async (side, dx) => {
+    const h = await page.evaluate((side) => { const r = document.querySelector(`.resize-handle.${side}`).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + 300 } }, side)
+    await page.mouse.move(h.x, h.y)
+    await page.mouse.down()
+    for (let k = 1; k <= 6; k++) await page.mouse.move(h.x + (dx * k) / 6, h.y)
+    await page.mouse.up()
+    await pause(300)
+  }
+  const leftBefore = await colWidth('.thumbs-col')
+  const rightBefore = await colWidth('.side')
+  await dragHandle('left', 60)
+  await dragHandle('right', -80)
+  const leftAfter = await colWidth('.thumbs-col')
+  const rightAfter = await colWidth('.side')
+  check('左右の欄の境目をつかんで動かすと、欄の幅が変わる', leftAfter >= leftBefore + 50 && rightAfter >= rightBefore + 70, `${leftBefore}→${leftAfter} / ${rightBefore}→${rightAfter}`)
+  await page.evaluate(() => document.querySelector('.resize-handle.left').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })))
+  await pause(300)
+  check('境目をダブルクリックすると、元の幅に戻る', (await colWidth('.thumbs-col')) === leftBefore, String(await colWidth('.thumbs-col')))
+
+  // ---- 抄録を書き始める前は、PDF に抄録のページを入れない ----
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, abstract: { ...r.abstract, started: false } })))
+  await pause(300)
+  await ready()
+  s = await snap()
+  await page.pdf({ path: `${OUT}/no-abstract.pdf`, preferCSSPageSize: true, printBackground: true })
+  const naDoc = await getDocument({ url: `${OUT}/no-abstract.pdf`, verbosity: 0 }).promise
+  let naText = ''
+  for (let n = 1; n <= naDoc.numPages; n++) naText += (await (await naDoc.getPage(n)).getTextContent()).items.map((it) => it.str).join('')
+  check('抄録を書き始める前は、PDF に抄録のページが入らない（画面には残る）', naDoc.numPages === s.layout.kinds.length - 1 && !/卒業制作\s*抄録/.test(naText) && s.layout.kinds.includes('abstract'), `${naDoc.numPages} / ${s.layout.kinds.length}ページ`)
   await context.close()
 })
 

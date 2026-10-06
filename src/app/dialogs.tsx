@@ -221,6 +221,9 @@ export function ExportDialog({ editor, findings, onClose }: { editor: ReportEdit
       <p className="lead">
         エラーはありません{warnings > 0 ? `（警告が${warnings}件あります。内容を確認してください）` : ''}。最後に、次のことを確認してください。
       </p>
+      {editor.getSnapshot().report.abstract.started === false && (
+        <p className="note">抄録はまだ書いていないため、このPDFには抄録のページは入りません（先生の許可が出たら、抄録のページの「先生の許可が出た」を押して書き始めます）。</p>
+      )}
       <div className="checklist">
         {SELF_CHECKS.map((text, i) => (
           <label key={i}>

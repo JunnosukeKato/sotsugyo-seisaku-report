@@ -35,15 +35,23 @@ button:disabled { cursor: default; opacity: 0.4; }
 .spacer { flex: 1; }
 .ng { color: var(--error); }
 
-.app { height: 100%; display: grid; grid-template-columns: 124px minmax(0, 1fr) 312px; }
+.app { position: relative; height: 100%; display: grid; grid-template-columns: var(--left-w, 124px) minmax(0, 1fr) var(--right-w, 312px); }
+/* 左右の欄の境目（つかんで動かすと幅が変わる） */
+.resize-handle { position: absolute; z-index: 30; top: 0; bottom: 0; width: 9px; cursor: col-resize; touch-action: none; }
+.resize-handle.left { left: calc(var(--left-w, 124px) - 5px); }
+.resize-handle.right { right: calc(var(--right-w, 312px) - 4px); }
+.resize-handle::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 3px; border-radius: 2px; background: transparent; transition: background 0.15s; }
+.resize-handle:hover::after, body.resizing .resize-handle:hover::after { background: var(--accent); opacity: 0.5; }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing .page-viewport { pointer-events: none; }
 /* ページの一覧（画面の左端の欄。PowerPoint と同じ形。mockups/v15 案2） */
 .thumbs-col { display: flex; flex-direction: column; min-height: 0; background: var(--panel-bg); border-right: 1px solid var(--line); }
 .thumbs-col .sec-h { padding: 16px 14px 10px; margin: 0; white-space: nowrap; }
 .thumbs-col .thumb-list { flex: 1; grid-template-columns: 1fr; max-height: none; gap: 14px; padding: 4px 12px 18px; overflow-y: auto; }
 .thumbs-col .thumb-list .t { font-size: 10.5px; }
-.thumbs-col .mini { width: 84px; height: 119px; }
-.thumbs-col .mini .mini-page { transform: scale(0.10583); }
-.thumbs-col .thumb-list .t.has-error::after { right: calc(50% - 47px); }
+.thumbs-col .mini { width: var(--mini-w, 84px); height: calc(var(--mini-w, 84px) * 1.4142); }
+.thumbs-col .mini .mini-page { transform: scale(var(--mini-scale, 0.10583)); }
+.thumbs-col .thumb-list .t.has-error::after { right: calc(50% - var(--mini-w, 84px) / 2 - 5px); }
 .refs-link { padding: 10px 20px 0; border-top: 1px solid var(--line); }
 .refs-link .add-refs { margin: 0 0 10px; }
 
@@ -285,6 +293,7 @@ button:disabled { cursor: default; opacity: 0.4; }
 .modal h3 { font-size: 12px; margin: 18px 0 6px; color: var(--muted); letter-spacing: 0.08em; }
 .modal .close { border: 0; background: none; font-size: 22px; color: var(--muted); }
 .modal .lead { line-height: 1.8; margin: 4px 0 14px; color: var(--ink); }
+.modal .note { margin: -4px 0 14px; padding: 8px 12px; border-radius: 8px; background: var(--accent-soft); font-size: 12.5px; line-height: 1.7; color: var(--ink); }
 .modal .muted { color: var(--muted); font-size: 13px; }
 .modal button { border: 1px solid var(--line); background: #fff; border-radius: var(--r-md); padding: 7px 14px; font-size: 13px; color: var(--ink); }
 .modal button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
@@ -413,7 +422,7 @@ button:disabled { cursor: default; opacity: 0.4; }
 /* ---- 印刷（PDFに保存）：紙面だけを、すべてのページを順に出す ---- */
 @media print {
   html, body, #root, .app, .stage { display: block !important; height: auto !important; overflow: visible !important; background: #fff !important; }
-  .side, .thumbs-col, .palette, .arrow, .zoom, #overlay-layer, .loading, .modal-backdrop, .popover-backdrop,
+  .side, .thumbs-col, .resize-handle, .palette, .arrow, .zoom, #overlay-layer, .loading, .modal-backdrop, .popover-backdrop,
   .p-top, .p-nav, .pager, .sel-bar, .edit-sheet, .sheet, .scrim, .unzoom, .popover, .guide { display: none !important; }
   .page-scroller { position: static !important; overflow: visible !important; }
   .page-viewport:not(.front) { display: none !important; }
@@ -430,6 +439,8 @@ button:disabled { cursor: default; opacity: 0.4; }
   .page-viewport [data-photo-slot] { outline: none !important; }
   .page-viewport .page-break::after { content: none !important; }
   .page-viewport .abstract-lock { display: none !important; }
+  /* 抄録を書き始めるまでは、抄録のページを PDF に入れない */
+  .page-viewport [data-vivliostyle-page-container].print-skip { display: none !important; }
   .page-viewport .is-selected { outline: none !important; }
   .page-viewport [data-block-id='basic:course'] { text-decoration: none !important; }
 }
