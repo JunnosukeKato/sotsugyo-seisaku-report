@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v18：原稿を Google ドライブにも自動で保存する</title>
+<style>
+  body { margin: 0; padding: 28px 32px 40px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  h2 { font-size: 17px; margin: 30px 0 4px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 13px; color: #5d6068; line-height: 1.8; max-width: 1100px; }
+  .trio { display: grid; grid-template-columns: 2.2fr 1fr 1fr; gap: 0; align-items: start; }
+  .trio .shot + .shot { border-left: 1px solid #ecebe8; }
+  figure { margin: 0 0 20px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid #ecebe8; }
+  figcaption b { display: block; font-size: 15px; margin-bottom: 3px; }
+  figcaption span { font-size: 12.5px; color: #5d6068; line-height: 1.7; }
+  .shot { margin: 0; }
+  .shot small { display: block; padding: 8px 14px 6px; font-size: 12px; color: #5d6068; background: #faf9f7; border-top: 1px solid #ecebe8; }
+  img { display: block; width: 100%; }
+  .states { display: grid; grid-template-columns: 120px repeat(4, 1fr); gap: 10px; align-items: start; padding: 14px 16px 16px; }
+  .states .h { font-size: 12px; color: #5d6068; text-align: center; }
+  .states .row-h { font-size: 13px; font-weight: 700; padding-top: 40px; }
+  .states img { border: 1px solid #ecebe8; border-radius: 8px; }
+  .phones { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; padding: 14px 16px 16px; }
+  .phones img { border: 1px solid #ddd; border-radius: 14px; max-width: 330px; margin: 0 auto; }
+  .phones small { display: block; text-align: center; font-size: 12.5px; color: #5d6068; margin-top: 6px; }
+  .common { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+</style>
+</head>
+<body>
+  <h1>原稿を Google ドライブにも自動で保存する（見た目の案）</h1>
+  <p class="lead">どの案も、書くたびにこのブラウザに保存し（今と同じ）、書くのをやめて数秒〜十数秒後にドライブにも送ります。写真は入れたときに1枚ずつ送ります。案ごとに違うのは、<b>ドライブにつなぐ入口</b>と、<b>保存のようすの出し方</b>です。いちばん下の「どの案でも共通」の窓は、どの案を選んでも同じです。</p>
+
+  <h2>案1　保存の表示を1つにまとめる</h2>
+  <figure>
+    <figcaption><b>今の「自動保存」の表示が、ドライブの保存のようすに変わる</b><span>つないでいないときは「この端末だけに保存」（黄色）と「ドライブにつなぐ」ボタン。つないだあとは「ドライブに保存 13:44」と出し、押すとドライブの操作（今すぐ保存・読み込み直す・この端末から消す）が開く。右の欄がほとんど今のまま</span></figcaption>
+    <div class="trio">
+      <div class="shot"><img src="screens/a-off.png" alt=""><small>画面全体（つないでいないとき）</small></div>
+      <div class="shot"><img src="screens/a-off-side.png" alt=""><small>右の欄：つないでいないとき</small></div>
+      <div class="shot"><img src="screens/a-on-side.png" alt=""><small>右の欄：つないだあと（「ドライブに保存 13:44」を押したところ）</small></div>
+    </div>
+  </figure>
+
+  <h2>案2　ドライブの欄を置く</h2>
+  <figure>
+    <figcaption><b>右の欄に「Google ドライブ」の枠を置き、つなぐボタンと保存のようすをまとめる</b><span>何ができるかの説明とボタンが常に見えるので、気づきやすい。つないだあとは枠が小さくなり、「⋯」から操作する。今の「自動保存」の表示はそのまま残る（この端末への保存）。右の欄が少し縦に長くなる</span></figcaption>
+    <div class="trio">
+      <div class="shot"><img src="screens/b-off.png" alt=""><small>画面全体（つないでいないとき）</small></div>
+      <div class="shot"><img src="screens/b-off-side.png" alt=""><small>右の欄：つないでいないとき</small></div>
+      <div class="shot"><img src="screens/b-on-side.png" alt=""><small>右の欄：つないだあと（「⋯」を押したところ）</small></div>
+    </div>
+  </figure>
+
+  <h2>案3　はじめに一度だけ聞く</h2>
+  <figure>
+    <figcaption><b>ツールを開いたときに「ドライブにも保存しましょう」と一度だけ聞く</b><span>学生がつなぎ忘れにくい。表紙の案内が終わったとき（すでに書き始めている学生は、次に開いたとき）に出す。「あとで」を選んだら、右の欄に「ドライブにつながっていません　つなぐ」を細く出し続ける。つないだあとの表示は案1と同じ</span></figcaption>
+    <div class="trio">
+      <div class="shot"><img src="screens/c-ask.png" alt=""><small>画面全体（はじめに出す窓）</small></div>
+      <div class="shot"><img src="screens/c-later-side.png" alt=""><small>右の欄：「あとで」を選んだあと</small></div>
+      <div class="shot"><img src="screens/a-on-side.png" alt=""><small>右の欄：つないだあと（案1と同じ）</small></div>
+    </div>
+  </figure>
+
+  <h2>保存のようす（4つの状態）</h2>
+  <figure>
+    <figcaption><b>保存しているとき・保存できたとき・電波がないとき・ログインが切れたとき</b><span>電波がないときも、この端末には保存し続け、つながったら自動で送ります。ログインが切れたときだけ、学生に「ログインし直す」を押してもらいます</span></figcaption>
+    <div class="states">
+      <span></span><span class="h">保存しています</span><span class="h">保存できた</span><span class="h">電波がない</span><span class="h">ログインが切れた</span>
+      <span class="row-h">案1・案3</span>
+      <img src="screens/state-chip-saving.png" alt=""><img src="screens/state-chip-saved.png" alt=""><img src="screens/state-chip-offline.png" alt=""><img src="screens/state-chip-expired.png" alt="">
+      <span class="row-h">案2</span>
+      <img src="screens/state-card-saving.png" alt=""><img src="screens/state-card-saved.png" alt=""><img src="screens/state-card-offline.png" alt=""><img src="screens/state-card-expired.png" alt="">
+    </div>
+  </figure>
+
+  <h2>スマホ</h2>
+  <figure>
+    <figcaption><b>上の帯に保存のようす（☁ 13:44）、メニューの中にドライブの操作</b><span>案3は、はじめに聞く窓をスマホに合わせた形</span></figcaption>
+    <div class="phones">
+      <div><img src="screens/phone-a.png" alt=""><small>案1（メニューを開いたところ）</small></div>
+      <div><img src="screens/phone-b.png" alt=""><small>案2（メニューを開いたところ）</small></div>
+      <div><img src="screens/phone-c.png" alt=""><small>案3（はじめに聞く窓）</small></div>
+    </div>
+  </figure>
+
+  <h2>どの案でも共通</h2>
+  <div class="common">
+    <figure><figcaption><b>新しい端末で開いたとき</b><span>はじめの案内（コースを選ぶ）の下に「ドライブから続きを開く」</span></figcaption><img src="screens/common-start.png" alt=""></figure>
+    <figure><figcaption><b>別の端末で書いた新しい原稿があるとき</b><span>保存した時刻と字数を並べて選ぶ。選ばなかった方は「自動の控え」に残る</span></figcaption><img src="screens/common-conflict.png" alt=""></figure>
+    <figure><figcaption><b>共用のパソコンで書き終えたとき</b><span>ドライブの操作の「この端末から原稿を消す」を押したときの確認</span></figcaption><img src="screens/common-wipe.png" alt=""></figure>
+  </div>
+</body>
+</html>
