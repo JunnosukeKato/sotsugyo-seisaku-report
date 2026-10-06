@@ -94,6 +94,8 @@ export class ReportEditor {
   private renderTimer: number | undefined
   private renderMs = 0
   private pendingOpen: { id: string; caret: number } | null = null
+  /** 「図を入れる」の後、図のタイトルを Enter で確定したら、書いていた段落のこの位置に戻る */
+  private returnTo: { from: string; id: string; caret: number } | null = null
   private currentId: string | null = null
   private selection: Selection = null
   private page = 0
@@ -130,11 +132,18 @@ export class ReportEditor {
         this.report = ops.setText(this.report, id, text)
         this.afterChange({ render: 'debounce', save: true })
       },
-      onCommit: (id, text) => {
+      onCommit: (id, text, byKey) => {
         this.report = ops.setText(this.report, id, text)
         if (this.reportBeforeEdit && JSON.stringify(this.reportBeforeEdit) !== JSON.stringify(this.report)) this.pushHistory(this.reportBeforeEdit)
         this.reportBeforeEdit = null
         this.hideStyle.textContent = ''
+        // 図を入れた後、タイトルを Enter で確定したら、書いていた段落の続きに戻る
+        const back = this.returnTo?.from === id ? this.returnTo : null
+        if (this.returnTo?.from === id) this.returnTo = null
+        if (back && byKey) {
+          this.hideStyle.textContent = this.editingStyle(back.id)
+          this.pendingOpen = { id: back.id, caret: back.caret }
+        }
         this.afterChange({ render: 'now', save: true })
       },
       onSplit: (id, before, after) => {
@@ -756,7 +765,14 @@ export class ReportEditor {
     this.reopenAfterRender(chapter.id, 0)
   }
 
+  /**
+   * 図を入れる。段落を書いているときは、カーソルの位置に「（図n）」を入れ、その段落のすぐ下に図を置く（同じ段落の図はひとまとまり）。
+   * 写真を選んだら図のタイトルの入力欄を開き、Enter で段落の続きに戻る。
+   * 段落を書いていないときは、最後に触ったところの後ろに図を置く（本文での参照はあとで「図表を参照」で入れる）
+   */
   async addFigure(): Promise<void> {
+    const paragraphId = this.overlay.blockId
+    if (paragraphId && ops.findEditable(this.report, paragraphId)?.kind === 'paragraph') return this.insertFigureAtCaret(paragraphId)
     // 写真を選んでいる間に入力欄が閉じるため、入れる位置を先に決めておく
     const after = this.insertionAnchor()
     this.marker.hidden = true
@@ -764,6 +780,25 @@ export class ReportEditor {
     if (!imageId) return
     const figureId = ops.newId('f')
     this.insertAndEdit({ type: 'figureRow', id: ops.newId('r'), figures: [{ id: figureId, imageId, caption: '' }] }, figureId, after)
+  }
+
+  private async insertFigureAtCaret(paragraphId: string): Promise<void> {
+    const caret = this.overlay.caret
+    this.marker.hidden = true
+    // 書いた文字を確定してから写真を選ぶ（写真を選ぶ画面を開くと入力欄は閉じる）
+    this.overlay.commit()
+    const imageId = await this.importImage('figure')
+    if (!imageId) {
+      this.reopenAfterRender(paragraphId, caret)
+      return
+    }
+    const figureId = ops.newId('f')
+    this.pushHistory(this.report)
+    let next = ops.insertRef(this.report, paragraphId, caret, figureId)
+    next = ops.addFigureBelow(next, paragraphId, { id: figureId, imageId, caption: '' })
+    this.report = next
+    this.returnTo = { from: figureId, id: paragraphId, caret: ops.refEnd(next, paragraphId, figureId) }
+    this.reopenAfterRender(figureId, 0)
   }
 
   addMaterialTable(): void {
@@ -786,20 +821,13 @@ export class ReportEditor {
   }
 
   /** 選んでいる図の横に、もう1枚並べる（2枚まで） */
+  /** 選んでいる図のすぐ後ろに、もう1枚加える。本文のその図への参照のすぐ後ろにも「（図n）」を足す */
   async addFigureBeside(figureId: string): Promise<void> {
     const imageId = await this.importImage('figure')
     if (!imageId) return
     const newFigure = { id: ops.newId('f'), imageId, caption: '' }
     this.pushHistory(this.report)
-    this.report = {
-      ...this.report,
-      body: this.report.body.map((c) => ({
-        ...c,
-        blocks: c.blocks.map((b) =>
-          b.type === 'figureRow' && b.figures.some((f) => f.id === figureId) && b.figures.length < 2 ? { ...b, figures: [...b.figures, newFigure] } : b,
-        ),
-      })),
-    }
+    this.report = ops.insertRefAfterRef(ops.addFigureAfter(this.report, figureId, newFigure), figureId, newFigure.id)
     this.reopenAfterRender(newFigure.id, 0)
   }
 
@@ -816,7 +844,8 @@ export class ReportEditor {
     const s = this.selection
     if (!s || s.kind === 'photos') return
     this.selection = null
-    this.update((r) => ops.removeBlock(r, s.id))
+    // 図を消すときは、本文のその図への参照「（図n）」も一緒に消す
+    this.update((r) => (s.kind === 'figure' ? ops.removeFigure(r, s.id) : ops.removeBlock(r, s.id)))
   }
 
   addTableRow(tableId: string): void {

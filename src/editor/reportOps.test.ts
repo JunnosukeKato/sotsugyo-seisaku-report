@@ -115,3 +115,56 @@ describe('ブロックの追加と削除', () => {
     expect(ops.removeChapter(added, 'cx').body.map((c) => c.id)).toEqual(['c1', 'c2', 'c3'])
   })
 })
+
+describe('図を入れる（書いている位置に（図n）、段落の下に図）', () => {
+  const base = (): Report => ({
+    ...demoReport(),
+    body: [
+      {
+        id: 'c1',
+        title: '企画',
+        blocks: [
+          { type: 'paragraph', id: 'pa', content: [{ type: 'text', text: '袖を大きくした。帯を巻いた。' }] },
+          { type: 'paragraph', id: 'pb', content: [{ type: 'text', text: '次の段落。' }] },
+        ],
+      },
+    ],
+  })
+  const fig = (id: string) => ({ id, imageId: `img-${id}`, caption: '' })
+  const paraText = (r: Report, id: string) => ops.findEditable(r, id)?.text
+
+  it('文末の「。」の直後で入れると「〜（図1）。」になり、段落のすぐ下に図が入る', () => {
+    let r = ops.insertRef(base(), 'pa', 8, 'f1')
+    r = ops.addFigureBelow(r, 'pa', fig('f1'))
+    expect(paraText(r, 'pa')).toBe('袖を大きくした（図1）。帯を巻いた。')
+    expect(r.body[0].blocks.map((b) => b.type)).toEqual(['paragraph', 'figureRow', 'paragraph'])
+    expect(ops.refEnd(r, 'pa', 'f1')).toBe('袖を大きくした（図1）'.length)
+  })
+
+  it('同じ段落から入れた図はひとまとまりにし、段落の中で参照している順に並べる', () => {
+    let r = ops.insertRef(base(), 'pa', 14, 'f1') // 「帯を巻いた。」の後ろ
+    r = ops.addFigureBelow(r, 'pa', fig('f1'))
+    r = ops.insertRef(r, 'pa', 8, 'f2') // 「袖を大きくした。」の後ろ（f1 より前）
+    r = ops.addFigureBelow(r, 'pa', fig('f2'))
+    const row = r.body[0].blocks[1]
+    expect(row.type === 'figureRow' && row.figures.map((f) => f.id)).toEqual(['f2', 'f1'])
+    // 番号は図の並び順で付くので、本文の中の番号も前から順になる
+    expect(paraText(r, 'pa')).toBe('袖を大きくした（図1）。帯を巻いた（図2）。')
+  })
+
+  it('「もう1枚」は、図のすぐ後ろに加え、本文の参照のすぐ後ろに参照を足す', () => {
+    let r = ops.insertRef(base(), 'pa', 8, 'f1')
+    r = ops.addFigureBelow(r, 'pa', fig('f1'))
+    r = ops.addFigureAfter(r, 'f1', fig('f2'))
+    r = ops.insertRefAfterRef(r, 'f1', 'f2')
+    expect(paraText(r, 'pa')).toBe('袖を大きくした（図1）（図2）。帯を巻いた。')
+  })
+
+  it('図を消すと、本文のその図への参照も消える', () => {
+    let r = ops.insertRef(base(), 'pa', 8, 'f1')
+    r = ops.addFigureBelow(r, 'pa', fig('f1'))
+    r = ops.removeFigure(r, 'f1')
+    expect(paraText(r, 'pa')).toBe('袖を大きくした。帯を巻いた。')
+    expect(r.body[0].blocks.map((b) => b.type)).toEqual(['paragraph', 'paragraph'])
+  })
+})

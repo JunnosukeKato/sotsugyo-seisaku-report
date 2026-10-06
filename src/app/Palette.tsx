@@ -113,12 +113,12 @@ export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
       <div className="group ctx">
         <div className="ctx-label">この図</div>
         <Tool label="差し替え" icon={Icon.replace} title="写真を差し替える" onClick={() => void editor.replaceFigureImage(figureId)} />
-        <Tool label="横に並べる" icon={Icon.beside} title="横にもう1枚並べる（2枚まで）" onClick={() => void editor.addFigureBeside(figureId)} />
+        <Tool label="もう1枚" icon={Icon.beside} title="この図のすぐ後ろにもう1枚入れる（本文の参照の後ろにも「（図n）」が入ります）" onClick={() => void editor.addFigureBeside(figureId)} />
         <Tool
           label="削除"
           icon={Icon.remove}
           danger
-          title="この図を削除"
+          title="この図を削除（本文の「（図n）」も消えます）"
           onClick={() => {
             editor.select({ kind: 'figure', id: figureId })
             editor.removeSelected()
@@ -200,7 +200,13 @@ export function Palette({ editor, snap, onReferences }: Props) {
             <Tool label="大見出し" icon={Icon.heading1} title="大見出し（Ⅰ．）を足す" onPreview={preview} onClick={() => editor.addChapter()} />
           </div>
           <div className="group">
-            <Tool label="図（写真）" icon={Icon.figure} title="図（写真）を入れる" onPreview={preview} onClick={() => void editor.addFigure()} />
+            <Tool
+              label="図を入れる"
+              icon={Icon.figure}
+              title={snap.editingKind === 'paragraph' ? '書いている位置に「（図n）」が入り、この段落のすぐ下に図が入ります' : '図（写真）を入れる（段落を書いている途中で押すと、その位置に「（図n）」も入ります）'}
+              onPreview={snap.editingKind === 'paragraph' ? undefined : preview}
+              onClick={() => void editor.addFigure()}
+            />
             <Tool label="素材表" icon={Icon.table} title="使用素材表を入れる" onPreview={preview} onClick={() => editor.addMaterialTable()} />
             <Tool label="参考文献" icon={Icon.refs} title="引用・参考文献を編集する" onClick={onReferences} />
           </div>

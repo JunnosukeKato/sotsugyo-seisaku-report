@@ -1,4 +1,4 @@
-import type { BasicInfo, BodyBlock, Chapter, InlineNode, ParagraphBlock, Report } from '../model/types'
+import type { BasicInfo, BodyBlock, Chapter, Figure, InlineNode, ParagraphBlock, Report } from '../model/types'
 
 /**
  * 報告書データの操作。いずれも元のデータを変えず、新しいデータを返す（元に戻す機能のため）。
@@ -315,4 +315,134 @@ export function removeBlock(report: Report, id: string): Report {
 /** 章を削除する（中のブロックごと） */
 export function removeChapter(report: Report, id: string): Report {
   return { ...report, body: report.body.filter((c) => c.id !== id) }
+}
+
+// ---- 図を入れる（書いている位置に（図n）を入れ、段落の下に図を置く） ----
+
+/** 段落を探す（本文） */
+function findParagraph(report: Report, id: string): ParagraphBlock | undefined {
+  for (const chapter of report.body) {
+    const b = chapter.blocks.find((x) => x.id === id)
+    if (b?.type === 'paragraph') return b
+  }
+  return undefined
+}
+
+/**
+ * 段落の文字位置 offset（いまの番号での表示の文字数）に、図表への参照「（図n）」を入れる。
+ * 文末の「。」の直後なら「〜（図n）。」となるよう「。」の前に入れる（手順書の書き方）
+ */
+export function insertRef(report: Report, paragraphId: string, offset: number, targetId: string): Report {
+  const paragraph = findParagraph(report, paragraphId)
+  if (!paragraph) return report
+  const num = numbering(report)
+  const full = contentToText(paragraph.content, num)
+  const at = Math.max(0, Math.min(offset, full.length)) - (full[Math.min(offset, full.length) - 1] === '。' ? 1 : 0)
+  const ref: InlineNode = { type: 'ref', targetId, withParens: true }
+  const content: InlineNode[] = []
+  let pos = 0
+  let placed = false
+  for (const node of paragraph.content) {
+    const length = contentToText([node], num).length
+    if (!placed && node.type === 'text' && at <= pos + length) {
+      const cut = at - pos
+      if (cut > 0) content.push({ type: 'text', text: node.text.slice(0, cut) })
+      content.push(ref)
+      if (cut < node.text.length) content.push({ type: 'text', text: node.text.slice(cut) })
+      placed = true
+    } else {
+      content.push(node)
+      // 参照の途中を指していたら、その参照の後ろに入れる
+      if (!placed && node.type === 'ref' && at < pos + length && at > pos) {
+        content.push(ref)
+        placed = true
+      }
+    }
+    pos += length
+  }
+  if (!placed) content.push(ref)
+  return mapBody(report, (b) => (b.id === paragraphId ? { ...paragraph, content } : b))
+}
+
+/** 段落の中で、その図表への参照が終わる文字位置（参照の後ろにカーソルを置くため）。なければ段落の最後 */
+export function refEnd(report: Report, paragraphId: string, targetId: string): number {
+  const paragraph = findParagraph(report, paragraphId)
+  if (!paragraph) return 0
+  const num = numbering(report)
+  let pos = 0
+  for (const node of paragraph.content) {
+    pos += contentToText([node], num).length
+    if (node.type === 'ref' && node.targetId === targetId) return pos
+  }
+  return pos
+}
+
+/**
+ * 段落のすぐ下に図を置く。段落のすぐ下にすでに図のまとまりがあれば、そこに加える。
+ * まとまりの中の図は、段落の中で参照している順に並べ直す（参照していない図はそのままの位置）
+ */
+export function addFigureBelow(report: Report, paragraphId: string, figure: Figure): Report {
+  return {
+    ...report,
+    body: report.body.map((chapter) => {
+      const i = chapter.blocks.findIndex((b) => b.id === paragraphId)
+      if (i < 0) return chapter
+      const paragraph = chapter.blocks[i] as ParagraphBlock
+      const next = chapter.blocks[i + 1]
+      const blocks = [...chapter.blocks]
+      if (next?.type === 'figureRow') blocks[i + 1] = { ...next, figures: orderByRefs([...next.figures, figure], paragraph) }
+      else blocks.splice(i + 1, 0, { type: 'figureRow', id: newId('r'), figures: [figure] })
+      return { ...chapter, blocks }
+    }),
+  }
+}
+
+/** 図のまとまりの中の、ある図のすぐ後ろに図を加える（「もう1枚」） */
+export function addFigureAfter(report: Report, figureId: string, figure: Figure): Report {
+  return mapBody(report, (b) => {
+    if (b.type !== 'figureRow') return b
+    const i = b.figures.findIndex((f) => f.id === figureId)
+    if (i < 0) return b
+    return { ...b, figures: [...b.figures.slice(0, i + 1), figure, ...b.figures.slice(i + 1)] }
+  })
+}
+
+/** 段落の中で、ある図表への参照のすぐ後ろに別の参照を入れる。その参照がなければ何もしない */
+export function insertRefAfterRef(report: Report, afterTargetId: string, targetId: string): Report {
+  for (const chapter of report.body) {
+    for (const b of chapter.blocks) {
+      if (b.type !== 'paragraph') continue
+      const i = b.content.findIndex((n) => n.type === 'ref' && n.targetId === afterTargetId)
+      if (i < 0) continue
+      const content = [...b.content.slice(0, i + 1), { type: 'ref' as const, targetId, withParens: true }, ...b.content.slice(i + 1)]
+      return mapBody(report, (x) => (x.id === b.id ? { ...b, content } : x))
+    }
+  }
+  return report
+}
+
+function orderByRefs(figures: Figure[], paragraph: ParagraphBlock): Figure[] {
+  const order = (id: string) => paragraph.content.findIndex((n) => n.type === 'ref' && n.targetId === id)
+  const slots = figures.map((f, i) => (order(f.id) >= 0 ? i : -1)).filter((i) => i >= 0)
+  const sorted = slots.map((i) => figures[i]).sort((a, b) => order(a.id) - order(b.id))
+  const result = [...figures]
+  slots.forEach((slot, k) => (result[slot] = sorted[k]))
+  return result
+}
+
+/** 図を消す。本文のその図への参照「（図n）」も一緒に消す */
+export function removeFigure(report: Report, figureId: string): Report {
+  const removed = removeBlock(report, figureId)
+  return mapBody(removed, (b) => {
+    if (b.type !== 'paragraph' || !b.content.some((n) => n.type === 'ref' && n.targetId === figureId)) return b
+    const content = b.content.filter((n) => !(n.type === 'ref' && n.targetId === figureId))
+    // 参照を抜いた後に並んだ文字の部分は、1つにまとめる
+    const merged: InlineNode[] = []
+    for (const n of content) {
+      const last = merged[merged.length - 1]
+      if (n.type === 'text' && last?.type === 'text') merged[merged.length - 1] = { type: 'text', text: last.text + n.text }
+      else merged.push(n)
+    }
+    return { ...b, content: merged.length ? merged : [{ type: 'text', text: '' }] }
+  })
 }

@@ -15,8 +15,8 @@ export type OverlayKind = 'paragraph' | 'line' | 'cell'
 export interface OverlayCallbacks {
   /** 文字が変わった（日本語の変換中は呼ばない） */
   onInput(blockId: string, text: string): void
-  /** 編集を終えた */
-  onCommit(blockId: string, text: string): void
+  /** 編集を終えた（byKey：Enter・Esc で閉じたとき true。ほかの場所をクリックして閉じたときは false） */
+  onCommit(blockId: string, text: string, byKey: boolean): void
   /** Enter で段落を分けた（見出しの Enter は、後ろに段落を作る） */
   onSplit(blockId: string, before: string, after: string): void
   /** 段落の先頭で Backspace を押した（前の段落とつなげる） */
@@ -59,6 +59,8 @@ export class OverlayEditor {
   private readonly callbacks: OverlayCallbacks
   private target: OverlayTarget | null = null
   private composingNow = false
+  /** Enter・Esc で閉じようとしている */
+  private closingByKey = false
   private scale = 1
   /** 見えているページの範囲（スクロールする前の座標） */
   private clipBox = { top: 0, left: 0, width: 0, height: 0 }
@@ -197,8 +199,10 @@ export class OverlayEditor {
     if (!this.target) return
     const { blockId } = this.target
     const text = this.text
+    const byKey = this.closingByKey
+    this.closingByKey = false
     this.close()
-    this.callbacks.onCommit(blockId, text)
+    this.callbacks.onCommit(blockId, text, byKey)
   }
 
   /** 確定せずに閉じる（呼び出し側がデータを処理済みのとき） */
@@ -261,6 +265,7 @@ export class OverlayEditor {
 
     if (e.key === 'Escape') {
       e.preventDefault()
+      this.closingByKey = true
       this.element.blur()
     } else if (e.key === 'Enter' && kind === 'cell' && e.shiftKey) {
       // 表のセルの中の改行は、そのまま入れる
@@ -270,6 +275,7 @@ export class OverlayEditor {
       this.callbacks.onSplit(blockId, text.slice(0, caret), text.slice(caret))
     } else if (e.key === 'Enter') {
       e.preventDefault()
+      this.closingByKey = true
       this.element.blur()
     } else if (e.key === 'Backspace' && kind === 'paragraph' && caret === 0 && collapsed) {
       e.preventDefault()

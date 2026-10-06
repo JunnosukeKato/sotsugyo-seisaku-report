@@ -116,6 +116,11 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
         {issues.length > 0 && <span className="ng">{issues[0].title}{issues.length > 1 ? ` ほか${issues.length - 1}件` : ''}</span>}
       </div>
       <div className="es-tools">
+        {snap.editingKind === 'paragraph' && (
+          <button onMouseDown={keepFocus} onClick={() => void editor.addFigure()}>
+            {Icon.figure}図を入れる
+          </button>
+        )}
         <RefButtons editor={editor} snap={snap} />
         {removable && (
           <button
@@ -167,7 +172,7 @@ function AddTools({ editor, snap, onDone, onReferences }: { editor: ReportEditor
         {tool('段落', Icon.paragraph, () => editor.addParagraph())}
         {tool('小見出し', Icon.heading2, () => editor.addSubheading())}
         {tool('大見出し', Icon.heading1, () => editor.addChapter())}
-        {tool('図（写真）', Icon.figure, () => void editor.addFigure())}
+        {tool('図を入れる', Icon.figure, () => void editor.addFigure())}
         {tool('素材表', Icon.table, () => editor.addMaterialTable())}
         {tool('参考文献', Icon.refs, onReferences)}
       </div>

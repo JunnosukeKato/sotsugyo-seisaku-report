@@ -41,7 +41,6 @@ await withEdge(async (browser) => {
     }, id, offset)
     await page.mouse.click(box.x, box.y)
   }
-  const clickTool = (title) => page.evaluate((title) => document.querySelector(`.palette .tb[title="${title}"]`).click(), title)
   const typeAndCommit = async (text, key = 'Enter') => {
     await page.keyboard.type(text)
     await page.keyboard.press(key)
@@ -177,24 +176,57 @@ await withEdge(async (browser) => {
   })
   const pngPath = join(tmpdir(), 'sotsugyo-e2e-figure.png')
   writeFileSync(pngPath, Buffer.from(png, 'base64'))
+  const clickPaletteButton = (label) => page.evaluate((label) => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes(label)).click(), label)
+  const waitEditing = (test, ...args) => page.waitForFunction(test, { timeout: 30000 }, ...args)
+
+  // 段落の最後（「。」の後ろ）で「図を入れる」を押し、写真を選ぶ
   await clickBlock(firstParagraph)
-  const [chooser] = await Promise.all([page.waitForFileChooser(), clickTool('図（写真）を入れる')])
+  await page.keyboard.press('End')
+  const [chooser] = await Promise.all([page.waitForFileChooser(), clickPaletteButton('図を入れる')])
   await chooser.accept([pngPath])
-  try {
-    await page.waitForFunction(() => window.__editor.getSnapshot().editingId?.startsWith('f-'), { timeout: 30000 })
-  } catch (e) {
-    console.log('debug after figure:', await page.evaluate(() => { const s = window.__editor.getSnapshot(); return JSON.stringify({ editingId: s.editingId, rendering: s.rendering, figures: s.report.body.flatMap((c) => c.blocks).filter((b) => b.type === 'figureRow') }) }))
-    throw e
-  }
+  await waitEditing(() => window.__editor.getSnapshot().editingId?.startsWith('f-'))
   await page.keyboard.type('デザイン画')
+  await page.keyboard.press('Enter')
+  await waitEditing((id) => window.__editor.getSnapshot().editingId === id, firstParagraph)
+  await ready()
+  s = await snap()
+  const blocksNow = s.report.body.flatMap((c) => c.blocks)
+  const pIndex = blocksNow.findIndex((b) => b.id === firstParagraph)
+  const group = blocksNow[pIndex + 1]
+  check('「図を入れる」で、書いている位置に（図1）が入り、段落のすぐ下にタイトル付きの図が入る', group?.type === 'figureRow' && group.figures[0].caption === 'デザイン画' && !!group.figures[0].imageId && /（図1）。$/.test(await page.evaluate(() => document.querySelector('.overlay-editor').innerText)), JSON.stringify(group?.figures))
+  check('図のタイトルを Enter で確定すると、書いていた段落の続きに戻る', s.editingId === firstParagraph)
+  check('参照していない図の指摘が出ない', !s.findings.some((x) => x.ruleId === 'figure-unreferenced'))
+  await page.keyboard.press('Escape')
+  await ready()
+
+  // 図を選んで「もう1枚」：すぐ後ろに入り、横に並び、本文に（図2）が入る
+  const figAt = await page.evaluate(() => {
+    const r = document.querySelector('.page-viewport.front figure[data-figure-id] img').getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })
+  await page.mouse.click(figAt.x, figAt.y)
+  const [chooser2] = await Promise.all([page.waitForFileChooser(), clickPaletteButton('もう1枚')])
+  await chooser2.accept([pngPath])
+  await waitEditing(() => (window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow')?.figures.length ?? 0) === 2 && window.__editor.getSnapshot().editingId?.startsWith('f-'))
+  await page.keyboard.type('型紙')
   await page.keyboard.press('Enter')
   await ready()
   s = await snap()
-  const figure = s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow' && b.figures[0].caption === 'デザイン画')
-  check('図が入り、タイトルを付けられる', !!figure && !!figure.figures[0].imageId)
-  check('参照していない図を指摘する', s.findings.some((f) => f.ruleId === 'figure-unreferenced'))
+  const two = s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow')
+  const rowTops = await page.evaluate(() => [...document.querySelectorAll('.page-viewport.front figure[data-figure-id] img')].map((img) => Math.round(img.getBoundingClientRect().top)))
+  const textWithTwo = await page.evaluate((id) => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === id).content.filter((n) => n.type === 'ref').length, firstParagraph)
+  check('「もう1枚」で2枚目が横に並び、本文に（図2）が入る', two.figures.length === 2 && rowTops.length === 2 && rowTops[0] === rowTops[1] && textWithTwo === 2, JSON.stringify(rowTops))
+  await page.screenshot({ path: `${OUT}/2-figure-two.png` })
 
-  // ---- 図を参照する ----
+  // 2枚目を消すと、本文の（図2）も消える
+  await page.evaluate((id) => window.__editor.select({ kind: 'figure', id }), two.figures[1].id)
+  await page.evaluate(() => window.__editor.removeSelected())
+  await ready()
+  s = await snap()
+  const refsLeft = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
+  check('図を消すと、本文のその図への（図n）も消える', s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow').figures.length === 1 && refsLeft === 1)
+
+  // ---- 図を参照する（もう一度） ----
   await clickBlock(firstParagraph)
   await page.keyboard.press('End')
   await page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('図表を参照')).click())
@@ -202,7 +234,8 @@ await withEdge(async (browser) => {
   await page.keyboard.press('Escape')
   await ready()
   s = await snap()
-  check('「図表を参照」で（図1）が入り、指摘が消える', !s.findings.some((f) => f.ruleId === 'figure-unreferenced'))
+  const refsNow = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
+  check('「図表を参照」で（図1）をもう一度入れられる', refsNow === 2 && !s.findings.some((x) => x.ruleId === 'figure-unreferenced'))
   await page.screenshot({ path: `${OUT}/2-figure.png` })
 
   // ---- 書いた文字が次のページへあふれたら、表示も追いかける ----

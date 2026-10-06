@@ -160,7 +160,8 @@ export function StartGuide({ editor, snap, config, narrow, step, onStep, onChoos
       ) : (
         <div className="g-dim" />
       )}
-      <div className="g-tip" ref={tipRef} role="dialog" aria-label="はじめての案内">
+      {/* 案内の中を押しても入力欄から文字のカーソルが外れないようにする（外れると次の段階へ進み、案内が動いてしまう） */}
+      <div className="g-tip" ref={tipRef} role="dialog" aria-label="はじめての案内" onMouseDown={(e) => e.preventDefault()}>
         {step !== 'done' && (
           <div className="g-steps">
             {STEP_LABELS.map(([s, label], i) => (

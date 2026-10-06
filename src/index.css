@@ -383,7 +383,7 @@ button:disabled { cursor: default; opacity: 0.4; }
 }
 
 /* ---- ひな形の図の枠（まだ写真を入れていない） ---- */
-.page-viewport .figure-slot { margin: 0 auto; outline: 1px dashed #b9b9b9; background: repeating-linear-gradient(45deg, #f6f6f6 0 8px, #efefef 8px 16px); display: grid; place-items: center; cursor: pointer; }
+.page-viewport .figure-slot { margin: 0 auto; outline: 1px dashed #b9b9b9; background: repeating-linear-gradient(45deg, #f6f6f6 0 8px, #efefef 8px 16px); display: grid !important; place-items: center !important; cursor: pointer; }
 .page-viewport .figure-slot::before { content: '（クリックして写真を選ぶ）'; color: #9a9a9a; font-family: 'BIZ UDPGothic', sans-serif; font-size: 10pt; }
 @media print {
   .page-viewport .figure-slot { outline: none !important; background: none !important; }

@@ -73,12 +73,21 @@ p {
   text-indent: calc(1em + ${LETTER_SPACING_PT}pt);
 }
 
+/* 図のまとまり（段落のすぐ下）。2枚ずつの段に分け、段の途中では改ページしない */
+.figure-group {
+  margin: ${LINE_PITCH_PT}pt 0;
+}
+
 .figure-row {
   display: flex;
-  justify-content: space-evenly;
+  justify-content: center;
   align-items: flex-end;
-  margin: ${LINE_PITCH_PT}pt 0;
+  column-gap: 8mm;
   break-inside: avoid;
+}
+
+.figure-row + .figure-row {
+  margin-top: ${LINE_PITCH_PT / 2}pt;
 }
 
 figure {

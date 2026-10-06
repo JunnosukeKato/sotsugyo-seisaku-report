@@ -50,6 +50,23 @@ export function numberFiguresAndTables(chapters: Chapter[]): Map<string, number>
   return numbers
 }
 
+/** 図を横に並べる数（それより多いときは段を分ける：3枚は2＋1、4枚は2×2） */
+export const FIGURES_PER_ROW = 2
+/** 本文の幅（A4 の左右の余白を除く）と、横に並べるときの図の間のすき間・1枚の幅の上限 */
+const TEXT_WIDTH_MM = 150
+const FIGURE_GAP_MM = 8
+const PAIR_MAX_MM = 72
+
+/**
+ * 横に並べる図の大きさ。1枚ならその図の大きさのまま、2枚なら高さをそろえ、本文の幅に収まるよう縮める
+ */
+export function rowSizes(sizes: FigureSize[]): FigureSize[] {
+  if (sizes.length < 2) return sizes
+  const ratios = sizes.map((s) => s.widthMm / s.heightMm)
+  const height = Math.min(PAIR_MAX_MM, (TEXT_WIDTH_MM - FIGURE_GAP_MM * (sizes.length - 1)) / ratios.reduce((a, b) => a + b, 0), PAIR_MAX_MM / Math.max(...ratios))
+  return ratios.map((r) => ({ widthMm: Math.round(r * height * 10) / 10, heightMm: Math.round(height * 10) / 10 }))
+}
+
 export function escapeHtml(text: string): string {
   return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`)
 }
@@ -71,20 +88,32 @@ function renderBlock(block: BodyBlock, numbers: Map<string, number>, tableIds: S
       return `<p data-block-id="${escapeHtml(block.id)}" data-placeholder="${escapeHtml(placeholder)}">${text}</p>`
     }
     case 'figureRow': {
-      const figures = block.figures
-        .map((f) => {
-          const size = options.figureSize(f)
-          const style = `width:${size.widthMm}mm;height:${size.heightMm}mm`
-          // ひな形で用意した、まだ写真を入れていない枠は、クリックして写真を選ぶ枠にする
-          const picture = f.imageId ? `<img src="${escapeHtml(options.imageSrc(f.imageId))}" style="${style}" alt="">` : `<div class="figure-slot" style="${style}"></div>`
-          return `<figure data-figure-id="${escapeHtml(f.id)}"${f.imageId ? '' : ' data-empty-figure'}>${picture}<figcaption>${captionHtml('図', numbers.get(f.id)!, f.caption, f.id)}</figcaption></figure>`
-        })
-        .join('')
-      return `<div class="figure-row">${figures}</div>`
+      // 図のまとまり：2枚ずつの段に分けて並べる（最後の段が1枚なら中央）
+      const rows: Figure[][] = []
+      for (let i = 0; i < block.figures.length; i += FIGURES_PER_ROW) rows.push(block.figures.slice(i, i + FIGURES_PER_ROW))
+      let previousHeight = Infinity
+      const rowHtml = rows.map((row) => {
+        let sizes = rowSizes(row.map((f) => options.figureSize(f)))
+        // 2＋1 のように最後の段が1枚のときは、上の段より大きくならないよう高さをそろえる
+        if (sizes.length === 1 && sizes[0].heightMm > previousHeight) {
+          const k = previousHeight / sizes[0].heightMm
+          sizes = [{ widthMm: Math.round(sizes[0].widthMm * k * 10) / 10, heightMm: previousHeight }]
+        }
+        previousHeight = Math.min(...sizes.map((s) => s.heightMm))
+        return `<div class="figure-row">${row.map((f, k) => renderFigure(f, sizes[k], numbers.get(f.id)!, options)).join('')}</div>`
+      })
+      return `<div class="figure-group">${rowHtml.join('')}</div>`
     }
     case 'materialTable':
       return renderMaterialTable(block, numbers.get(block.id)!, options)
   }
+}
+
+function renderFigure(f: Figure, size: FigureSize, number: number, options: BodyRenderOptions): string {
+  const style = `width:${size.widthMm}mm;height:${size.heightMm}mm`
+  // ひな形で用意した、まだ写真を入れていない枠は、クリックして写真を選ぶ枠にする
+  const picture = f.imageId ? `<img src="${escapeHtml(options.imageSrc(f.imageId))}" style="${style}" alt="">` : `<div class="figure-slot" style="${style}"></div>`
+  return `<figure data-figure-id="${escapeHtml(f.id)}"${f.imageId ? '' : ' data-empty-figure'}>${picture}<figcaption>${captionHtml('図', number, f.caption, f.id)}</figcaption></figure>`
 }
 
 function renderMaterialTable(block: MaterialTableBlock, number: number, options: BodyRenderOptions): string {
