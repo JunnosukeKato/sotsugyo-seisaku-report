@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v20：先生をまとめて登録する</title>
+<style>
+  body { margin: 0; padding: 28px 32px 36px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 18px; font-size: 13px; color: #5d6068; line-height: 1.8; max-width: 1150px; }
+  .grid { display: grid; grid-template-columns: 1fr; gap: 20px; }
+  figure { margin: 0; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid #ecebe8; }
+  figcaption b { display: block; font-size: 15px; margin-bottom: 3px; }
+  figcaption span { font-size: 12px; color: #5d6068; line-height: 1.7; }
+  img { display: block; width: 100%; }
+</style>
+</head>
+<body>
+  <h1>先生をまとめて登録する（管理ページの「先生の登録」）</h1>
+  <p class="lead">メーリングリストの宛先（「名前 &lt;アドレス&gt;」の形や、カンマ・改行で区切ったアドレス）をそのまま貼り付けると、名前とアドレスを読み取って一覧にします。名前はメモになります。学生のアドレス（学籍番号の形）と、大学のアドレスでないものは登録しません。すでに登録している人はそのままにします。案ごとに違うのは、貼り付ける場所と、確かめる手順です。</p>
+  <div class="grid">
+    <figure><figcaption><b>案1　窓の下に「まとめて登録」の欄を置く</b><span>いつも見えているので気づきやすい。貼り付けると、すぐ下に読み取った結果が出て、そのまま登録できる。窓が縦に長くなる</span></figcaption><img src="screens/a.png" alt=""></figure>
+    <figure><figcaption><b>案2　「まとめて登録…」のボタンから別の窓で</b><span>ふだんの窓はすっきりしたまま。貼り付け → 確かめて登録、の2段階で、間違いに気づきやすい（画像は2段階めの「確かめて登録する」）</span></figcaption><img src="screens/b.png" alt=""></figure>
+    <figure><figcaption><b>案3　今の1人ずつの欄に、何人分でも貼り付けられる</b><span>欄が1つで済み、1人でも何人でも同じ操作。2人以上を貼り付けたときだけ、下に読み取った結果が出る</span></figcaption><img src="screens/c.png" alt=""></figure>
+  </div>
+</body>
+</html>
