@@ -79,6 +79,14 @@ export const TEXT_RULES: TextRule[] = [
     find: (text) => matches(text, /製作/g).map(({ start, end }) => ({ start, end, replacement: '制作', detail: '「製作」→「制作」' })),
   },
   {
+    // 服の胴の部分は「身頃」（前身頃・後ろ身頃）。「見頃」（花などの見ごろ）と書き間違えやすい
+    id: 'migoro',
+    severity: 'error',
+    source: 'supplementary',
+    title: '「見頃」ではなく「身頃」と書く',
+    find: (text) => matches(text, /見頃/g).map(({ start, end }) => ({ start, end, replacement: '身頃', detail: '「見頃」→「身頃」（服の胴の部分）' })),
+  },
+  {
     id: 'honorific',
     severity: 'warning',
     source: 'guide',

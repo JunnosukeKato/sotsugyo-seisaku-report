@@ -123,6 +123,14 @@ describe('2025年度サンプルで見つかった違反', () => {
   })
 })
 
+describe('身頃', () => {
+  it('「見頃」は「身頃」に直す（前身頃・後ろ身頃）', () => {
+    const f = checkText('前見頃と後ろ見頃を縫い合わせた。').filter((x) => x.ruleId === 'migoro')
+    expect(f.map((x) => x.replacement)).toEqual(['身頃', '身頃'])
+    expect(checkText('前身頃を縫い合わせた。').some((x) => x.ruleId === 'migoro')).toBe(false)
+  })
+})
+
 describe('その他', () => {
   it('テンプレートの仮の文字はエラー', () => {
     expect(ids('―●●●の衣装制作―').filter((id) => id !== 'sentence-end')).toEqual(['placeholder'])
