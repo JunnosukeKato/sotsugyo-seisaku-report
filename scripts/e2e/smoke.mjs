@@ -104,10 +104,13 @@ await withEdge(async (browser) => {
   check('ホイールを下へ1目盛り回すと、次のページへめくれる', (await snap()).page === 1)
   await pause()
   // タッチパッドのように細かく続けて回しても（指を離したあとの惰性を含めて）、1ページだけ送る
-  for (let i = 0; i < 30; i++) {
-    await page.mouse.wheel({ deltaY: 25 })
-    await pause(16)
-  }
+  await page.evaluate(async () => {
+    const stage = document.querySelector('.stage')
+    for (let i = 0; i < 40; i++) {
+      stage.dispatchEvent(new WheelEvent('wheel', { deltaY: 25, bubbles: true, cancelable: true }))
+      await new Promise((r) => setTimeout(r, 16))
+    }
+  })
   await pause()
   await ready()
   check('細かく続けて回しても、1回の操作では1ページだけ送る', (await snap()).page === 2, `${(await snap()).page}ページ目`)

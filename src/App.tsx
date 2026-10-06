@@ -12,6 +12,7 @@ import { PhoneChrome } from './app/Phone'
 import { useKeyboardInset, useNarrow, useSwipe, useWheelPaging } from './app/uiShared'
 import { SidePanel } from './app/SidePanel'
 import { StartGuide, type GuideStep } from './app/StartGuide'
+import { TypingTrial } from './app/TypingTrial'
 import { useAutosave } from './app/useAutosave'
 
 const noopSubscribe = () => () => {}
@@ -244,6 +245,7 @@ export default function App() {
           }}
         />
       )}
+      <TypingTrial />
       {ready && guide && snap.layout && (
         <StartGuide
           editor={editor}

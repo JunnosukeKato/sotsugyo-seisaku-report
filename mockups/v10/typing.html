@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v10：文字を書いているときの見え方</title>
+<style>
+  body { margin: 0; padding: 28px 32px 36px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 20px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 20px; font-size: 13px; color: #5d6068; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+  figure { margin: 0; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+  figcaption { padding: 14px 18px 12px; border-bottom: 1px solid #ecebe8; }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 4px; }
+  figcaption span { font-size: 12.5px; color: #5d6068; line-height: 1.7; }
+  .now figcaption b { color: #8a8c91; }
+  img { display: block; width: 100%; }
+</style>
+</head>
+<body>
+  <h1>文字を書いているときの見え方（2つ目の段落を書いている途中）</h1>
+  <p class="lead">どの案も、書き方（Enter で段落を分ける・↑↓で隣の段落へ移る・先頭の Backspace で前の段落とつなげる）は今と同じです。見え方だけが変わります。</p>
+  <div class="grid">
+    <figure class="now"><figcaption><b>今</b><span>クリックするたびに、書いている段落が青い枠で囲まれる。枠が次の行に少しかかる</span></figcaption><img src="screens/now.png" alt=""></figure>
+    <figure><figcaption><b>案1　枠なし（Word・Google ドキュメントと同じ）</b><span>文字のカーソルだけが出る。紙面は何も変わらない</span></figcaption><img src="screens/a.png" alt=""></figure>
+    <figure><figcaption><b>案2　枠なし＋左の余白に細い線</b><span>書いている段落の左に、うすい線だけを出す。どの段落を書いているかがわかる</span></figcaption><img src="screens/b.png" alt=""></figure>
+    <figure><figcaption><b>案3　枠なし＋ごく薄い色</b><span>書いている段落を、ほんのり色づける。枠よりも目立たない</span></figcaption><img src="screens/c.png" alt=""></figure>
+  </div>
+</body>
+</html>

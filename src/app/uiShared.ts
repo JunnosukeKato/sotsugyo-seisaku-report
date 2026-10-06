@@ -58,7 +58,7 @@ export function useKeyboardInset(): void {
 
 /** 紙面を指で左右にはらうと、ページをめくる */
 /** これより間が空いたら、ホイールの別の操作とみなす（ミリ秒） */
-const WHEEL_GESTURE_GAP_MS = 180
+const WHEEL_GESTURE_GAP_MS = 200
 /** ページを送るのに必要な回転の量（px。マウスのホイールなら1目盛りで届く） */
 const WHEEL_TURN_PX = 50
 
@@ -102,7 +102,8 @@ export function useWheelPaging(target: React.RefObject<HTMLElement | null>, scro
       const dy = e.deltaY * unit
       const d = Math.abs(dx) > Math.abs(dy) ? dx : dy
       if (!d) return
-      const now = performance.now()
+      // 回した時刻（画面の処理が混んで遅れて届いても、回した間隔で判断する）
+      const now = e.timeStamp
       if (now - last > WHEEL_GESTURE_GAP_MS) {
         // 新しい操作：縦にスクロールできる余地があれば、ふつうにスクロールする
         const atEdge = d > 0 ? sc.scrollTop + sc.clientHeight >= sc.scrollHeight - 2 : sc.scrollTop <= 1
