@@ -561,6 +561,40 @@ await withEdge(async (browser) => {
   s = await snap()
   check('改ページの印をクリックして選び、「削除」で消せる', selected === 'pageBreak' && !s.report.body[0].blocks.some((b) => b.type === 'pageBreak') && (await pageOfId('bpB')) === (await pageOfId('bpA')), selected)
 
+  // ---- 章の終わり（次の章の前）の図がページの下に入りきらないときは、はみ出さずに次のページへ送る ----
+  await page.evaluate(async () => {
+    const make = async (w, h) => {
+      const c = new OffscreenCanvas(w, h)
+      c.getContext('2d').fillRect(0, 0, w, h)
+      return c.convertToBlob({ type: 'image/png' })
+    }
+    const sizes = [[800, 800], [600, 800], [600, 800], [800, 800], [800, 800]]
+    window.__editor.addImages(await Promise.all(sizes.map(async ([w, h], i) => ({ id: `ov${i}`, blob: await make(w, h), widthPx: w, heightPx: h }))))
+    const t = (s) => ({ type: 'text', text: s })
+    const ref = (id) => ({ type: 'ref', targetId: id, withParens: true })
+    const blocks = [
+      { type: 'paragraph', id: 'ovp1', content: [t('袖を広げた'), ref('ovf0'), ref('ovf1'), ref('ovf2'), ref('ovf3'), t('。')] },
+      { type: 'figureRow', id: 'ovg1', figures: [0, 1, 2, 3].map((i) => ({ id: `ovf${i}`, imageId: `ov${i}`, caption: '見本' })) },
+      { type: 'paragraph', id: 'ovp2', content: [t('仕上げた'), ref('ovf4'), t('。')] },
+      { type: 'figureRow', id: 'ovg2', figures: [{ id: 'ovf4', imageId: 'ov4', caption: '完成' }] },
+    ]
+    window.__editor.update((r) => ({ ...r, body: [{ id: 'ovc1', title: '制作過程', blocks }, { id: 'ovc2', title: 'まとめ', blocks: [{ type: 'paragraph', id: 'ovp3', content: [t('まとめ。')] }] }] }))
+  })
+  await pause(300)
+  await ready()
+  const overflow = await page.evaluate(() => {
+    const vp = document.querySelector('.page-viewport.front')
+    vp.classList.add('measuring')
+    const el = vp.querySelector('.figure-group[data-group-id="ovg2"]')
+    const pg = el.closest('[data-vivliostyle-page-container]')
+    const pr = pg.getBoundingClientRect()
+    const r = el.getBoundingClientRect()
+    const res = { top: Math.round(((r.top - pr.top) / pr.height) * 297), bottom: Math.round(((r.bottom - pr.top) / pr.height) * 297) }
+    vp.classList.remove('measuring')
+    return res
+  })
+  check('章の終わりの図がページの下に入りきらないときは、はみ出さずに次のページの上へ送る', overflow.bottom <= 272 && overflow.top <= 26, JSON.stringify(overflow))
+
   // ---- 左右の欄の境目をつかんで、幅を変える（ダブルクリックで元の幅） ----
   const colWidth = (sel) => page.evaluate((sel) => Math.round(document.querySelector(sel).getBoundingClientRect().width), sel)
   const dragHandle = async (side, dx) => {

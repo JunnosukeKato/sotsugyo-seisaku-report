@@ -159,7 +159,9 @@ function renderChapter(chapter: Chapter, index: number, numbers: Map<string, num
         : renderBlock(block, numbers, tableIds, options),
     )
     .join('\n')
-  return `<h1 class="chapter" id="${chapterAnchor(chapter.id)}">${labeledHtml(chapterLabel(index), chapter.title, chapter.id)}</h1>\n${blocks}`
+  // 章の終わりの目印（高さなし）：組版エンジンは、次のページへ切り替わる直前（次の章の前・本文の終わり）の要素が入りきらないとき、
+  // 次のページへ送らずにページからはみ出させることがある。目印を置き、図や表がその「直前の要素」にならないようにする
+  return `<h1 class="chapter" id="${chapterAnchor(chapter.id)}">${labeledHtml(chapterLabel(index), chapter.title, chapter.id)}</h1>\n${blocks}\n<div class="flow-end"></div>`
 }
 
 /** 目次からページ番号を参照するための、大見出しの id */

@@ -68,6 +68,11 @@ h1.chapter + h2.subheading {
   margin-top: 0;
 }
 
+/* 章の終わりの目印（bodyHtml.ts）。高さを持たない */
+.flow-end {
+  height: 0;
+}
+
 /* 学生が入れた改ページ：この後ろは次のページから始める */
 .page-break {
   break-after: page;
