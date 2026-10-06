@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v21：コースごとのお知らせ</title>
+<style>
+  body { margin: 0; padding: 28px 32px 40px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  h2 { font-size: 17px; margin: 28px 0 4px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 13px; color: #5d6068; line-height: 1.8; max-width: 1150px; }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid #ecebe8; }
+  figcaption b { display: block; font-size: 15px; margin-bottom: 3px; }
+  figcaption span { font-size: 12.5px; color: #5d6068; line-height: 1.7; }
+  img { display: block; width: 100%; }
+  .two { display: grid; grid-template-columns: 2.4fr 1fr; align-items: start; }
+  .two img + img { border-left: 1px solid #ecebe8; }
+</style>
+</head>
+<body>
+  <h1>学生へのお知らせを、コースごとにも出す（見た目の案）</h1>
+  <p class="lead">今の「学生へのお知らせ」は、全員に同じものが出ます。これに加えて、コースごとのお知らせを書けるようにし、学生にはそのコースのものだけが出るようにします。決めていただきたいのは、<b>管理ページで書く場所</b>（案A〜C）と、<b>学生の画面での見せ方</b>（見せ方1・2）です。お知らせの文はどれも例です。</p>
+
+  <h2>管理ページで書く場所</h2>
+  <figure><figcaption><b>案A　コースのカードに、そのコースのお知らせの欄を足す</b><span>コースの設定（指導教員・ひな形）と同じ場所にあるので分かりやすい。今の欄は「全員へのお知らせ」になる。コースが多いと左の欄が長くなる</span></figcaption><img src="screens/admin-a.png" alt=""></figure>
+  <figure><figcaption><b>案B　お知らせの欄を「全員・コースごと」の切り替えにする</b><span>お知らせが1か所にまとまる。上のボタンで切り替えて書く（点は、書いてあるもの）</span></figcaption><img src="screens/admin-b.png" alt=""></figure>
+  <figure><figcaption><b>案C　ボタンから開く窓で、まとめて編集する</b><span>左で全員・コースを選び、まん中で書く。右に、そのコースの学生にどう見えるかが出る。左の欄はすっきりする</span></figcaption><img src="screens/admin-c.png" alt=""></figure>
+
+  <h2>学生の画面での見せ方</h2>
+  <figure><figcaption><b>見せ方1　1つの枠に続けて出す</b><span>「学科からのお知らせ」の枠の中に、全員へのお知らせと、自分のコースのお知らせを続けて出す。右の欄が今とほとんど変わらない</span></figcaption><div class="two"><img src="screens/student-s1.png" alt=""><img src="screens/student-s1-side.png" alt=""></div></figure>
+  <figure><figcaption><b>見せ方2　枠を分ける</b><span>コースのお知らせは、色を変えた別の枠に出す。どちらからのお知らせか、ひと目で分かる。右の欄が少し長くなる</span></figcaption><div class="two"><img src="screens/student-s2.png" alt=""><img src="screens/student-s2-side.png" alt=""></div></figure>
+</body>
+</html>
