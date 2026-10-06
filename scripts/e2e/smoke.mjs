@@ -197,6 +197,22 @@ await withEdge(async (browser) => {
   const i = blocks.findIndex((b) => b.id === firstParagraph)
   check('Enter で段落が分かれる', blocks[i + 1]?.type === 'paragraph' && blocks[i + 1].content.map((n) => n.text ?? '').join('') === '次の段落である。')
 
+  // ---- 書いていて行が増えたら、紙面を組み直す前から、後ろの段落が下へずれて見える（入力欄に隠れない） ----
+  await clickBlock(firstParagraph)
+  await page.keyboard.press('End')
+  await page.keyboard.type('衣装は、舞台の上で動きやすく、遠くの客席からも形がわかるよう、袖を大きく広げた形にした。')
+  const pushed = await page.evaluate((nextId) => {
+    const ed = document.querySelector('.overlay-clip:not([hidden]) .overlay-editor').getBoundingClientRect()
+    const next = [...document.querySelectorAll(`.page-viewport.front [data-block-id="${nextId}"]`)].find((e) => e.getBoundingClientRect().width > 0)?.getBoundingClientRect()
+    return { rendering: window.__editor.getSnapshot().rendering, overlayBottom: Math.round(ed.bottom), nextTop: next && Math.round(next.top) }
+  }, blocks[i + 1].id)
+  check('書いて行が増えると、後ろの段落が下へずれて見える（入力欄に隠れない）', pushed.nextTop >= pushed.overlayBottom - 1, JSON.stringify(pushed))
+  await page.keyboard.press('Escape')
+  await ready()
+  // 書き足した文は取り消す（この後の確かめは、1行の段落で行う）
+  await page.evaluate(() => window.__editor.undo())
+  await ready()
+
   // ---- 本文を書き始めてからコースを変えると、確かめる ----
   if (courseCount > 1) {
     const before = s.report.basicInfo.courseId

@@ -148,6 +148,7 @@ export class ReportEditor {
         this.afterChange({ render: 'debounce', save: true })
       },
       onCommit: (id, text, byKey) => {
+        this.clearShift()
         this.report = ops.setText(this.report, id, text)
         if (this.reportBeforeEdit && JSON.stringify(this.reportBeforeEdit) !== JSON.stringify(this.report)) this.pushHistory(this.reportBeforeEdit)
         this.reportBeforeEdit = null
@@ -188,6 +189,7 @@ export class ReportEditor {
         this.report = result.report
         this.reopenAfterRender(result.lastId, caretInLast)
       },
+      onResize: () => this.shiftFollowing(),
     })
 
     // 画面の大きさが変わって紙面の倍率・位置が変わったら、入力欄も合わせる
@@ -196,6 +198,7 @@ export class ReportEditor {
       const id = this.overlay.blockId
       const placement = id ? this.overlayPlacement(id) : null
       if (placement) this.overlay.moveTo(placement)
+      this.shiftFollowing()
       this.notify()
     })
 
@@ -476,6 +479,58 @@ export class ReportEditor {
     }
     const placement = this.overlayPlacement(id)
     if (placement) this.overlay.moveTo(placement)
+    this.shiftFollowing()
+  }
+
+  /** 後ろの文章をずらしている要素（組み直す・書き終えると元に戻す） */
+  private shifted: HTMLElement[] = []
+
+  /**
+   * 書いていて段落の行が増えた（減った）とき、紙面を組み直すのを待たずに、同じページの後ろの文章を下（上）へずらして見せる。
+   * 入力欄が後ろの文章に重なって隠さないようにするため。ページの下からはみ出す分は見せない。組み直すと、新しい紙面で正しく並ぶ。
+   */
+  private shiftFollowing(): void {
+    this.clearShift()
+    const id = this.overlay.blockId
+    // 行が増えるのは段落（見出し・表紙の項目などは1行）
+    if (!id || this.overlay.inSheet || this.overlay.kind !== 'paragraph') return
+    const view = this.renderer.pageView
+    const last = view.fragments(id).at(-1)
+    // 段落が次のページへ続いているときは、このページに後ろの文章はない
+    if (!last || view.pageIndexOf(last) !== this.page) return
+    const lastRect = last.getBoundingClientRect()
+    const delta = this.overlay.bottom - lastRect.bottom
+    if (Math.abs(delta) < 1) return
+    const page = view.pages()[this.page]
+    const section = last.closest('section')
+    if (!page || !section) return
+    const pageRect = page.getBoundingClientRect()
+    // 本文の領域の下端（A4 の下の余白 25mm）
+    const contentBottom = pageRect.top + (pageRect.height * (297 - 25)) / 297
+    const scale = this.stage.scale
+    // 書いている段落より後ろにある要素（親をさかのぼり、それぞれの後ろの兄弟）。ページの上に送った図などは除く
+    const targets: HTMLElement[] = []
+    for (let el: Element | null = last; el && el !== section; el = el.parentElement) {
+      for (let next = el.nextElementSibling; next; next = next.nextElementSibling) {
+        if (next instanceof HTMLElement && next.getBoundingClientRect().top >= lastRect.bottom - 1) targets.push(next)
+      }
+    }
+    for (const t of targets) {
+      const r = t.getBoundingClientRect()
+      t.style.translate = `0 ${delta / scale}px`
+      if (r.top + delta >= contentBottom) t.style.visibility = 'hidden'
+      else if (r.bottom + delta > contentBottom) t.style.clipPath = `inset(0 0 ${(r.bottom + delta - contentBottom) / scale}px 0)`
+      this.shifted.push(t)
+    }
+  }
+
+  private clearShift(): void {
+    for (const t of this.shifted) {
+      t.style.translate = ''
+      t.style.visibility = ''
+      t.style.clipPath = ''
+    }
+    this.shifted = []
   }
 
   applyFinding(finding: ReportFinding): void {

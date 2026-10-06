@@ -11,7 +11,9 @@ import { validateConfig } from './validate'
 export type ConfigSource = 'remote' | 'cache' | 'bundled'
 
 const CACHE_KEY = 'sotsugyo-seisaku-report-config'
-const TIMEOUT_MS = 8000
+/** 配信の窓口は、しばらく使われていないと返事に数秒〜10秒ほどかかることがあるため、長めに待ち、1回だけ試し直す */
+const TIMEOUT_MS = 15000
+const ATTEMPTS = 2
 
 function usable(config: unknown): config is YearConfig {
   if (!config || typeof config !== 'object') return false
@@ -32,7 +34,7 @@ function readCache(): YearConfig | null {
 }
 
 export async function loadConfig(apiUrl = import.meta.env.VITE_CONFIG_API_URL as string | undefined): Promise<{ config: YearConfig; source: ConfigSource }> {
-  if (apiUrl) {
+  for (let attempt = 0; apiUrl && attempt < ATTEMPTS; attempt++) {
     try {
       const response = await fetch(`${apiUrl}?action=config`, { signal: AbortSignal.timeout(TIMEOUT_MS) })
       const body = await response.json()
@@ -45,7 +47,7 @@ export async function loadConfig(apiUrl = import.meta.env.VITE_CONFIG_API_URL as
         return { config: body.config, source: 'remote' }
       }
     } catch {
-      // 通信できないときは控えか初期値を使う
+      // 通信できないときは試し直し、それでもだめなら控えか初期値を使う
     }
   }
   const cached = readCache()

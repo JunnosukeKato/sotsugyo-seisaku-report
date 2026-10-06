@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { currentConfig, findCourse, type YearConfig } from './config'
-import { loadConfig } from './config/remote'
+import { loadConfig, type ConfigSource } from './config/remote'
 import { ReportEditor, type EditorSnapshot } from './editor/reportEditor'
 import { backupFileName, createBackup, readBackup } from './model/backup'
 import { createReport } from './model/newReport'
@@ -12,7 +12,6 @@ import { PhoneChrome } from './app/Phone'
 import { useKeyboardInset, useNarrow, useSwipe, useWheelPaging } from './app/uiShared'
 import { SidePanel } from './app/SidePanel'
 import { StartGuide, type GuideStep } from './app/StartGuide'
-import { TypingTrial } from './app/TypingTrial'
 import { useAutosave } from './app/useAutosave'
 
 const noopSubscribe = () => () => {}
@@ -62,6 +61,7 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null)
   // はじめて使う学生への案内（コース → 学籍番号 → 氏名 → サブタイトル）
   const [guide, setGuide] = useState<GuideStep | null>(null)
+  const [configSource, setConfigSource] = useState<ConfigSource>('remote')
   const autosave = useAutosave()
   const snap = useSyncExternalStore(editor?.subscribe ?? noopSubscribe, editor?.getSnapshot ?? nullSnapshot) as EditorSnapshot | null
   // スマホ（画面の幅が狭いとき）は、並べ方と書き方を変える
@@ -80,10 +80,12 @@ export default function App() {
     started.current = true
     void (async () => {
       try {
-        const { config: loaded } = await loadConfig()
+        const { config: loaded, source } = await loadConfig()
         setConfig(loaded)
+        setConfigSource(source)
         const saved = await loadReport()
-        const report = saved ?? createReport(loaded)
+        // 設定を一度も読み込めていない（同梱の初期値で動く）ときは、コースを勝手に決めない
+        const report = saved ?? createReport(loaded, source === 'bundled' ? '' : undefined)
         const ed = new ReportEditor(stageRef.current!, scrollerRef.current!, layerRef.current!, loaded, report, {
           onChange: autosave.save,
           onCourseClick: (rect) => setDialog({ kind: 'course', rect }),
@@ -245,12 +247,12 @@ export default function App() {
           }}
         />
       )}
-      <TypingTrial />
       {ready && guide && snap.layout && (
         <StartGuide
           editor={editor}
           snap={snap}
           config={config}
+          configMissing={configSource === 'bundled'}
           narrow={narrow}
           step={guide}
           onStep={setGuide}

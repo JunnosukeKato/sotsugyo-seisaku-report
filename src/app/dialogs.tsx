@@ -269,7 +269,7 @@ export function BackupDialog({
   return (
     <Modal title="バックアップと復元" onClose={onClose}>
       <p className="lead">
-        原稿はこのブラウザの中に自動で保存されています。別のパソコンで続きを書くときや、念のための控えとして、ときどきバックアップファイルを保存してください。
+        原稿は、書くたびに（書くのをやめて約1秒後に）このブラウザの中へ自動で保存されています。別のパソコンで続きを書くときや、念のための控えとして、ときどきバックアップファイルを保存してください。
       </p>
       <div className="backup-actions">
         <button className="primary" onClick={onSaveBackup}>
@@ -280,7 +280,7 @@ export function BackupDialog({
           <input type="file" accept=".json,application/json" hidden onChange={(e) => e.target.files?.[0] && onRestoreFile(e.target.files[0])} />
         </label>
       </div>
-      <h3>自動の控え（10分ごと）</h3>
+      <h3>自動の控え（誤って消したときに戻せる版。10分ごとに残します）</h3>
       {snapshots.length === 0 ? (
         <p className="muted">まだ控えはありません。</p>
       ) : (

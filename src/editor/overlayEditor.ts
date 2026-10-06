@@ -25,6 +25,8 @@ export interface OverlayCallbacks {
   onNavigate(blockId: string, text: string, direction: 'prev' | 'next'): void
   /** 複数行を貼り付けた（行ごとに段落にする） */
   onPasteParagraphs(blockId: string, paragraphs: string[], caretInLast: number): void
+  /** 紙面に重ねた入力欄の大きさが変わった（行が増えた・減った。日本語の変換中も呼ぶ） */
+  onResize?(): void
 }
 
 /** 紙面上の位置と大きさ（画面座標）。紙面は縮小・拡大して表示しているため、倍率も渡す */
@@ -97,6 +99,14 @@ export class OverlayEditor {
     this.element.addEventListener('paste', (e) => this.onPaste(e))
     this.element.addEventListener('blur', () => this.commit())
     scroller.addEventListener('scroll', () => this.place())
+    new ResizeObserver(() => {
+      if (this.target && !this.sheetHost) this.callbacks.onResize?.()
+    }).observe(this.element)
+  }
+
+  /** 紙面に重ねた入力欄の下端（画面座標） */
+  get bottom(): number {
+    return this.element.getBoundingClientRect().bottom
   }
 
   /**

@@ -30,13 +30,15 @@ interface Props {
   editor: ReportEditor
   snap: EditorSnapshot
   config: YearConfig
+  /** 学科の設定（コースの一覧など）を読み込めていない */
+  configMissing?: boolean
   narrow: boolean
   step: GuideStep
   onStep: (step: GuideStep | null) => void
   onChooseCourse: (courseId: string) => void
 }
 
-export function StartGuide({ editor, snap, config, narrow, step, onStep, onChooseCourse }: Props) {
+export function StartGuide({ editor, snap, config, configMissing, narrow, step, onStep, onChooseCourse }: Props) {
   const field = FIELD_OF[step]
   const [rect, setRect] = useState<DOMRect | null>(null)
   const tipRef = useRef<HTMLDivElement>(null)
@@ -106,6 +108,19 @@ export function StartGuide({ editor, snap, config, narrow, step, onStep, onChoos
   const body = (() => {
     switch (step) {
       case 'course':
+        // コースの一覧を読み込めていないときは、選ばせずに読み込み直してもらう（違うコースの下書きで始めないように）
+        if (configMissing)
+          return (
+            <>
+              <h2>コースの一覧を読み込めませんでした</h2>
+              <p>通信の状態を確かめて、ページを読み込み直してください。</p>
+              <div className="g-actions">
+                <button className="primary" onClick={() => location.reload()}>
+                  読み込み直す
+                </button>
+              </div>
+            </>
+          )
         return (
           <>
             <h2>はじめに、コースを選んでください</h2>
