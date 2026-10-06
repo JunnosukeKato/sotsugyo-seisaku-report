@@ -52,8 +52,6 @@ export interface YearConfig {
   /** 学籍番号の形式（正規表現）。未確定の間は null とし、形式チェックを行わない */
   studentIdPattern: string | null
   courses: Course[]
-  /** 学生へのお知らせ（ツールの画面に表示する。任意） */
-  notice?: string
   /** その年度の手順書へのリンク（任意） */
   handbookUrl?: string
 }
@@ -75,6 +73,8 @@ export interface Course {
   template?: TemplateBlock[]
   /** 抄録の書き出し例（学生の抄録の欄に薄く出す）。ないときは年度の設定の openingExample を使う */
   abstractExample?: string
+  /** このコースの学生へのお知らせ（学生のツールの右の欄に出す。任意。管理者と先生が書く） */
+  notice?: string
 }
 
 /**

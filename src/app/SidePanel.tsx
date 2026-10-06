@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import type { YearConfig } from '../config'
+import { findCourse, type YearConfig } from '../config'
 import { abstractCharCount, type ReportFinding } from '../checker/reportChecks'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import type { PageKind } from '../layout/measure'
@@ -30,6 +30,18 @@ export function SaveChip({ state }: { state: SaveState }) {
   if (state.status === 'error') return <span className="chip saved ng" title={state.message}><i className="dot ng" />保存できません。バックアップを保存してください</span>
   const at = state.status === 'saved' ? ` ${state.at.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}` : ''
   return <span className="chip saved" title={title}><i className="dot" />自動保存{at}</span>
+}
+
+/** 自分のコースへのお知らせ（管理ページで、コースごとに書く。mockups/v21） */
+export function CourseNotice({ config, courseId }: { config: YearConfig; courseId: string }) {
+  const course = findCourse(config, courseId)
+  if (!course?.notice?.trim()) return null
+  return (
+    <div className="notice">
+      <b>{course.name} コースからのお知らせ</b>
+      <p>{course.notice.trim()}</p>
+    </div>
+  )
 }
 
 export function DeadlineChip({ deadline }: { deadline: string }) {
@@ -272,12 +284,7 @@ export function SidePanel({ editor, snap, config, saveState, drive, onBackup, on
         </div>
       </header>
 
-      {config.notice?.trim() && (
-        <div className="notice">
-          <b>学科からのお知らせ</b>
-          <p>{config.notice}</p>
-        </div>
-      )}
+      <CourseNotice config={config} courseId={snap.report.basicInfo.courseId} />
 
       {/* 引用・参考文献はない報告書が多いため、使うときだけここから入れる（入れた後は、そのページをクリックして編集する） */}
       {snap.report.references.length === 0 && (

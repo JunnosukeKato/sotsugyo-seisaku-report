@@ -188,3 +188,7 @@ textarea.in { resize: vertical; }
 .teacher-main h2 { font-size: 15px; margin: 6px 0 6px; }
 .teacher-main > .hint { display: block; margin-bottom: 14px; font-size: 12.5px; line-height: 1.7; }
 .teacher-main .course { background: var(--panel); }
+
+/* ---- コースのお知らせ（mockups/v21 案A） ---- */
+.notice-field { display: grid; gap: 4px; margin-top: 4px; }
+.notice-field textarea { font-size: 13px; resize: vertical; }

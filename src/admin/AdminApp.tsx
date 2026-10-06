@@ -129,6 +129,7 @@ function CourseCard({
         />
       </div>
       <TemplateRow course={course} onEdit={onEditTemplate} />
+      <NoticeField course={course} onChange={(notice) => onChange({ ...course, notice })} />
       <div className="course-actions">
         <button disabled={index === 0} onClick={() => onMove(-1)}>
           ↑ 上へ
@@ -159,6 +160,17 @@ function TemplateRow({ course, onEdit }: { course: Course; onEdit: () => void })
         編集する
       </button>
     </div>
+  )
+}
+
+/** コースのカードの「このコースの学生へのお知らせ」（mockups/v21 案A。管理者と先生が書く） */
+function NoticeField({ course, onChange }: { course: Course; onChange: (notice: string) => void }) {
+  return (
+    <label className="notice-field">
+      <span className="l">このコースの学生へのお知らせ（任意）</span>
+      <textarea className="in" rows={2} value={course.notice ?? ''} placeholder="例：12月4日（金）の中間発表では、本文の下書きを印刷して持ってきてください" onChange={(e) => onChange(e.target.value)} />
+      <span className="hint">このコースの学生のツールの、セルフチェック欄の上に表示されます</span>
+    </label>
   )
 }
 
@@ -259,10 +271,12 @@ export function AdminApp() {
         busy={busy}
         message={message}
         onSelectYear={(y) => select(state, y)}
-        onSave={(templates, words) =>
+        onSave={(templates, words, notices) =>
           void run(row.status === '公開中' ? '保存し、学生のツールに反映しました' : '保存しました', async () => {
             let saved: AdminState | null = null
-            if (Object.keys(templates).length || !words) saved = await server.saveTemplates(row.year, templates)
+            const hasNotices = Object.keys(notices).length > 0
+            if (Object.keys(templates).length || (!words && !hasNotices)) saved = await server.saveTemplates(row.year, templates)
+            if (hasNotices) saved = await server.saveNotices(row.year, notices)
             if (words) saved = await server.saveWordChecks(row.year, words)
             return saved!
           })
@@ -370,9 +384,6 @@ export function AdminApp() {
           </Field>
           <Field label="最終締切">
             <TextInput type="date" value={draft.deadline} onChange={(v) => set({ deadline: v })} />
-          </Field>
-          <Field label="学生へのお知らせ（任意）" hint="学生のツールのセルフチェック欄の上に表示されます">
-            <textarea className="in" rows={3} value={draft.notice ?? ''} onChange={(e) => set({ notice: e.target.value })} />
           </Field>
           <Field label="手順書のリンク（任意）" hint="学生のツールの上部に「手順書」ボタンとして表示されます">
             <TextInput value={draft.handbookUrl ?? ''} onChange={(v) => set({ handbookUrl: v })} placeholder="https://drive.google.com/…" />
@@ -590,7 +601,8 @@ function TeacherView({
   message: { kind: 'ok' | 'ng'; text: string } | null
   onSelectYear: (year: number) => void
   /** words は、書き間違えやすい語を変えたときだけ（変えていなければ null） */
-  onSave: (templates: TemplateSet, words: WordCheck[] | null) => void
+  /** notices は、書き換えたコースのお知らせだけ（コースの ID → お知らせ） */
+  onSave: (templates: TemplateSet, words: WordCheck[] | null, notices: Record<string, string>) => void
 }) {
   const [editing, setEditing] = useState<number | null>(null)
   const [editingWords, setEditingWords] = useState(false)
@@ -604,8 +616,13 @@ function TeacherView({
       }
     })
     const words = draft.wordChecks && !same(draft.wordChecks, row.config.wordChecks) ? draft.wordChecks : null
+    const notices: Record<string, string> = {}
+    draft.courses.forEach((c) => {
+      const before = row.config.courses.find((x) => x.id === c.id)
+      if ((c.notice ?? '') !== (before?.notice ?? '')) notices[c.id] = c.notice ?? ''
+    })
     if (isPublished && !confirm('この年度は学生に公開中です。保存すると、すぐに学生のツールに反映されます（すでに書き始めた学生の原稿は変わりません）。保存しますか？')) return
-    onSave(templates, words)
+    onSave(templates, words, notices)
   }
   return (
     <div className="admin">
@@ -636,8 +653,8 @@ function TeacherView({
       </header>
       <main className="teacher-main">
         {message && <div className={`message ${message.kind}`}>{message.text}</div>}
-        <h2>コースごとの下書きのひな形（{draft.fiscalYear}年度）</h2>
-        <p className="hint">学生が最初に見る本文の組み立て（大見出し・小見出し・書くことの説明・図の枠・素材表）を、コースごとに決めます。先生は、どのコースのひな形も編集できます。</p>
+        <h2>コースごとの下書きのひな形とお知らせ（{draft.fiscalYear}年度）</h2>
+        <p className="hint">学生が最初に見る本文の組み立て（大見出し・小見出し・書くことの説明・図の枠・素材表）と、そのコースの学生へのお知らせを、コースごとに決めます。先生は、どのコースも編集できます。</p>
         {draft.courses
           .map((c, i) => ({ c, i }))
           .filter(({ c }) => !c.hidden)
@@ -648,6 +665,7 @@ function TeacherView({
               </div>
               <div className="hint">指導教員：{c.advisors.join('、') || '（未登録）'}</div>
               <TemplateRow course={c} onEdit={() => setEditing(i)} />
+              <NoticeField course={c} onChange={(notice) => setDraft({ ...draft, courses: draft.courses.map((x, j) => (j === i ? { ...x, notice } : x)) })} />
             </div>
           ))}
         <WordsSection words={draft.wordChecks ?? DEFAULT_WORD_CHECKS} onOpen={() => setEditingWords(true)} />

@@ -55,6 +55,8 @@ await withEdge(async (browser) => {
   await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:studentId', { timeout: 30000 })
   let s = await snap()
   check('コースを選ぶと、そのコースの下書きが本文に入り、学籍番号の入力が始まる', !!s.report.basicInfo.courseId && s.report.body.length > 0 && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'paragraph' && b.hint), s.report.basicInfo.courseId)
+  const noticeText = () => page.evaluate(() => document.querySelector('.side .notice')?.textContent ?? '')
+  check('右の欄に、自分のコースのお知らせが出る', (await noticeText()).includes('映画・舞台衣装デザイナー コースからのお知らせ') && (await noticeText()).includes('衣装コースへのお知らせ'), await noticeText())
   await page.keyboard.type('23FA0123')
   await page.keyboard.press('Enter')
   await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:name', { timeout: 30000 })
@@ -152,6 +154,7 @@ await withEdge(async (browser) => {
     await ready()
     s = await snap()
     check('表紙のコース欄から、ほかのコースに変えられる', s.report.basicInfo.courseId !== firstCourse && !(await page.$('.modal')), s.report.basicInfo.courseId)
+    check('コースを変えると、お知らせもそのコースのものになる（ないときは出ない）', (await noticeText()) === '', await noticeText())
   } else {
     await page.click('.popover button')
     await ready()

@@ -93,6 +93,14 @@ await withEdge(async (browser) => {
   const savedWords = await page.evaluate(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config.wordChecks)
   check('書き間違えやすい語が年度の設定に保存される', savedWords?.length === 14 && savedWords.at(-1).wrong === '芯地(仮)')
 
+  // コースのお知らせ（コースのカードに書く。mockups/v21 案A）
+  const noticeBox = await page.$('.form .course .notice-field textarea')
+  await noticeBox.type('管理者が書いたお知らせ')
+  await clickButton('保存して学生に反映')
+  await page.waitForFunction(() => document.querySelector('.message.ok')?.textContent.includes('反映しました'))
+  const savedNotice = await page.evaluate(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config.courses[0].notice)
+  check('コースのカードに書いたお知らせが、そのコースに保存される', savedNotice === '管理者が書いたお知らせ', savedNotice)
+
   // 先生の画面：ひな形だけを編集・保存できる
   const teacher = await context.newPage()
   teacher.on('dialog', (d) => d.accept())
@@ -106,6 +114,10 @@ await withEdge(async (browser) => {
   await teacher.evaluate(() => [...document.querySelectorAll('.tpl-modal .adds button')].find((b) => b.textContent.includes('説明')).click())
   await teacher.keyboard.type('先生が足した説明')
   await teacher.evaluate(() => [...document.querySelectorAll('.tpl-foot button')].find((b) => b.textContent.includes('反映する')).click())
+  // 先生もコースのお知らせを書ける
+  const teacherNotice = await teacher.$('.teacher-main .notice-field textarea')
+  await teacherNotice.evaluate((el) => el.select())
+  await teacherNotice.type('先生が書いたお知らせ')
   // 先生も書き間違えやすい語を編集できる（足した語を消す）
   await teacher.click('.words-btn')
   await teacher.waitForSelector('.words-modal')
@@ -118,6 +130,7 @@ await withEdge(async (browser) => {
   const savedConfig = await page.evaluate(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config)
   const saved = savedConfig.courses[0]
   check('先生が保存したひな形が、年度の設定に入る（ほかの設定は変わらない）', saved.template.some((b) => b.hint === '先生が足した説明') && saved.template.some((b) => b.title === '試験の小見出し'))
+  check('先生が書いたコースのお知らせも、いっしょに保存される', saved.notice === '先生が書いたお知らせ', saved.notice)
   check('先生が編集した書き間違えやすい語も、いっしょに保存される', savedConfig.wordChecks.length === 13 && !savedConfig.wordChecks.some((w) => w.wrong === '芯地(仮)'))
   await teacher.close()
 

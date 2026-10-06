@@ -4,7 +4,7 @@ import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { findEditable, type EditableKind } from '../editor/reportOps'
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
-import { CheckBody, DeadlineChip, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
+import { CheckBody, CourseNotice, DeadlineChip, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
 import { keepFocus, PAGE_CONTEXT, pageName } from './uiShared'
 import { DriveChip, DriveMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
@@ -298,12 +298,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, onBackup, 
           </div>
           {drive && <DriveMenu drive={drive} inline onDone={close} />}
           {drive?.staff && <p className="staff-note">教職員のアカウントで試しています（学籍番号は自動で入りません）</p>}
-          {config.notice?.trim() && (
-            <div className="notice">
-              <b>学科からのお知らせ</b>
-              <p>{config.notice}</p>
-            </div>
-          )}
+          <CourseNotice config={config} courseId={snap.report.basicInfo.courseId} />
           <div className="links">
             {config.handbookUrl && (
               <a className="link-btn" href={config.handbookUrl} target="_blank" rel="noreferrer">

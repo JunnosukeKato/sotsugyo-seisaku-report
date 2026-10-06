@@ -123,6 +123,20 @@ describe('管理ページ（admin-project）', () => {
     expect(gas.getHistory(2026)[0].action).toContain('下書きのひな形を保存')
   })
 
+  it('先生もコースのお知らせを保存できる（指定したコースだけ書き換える）', () => {
+    const gas = load('admin-project')
+    gas.setup()
+    gas.addMember('sensei@example.ac.jp', '先生')
+    user = 'sensei@example.ac.jp'
+    const saved = gas.saveNotices(2026, { 'film-stage-costume': '中間発表の準備をしてください', 'no-such-course': 'x' })
+    const course = saved.years[0].config.courses[0]
+    expect(course.notice).toBe('中間発表の準備をしてください')
+    expect(saved.years[0].config.commonTitle).toBe(initialConfig.commonTitle)
+    expect(gas.getHistory(2026)[0].action).toContain('お知らせを保存')
+    user = 'student@example.ac.jp'
+    expect(() => gas.saveNotices(2026, {})).toThrow(/登録された先生だけ/)
+  })
+
   it('先生も書き間違えやすい語を保存できる（空の行・同じ語の行は捨てる）', () => {
     const gas = load('admin-project')
     gas.setup()

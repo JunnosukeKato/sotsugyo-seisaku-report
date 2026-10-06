@@ -56,6 +56,8 @@ export interface AdminServer {
   createYear(fromYear: number, newYear: number): Promise<AdminState>
   getHistory(year: number): Promise<HistoryRow[]>
   saveTemplates(year: number, templates: TemplateSet): Promise<AdminState>
+  /** コースのお知らせを保存する（管理者・先生）。notices はコースの ID → お知らせ */
+  saveNotices(year: number, notices: Record<string, string>): Promise<AdminState>
   /** 書き間違えやすい語の一覧を保存する（管理者・先生） */
   saveWordChecks(year: number, words: WordCheck[]): Promise<AdminState>
   getMembers(): Promise<Member[]>
@@ -93,6 +95,7 @@ function appsScriptServer(): AdminServer {
     getHistory: (year) => call('getHistory', year),
     saveTemplates: (year, templates) => call('saveTemplates', year, templates),
     saveWordChecks: (year, words) => call('saveWordChecks', year, words),
+    saveNotices: (year, notices) => call('saveNotices', year, notices),
     getMembers: () => call('getMembers'),
     addMember: (email, role, memo) => call('addMember', email, role, memo),
     addMembers: (entries, role) => call('addMembers', entries, role),

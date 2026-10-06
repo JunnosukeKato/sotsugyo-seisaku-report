@@ -14,13 +14,13 @@
     "heading": "卒業制作"
   },
   "faculty": "国際文化学部",
-  "notice": "テスト",
   "courses": [
     {
       "name": "映画・舞台衣装デザイナー",
       "id": "film-stage-costume",
       "hidden": false,
       "subtitleTemplate": "―{input}の衣装制作―",
+      "notice": "（自動テスト用）衣装コースへのお知らせ",
       "advisors": [
         "梶田　貴子",
         "佐藤　綾",

@@ -98,6 +98,22 @@ export function createMockServer(): AdminServer {
         .history.filter((h) => h.year === year)
         .reverse()
     },
+    async saveNotices(year, notices) {
+      await wait()
+      const store = load()
+      if (!roleOf(store)) throw new Error('登録された先生だけが使えます')
+      const row = store.years.find((y) => y.year === year)!
+      const names: string[] = []
+      for (const course of row.config.courses) {
+        if (!(course.id in notices)) continue
+        course.notice = notices[course.id]
+        names.push(course.name)
+      }
+      Object.assign(row, { updatedAt: new Date().toISOString(), updatedBy: USER })
+      record(store, year, `お知らせを保存（${names.join('・')}）`, row.config)
+      save(store)
+      return state(store)
+    },
     async saveWordChecks(year, words) {
       await wait()
       const store = load()
