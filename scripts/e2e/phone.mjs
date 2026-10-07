@@ -1,6 +1,7 @@
 // スマホ版の動作確認（Edge をスマホの画面の大きさ・タッチ操作にして動かす）。
 // 使い方: node scripts/e2e/phone.mjs（開発サーバーが http://localhost:5173 で動いていること）
-import { existsSync, mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { withEdge } from '../poc/edge.mjs'
 import { stubConfig } from './configStub.mjs'
 
@@ -330,7 +331,77 @@ await withEdge(async (browser) => {
 
   // 今年度だけ：小さい画面（360×640）で、はじめての案内から見本の Word を読み込む（mockups/v24 ④）
   await phoneWordCheck(browser)
+
+  // iPhone：PDF を作ったあと「保存する」で共有の画面から保存する（mockups/v28 案C）
+  await iphoneShareCheck(browser)
 })
+
+/**
+ * iPhone で「PDFを書き出す」：作り終えたら、もう一度「保存する」を押して共有の画面から保存する（作るのに数秒かかり、最初のタップでは開けないため）。
+ * 共有の画面（navigator.share）は偽物にする：1回目はやめる（AbortError）、2回目は保存できる、3回目は開けない（ダウンロードに切り替える）
+ */
+async function iphoneShareCheck(browser) {
+  const context = await browser.createBrowserContext()
+  const page = await context.newPage()
+  await noHotReload(page)
+  await stubConfig(page)
+  page.on('pageerror', (e) => console.log('pageerror(share):', e.message))
+  await page.evaluateOnNewDocument(() => {
+    try {
+      localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+    } catch {}
+  })
+  const downloads = resolve(`${OUT}/share-downloads`)
+  rmSync(downloads, { recursive: true, force: true })
+  mkdirSync(downloads, { recursive: true })
+  await (await page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads, browserContextId: context.id })
+  await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
+  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  const ready = () =>
+    page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
+  await ready()
+  await page.waitForSelector('.guide.step-course .g-opts button')
+  await page.evaluate(() => document.querySelector('.g-opts button').click())
+  await page.waitForSelector('.guide.step-word .g-word-opt.no')
+  await page.evaluate(() => document.querySelector('.g-word-opt.no').click())
+  await page.waitForSelector('.g-later')
+  await page.evaluate(() => document.querySelector('.g-later').click())
+  await ready()
+  await page.evaluate(() => {
+    window.__shares = []
+    navigator.canShare = () => true
+    navigator.share = (data) => {
+      const f = data.files[0]
+      window.__shares.push(`${f.name}|${f.type}`)
+      const n = window.__shares.length
+      return n === 1 ? Promise.reject(new DOMException('やめた', 'AbortError')) : n === 2 ? Promise.resolve() : Promise.reject(new DOMException('開けない', 'NotAllowedError'))
+    }
+  })
+  const title = await page.evaluate(() => window.__editor.pdfTitle)
+  await page.click('.p-nav .nav-pdf')
+  await page.waitForSelector('.modal .draft-box .pdf-draft')
+  check('iPhone：エラーが残っているときのボタンは「下書きの PDF を作る」（保存は、できたあとに押す）', (await page.$eval('.modal .draft-box .pdf-draft', (b) => b.textContent)) === '下書きの PDF を作る')
+  await page.tap('.modal .draft-box .pdf-draft')
+  await page.waitForSelector('.modal .pdf-save', { timeout: 120000 })
+  await wait(300)
+  const made = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, save: document.querySelector('.modal .pdf-save')?.textContent, thumbs: document.querySelectorAll('.modal .pdf-thumbs img').length, shares: window.__shares.length }))
+  await page.screenshot({ path: `${OUT}/11-pdf-share.png` })
+  check('iPhone：できたら「下書きの PDF ができました」と大きな「保存する」を出す（まだ保存しない・共有の画面も開かない）', made.title === '下書きの PDF ができました' && made.save === '保存する' && made.thumbs > 0 && made.shares === 0 && readdirSync(downloads).length === 0, JSON.stringify(made))
+  await page.tap('.modal .pdf-save')
+  await wait(300)
+  const cancelled = await page.evaluate(() => ({ save: document.querySelector('.modal .pdf-save')?.textContent, shares: [...window.__shares] }))
+  check('「保存する」で共有の画面を開き（ファイル名・PDF）、やめても「保存する」がそのまま押せる', cancelled.save === '保存する' && cancelled.shares[0] === `${title}_下書き.pdf|application/pdf`, JSON.stringify(cancelled))
+  await page.tap('.modal .pdf-save')
+  await wait(300)
+  const shared = await page.evaluate(() => ({ save: document.querySelector('.modal .pdf-save')?.textContent, lead: document.querySelector('.modal .lead')?.textContent ?? '', shares: window.__shares.length }))
+  check('もう一度「保存する」を押して保存すると「保存しました」と出る', shared.shares === 2 && shared.lead.startsWith('保存しました') && shared.save === 'もう一度保存する', JSON.stringify(shared))
+  // 共有の画面が開けなかったとき（やめた以外の理由）は、ダウンロードに切り替える
+  await page.tap('.modal .pdf-save')
+  for (let i = 0; i < 40 && !readdirSync(downloads).some((n) => n.endsWith('.pdf')); i++) await wait(250)
+  check('共有の画面を開けなかったときは、ダウンロードに切り替えて知らせる', readdirSync(downloads).includes(`${title}_下書き.pdf`) && (await page.$eval('.modal .lead', (e) => e.textContent)).includes('ダウンロードしました'), readdirSync(downloads).join(','))
+  await context.close()
+}
 
 async function phoneWordCheck(browser) {
   // 見本の Word の置き場所（WORD_FIXTURES で変えられる）

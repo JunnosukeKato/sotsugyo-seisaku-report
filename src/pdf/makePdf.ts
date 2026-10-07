@@ -53,7 +53,8 @@ export async function loadManuscript(kind: SourceKind): Promise<Manuscript> {
 /** PDF のファイル名のもと（学生用ツールの「PDFを書き出す」と同じ形） */
 export function pdfTitle({ report, config }: Manuscript, draft: boolean): string {
   const { studentId, name } = report.basicInfo
-  return `${config.fiscalYear}_${config.reportName}_${studentId.trim()}_${name.replace(/[\s　]/g, '')}${draft ? '_下書き' : ''}`
+  const base = [String(config.fiscalYear), config.reportName, studentId.trim(), name.replace(/[\s　]/g, '')].filter(Boolean).join('_')
+  return draft ? `${base}_下書き` : base
 }
 
 export interface MakePdfResult extends PagesToPdfResult {

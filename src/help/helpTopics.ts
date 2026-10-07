@@ -1,6 +1,6 @@
 /**
  * 使い方（ヘルプ）の項目。学生用ツールの「？ 使い方」と、管理ページの「？ 使い方」で使う（mockups/v27 案A）。
- * 中身は、印刷用の手引き（docs/手引き_学生用.html・docs/手引き_教員用.html）から短くしたもの。
+ * 中身は、印刷用の手引き（docs/ の学生用・先生用・管理者用の手引き）と、前の4ページ・8ページの手引きから短くしたもの。
  * 1つの項目は、ひとこと（lead）＋手順2〜3つ（steps）まで。うまくいかないときなどは items に1〜2行で書く。
  * 画面の写真（shot）は public/help/ に置く（scripts/make-help-images.mjs で、本物のツールを撮って作る）。
  * 動画（video）は、あとで作ったものだけ入れる（入れた項目にだけ、再生の部品を出す）
@@ -25,6 +25,8 @@ export interface HelpTopic {
   steps?: string[]
   /** 端末ごとの手順 */
   devices?: HelpDevice[]
+  /** 端末ごとの手順の上に出す小見出し（例：うまくいかないとき：印刷の画面から保存） */
+  devicesTitle?: string
   /** 補足（h：小見出し、t：文）。小見出しが「〜とき」で終わるものは、うまくいかないときの印（黄土色）で出す */
   items?: { h: string; t: string }[]
   /** 画面の写真（file：public/help/ のファイル名） */
@@ -177,8 +179,9 @@ export const STUDENT_TOPICS: HelpTopic[] = [
     id: 'pdf',
     group: 'PDF',
     title: 'PDF の出し方（端末ごと）',
-    lead: 'エラーを0件にしてから書き出します。',
-    steps: ['「PDFを書き出す」を押す（スマホは「PDF」）', '3つにチェック →「印刷の画面を開く」', '印刷の画面で、PDF に保存（下の手順）'],
+    lead: 'エラーを0件にして「PDFを書き出す」（スマホは「PDF」）を押します。',
+    steps: ['3つにチェック →「PDF を保存する」（iPhone は「PDF を作る」）', 'できたページが並ぶので、ページの数と写真を確かめる', 'パソコン・Android は「ダウンロード」に保存。iPhone は「保存する」→「"ファイル"に保存」'],
+    devicesTitle: 'うまくいかないとき：窓の左下の「印刷の画面から保存」で',
     devices: [
       { id: 'pc', label: 'パソコン', lines: ['Chrome・Edge のとき（Mac の Chrome も）', '送信先：PDF に保存（PDF として保存）', '用紙：A4・背景のグラフィック：オン'] },
       { id: 'mac', label: 'Mac', lines: ['Safari：「詳細を表示」→ 用紙：A4', '「背景をプリント」を入れ、「ヘッダとフッタ」を外す', '左下の「PDF」→「PDF として保存」'] },
@@ -186,19 +189,19 @@ export const STUDENT_TOPICS: HelpTopic[] = [
       { id: 'android', label: 'Android', lines: ['上のプリンターを「PDF 形式で保存」に', '用紙：A4 → PDF のボタンを押して保存'] },
     ],
     items: [{ h: '提出用の PDF が出ないとき', t: 'エラーが残っています。セルフチェックで × を0件に。' }],
-    shot: { file: 'export.jpg', caption: 'エラーが0件のときに出る窓' },
+    shot: { file: 'export.jpg', caption: 'PDF を保存したところ（できたページが並ぶ）' },
     related: ['draft', 'check'],
-    words: '提出 印刷 書き出し 保存できない iPad',
+    words: '提出 印刷 書き出し 保存できない 保存されない ダウンロード 共有 ファイル iPad スマホ',
   },
   {
     id: 'draft',
     group: 'PDF',
     title: '下書きの PDF',
     lead: '途中経過を先生に見せるときに使います。',
-    steps: ['「PDFを書き出す」→「下書きの PDF を書き出す」', 'どのページにも「下書き」の透かし（提出には使えません）'],
+    steps: ['「PDFを書き出す」→「下書きの PDF を保存する」（iPhone は「〜を作る」）', 'どのページにも「下書き」の透かし（提出には使えません）'],
     items: [{ h: '提出用が出ないとき', t: 'エラーが残っていても、下書きなら出せます。' }],
     shot: { file: 'export-draft.jpg', caption: 'エラーが残っているときの窓' },
-    words: '途中点検 見せる 透かし',
+    words: '途中点検 見せる 透かし 保存',
   },
   // ---------------- そのほか ----------------
   {

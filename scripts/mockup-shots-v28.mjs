@@ -223,7 +223,7 @@ const driveSaved = (page) =>
   page.waitForFunction(() => [...document.querySelectorAll('.chip.ok')].some((c) => /ドライブに保存|\d+:\d+/.test(c.textContent)) && !document.querySelector('.chip .dot.busy'), { timeout: 60000 })
 
 /** 見本の原稿（本文5ページ・図3枚・素材表・作品写真1枚・抄録）。make-help-images.mjs と同じもの */
-const setupWriting = readFileSync('scripts/make-help-images.mjs', 'utf8').match(/async function setupWriting\(\) \{[\s\S]*?\n\}\n/)[0]
+const { setupWriting } = await import('./e2e/sampleReport.mjs')
 
 async function openStudent(browser, { device }) {
   const phone = device !== 'pc'
@@ -248,7 +248,7 @@ async function openStudent(browser, { device }) {
   await page.evaluate(() => document.querySelector('.guide .g-later').click())
   await page.evaluate(() => window.__editor.finishEditing())
   await ready(page)
-  await page.evaluate(`(${setupWriting.replace(/^async function setupWriting\(\)/, 'async () =>')})()`)
+  await page.evaluate(setupWriting)
   await sleep(800)
   await ready(page)
   await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfBlock('p3'), 'none'))

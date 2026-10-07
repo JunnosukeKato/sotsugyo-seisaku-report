@@ -28,6 +28,8 @@ export interface PagesToPdfOptions {
   title?: string
   /** 1ページ画像にするたびに呼ぶ（進み具合の表示や、縮小画像を作るのに使う。canvas は、この後すぐ解放する） */
   onPage?: (page: CapturedPage) => void | Promise<void>
+  /** やめる（ページとページの間で止める。止めたら、signal の理由を投げる） */
+  signal?: AbortSignal
 }
 
 export interface CapturedPage {
@@ -269,7 +271,7 @@ async function assemble(jpegs: Blob[], title: string): Promise<Blob> {
  * .print-skip の付いたページは入れない。ページは文書の中に置いたまま渡すこと（表示していなくてもよい）
  */
 export async function pagesToPdf(pages: HTMLElement[], options: PagesToPdfOptions = {}): Promise<PagesToPdfResult> {
-  const { draft = false, dpi = DEFAULT_DPI, quality = DEFAULT_QUALITY, title = '', onPage } = options
+  const { draft = false, dpi = DEFAULT_DPI, quality = DEFAULT_QUALITY, title = '', onPage, signal } = options
   const started = performance.now()
   // 部品を先に読み込んでおく（読み込みの時間を、画像にする時間と分けて測る）
   await Promise.all([import('modern-screenshot'), import('jspdf')])
@@ -291,6 +293,7 @@ export async function pagesToPdf(pages: HTMLElement[], options: PagesToPdfOption
   let heightPx = 0
   try {
     for (const [index, page] of printed.entries()) {
+      signal?.throwIfAborted()
       const pageStarted = performance.now()
       const clone = printableClone(page, variables, draft)
       host.replaceChildren(clone)
@@ -318,6 +321,7 @@ export async function pagesToPdf(pages: HTMLElement[], options: PagesToPdfOption
     host.remove()
     if (shared.context) (await import('modern-screenshot')).destroyContext(shared.context)
   }
+  signal?.throwIfAborted()
   const captured = performance.now()
   const blob = await assemble(jpegs, title)
   const finished = performance.now()

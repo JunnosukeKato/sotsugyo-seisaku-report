@@ -89,6 +89,11 @@ export const Icon = {
     </>,
   ),
   search: svg(<path d="M15.5 15.5L20 20M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />),
+  // PDF をそのまま保存する（mockups/v28）：できた（✓）・作れなかった（！）・共有して保存する・開く
+  check: svg(<path d="M5 12.5l4.5 4.5L19 7.5" />),
+  warn: svg(<path d="M12 4l9 16H3zM12 10v4.5M12 17.2v.1" />),
+  share: svg(<path d="M12 3.5v11M8 7.5l4-4 4 4M6.5 11H5v9.5h14V11h-1.5" />),
+  open: svg(<path d="M14 4.5h5.5V10M19.5 4.5L11 13M17 13.5v6H4.5V7H11" />),
   play: svg(
     <>
       <circle cx="12" cy="12" r="8.6" />

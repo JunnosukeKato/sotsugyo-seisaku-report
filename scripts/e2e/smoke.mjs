@@ -1,12 +1,13 @@
 // 通しの動作確認（Edge を自動で操作する）。
 // 新しい報告書に、表紙・抄録・本文を入力し、指摘を直し、図を入れ、PDF に書き出すまでを行う。
 // 使い方: node scripts/e2e/smoke.mjs（開発サーバーが http://localhost:5173 で動いていること）
-import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { withEdge } from '../poc/edge.mjs'
 import { stubConfig } from './configStub.mjs'
+import { setupWriting } from './sampleReport.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -24,6 +25,17 @@ const noHotReload = (page) =>
   })
 const OUT = 'poc-output/e2e'
 mkdirSync(OUT, { recursive: true })
+/** 「PDFを書き出す」で保存した PDF の置き場所（毎回空にする） */
+const DOWNLOADS = `${OUT}/downloads`
+rmSync(DOWNLOADS, { recursive: true, force: true })
+mkdirSync(DOWNLOADS, { recursive: true })
+/** 保存された PDF を待って、名前とページの数を返す（ページの数は、PDF の中の /Type /Page を数える） */
+const savedPdf = async (name) => {
+  for (let i = 0; i < 80 && !existsSync(`${DOWNLOADS}/${name}`); i++) await new Promise((r) => setTimeout(r, 250))
+  if (!existsSync(`${DOWNLOADS}/${name}`)) return { files: readdirSync(DOWNLOADS), pages: 0 }
+  const text = readFileSync(`${DOWNLOADS}/${name}`, 'latin1')
+  return { files: readdirSync(DOWNLOADS), pages: (text.match(/\/Type\s*\/Page[^s]/g) ?? []).length, head: text.slice(0, 5) }
+}
 const results = []
 const check = (name, ok, detail = '') => {
   results.push({ name, ok, detail })
@@ -37,6 +49,8 @@ await withEdge(async (browser) => {
   await noHotReload(page)
   await stubConfig(page)
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
+  // 「PDFを書き出す」で保存した PDF を、決まった場所に置く（確かめのため）
+  await (await page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: resolve(DOWNLOADS), browserContextId: context.id })
   await page.setViewport({ width: 1440, height: 900 })
   await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
   await page.evaluate(() => new Promise((r) => { const req = indexedDB.deleteDatabase('sotsugyo-seisaku-report'); req.onsuccess = req.onerror = req.onblocked = () => r() }))
@@ -239,8 +253,8 @@ await withEdge(async (browser) => {
   }
   await setSubtitle('映画『千夜一夜物語』に登場する砂漠の王子シンドバッド')
   let sf = await subtitleFit()
-  check('表紙のサブタイトルが長いと、枠の1行に入るまで行全体の文字を小さくする（26字で 12pt ほど）', sf.pt >= 11 && sf.pt <= 12.5 && sf.fit.ratio <= 1.002 && !sf.error, JSON.stringify(sf))
-  await setSubtitle('映画『千夜一夜物語』に登場する砂漠の王子シンドバッドと船乗りたち')
+  check('表紙のサブタイトルが長いと、枠の1行に入るまで行全体の文字を小さくする（26字で 13pt ほど。枠の幅 144.2mm）', sf.pt >= 12 && sf.pt <= 13.5 && sf.fit.ratio <= 1.002 && !sf.error, JSON.stringify(sf))
+  await setSubtitle('映画『千夜一夜物語』に登場する砂漠の王子シンドバッドと七つの海を渡る船乗りたち')
   sf = await subtitleFit()
   check('いちばん小さい文字（11pt）でも入らないときは、表紙のサブタイトルのエラーになる', sf.pt === 11 && sf.fit.ratio > 1 && sf.error, JSON.stringify(sf))
   await page.evaluate(() => {
@@ -683,6 +697,7 @@ await withEdge(async (browser) => {
   const vp = page1.getViewport({ scale: 1 })
   check('PDF は A4', Math.abs(vp.width - 595.3) < 2 && Math.abs(vp.height - 841.9) < 2, `${vp.width.toFixed(1)}x${vp.height.toFixed(1)}pt`)
 
+
   // ---- 図が段落の下に入りきらないときは、図だけ次のページの上へ送り、後ろの文章でページを埋める ----
   const setBody = async (rest, nextChapter) => {
     await page.evaluate((rest, nextChapter) => {
@@ -840,9 +855,12 @@ await withEdge(async (browser) => {
     window.print = () => (window.__printed = { draft: document.documentElement.classList.contains('print-draft'), title: document.title })
   })
   await page.click('.side .export')
-  await page.waitForSelector('.modal .draft-box button')
+  await page.waitForSelector('.modal .draft-box .pdf-draft')
   const titleBefore = await page.title()
-  await page.click('.modal .draft-box button')
+  // 印刷の画面から保存する道（「うまくいかないとき」を開いてから）
+  await page.click('.modal .draft-box .pdf-fallback')
+  await page.waitForSelector('.modal .draft-box .pdf-print')
+  await page.click('.modal .draft-box .pdf-print')
   await page.waitForFunction(() => !!window.__printed)
   const printed = await page.evaluate(() => window.__printed)
   // 印刷画面が開いているときの見た目：どのページにも「下書き」が入る（透かしは PDF の文字としては取り出せないので、印刷のときの見た目で確かめる。PDF は目視用）
@@ -854,12 +872,55 @@ await withEdge(async (browser) => {
   await page.pdf({ path: `${OUT}/draft.pdf`, preferCSSPageSize: true, printBackground: true })
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
   const afterPrint = await page.evaluate(() => ({ draft: document.documentElement.classList.contains('print-draft'), title: document.title }))
-  check('エラーが残っていても、「下書きの PDF を書き出す」で印刷に進め、ファイル名に「_下書き」が付く（終わると元に戻る）', printed.draft && printed.title.endsWith('_下書き') && !afterPrint.draft && afterPrint.title === titleBefore, JSON.stringify(printed))
+  check('エラーが残っていても、下書きの欄の「うまくいかないとき：印刷の画面から保存」から印刷に進め、ファイル名に「_下書き」が付く（終わると元に戻る）', printed.draft && printed.title.endsWith('_下書き') && !afterPrint.draft && afterPrint.title === titleBefore, JSON.stringify(printed))
   check('下書きの PDF は、どのページにも「下書き」の透かしが入る', draftPages.length > 0 && draftPages.every((t) => t.includes('下書き')), draftPages.map((t) => (t.includes('下書き') ? '○' : '×')).join(''))
   await page.emulateMediaType('print')
   const plainPages = await page.evaluate(() => [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].map((p) => getComputedStyle(p, '::after').content))
   await page.emulateMediaType(null)
   check('提出用の PDF には透かしが入らない', plainPages.length > 0 && !plainPages.some((t) => t.includes('下書き')), plainPages.join(','))
+
+  // ---- 下書きの PDF を、ツールの中で作って保存する（「やめる」・作れなかったときも） ----
+  {
+    const title = await page.evaluate(() => window.__editor.pdfTitle)
+    await page.click('.side .export')
+    await page.waitForSelector('.modal .draft-box .pdf-draft')
+    check('エラーが残っているときは「下書きの PDF を保存する」', (await page.$eval('.modal .draft-box .pdf-draft', (b) => b.textContent)) === '下書きの PDF を保存する')
+    // やめる：ページとページの間で止まり、最初の窓に戻る
+    await page.click('.modal .draft-box .pdf-draft')
+    await page.waitForFunction(() => document.querySelectorAll('.modal .pdf-thumbs img').length >= 1, { timeout: 60000 })
+    await page.evaluate(() => [...document.querySelectorAll('.modal .row-buttons button')].find((b) => b.textContent === 'やめる').click())
+    await pause0(1500)
+    check('作っている途中の「やめる」で止まり、最初の窓に戻る（保存しない）', !!(await page.$('.modal .draft-box .pdf-draft')) && !existsSync(`${DOWNLOADS}/${title}_下書き.pdf`))
+    // 下書きの PDF を作って保存する
+    await page.click('.modal .draft-box .pdf-draft')
+    await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+    const draftDone = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, file: document.querySelector('.modal .pdf-file b')?.textContent, note: document.querySelector('.modal .lead')?.textContent ?? '' }))
+    const printedPages = await page.evaluate(() => window.__editor.pageElements().filter((p) => !p.classList.contains('print-skip')).length)
+    const saved = await savedPdf(`${title}_下書き.pdf`)
+    await page.screenshot({ path: `${OUT}/0-pdf-draft-saved.png` })
+    check('下書きの PDF も同じ流れで作って保存し、ファイル名に「_下書き」が付く（透かしの説明）', draftDone.title === '下書きの PDF を保存しました' && draftDone.file === `${title}_下書き.pdf` && draftDone.note.includes('透かし') && saved.pages === printedPages, JSON.stringify({ draftDone, saved, printedPages }))
+    await page.click('.modal .close')
+    await pause0(300)
+    // 作れなかったとき（画像を JPEG にできない）：印刷の画面から保存する道を出す
+    await page.evaluate(() => {
+      window.__toBlob = HTMLCanvasElement.prototype.toBlob
+      HTMLCanvasElement.prototype.toBlob = function (cb) {
+        cb(null)
+      }
+    })
+    await page.click('.side .export')
+    await page.waitForSelector('.modal .draft-box .pdf-draft')
+    await page.click('.modal .draft-box .pdf-draft')
+    await page.waitForSelector('.modal .pdf-print', { timeout: 60000 })
+    const failed = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, guide: document.querySelector('.modal .print-guide')?.textContent ?? '', retry: [...document.querySelectorAll('.modal button')].some((b) => b.textContent === 'もう一度作る') }))
+    await page.screenshot({ path: `${OUT}/0-pdf-failed.png` })
+    await page.evaluate(() => {
+      HTMLCanvasElement.prototype.toBlob = window.__toBlob
+    })
+    check('作れなかったときは「PDF を作れませんでした」と、印刷の画面での選び方・「印刷の画面を開く」・「もう一度作る」を出す', failed.title === 'PDF を作れませんでした' && failed.guide.includes('印刷の画面で') && failed.guide.includes('_下書き.pdf') && failed.retry, JSON.stringify(failed))
+    await page.click('.modal .close')
+    await pause0(300)
+  }
 
   // ---- 補助の指摘は「このままにする（確認済み）」にでき、「戻す」で元に戻る（mockups/v22 ① 案A） ----
   const keepKey = `sentence-end|${keepId}|`
@@ -903,7 +964,90 @@ await withEdge(async (browser) => {
 
   // ---- 今年度だけ：Word から読み込む（mockups/v24。見本の Word は scripts/e2e/fixtures） ----
   await wordImportCheck(browser)
+
+  // ---- 「PDFを書き出す」：エラーが0件の原稿で、ツールの中で PDF を作り、そのまま保存する（mockups/v28 案C） ----
+  await pdfSaveCheck(browser)
 })
+
+/** エラーが0件の見本の原稿で、3つを確かめる → PDF を作る（進み具合・できたページの絵）→「ダウンロード」に保存、までを確かめる */
+async function pdfSaveCheck(browser) {
+  const context = await browser.createBrowserContext()
+  const page = await context.newPage()
+  await noHotReload(page)
+  await stubConfig(page)
+  page.on('pageerror', (e) => console.log('pageerror(pdf):', e.message))
+  await page.evaluateOnNewDocument(() => {
+    try {
+      localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+    } catch {}
+  })
+  await (await page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: resolve(DOWNLOADS), browserContextId: context.id })
+  await page.setViewport({ width: 1440, height: 900 })
+  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  const ready = () =>
+    page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
+  const pause = (ms) => new Promise((r) => setTimeout(r, ms))
+  await ready()
+  await page.waitForSelector('.guide.step-course .g-opts button')
+  await page.evaluate(() => document.querySelector('.g-opts button').click())
+  await page.waitForSelector('.guide.step-word .g-word-opt.no')
+  await page.evaluate(() => document.querySelector('.g-word-opt.no').click())
+  await page.waitForSelector('.g-later')
+  await page.evaluate(() => document.querySelector('.g-later').click())
+  await page.evaluate(() => window.__editor.finishEditing())
+  await ready()
+  await page.evaluate(setupWriting)
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: '00ZZ0123' } })))
+  await pause(800)
+  await ready()
+  const errorsNow = await page.evaluate(() => window.__editor.getSnapshot().findings.filter((f) => f.severity === 'error').map((f) => f.title))
+  await page.click('.side .export')
+  await page.waitForSelector('.modal .checklist')
+  const confirm = await page.evaluate(() => ({
+    start: document.querySelector('.modal .pdf-start')?.textContent,
+    disabled: document.querySelector('.modal .pdf-start')?.disabled,
+    file: document.querySelector('.modal .pdf-file b')?.textContent,
+    fallback: document.querySelector('.modal .row-buttons .pdf-fallback')?.textContent,
+  }))
+  const title = await page.evaluate(() => window.__editor.pdfTitle)
+  check(
+    '「PDFを書き出す」の窓：3つを確かめるまで「PDF を保存する」は押せず、ファイル名と、左下に「うまくいかないとき：印刷の画面から保存」が出る',
+    errorsNow.length === 0 && confirm.start === 'PDF を保存する' && confirm.disabled && confirm.file === `${title}.pdf` && confirm.fallback?.includes('印刷の画面から保存'),
+    JSON.stringify({ errorsNow, ...confirm }),
+  )
+  // 「うまくいかないとき」を開くと、今までの印刷の画面での選び方と「印刷の画面を開く」が出る
+  await page.click('.modal .row-buttons .pdf-fallback')
+  check('「うまくいかないとき：印刷の画面から保存」を押すと、印刷の画面での選び方と「印刷の画面を開く」が出る', await page.evaluate(() => !!document.querySelector('.modal .pdf-print-box .print-guide') && !!document.querySelector('.modal .pdf-print-box .pdf-print')))
+  await page.click('.modal .row-buttons .pdf-fallback')
+  await page.evaluate(() => document.querySelectorAll('.modal .checklist input').forEach((i) => i.click()))
+  await page.click('.modal .pdf-start')
+  // 作っている途中：進み具合と、できたページの小さな絵
+  await page.waitForFunction(() => document.querySelectorAll('.modal .pdf-thumbs img').length >= 1, { timeout: 60000 })
+  const building = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, progress: document.querySelector('.modal .pdf-progress span')?.textContent ?? '', tiles: document.querySelectorAll('.modal .pdf-thumbs figure').length }))
+  await page.screenshot({ path: `${OUT}/0-pdf-building.png` })
+  await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+  await pause(300)
+  const done = await page.evaluate(() => ({
+    title: document.querySelector('.modal h2')?.textContent,
+    file: document.querySelector('.modal .pdf-file')?.textContent ?? '',
+    thumbs: [...document.querySelectorAll('.modal .pdf-thumbs img')].filter((i) => i.complete && i.naturalWidth > 0 && i.src.startsWith('blob:')).length,
+    focus: document.activeElement?.classList.contains('pdf-open'),
+  }))
+  await page.screenshot({ path: `${OUT}/0-pdf-saved.png` })
+  const printedPages = await page.evaluate(() => window.__editor.pageElements().filter((p) => !p.classList.contains('print-skip')).length)
+  const saved = await savedPdf(`${title}.pdf`)
+  check('作っている間は「PDF を作っています」と、進み具合（〇 / 〇ページ）と、全ページの枠が出る', building.title === 'PDF を作っています' && /\d+ \/ \d+ページ/.test(building.progress) && building.tiles === printedPages, JSON.stringify(building))
+  check(
+    'できたら「保存しました」と、ファイル名・ページの数・できたページの小さな絵（全ページ）を出し、「PDF を開く」に移る',
+    done.title === '保存しました' && done.file.includes(`${title}.pdf`) && done.file.includes(`${printedPages}ページ`) && done.thumbs === printedPages && done.focus,
+    JSON.stringify(done),
+  )
+  check('PDF は「ダウンロード」に、決まったファイル名で保存され、ページの数が紙面と同じ', saved.head === '%PDF-' && saved.pages === printedPages, JSON.stringify({ ...saved, printedPages }))
+  await page.click('.modal .close')
+  await pause(300)
+  check('窓を閉じると、ふだんの画面に戻る', !(await page.$('.modal')))
+  await context.close()
+}
 
 /** 見本の Word（本文・表紙）を、はじめての案内から読み込み、写したあとの「つぎにすること」と「読み込む前の原稿に戻す」までを確かめる */
 async function wordImportCheck(browser) {

@@ -609,13 +609,15 @@ async function studentShots(browser, config, images) {
   if (info.findings.some((f) => f.startsWith('error'))) throw new Error('見本の原稿にエラーが残っています（提出用の PDF の画面が撮れません）')
 
   // ---- 提出用の PDF を書き出す窓（エラーが0件のとき） ----
+  // （PDF はツールの中で作って保存する。3つにチェックを入れ、「PDF を保存する」が押せるところ。mockups/v28 案C）
   await page.evaluate(() => document.querySelector('.side .export').click())
   await page.waitForSelector('.modal .checklist')
+  await page.evaluate(() => document.querySelectorAll('.modal .checklist input').forEach((i) => i.click()))
   await page.evaluate(() => document.activeElement?.blur())
   await sleep(500)
   await capture(page, 'g-export', await page.evaluate(rectOf, '.modal'), [
     { n: 1, box: await page.evaluate(rectOf, '.modal .checklist'), at: 'l' },
-    { n: 2, box: await page.evaluate(rectOf, '.modal .print-guide'), at: 'l' },
+    { n: 2, box: await page.evaluate(rectOf, '.modal .pdf-file'), at: 'l' },
     { n: 3, box: await page.evaluate(rectOf, '.modal .row-buttons button.primary'), at: 'l' },
   ])
   await page.evaluate(() => document.querySelector('.modal .close').click())

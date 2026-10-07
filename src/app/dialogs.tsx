@@ -1,27 +1,23 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { YearConfig } from '../config'
-import type { ReportFinding } from '../checker/reportChecks'
-import type { ReportEditor } from '../editor/reportEditor'
 import { newId } from '../editor/reportOps'
 import { formatReference } from '../layout/document'
 import type { Snapshot } from '../model/storage'
 import type { Reference, Report } from '../model/types'
-import { deviceName } from '../drive/device'
-import { AREA_LABELS } from './labels'
 import { useDialogFocus } from './useDialogFocus'
 
 /**
  * 画面の上に出す窓。keepOpen：窓の外を押しても Esc でも閉じない（書きかけの内容が消えないように。閉じるのは「×」とボタンだけ）。
- * className：窓の幅などを、窓ごとに変えるとき
+ * className：窓の幅などを、窓ごとに変えるとき。heading：見出しに印（✓ など）を付けるとき（title は読み上げの名前）
  */
-export function Modal({ title, onClose, children, wide, keepOpen, className }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean; keepOpen?: boolean; className?: string }) {
+export function Modal({ title, heading, onClose, children, wide, keepOpen, className }: { title: string; heading?: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean; keepOpen?: boolean; className?: string }) {
   const ref = useRef<HTMLDivElement>(null)
   useDialogFocus(ref, keepOpen ? undefined : onClose)
   return (
     <div className="modal-backdrop" onMouseDown={(e) => !keepOpen && e.target === e.currentTarget && onClose()}>
       <div className={`modal${wide ? ' wide' : ''}${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-label={title} ref={ref}>
         <header>
-          <h2>{title}</h2>
+          <h2>{heading ?? title}</h2>
           <button className="close" onClick={onClose} aria-label="閉じる">
             ×
           </button>
@@ -175,162 +171,6 @@ export function ReferencesDialog({ report, onSave, onClose }: { report: Report; 
           }}
         >
           反映する
-        </button>
-      </div>
-    </Modal>
-  )
-}
-
-// ---- PDF の書き出し ----
-
-const SELF_CHECKS = [
-  'タイトル（サブタイトルを含む）は、以前提出した申告書と同じにした',
-  '作品写真は、自分で撮影した写真だけを使った',
-  '指導教員に内容を見てもらい、了承を得た',
-]
-
-/** PDF の保存のしかた（端末とブラウザによって、印刷の画面が違う） */
-function PrintSteps() {
-  const device = deviceName()
-  if (/^(iPhone|iPad)/.test(device)) {
-    return (
-      <ul>
-        <li>
-          印刷の画面の右上（または下）の <b>共有のボタン（四角に上向きの矢印）</b> を押し、<b>「"ファイル"に保存」</b> を選ぶ
-        </li>
-        <li>保存する場所（「iCloud Drive」や「このiPhone内」など）を選んで「保存」</li>
-        <li>うまく保存できないときは、パソコンで書き出してください</li>
-      </ul>
-    )
-  }
-  if (/^Android/.test(device)) {
-    return (
-      <ul>
-        <li>
-          上のプリンターを <b>「PDF 形式で保存」</b> にする
-        </li>
-        <li>
-          用紙サイズ：<b>A4</b>　→　<b>PDF のボタン</b> を押して保存
-        </li>
-      </ul>
-    )
-  }
-  if (/^Mac・Safari/.test(device)) {
-    return (
-      <ul>
-        <li>
-          「詳細を表示」を押し、用紙サイズ：<b>A4</b>　「背景をプリント」：<b>チェックを入れる</b>　「ヘッダとフッタをプリント」：<b>チェックを外す</b>
-        </li>
-        <li>
-          左下の <b>「PDF」</b> から <b>「PDF として保存」</b> を選ぶ
-        </li>
-      </ul>
-    )
-  }
-  return (
-    <ul>
-      <li>
-        送信先：<b>{/Edge/.test(device) ? 'PDF として保存' : 'PDF に保存'}</b>
-      </li>
-      <li>
-        用紙サイズ：<b>A4</b>　／　倍率：<b>既定（100%）</b>
-      </li>
-      <li>
-        詳細設定の「ヘッダーとフッター」：<b>オフ</b>　「背景のグラフィック」：<b>オン</b>
-      </li>
-    </ul>
-  )
-}
-
-export function ExportDialog({ editor, findings, onClose }: { editor: ReportEditor; findings: ReportFinding[]; onClose: () => void }) {
-  const errors = findings.filter((f) => f.severity === 'error')
-  const warnings = findings.length - errors.length
-  const [checked, setChecked] = useState<boolean[]>(SELF_CHECKS.map(() => false))
-  const allChecked = checked.every(Boolean)
-
-  /** draft：下書き（どのページにも「下書き」の透かしを入れる。エラーが残っていても出せる。提出には使えない） */
-  const print = (draft = false) => {
-    const title = document.title
-    document.title = draft ? `${editor.pdfTitle}_下書き` : editor.pdfTitle
-    document.documentElement.classList.toggle('print-draft', draft)
-    window.addEventListener(
-      'afterprint',
-      () => {
-        document.title = title
-        document.documentElement.classList.remove('print-draft')
-      },
-      { once: true },
-    )
-    onClose()
-    // ダイアログが閉じてから印刷画面を開く
-    setTimeout(() => window.print(), 50)
-  }
-
-  if (errors.length > 0) {
-    return (
-      <Modal title="PDFを書き出す前に" onClose={onClose}>
-        <p className="lead">
-          手順書のルールに合っていない箇所（エラー）が <b className="ng">{errors.length}件</b> あります。エラーを0件にすると、提出用のPDFを書き出せます。
-        </p>
-        <ul className="error-list">
-          {errors.slice(0, 8).map((f, i) => (
-            <li key={i}>
-              <button
-                className="link"
-                onClick={() => {
-                  onClose()
-                  editor.goToFinding(f)
-                }}
-              >
-                {AREA_LABELS[f.area]}：{f.title}
-              </button>
-              {f.detail && <span className="detail">（{f.detail}）</span>}
-            </li>
-          ))}
-          {errors.length > 8 && <li>ほか {errors.length - 8}件（セルフチェックを見てください）</li>}
-        </ul>
-        <div className="draft-box">
-          <b>先生に途中経過を見せるとき</b>
-          エラーが残っていても、どのページにも「下書き」の透かしが入った PDF を書き出せます（提出には使えません）。
-          <PrintSteps />
-          <button onClick={() => print(true)}>下書きの PDF を書き出す</button>
-        </div>
-        <div className="row-buttons">
-          <span className="spacer" />
-          <button className="primary" onClick={onClose}>
-            直しに戻る
-          </button>
-        </div>
-      </Modal>
-    )
-  }
-
-  return (
-    <Modal title="提出用のPDFを書き出す" onClose={onClose}>
-      <p className="lead">
-        エラーはありません{warnings > 0 ? `（警告が${warnings}件あります。内容を確認してください）` : ''}。最後に、次のことを確認してください。
-      </p>
-      {editor.getSnapshot().report.abstract.started === false && (
-        <p className="note">抄録はまだ書いていないため、このPDFには抄録のページは入りません（先生の許可が出たら、抄録のページの「先生の許可が出た」を押して書き始めます）。</p>
-      )}
-      <div className="checklist">
-        {SELF_CHECKS.map((text, i) => (
-          <label key={i}>
-            <input type="checkbox" checked={checked[i]} onChange={(e) => setChecked(checked.map((c, j) => (j === i ? e.target.checked : c)))} />
-            {text}
-          </label>
-        ))}
-      </div>
-      <div className="print-guide">
-        <b>印刷の画面で、次のように選んでください（{deviceName()}）</b>
-        <PrintSteps />
-        ファイル名は「{editor.pdfTitle}.pdf」になります。保存したら PDF を開いて、ページの数と写真を確かめてください。
-      </div>
-      <div className="row-buttons">
-        <span className="spacer" />
-        <button onClick={onClose}>やめる</button>
-        <button className="primary" disabled={!allChecked} onClick={() => print()}>
-          印刷の画面を開く
         </button>
       </div>
     </Modal>

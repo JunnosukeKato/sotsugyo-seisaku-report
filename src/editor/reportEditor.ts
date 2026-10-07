@@ -1417,8 +1417,9 @@ export class ReportEditor {
     )
   }
 
+  /** PDF のファイル名のもと（例：2026_卒業制作報告書_00ZZ0123_文化花子）。学籍番号・氏名がまだ空なら、その部分は付けない */
   get pdfTitle(): string {
     const { studentId, name } = this.report.basicInfo
-    return `${this.config.fiscalYear}_${this.config.reportName}_${studentId.trim()}_${name.replace(/[\s　]/g, '')}`
+    return [String(this.config.fiscalYear), this.config.reportName, studentId.trim(), name.replace(/[\s　]/g, '')].filter(Boolean).join('_')
   }
 }

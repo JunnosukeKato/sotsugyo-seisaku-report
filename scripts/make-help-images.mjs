@@ -13,6 +13,7 @@ import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 process.env.EDGE_PORT ??= '9403'
 const { withEdge } = await import('./poc/edge.mjs')
 const { fakeDrive, routeGoogle } = await import('./e2e/fakeGoogle.mjs')
+const { setupWriting } = await import('./e2e/sampleReport.mjs')
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'public/help'
@@ -120,102 +121,6 @@ async function capture(page, name, clip) {
 const CHECK_TEXT = '二回目の仮縫いでは、前見頃の丈を2cm短くした。袖の記事が重く、腕が下がって見えたためです。'
 const P7 = '二回目の仮縫いでは、実際に舞台の上で歩いたり腕を回したりして、動きやすさを確かめた。'
 
-/** ページの中で、見本の画像（docs/guide-images/sample/）を読み込み、見本の原稿にする（本文5ページ・図3枚・素材表・作品写真1枚・抄録） */
-async function setupWriting() {
-  const { fromMaterialTable } = await import('/src/model/table.ts')
-  const { importImage } = await import('/src/model/images.ts')
-  const files = [
-    ['g-design', 'design', 1200],
-    ['g-mood', 'moodboard', 1200],
-    ['g-process', 'process', 1200],
-    ['g-photo1', 'photo-1', 1200],
-    ['g-satin', 'swatch-satin', 800],
-    ['g-chiffon', 'swatch-chiffon', 800],
-    ['g-broad', 'swatch-broad', 800],
-  ]
-  const made = []
-  for (const [id, file, max] of files) made.push(await importImage(await (await fetch(`/docs/guide-images/sample/${file}.jpg`)).blob(), id, max))
-  window.__editor.addImages(made)
-  const r0 = window.__editor.getSnapshot().report
-  const t = (text) => ({ type: 'text', text })
-  const ref = (targetId, withParens = true) => ({ type: 'ref', targetId, withParens })
-  const p = (id, ...content) => ({ type: 'paragraph', id, content: content.map((c) => (typeof c === 'string' ? t(c) : c)) })
-  const sub = (id, title) => ({ type: 'subheading', id, title })
-  const fig = (rowId, id, imageId, caption) => ({ type: 'figureRow', id: rowId, figures: [{ id, imageId, caption }] })
-  window.__editor.replace({
-    ...r0,
-    basicInfo: { ...r0.basicInfo, name: '文化　花子', courseId: 'film-stage-costume', subtitleInput: 'シンドバッド' },
-    abstract: {
-      started: true,
-      paragraphs: [
-        p('a1', '本制作報告書は、卒業イベント「シンドバッド」において、筆者が担当した主人公シンドバッドの衣装の制作についてまとめたものである。シンドバッドは七つの航海を経て成長していく人物であり、本制作では、旅立ちの場面の若々しさと、帰還の場面の頼もしさの両方を、一着の衣装で表すことを目標とした。'),
-        p('a2', 'デザインは、中東の伝統的な装いをもとに、航海の力強さと冒険心を表すことを考えた。袖は風をはらむように大きく膨らませ、腰には幅の広い帯を巻いた。配色は海の青と砂の金を軸とし、袖には波の模様を金の糸で刺繍した。素材は、光沢のあるコットンサテンを中心に、透けるシルクシフォンを重ねて、照明の当たり方で表情が変わるようにした。'),
-        p('a3', '制作では、二回の仮縫いで動きやすさを確かめた。一回目は袖の膨らみが大きすぎ、腕を上げると肩が引きつれたため、袖山を下げて袖幅を細くした。二回目は舞台の上で歩いたり腕を回したりして、客席からの見え方も確かめた。刺繍は図案を何度も描き直し、離れた客席からでも波の形が分かる大きさに決めた。袖の重ね布は、腕を下ろしたときに広がりすぎないよう、端に細いテープを入れて形を整えた。'),
-        p('a4', '本番では、照明の下で袖の刺繍が光り、主人公の動きを大きく見せることができた。客席からも、袖が揺れる様子が印象に残ったという声が多く寄せられた。一方で、帯の結び目が大きく、場面転換の早替えに時間がかかるという課題が残った。今後は、見た目の美しさだけでなく、着脱のしやすさも初めから考えたデザインを心がけたい。'),
-      ],
-    },
-    body: [
-      {
-        id: 'c1',
-        title: '企画・立案',
-        blocks: [
-          sub('s1', '担当衣装のキャラクター'),
-          p('p1', '筆者が担当したのは、物語の主人公である船乗りシンドバッドの衣装である。シンドバッドは七つの航海を経て成長していく人物であり、場面ごとに異なる表情を見せる。'),
-          p('p2', '本制作では、旅立ちの場面の若々しさと、帰還の場面の頼もしさの両方を、一着の衣装で表すことを目標とした。そのため、色や形で年齢を強く感じさせるのではなく、動きの大きさと素材の光り方で印象を変えられるように考えた。'),
-          sub('s2', 'デザイン説明'),
-          p('p3', '中東の伝統的な装いをもとに、航海の力強さと冒険心を表すデザインを考えた', ref('f1'), '。キーワードは自由、勇気、海である。'),
-          fig('r1', 'f1', 'g-design', 'デザイン画'),
-          p('p4', '袖は風をはらむように大きく膨らませた。腰には幅の広い帯を巻き、袖には波の模様を刺繍で入れた。配色は海の青と砂の金を軸とし、ズボンには生成りを合わせて全体を軽く見せた。'),
-          p('p4b', '配色と素材は、海と砂漠の写真や布の切れ端を集めたイメージボードをもとに決めた', ref('f2'), '。藍色の濃さは、照明の下でも黒く沈まないものを選んだ。'),
-          fig('r2', 'f2', 'g-mood', 'イメージボード'),
-          sub('s3', '使用素材'),
-          p('p5', ref('t1', false), 'に使用した素材をまとめる。'),
-          fromMaterialTable({
-            id: 't1',
-            caption: '使用素材表',
-            rows: [
-              { id: 'm1', name: 'コットンサテン', usage: 'ブラウス', swatchImageId: 'g-satin' },
-              { id: 'm2', name: 'シルクシフォン', usage: '袖の重ね布', swatchImageId: 'g-chiffon' },
-              { id: 'm3', name: 'コットンブロード', usage: 'ズボン', swatchImageId: 'g-broad' },
-            ],
-          }),
-          p('p5b', 'ブラウスには、やわらかい光沢のあるコットンサテンを使った。照明が当たると表面が光り、袖の動きが客席からも分かりやすくなる。袖の重ね布には透けるシルクシフォンを使い、腕を動かしたときに風に揺れるように見せた。'),
-        ],
-      },
-      {
-        id: 'c2',
-        title: '制作過程',
-        blocks: [
-          sub('s4', 'パターンと仮縫い'),
-          p('p6', 'デザイン画をもとにパターンを引き、シーチングで仮縫いをした。一回目の仮縫いでは、袖の膨らみが大きすぎて、腕を上げたときに肩が引きつれた。そこで袖山を3cm下げ、袖幅も細くした。'),
-          p('p7', '二回目の仮縫いでは、実際に舞台の上で歩いたり腕を回したりして、動きやすさを確かめた。'),
-          sub('s5', '袖の刺繍'),
-          p('p8', '袖には、海の波を表す模様を金の糸で刺繍した', ref('f3'), '。図案は実物大に描いて袖に写し、刺繍枠に張ってから一針ずつ刺した。'),
-          fig('r3', 'f3', 'g-process', '袖の刺繍'),
-          p('p9', '最初の図案は波が細かすぎて、離れると模様が見えなかった。そこで波の数を減らし、一つ一つの波を大きく描き直した。糸は、照明の下で強く光りすぎないよう、つやを抑えた金色を選んだ。'),
-          p('p10', '刺繍には片袖でおよそ20時間かかった。両袖の模様がそろうよう、型紙に印を付けて位置を合わせた。刺し終えたあとは、裏に薄い接着芯を貼り、着たときに糸が引っかからないようにした。'),
-          sub('s6', '帯とズボン'),
-          p('p11', '帯は、からし色の布を幅15cmの筒に縫い、腰に二重に巻いて後ろで結んだ。結び目が大きく見えるよう、端に重さのある房を付けた。房は動いたときに揺れて、舞台の上で動きを強調する役割も果たした。'),
-          p('p12', 'ズボンは、裾に向かって細くなる形にし、裾口にゴムを入れて動きやすくした。股上を深くとり、しゃがんだり飛び跳ねたりしても突っ張らないようにした。'),
-          sub('s7', '仕上げ'),
-          p('p13', '最後に全体をアイロンで整え、本番と同じ照明の下で色の見え方を確かめた。袖の刺繍が客席の後ろからも光って見えることを確かめ、完成とした。'),
-        ],
-      },
-      {
-        id: 'c3',
-        title: 'まとめ',
-        blocks: [
-          p('p14', '本制作では、主人公の成長を一着の衣装で表すことを目標とした。袖の大きな膨らみと金の刺繍によって、旅立ちの若々しさと帰還の頼もしさの両方を表すことができた。'),
-          p('p15', '一方で、帯の結び目が大きく、場面転換の早替えに時間がかかるという課題が残った。今後は、見た目の美しさだけでなく、着脱のしやすさも初めから考えたデザインを心がけたい。'),
-          p('p16', '制作を通して、舞台衣装は客席からの見え方と演者の動きやすさの両方を考える必要があることを学んだ。この経験を、今後の衣装制作に生かしたい。'),
-        ],
-      },
-    ],
-    references: [],
-    workPhotos: { layout: 1, imageIds: ['g-photo1'] },
-    acknowledged: [],
-  })
-}
 
 /** 段落の文を書き換える */
 const setParagraph = (page, id, text) =>
@@ -236,6 +141,8 @@ async function openTool(browser, drive, { context, viewport = PC } = {}) {
   const page = await context.newPage()
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
   page.on('dialog', (d) => d.accept())
+  // 「PDF を保存する」で保存される PDF は、どこにも置かない（撮影には要らない）
+  await (await page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'deny', browserContextId: context.id })
   await prepare(page)
   await page.setViewport(viewport)
   await routeGoogle(page, drive, config)
@@ -278,9 +185,12 @@ async function studentShots(browser) {
   const errors = await page.evaluate(() => window.__editor.getSnapshot().findings.map((f) => `${f.severity}:${f.title}`))
   if (errors.length) throw new Error(`見本の原稿に指摘が残っています：${errors.join('、')}`)
 
-  // ---- 提出用の PDF を書き出す窓（エラーが0件のとき） ----
+  // ---- 提出用の PDF を保存したところ（エラーが0件のとき。3つにチェック →「PDF を保存する」→ できたページが並ぶ。mockups/v28 案C） ----
   await page.evaluate(() => document.querySelector('.side .export').click())
   await page.waitForSelector('.modal .checklist')
+  await page.evaluate(() => document.querySelectorAll('.modal .checklist input').forEach((i) => i.click()))
+  await page.evaluate(() => document.querySelector('.modal .pdf-start').click())
+  await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
   await page.evaluate(() => document.activeElement?.blur())
   await sleep(500)
   await capture(page, 'export', await R(page, '.modal'))

@@ -707,6 +707,51 @@ body.resizing .page-viewport { pointer-events: none; }
   .print-draft .page-viewport [data-vivliostyle-page-container]::after { content: '下書き' !important; position: absolute !important; inset: auto !important; left: 50% !important; top: 50% !important; transform: translate(-50%, -50%) rotate(-32deg) !important; background: none !important; animation: none !important; font-family: 'BIZ UDPGothic', sans-serif; font-weight: 700; font-size: 96pt; letter-spacing: 0.3em; color: rgba(181, 68, 59, 0.14) !important; white-space: nowrap; pointer-events: none; z-index: 10; }
 }
 
+/* ---- PDF をそのまま保存する（印刷の画面を通さない。mockups/v28 案C「窓の中で、できたページを見せる」） ---- */
+.modal.pdf-modal { width: min(760px, calc(100vw - 32px)); }
+.modal h2 .pdf-ok, .modal h2 .pdf-ng { display: inline-grid; place-items: center; width: 26px; height: 26px; margin-right: 8px; vertical-align: -6px; }
+.modal h2 .pdf-ok { border-radius: 50%; background: var(--ok); color: #fff; }
+.modal h2 .pdf-ok svg { width: 17px; height: 17px; stroke-width: 2.2; }
+.modal h2 .pdf-ng { color: var(--error); }
+.modal h2 .pdf-ng svg { width: 24px; height: 24px; }
+/* 保存するファイル（名前と、保存する場所・ページの数と大きさ） */
+.pdf-file { display: grid; grid-template-columns: 30px minmax(0, 1fr); gap: 10px; align-items: center; margin: 4px 0 14px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 12px; background: var(--panel-bg); }
+.pdf-file > svg { width: 28px; height: 28px; color: var(--accent); }
+.pdf-file.draft > svg { color: var(--error); }
+.pdf-file b { display: block; font-size: 13.5px; overflow-wrap: anywhere; }
+.pdf-file small { display: block; margin-top: 1px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+/* 進み具合 */
+.pdf-progress { display: flex; align-items: center; gap: 12px; margin: 6px 0 8px; }
+.pdf-progress .bar { flex: 1; height: 8px; border-radius: 4px; background: var(--chip-bg); overflow: hidden; }
+.pdf-progress .bar i { display: block; height: 100%; border-radius: 4px; background: var(--accent); transition: width 0.2s ease; }
+.pdf-progress span { font-size: 13px; color: var(--muted); white-space: nowrap; }
+.pdf-progress span b { font-size: 16px; color: var(--ink); }
+.pdf-small { margin: 0; font-size: 12px; line-height: 1.7; color: var(--muted); }
+/* できたページの小さな絵（PDF に入れるのと同じ画像を縮めたもの） */
+.pdf-thumbs { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px 8px; margin: 4px 0 12px; padding: 12px; border-radius: 12px; background: var(--stage-bg); }
+.pdf-thumbs figure { margin: 0; text-align: center; font-size: 10.5px; color: var(--muted); }
+.pdf-thumbs img, .pdf-thumbs .tile { display: block; width: 100%; aspect-ratio: 210 / 297; margin-bottom: 3px; background: #fff; box-shadow: 0 1px 2px rgba(30, 25, 20, 0.1); }
+.pdf-thumbs .tile { background: #f4f2ee; box-shadow: inset 0 0 0 1px #e2ded7; }
+.pdf-thumbs .tile.now { position: relative; background: #fff; box-shadow: inset 0 0 0 2px var(--accent); }
+.pdf-thumbs .tile.now::after { content: ''; position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; border-radius: 50%; border: 2.5px solid var(--accent-soft); border-top-color: var(--accent); animation: login-spin 0.8s linear infinite; }
+/* iPhone・iPad：できたあとに押す「保存する」（大きく） */
+.modal button.pdf-save { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 13px 0; border-radius: 12px; font-size: 16px; }
+.modal button.pdf-save svg, .modal button.pdf-open svg { width: 18px; height: 18px; }
+.modal button.pdf-open { display: inline-flex; align-items: center; gap: 6px; }
+/* 予備：印刷の画面から保存（小さな字のリンク。窓の左下と、下書きの欄の中） */
+.modal button.pdf-fallback { border: 0; padding: 0; background: none; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+.draft-box button.pdf-draft { display: block; margin-top: 10px; }
+.draft-box button.pdf-fallback { display: block; margin-top: 10px; }
+.pdf-print-box { margin: 0 0 6px; }
+.draft-box .pdf-print-box { margin: 8px 0 0; padding: 8px 12px; border-radius: 8px; background: #fff; }
+.pdf-print-box > button { margin-top: 8px; }
+@media (max-width: 600px) {
+  .modal.pdf-modal { padding: 18px 18px 20px; max-height: calc(100dvh - 24px); }
+  .pdf-thumbs { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 8px 6px; padding: 10px; }
+  .modal .row-buttons .pdf-fallback { flex-basis: 100%; order: 9; text-align: left; margin-top: 4px; }
+}
+@media (prefers-reduced-motion: reduce) { .pdf-thumbs .tile.now::after { animation: none; } .pdf-progress .bar i { transition: none; } }
+
 /* 管理ページでドライブ保存を止めているとき（mockups/v22 ②） */
 .drive-stopped { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 12px; line-height: 1.6; }
 

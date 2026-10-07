@@ -355,6 +355,7 @@ function TopicView({ topic: t, topics, terms, backLabel, imageBase, device, dete
           ))}
         </ol>
       )}
+      {t.devices && dev && t.devicesTitle && <p className="help-dev-title">{t.devicesTitle}</p>}
       {t.devices && dev && (
         <div className="help-dev">
           <div className="tabs" role="group" aria-label="端末">
