@@ -79,7 +79,7 @@ export function coverHtml(report: Report, config: YearConfig, options: Pick<Docu
 <div class="el label">${escapeHtml(config.cover.titleLabel)}</div>
 <div class="el title">${escapeHtml(config.commonTitle)}</div>
 <div class="rule title-rule"></div>
-<div class="el subtitle" style="font-size:${subtitlePt}pt">${escapeHtml(subtitleBefore)}${field(FIELD_IDS.subtitleInput, basicInfo.subtitleInput, '（クリックして入力）')}${escapeHtml(subtitleAfter)}</div>
+<div class="el subtitle" style="font-size:${subtitlePt}pt${subtitlePt < COVER_SUBTITLE.maxPt ? `;padding-top:${COVER_SUBTITLE.maxPt - subtitlePt}pt` : ''}">${escapeHtml(subtitleBefore)}${field(FIELD_IDS.subtitleInput, basicInfo.subtitleInput, '（クリックして入力）')}${escapeHtml(subtitleAfter)}</div>
 <div class="rule subtitle-rule"></div>
 <div class="el department">${escapeHtml(config.faculty)}・${escapeHtml(config.department)}</div>
 <div class="el course">${field(FIELD_IDS.course, course?.name ?? '', '（コースを選ぶ）')} コース</div>
@@ -118,10 +118,10 @@ export interface LineBox {
 }
 
 /**
- * 表紙のサブタイトル（幅135.8mm・22pt）。長いときは、枠の1行に入るまで行全体の文字を小さくする（mockups/v23 ① 案A）。
+ * 表紙のサブタイトル（幅144.2mm・22pt）。長いときは、枠の1行に入るまで行全体の文字を小さくする（mockups/v23 ① 案A）。
  * 本文の文字（10.5pt）より小さくはしない。それでも入らなければ、セルフチェックのエラーにする
  */
-export const COVER_SUBTITLE: LineBox = { widthMm: 135.8, maxPt: 22, minPt: 11 }
+export const COVER_SUBTITLE: LineBox = { widthMm: 144.2, maxPt: 22, minPt: 11 }
 /** 抄録の見出しのサブタイトル（本文の幅150mm・12pt）。表紙と同じく、1行に入るまで小さくする */
 export const ABSTRACT_SUBTITLE: LineBox = { widthMm: 150, maxPt: 12, minPt: 9 }
 /** 文字を小さくする刻み（pt） */
@@ -198,11 +198,11 @@ function tocHtml(report: Report, pageNumbers: Record<string, number>): string {
         .filter((b) => b.type === 'subheading')
         .map((b) => `<div class="toc-sub">${subheadingLabel(sub++)}${escapeHtml(b.title)}</div>`)
         .join('\n')
-      return `<div class="toc-ch"><span>${chapterLabel(i)}${escapeHtml(chapter.title)}</span><span class="leader"></span><span class="pno">${pno(chapter.id)}</span></div>\n${subs}`
+      return `<div class="toc-ch${i > 0 ? ' next' : ''}"><span>${chapterLabel(i)}${escapeHtml(chapter.title)}</span><span class="leader"></span><span class="pno">${pno(chapter.id)}</span></div>\n${subs}`
     })
     .join('\n')
   const references = report.references.length
-    ? `<div class="toc-ch"><span>引用・参考文献</span><span class="leader"></span><span class="pno">${pno(REFERENCES_ANCHOR)}</span></div>`
+    ? `<div class="toc-ch${report.body.length ? ' next' : ''}"><span>引用・参考文献</span><span class="leader"></span><span class="pno">${pno(REFERENCES_ANCHOR)}</span></div>`
     : ''
   return `<section class="toc">
 <div class="toc-title">目次</div>

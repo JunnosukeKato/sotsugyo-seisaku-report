@@ -26,7 +26,7 @@ function sampleReport(config: YearConfig, courseId: string): Report {
 const PREVIEW_CSS = `
 body { margin: 0; padding: 16px; background: #eef0f3; display: flex; gap: 16px; align-items: flex-start; letter-spacing: 0; text-align: left; }
 .page { flex: none; width: 210mm; height: 297mm; box-sizing: border-box; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.15); overflow: hidden; }
-.page.cover-page { padding: 25mm; }
+.page.cover-page { padding: 20mm; }
 .page.abstract-page { padding: 25mm 25mm 25mm 35mm; }
 [data-block-id]:empty::before { content: attr(data-placeholder); color: #9aa1ad; }
 [data-block-id="basic:subtitleInput"]:empty::before { content: '（学生の入力）'; }

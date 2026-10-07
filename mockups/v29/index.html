@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>v29 表紙と目次の調整</title>
+<style>
+  body { margin: 0; padding: 20px; background: #e9e6e1; font-family: 'BIZ UDPGothic', sans-serif; color: #222; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 17px; margin: 28px 0 8px; }
+  p.lead { margin: 0 0 12px; font-size: 13.5px; line-height: 1.7; }
+  .row { display: flex; flex-wrap: wrap; gap: 16px; align-items: flex-start; }
+  .cell small { min-height: 3em; }
+  .cell { flex: none; }
+  .cell b { display: block; margin: 0 0 6px; font-size: 14px; }
+  .cell small { display: block; margin: 0 0 6px; font-size: 12px; color: #555; line-height: 1.5; }
+  iframe { display: block; border: 0; background: #fff; box-shadow: 0 2px 8px rgba(0,0,0,.18); }
+</style>
+</head>
+<body>
+<h1>v29 表紙と目次の調整</h1>
+<p class="lead">本物の組版の部品（document.ts・documentCss）で作った見本です。左が今の形。中身は架空の学生（文化 花子・00ZZ0123）。<br>※ 依頼者は表紙＝案B、目次＝案A を選び、ツールに反映済み（2026年10月8日）。このページは今の組版の上に案を重ねるので、反映後は「今」が選んだ形になる。選んだときの画像は shots/ にある。</p>
+<h2>① 表紙：題目・サブタイトルを罫線に近づけ、外の余白を少し狭く</h2>
+<div class="row" id="covers"></div>
+<h2>② 目次：大見出しの前にすき間をあける</h2>
+<div class="row" id="tocs"></div>
+<script type="module" src="./v29.ts"></script>
+</body>
+</html>

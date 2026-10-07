@@ -25,7 +25,7 @@ export const documentCss = `
 ${reportCss}
 
 /* ---- ページの種類 ---- */
-@page cover { margin: 25mm; @bottom-center { content: none; } }
+@page cover { margin: 20mm; @bottom-center { content: none; } }
 @page abstract { @bottom-center { content: none; } }
 @page toc { @bottom-center { content: none; } }
 @page photos { margin: 0; @bottom-center { content: none; } }
@@ -39,29 +39,32 @@ section.photos { page: photos; }
 /* ページ番号は本文の1ページ目を「1」とする（表紙・抄録・目次は数えない） */
 section.body { counter-reset: page 1; }
 
-/* ---- 表紙（BIZ UDPゴシック。テンプレートは MS Pゴシック） ---- */
-.cover { position: relative; height: 247mm; font-family: ${COVER_FONT}; letter-spacing: 0; text-indent: 0; line-height: 1; text-align: left; }
-.cover .frame { position: absolute; left: 0; top: 0; width: 161mm; height: 242mm; border: 0.75pt solid #000; }
+/* ---- 表紙（BIZ UDPゴシック。テンプレートは MS Pゴシック） ----
+ * 位置はテンプレートの値（余白25mm・枠161×242mm）を、余白20mm・枠171×252mm に広げて比例で移したもの（mockups/v29 ① 案B）。
+ * 題目・サブタイトルは、文字の下が罫線の3mm上にくるように下げた（氏名の欄と同じくらいの間）
+ */
+.cover { position: relative; height: 257mm; font-family: ${COVER_FONT}; letter-spacing: 0; text-indent: 0; line-height: 1; text-align: left; }
+.cover .frame { position: absolute; left: 0; top: 0; width: 171mm; height: 252mm; border: 0.75pt solid #000; }
 .cover .el { position: absolute; white-space: nowrap; }
-.cover .center { left: 0; width: 161mm; text-align: center; }
-.cover .year { top: 16.7mm; font-size: 22pt; }
-.cover .heading { top: 39.6mm; font-size: 48pt; }
-.cover .label { top: 69.8mm; left: 9.4mm; font-size: 20pt; }
-.cover .title { top: 86.2mm; left: 12.7mm; width: 135.8mm; text-align: center; font-size: 22pt; }
-.cover .subtitle { top: 105.2mm; left: 12.7mm; width: 135.8mm; text-align: center; font-size: 22pt; }
-.cover .rule { position: absolute; left: 12.7mm; width: 135.8mm; border-top: 0.75pt solid #000; }
-.cover .rule.title-rule { top: 102mm; }
-.cover .rule.subtitle-rule { top: 117.7mm; }
-.cover .department { top: 141.4mm; left: 14.4mm; font-size: 18pt; }
-.cover .course { top: 152.4mm; right: 13.7mm; font-size: 18pt; }
-.cover .id-label { top: 169.5mm; right: 53.4mm; font-size: 16pt; }
-.cover .id-value { top: 169.5mm; left: 109.7mm; width: 38.3mm; text-align: center; font-size: 16pt; }
-.cover .rule.id-rule { top: 179mm; left: 109.7mm; width: 38.3mm; }
-.cover .name-label { top: 191.3mm; left: 21.8mm; font-size: 20pt; }
-.cover .name-value { top: 191.3mm; left: 59.2mm; font-size: 20pt; }
-.cover .rule.name-rule { top: 201.7mm; left: 57.6mm; width: 90.4mm; }
-.cover .rule.bottom-rule { top: 225.5mm; border-top-width: 2pt; }
-.cover .university { top: 228mm; font-size: 24pt; }
+.cover .center { left: 0; width: 171mm; text-align: center; }
+.cover .year { top: 17.4mm; font-size: 22pt; }
+.cover .heading { top: 41.2mm; font-size: 48pt; }
+.cover .label { top: 72.7mm; left: 10mm; font-size: 20pt; }
+.cover .title { top: 95.4mm; left: 13.5mm; width: 144.2mm; text-align: center; font-size: 22pt; }
+.cover .subtitle { top: 111.8mm; left: 13.5mm; width: 144.2mm; text-align: center; font-size: 22pt; }
+.cover .rule { position: absolute; left: 13.5mm; width: 144.2mm; border-top: 0.75pt solid #000; }
+.cover .rule.title-rule { top: 106.2mm; }
+.cover .rule.subtitle-rule { top: 122.6mm; }
+.cover .department { top: 147.2mm; left: 15.3mm; font-size: 18pt; }
+.cover .course { top: 158.7mm; right: 14.6mm; font-size: 18pt; }
+.cover .id-label { top: 176.5mm; right: 56.7mm; font-size: 16pt; }
+.cover .id-value { top: 176.5mm; left: 116.5mm; width: 40.7mm; text-align: center; font-size: 16pt; }
+.cover .rule.id-rule { top: 186.4mm; left: 116.5mm; width: 40.7mm; }
+.cover .name-label { top: 199.2mm; left: 23.2mm; font-size: 20pt; }
+.cover .name-value { top: 199.2mm; left: 62.9mm; font-size: 20pt; }
+.cover .rule.name-rule { top: 210mm; left: 61.2mm; width: 96mm; }
+.cover .rule.bottom-rule { top: 234.8mm; border-top-width: 2pt; }
+.cover .university { top: 237.4mm; font-size: 24pt; }
 
 /* ---- 抄録（10.5pt、横40字、行送り23pt。上部はテンプレートの配置） ---- */
 .abstract { font-family: ${MINCHO}; }
@@ -96,6 +99,8 @@ section.body { counter-reset: page 1; }
 .toc .toc-ch .leader::before { content: '${'・'.repeat(60)}'; }
 .toc .toc-ch .pno { flex: none; }
 .toc .toc-sub { padding-left: 5mm; }
+/* 2つ目からの大見出し（と引用・参考文献）の前に半行あけて、章のまとまりを見せる（mockups/v29 ② 案A） */
+.toc .toc-ch.next { margin-top: ${LINE_PITCH_PT / 2}pt; }
 
 /* ---- 引用・参考文献（本文に続けてページ番号を振る） ---- */
 .references h1 { margin-bottom: 0; }

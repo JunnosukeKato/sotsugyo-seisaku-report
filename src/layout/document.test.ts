@@ -37,10 +37,10 @@ describe('サブタイトルが長いとき、1行に入るまで文字を小さ
     const pt = (input: string) => fitLineFontPt(subtitleLine(withSubtitle(input), currentConfig), COVER_SUBTITLE)
     expect(subtitleLine(withSubtitle(EIGHT), currentConfig)).toBe('―アラビアンナイトの衣装制作―')
     expect(pt(EIGHT)).toBe(22)
-    expect(pt(SIXTEEN)).toBe(16.5)
-    expect(pt(TWENTY_SIX)).toBe(11.5)
+    expect(pt(SIXTEEN)).toBe(17.5)
+    expect(pt(TWENTY_SIX)).toBe(12)
     expect(pt('あ'.repeat(40))).toBe(11)
-    // どの大きさでも、見積もった幅は枠（135.8mm）に収まる
+    // どの大きさでも、見積もった幅は枠（144.2mm）に収まる
     for (const input of [EIGHT, SIXTEEN, TWENTY_SIX]) {
       const line = subtitleLine(withSubtitle(input), currentConfig)
       expect(textUnits(line) * pt(input) * (25.4 / 72)).toBeLessThanOrEqual(COVER_SUBTITLE.widthMm)
@@ -68,9 +68,9 @@ describe('サブタイトルが長いとき、1行に入るまで文字を小さ
     expect(refitLineFontPt(20, 0, COVER_SUBTITLE)).toBe(20)
   })
 
-  it('表紙：決めた大きさで、サブタイトルの行全体（決まり文句も）を組む', () => {
+  it('表紙：決めた大きさで、サブタイトルの行全体（決まり文句も）を組む。小さくしたときは上をあけて、文字の下を罫線の上にそろえる', () => {
     expect(coverHtml(withSubtitle(EIGHT), currentConfig)).toContain('<div class="el subtitle" style="font-size:22pt">―<span data-block-id="basic:subtitleInput"')
-    expect(coverHtml(withSubtitle(SIXTEEN), currentConfig, { coverSubtitlePt: 17.5 })).toContain('<div class="el subtitle" style="font-size:17.5pt">')
+    expect(coverHtml(withSubtitle(SIXTEEN), currentConfig, { coverSubtitlePt: 17.5 })).toContain('<div class="el subtitle" style="font-size:17.5pt;padding-top:4.5pt">')
   })
 
   it('抄録の見出し：12pt から、本文の幅（150mm）の1行に入るまで小さくする（いちばん小さくて 9pt）', () => {
