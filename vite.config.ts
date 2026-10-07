@@ -8,8 +8,8 @@ export default defineConfig({
   plugins: [react()],
   build: {
     rollupOptions: {
-      // 学生用ツールと、Google ドライブの接続テストのページ
-      input: { main: 'index.html', driveTest: 'drive-test.html' },
+      // 学生用ツールと、Google ドライブの接続テストのページと、PDF を手元で作る試しのページ
+      input: { main: 'index.html', driveTest: 'drive-test.html', pdfTest: 'pdf-test.html' },
     },
   },
   test: {
