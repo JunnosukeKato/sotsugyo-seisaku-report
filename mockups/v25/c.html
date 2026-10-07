@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案C やわらか（v25 使い方の手引き）</title>
+<!-- node scripts/mockup-shots-v25.mjs pages で作る（手で直さない）。画面の画像は shots/、番号の吹き出しの場所は shots/marks.json -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udmincho/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udmincho/700.css">
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; background: #e9e6e0; -webkit-font-smoothing: antialiased; }
+  .sheet { position: relative; width: 210mm; height: 297mm; overflow: hidden; background: #fff; break-after: page; }
+  .sheet:last-child { break-after: auto; }
+  @media screen { body { padding: 24px 0; } .sheet { margin: 0 auto 24px; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08), 0 20px 60px rgba(30, 25, 20, 0.16); } }
+  @media print { body { background: none; padding: 0; } .sheet { margin: 0; box-shadow: none; } }
+  h1, h2, h3, p, ol, ul, dl, dd, figure { margin: 0; }
+  ol, ul { padding: 0; list-style: none; }
+  b, strong { font-weight: 700; }
+  .fn { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; letter-spacing: 0.01em; }
+  .ic { width: 1em; height: 1em; display: inline-block; vertical-align: -0.14em; flex: none; }
+  .shot { position: relative; margin: 0; --mkr: 2.7mm; --mkgap: 0.5mm; --mkout: 1.4mm; }
+  .shot .ld { position: absolute; z-index: 1; height: 0.4mm; margin-top: -0.2mm; }
+  .shot > img { display: block; width: 100%; height: 100%; }
+  .shot .mk { position: absolute; transform: translate(-50%, -50%); display: grid; place-items: center; font-style: normal; line-height: 1; z-index: 2; }
+  .shot .hl { position: absolute; z-index: 1; pointer-events: none; }
+
+  :root { --ink: #2b2e36; --muted: #5f6470; --ai: #3a4c94; --soft: #eef1fa; --soft-2: #dfe5f6; --cream: #fbf5ea; --cream-2: #efe3cc; --coral: #c8573a; --line: #e2e5ee; }
+  body { font-family: 'BIZ UDPGothic', sans-serif; color: var(--ink); font-size: 9.5pt; line-height: 1.65; }
+  .shot { --mkr: 2.9mm; --mkgap: 0.7mm; }
+  .shot .mk { width: 5.8mm; height: 5.8mm; border-radius: 50%; background: var(--coral); color: #fff; font: 700 10pt/1 'BIZ UDPGothic', sans-serif; box-shadow: 0 0 0 0.6mm #fff, 0 0.5mm 1.6mm rgba(120, 50, 30, 0.35); }
+  .shot .mk.sub { background: var(--ai); font-family: 'Segoe UI', sans-serif; }
+  .shot .hl { border: 0.5mm solid var(--coral); border-radius: 2mm; }
+  .shot .ld { background: var(--coral); }
+  .shot-card.room { padding-left: 9mm; }
+  .round { border-radius: 3.4mm; overflow: hidden; }
+  .chip { display: inline-flex; align-items: center; padding: 1mm 4mm; border-radius: 99mm; border: 0.35mm solid var(--ai); color: var(--ai); font-size: 10pt; font-weight: 700; letter-spacing: 0.08em; }
+  .chip.solid { background: var(--ai); color: #fff; }
+  .icon { width: 10mm; height: 10mm; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--soft); color: var(--ai); font-size: 6mm; }
+
+  /* ---- 表紙 ---- */
+  .c-cover { padding: 13mm 14mm 0; display: flex; flex-direction: column; gap: 6.5mm; }
+  .c-top { display: flex; align-items: center; gap: 2.4mm; }
+  .c-top .org { margin-left: auto; font-size: 9.5pt; color: var(--muted); letter-spacing: 0.06em; }
+  .c-hero { position: relative; height: 140mm; padding: 11mm 12mm 0; border-radius: 7mm; background: var(--soft); overflow: hidden; }
+  .t .c-hero { background: var(--cream); }
+  .c-hero .tool { font-size: 12.5pt; font-weight: 700; color: var(--ai); letter-spacing: 0.06em; }
+  .c-hero h1 { margin-top: 1mm; font-size: 33pt; line-height: 1.25; letter-spacing: 0.06em; }
+  .c-hero .catch { margin-top: 2.4mm; font-size: 11.5pt; color: var(--muted); }
+  .c-hero .dots { position: absolute; right: 12mm; top: 12mm; width: 38mm; height: 26mm; background: radial-gradient(circle, #c9d2ef 0.7mm, transparent 0.8mm) 0 0 / 5mm 5mm; }
+  .t .c-hero .dots { background: radial-gradient(circle, #e6d3ae 0.7mm, transparent 0.8mm) 0 0 / 5mm 5mm; }
+  .c-hero .pc { position: absolute; left: 40mm; bottom: -8mm; width: 134mm; margin: 0; padding: 1.6mm; border-radius: 3.6mm; background: #fff; box-shadow: 0 2mm 7mm rgba(40, 50, 90, 0.18); }
+  .c-hero .pc img { display: block; width: 100%; border-radius: 2.2mm; }
+  .c-hero .ph { position: absolute; left: 13mm; bottom: -6mm; width: 30mm; margin: 0; padding: 1.2mm; border-radius: 5mm; background: #2b2e36; box-shadow: 0 2mm 6mm rgba(40, 50, 90, 0.25); }
+  .c-hero .ph img { display: block; width: 100%; border-radius: 3.8mm; }
+  .flow3 { display: grid; grid-template-columns: 1fr auto 1fr auto 1fr; gap: 2mm; align-items: center; }
+  .flow3 .card { display: grid; grid-template-columns: auto 1fr; gap: 0 3mm; align-items: center; padding: 3.4mm 3.6mm; border-radius: 4mm; border: 0.35mm solid var(--line); }
+  .flow3 .card b { font-size: 11pt; }
+  .flow3 .card p { grid-column: 2; font-size: 9.5pt; line-height: 1.5; color: var(--muted); }
+  .flow3 .card .icon { grid-row: span 2; }
+  .flow3 > .ic { color: var(--coral); width: 5mm; height: 5mm; }
+  .c-bottom { display: grid; grid-template-columns: 1fr 52mm; gap: 5mm; align-items: stretch; }
+  .c-toc { padding: 4mm 5mm 4.4mm; border-radius: 4mm; background: #fff; border: 0.35mm solid var(--line); }
+  .c-toc h2, .c-qr h2 { display: flex; align-items: center; gap: 2mm; font-size: 11pt; color: var(--ai); margin-bottom: 2mm; }
+  .c-toc ol { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6mm 5mm; }
+  .c-toc li { display: grid; grid-template-columns: 6mm 1fr auto; gap: 2mm; align-items: center; font-size: 10pt; line-height: 1.35; }
+  .c-toc .n { width: 5.6mm; height: 5.6mm; display: grid; place-items: center; border-radius: 50%; background: var(--soft); color: var(--ai); font-weight: 700; font-size: 9.5pt; }
+  .c-toc .pg { font-size: 9pt; color: var(--muted); }
+  .c-qr { padding: 4mm 4mm 4mm; border-radius: 4mm; background: var(--cream); text-align: center; display: flex; flex-direction: column; align-items: center; }
+  .c-qr .q { width: 32mm; height: 32mm; padding: 2mm; border-radius: 2.4mm; background: #fff; }
+  .c-qr .q svg { display: block; width: 100%; height: 100%; }
+  .c-qr h2 { justify-content: center; }
+  .c-qr p { margin-top: 2mm; font-size: 9pt; line-height: 1.45; color: var(--muted); }
+  .c-login { display: flex; align-items: center; gap: 3mm; padding: 3mm 4mm; border-radius: 4mm; background: var(--soft); font-size: 9.5pt; }
+  .t .c-login { background: var(--cream); }
+  .c-login .icon { background: #fff; width: 8mm; height: 8mm; font-size: 4.6mm; }
+  .c-login .fn { font-weight: 600; color: var(--ai); }
+
+  /* ---- 中のページ ---- */
+  .c-inner { padding: 12mm 14mm 0; display: flex; flex-direction: column; }
+  .c-ch { display: flex; align-items: center; gap: 4mm; }
+  .c-ch .no { width: 15mm; height: 15mm; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--ai); color: #fff; font-size: 22pt; font-weight: 700; }
+  .c-ch .kick { font-size: 9.5pt; font-weight: 700; color: var(--coral); letter-spacing: 0.14em; }
+  .c-ch h1 { font-size: 23pt; line-height: 1.25; letter-spacing: 0.05em; }
+  .c-ch .tag { margin-left: auto; align-self: flex-start; }
+  .c-lead { margin: 4mm 0 0; padding: 3mm 4.4mm; border-radius: 4mm; background: var(--soft); font-size: 10pt; line-height: 1.7; }
+  .t .c-lead { background: var(--cream); }
+  .c-main { display: grid; grid-template-columns: 102mm 1fr; gap: 6mm; margin-top: 6mm; align-items: start; }
+  .c-left { display: grid; gap: 4mm; }
+  .shot-card { padding: 2mm; border-radius: 4mm; background: #fff; border: 0.35mm solid var(--line); box-shadow: 0 1mm 4mm rgba(40, 50, 90, 0.08); }
+  .shot-card .shot > img { border-radius: 2.4mm; }
+  .c-steps { display: grid; gap: 2.2mm; }
+  .c-steps li { display: grid; grid-template-columns: 9mm 1fr; gap: 0 2.6mm; align-items: start; }
+  .c-steps .icon { position: relative; grid-row: span 2; width: 9mm; height: 9mm; font-size: 5mm; }
+  .c-steps .icon i, .c-list2 .icon i { position: absolute; right: -1.8mm; top: -1.8mm; width: 5.2mm; height: 5.2mm; display: grid; place-items: center; border-radius: 50%; background: var(--coral); color: #fff; font: 700 9.5pt/1 'BIZ UDPGothic', sans-serif; font-style: normal; box-shadow: 0 0 0 0.45mm #fff; }
+  .c-steps b { font-size: 10.5pt; line-height: 1.45; }
+  .c-steps p { font-size: 9.5pt; line-height: 1.55; }
+  .c-row { display: grid; grid-template-columns: 1.2fr 1fr 1fr; gap: 4mm; margin-top: 6mm; align-items: stretch; }
+  .soft { padding: 3mm 3.4mm 3.4mm; border-radius: 4mm; background: var(--cream); }
+  .soft h3 { display: flex; align-items: center; gap: 1.6mm; margin-bottom: 2mm; font-size: 10.5pt; color: var(--ai); }
+  .soft h3 .ic { width: 4.6mm; height: 4.6mm; }
+  .soft .shot > img { border-radius: 2mm; border: 0.3mm solid var(--cream-2); }
+  .soft p, .soft li { font-size: 9.5pt; line-height: 1.55; }
+  .soft p { margin-top: 2mm; }
+  .soft ol { margin-top: 2mm; display: grid; gap: 1mm; }
+  .soft li { display: grid; grid-template-columns: 4.8mm 1fr; gap: 1.2mm; }
+  .soft .k { width: 4.6mm; height: 4.6mm; margin-top: 0.3mm; display: grid; place-items: center; border-radius: 50%; background: var(--ai); color: #fff; font: 700 9pt/1 'Segoe UI', sans-serif; }
+  .soft .narrow { width: 70%; margin: 0 auto; }
+  .bubble { position: relative; display: flex; align-items: flex-start; gap: 3mm; padding: 3.2mm 4.4mm; border-radius: 4mm; border: 0.35mm solid var(--soft-2); background: #fff; }
+  .bubble .icon { width: 9mm; height: 9mm; font-size: 5mm; background: var(--cream); color: var(--coral); }
+  .bubble ul { display: grid; gap: 0.8mm; flex: 1; }
+  .bubble li { position: relative; padding-left: 3.6mm; font-size: 9.5pt; line-height: 1.55; }
+  .bubble li::before { content: ''; position: absolute; left: 0; top: 2mm; width: 1.6mm; height: 1.6mm; border-radius: 50%; background: var(--coral); }
+  .bubble b { display: block; font-size: 10.5pt; color: var(--coral); margin-bottom: 0.6mm; }
+  .folio { margin-top: auto; padding: 3mm 0 6mm; display: flex; justify-content: center; }
+  .folio span { min-width: 9mm; height: 6mm; padding: 0 2mm; display: grid; place-items: center; border-radius: 99mm; background: var(--soft); color: var(--ai); font-size: 9pt; font-weight: 700; }
+  /* 年度の設定 */
+  .set-card { margin-top: 4.5mm; }
+  .c-list2 { display: grid; grid-template-columns: 1fr 1fr; gap: 2mm 6mm; margin-top: 4.5mm; }
+  .c-list2 li { display: grid; grid-template-columns: 9mm 1fr; gap: 0 2.6mm; align-items: start; }
+  .c-list2 .icon { position: relative; grid-row: span 2; width: 9mm; height: 9mm; font-size: 5mm; }
+  .c-list2 b { font-size: 10.5pt; line-height: 1.45; }
+  .c-list2 p { font-size: 9.5pt; line-height: 1.5; }
+  .c-row2 { display: grid; grid-template-columns: 1.1fr 1fr; gap: 5mm; margin-top: 4mm; align-items: stretch; }
+  .steps4 { display: grid; gap: 1.2mm; margin-top: 2.2mm; }
+  .steps4 li { display: grid; grid-template-columns: 6mm 1fr; gap: 2mm; align-items: center; padding: 1.1mm 2.4mm; border-radius: 99mm; background: #fff; font-size: 9.5pt; line-height: 1.4; }
+  .steps4 .n { width: 5.6mm; height: 5.6mm; display: grid; place-items: center; border-radius: 50%; background: var(--ai); color: #fff; font-weight: 700; font-size: 9.5pt; }
+  .steps4 small { margin-left: 1.6mm; font-size: 9.5pt; color: var(--muted); }
+  .soft.blue { background: var(--soft); }
+  .care-list li { display: grid; grid-template-columns: 4.6mm 1fr; gap: 1.6mm; }
+  .care-list .ic { width: 4.4mm; height: 4.4mm; margin-top: 0.5mm; color: var(--coral); }
+  
+</style>
+</head>
+<body>
+
+<section class="sheet c-cover">
+  <div class="c-top"><span class="chip">2026年度</span><span class="chip solid">学生用</span><span class="org">文化学園大学　国際ファッション文化学科</span></div>
+  <div class="c-hero">
+    <div class="dots"></div>
+    <p class="tool">卒業制作報告書 作成ツール</p>
+    <h1>使い方の手引き</h1>
+    <p class="catch">はじめて開く日から、提出の日まで。</p>
+    <figure class="pc"><img src="shots/pc-full.png" alt=""></figure>
+    <figure class="ph"><img src="shots/phone-write.png" alt=""></figure>
+  </div>
+  <div class="flow3"><div class="card"><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19l1-4L16 5l3 3L9 18z"/><path d="M14 7l3 3"/></svg></span><b>書く</b><p>表紙から作品写真まで、決まった形のまま</p></div><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg><div class="card"><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></span><b>確かめる</b><p>手順書のルールをセルフチェック</p></div><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg><div class="card"><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 3.5h8l4 4v13H6zM14 3.5v4h4"/><path d="M9 13h6M9 16.5h4"/></svg></span><b>提出する</b><p>1つの PDF にして提出</p></div></div>
+  <div class="c-bottom">
+    <div class="c-toc">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="5" cy="6.5" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="17.5" r="1"/></svg>もくじ</h2>
+      <ol><li><span class="n">1</span><span>はじめに</span><span class="pg">p.2</span></li><li><span class="n">2</span><span>表紙と抄録</span><span class="pg">p.4</span></li><li><span class="n">3</span><span>本文を書く</span><span class="pg">p.6</span></li><li><span class="n">4</span><span>作品写真と引用・参考文献</span><span class="pg">p.8</span></li><li><span class="n">5</span><span>セルフチェックで直す</span><span class="pg">p.9</span></li><li><span class="n">6</span><span>PDF にして提出する</span><span class="pg">p.10</span></li><li><span class="n">7</span><span>保存とバックアップ</span><span class="pg">p.11</span></li><li><span class="n">8</span><span>困ったとき</span><span class="pg">p.12</span></li></ol>
+    </div>
+    <div class="c-qr">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>スマホで開く</h2>
+      <div class="q"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h33v33H0z"/><path stroke="#2f3e75" d="M0 0.5h7m4 0h3m2 0h4m1 0h3m2 0h7M0 1.5h1m5 0h1m2 0h1m1 0h5m1 0h1m2 0h1m5 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h1m1 0h4m2 0h1m2 0h5m2 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h2m1 0h1m2 0h2m2 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m1 0h1m2 0h1m1 0h1m1 0h1m1 0h3m1 0h1m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h2m1 0h2m2 0h3m8 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M8 7.5h3m1 0h1m1 0h2m2 0h1m2 0h2m1 0h1M0 8.5h1m1 0h5m3 0h1m2 0h3m1 0h1m4 0h3m1 0h5M0 9.5h1m7 0h4m6 0h6m2 0h2m1 0h2m1 0h1M1 10.5h3m1 0h7m3 0h1m1 0h2m2 0h1m2 0h1m1 0h1m1 0h1m1 0h2M0 11.5h2m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m3 0h1m1 0h4m1 0h1m2 0h5M0 12.5h2m1 0h1m1 0h3m1 0h1m2 0h1m2 0h1m1 0h1m2 0h1m1 0h4m2 0h2M2 13.5h2m1 0h1m1 0h2m2 0h1m2 0h3m2 0h3m1 0h1m2 0h1m2 0h1m1 0h2M1 14.5h1m1 0h4m1 0h5m4 0h1m2 0h3m2 0h2m1 0h2m1 0h1M1 15.5h1m2 0h2m1 0h1m8 0h1m3 0h3m2 0h2m2 0h2M0 16.5h3m1 0h3m2 0h1m1 0h3m3 0h1m2 0h1m1 0h1m1 0h2m1 0h3m2 0h1M0 17.5h3m2 0h1m3 0h1m3 0h2m1 0h1m1 0h3m2 0h1m2 0h2m1 0h4M0 18.5h1m2 0h2m1 0h1m1 0h1m5 0h3m3 0h1m3 0h5m1 0h2M0 19.5h1m1 0h1m2 0h1m1 0h1m3 0h6m1 0h1m2 0h3m1 0h8M0 20.5h3m1 0h1m1 0h7m1 0h5m3 0h3m2 0h3m1 0h2M0 21.5h3m1 0h2m2 0h1m5 0h2m1 0h4m1 0h2m2 0h1m2 0h2m1 0h1M0 22.5h1m1 0h1m1 0h3m2 0h1m1 0h6m1 0h1m7 0h1m3 0h2M0 23.5h1m3 0h2m2 0h4m3 0h1m3 0h1m1 0h4m1 0h1m2 0h2M0 24.5h1m2 0h5m3 0h2m1 0h4m4 0h1m1 0h6m2 0h1M8 25.5h2m3 0h1m2 0h2m1 0h3m2 0h1m3 0h1m1 0h1m1 0h1M0 26.5h7m2 0h1m1 0h5m1 0h1m2 0h5m1 0h1m1 0h1m1 0h1M0 27.5h1m5 0h1m1 0h1m5 0h2m3 0h1m1 0h4m3 0h5M0 28.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h3m3 0h3m3 0h6m1 0h2M0 29.5h1m1 0h3m1 0h1m1 0h5m1 0h3m1 0h4m1 0h3m2 0h1m1 0h3M0 30.5h1m1 0h3m1 0h1m1 0h3m2 0h1m6 0h8m1 0h1M0 31.5h1m5 0h1m2 0h1m1 0h4m1 0h1m1 0h1m1 0h4m1 0h2m1 0h3M0 32.5h7m1 0h2m1 0h2m1 0h1m2 0h1m1 0h1m2 0h4m1 0h1m1 0h1m1 0h1"/></svg>
+</div>
+      <p class="fn">junnosukekato.github.io/sotsugyo-seisaku-report/</p>
+    </div>
+  </div>
+  <div class="c-login"><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 5H6.5A1.5 1.5 0 005 6.5v11A1.5 1.5 0 006.5 19H10"/><path d="M14 8l4 4-4 4M18 12H9"/></svg></span><span>大学の Google アカウント（<span class="fn">@bunka-wu.ac.jp</span>）でログインします。はじめて開くと、コースを選ぶ案内が出ます。</span></div>
+</section>
+<section class="sheet c-inner">
+  <header class="c-ch"><span class="no">3</span><div><p class="kick">STEP 3</p><h1>本文を書く</h1></div><span class="chip tag">学生用</span></header>
+  <p class="c-lead">紙面の上で、そのまま書きます。字の大きさ・行の間・見出しの番号は、ツールが手順書どおりにそろえます。</p>
+  <div class="c-main">
+    <div class="c-left">
+      <div class="shot-card"><figure class="shot " style="aspect-ratio:750/592"><img src="shots/w-main.png" alt=""><span class="hl" style="left:calc(3.27% - 0.6mm);top:calc(42.81% - 0.6mm);width:calc(9.6% + 1.2mm);height:calc(8.45% + 1.2mm)"></span><span class="hl" style="left:calc(3.27% - 0.6mm);top:calc(51.43% - 0.6mm);width:calc(9.6% + 1.2mm);height:calc(8.45% + 1.2mm)"></span><span class="hl" style="left:calc(3.27% - 0.6mm);top:calc(15.28% - 0.6mm);width:calc(9.6% + 1.2mm);height:calc(17.06% + 1.2mm)"></span><span class="hl" style="left:calc(3.27% - 0.6mm);top:calc(74.9% - 0.6mm);width:calc(9.6% + 1.2mm);height:calc(8.45% + 1.2mm)"></span><i class="mk" style="left:calc(29.75% - var(--mkr) + var(--mkgap));top:46%">1</i><i class="mk" style="left:calc(59.98% + var(--mkr) + var(--mkgap));top:48.66%">2</i><i class="mk" style="left:calc(12.87% + var(--mkr) + var(--mkgap));top:47.03%">3</i><i class="mk" style="left:calc(12.87% + var(--mkr) + var(--mkgap));top:55.66%">4</i><i class="mk" style="left:calc(12.87% + var(--mkr) + var(--mkgap));top:23.81%">5</i><i class="mk" style="left:calc(12.87% + var(--mkr) + var(--mkgap));top:79.13%">6</i></figure></div>
+      <div class="bubble"><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9.5 17.5h5M10.3 20.5h3.4"/><path d="M12 3.5a5.5 5.5 0 00-3.2 10c.7.5 1.2 1.3 1.2 2.2v.3h4v-.3c0-.9.5-1.7 1.2-2.2A5.5 5.5 0 0012 3.5z"/></svg></span><div style="flex:1"><b>知っておくと安心</b><ul><li>ページは自動で分かれます（「改ページ」もあります）</li><li>原稿は自動で保存（この端末と Google ドライブ）</li><li>図・表が押せないときは、先に文中をクリック</li><li>ボタンにマウスを重ねると、入る場所に線が出ます</li></ul></div></div>
+    </div>
+    <ol class="c-steps"><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 9.5l9 3.6-3.8 1.5-1.6 3.9z"/><path d="M5.5 5.5l2 2M10 3.5v2.6M3.5 10h2.6"/></svg><i>1</i></span><b>書きたいところをクリック</b><p>紙面の段落をクリックすると、その場に書く欄が開きます。書き終えたら Esc キーか、紙面の外をクリック。</p></li><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M19 5.5v5.5a3 3 0 01-3 3H6"/><path d="M9.5 10.5L6 14l3.5 3.5"/></svg><i>2</i></span><b>Enter で次の段落へ</b><p>段落を分けるところで Enter。「。」を忘れても自動で付きます。段落の頭で Backspace を押すと、前の段落とつながります。</p></li><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17.5l4.5-4.5 3 3L15 13.5l4 4"/></svg><i>3</i></span><b>図を入れる</b><p>図を指したい文中の位置をクリックしてから押し、写真を選びます。</p></li><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 10h16M4 14.5h16M10 10v9M15 10v9"/></svg><i>4</i></span><b>表を入れる</b><p>図と同じく、入れたい位置をクリックしてから押します。</p></li><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6h14M5 11h9M5 16h14M5 20h9"/></svg><i>5</i></span><b>見出しを足す</b><p>「小見出し」（ⅰ．）・「大見出し」（Ⅰ．）は、書いている段落の後ろに入ります。番号は自動です。</p></li><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 7.5L5 11.5l4 4M5 11.5h9.5a4.5 4.5 0 010 9H12"/></svg><i>6</i></span><b>元に戻す</b><p>間違えたら「元に戻す」（Ctrl＋Z）。直前の操作を取り消せます。</p></li></ol>
+  </div>
+  <div class="c-row">
+    <section class="soft"><h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><circle cx="9" cy="10" r="1.6"/><path d="M5 17.5l4.5-4.5 3 3L15 13.5l4 4"/></svg>図を入れると</h3><figure class="shot " style="aspect-ratio:488/252"><img src="shots/w-figure.png" alt=""><i class="mk sub" style="left:calc(43.25% + var(--mkr) + var(--mkgap));top:12.1%">A</i><i class="mk sub" style="left:calc(65.5% + var(--mkr) + var(--mkgap));top:90.16%">B</i></figure><ol><li><span class="k">A</span><span>書いていた位置に「（図1）」が入ります。番号は自動でそろいます。</span></li><li><span class="k">B</span><span>すぐ下に図が入り、タイトルの欄が開きます。書いて Enter で文の続きへ。</span></li></ol></section>
+    <section class="soft"><h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5" width="16" height="14" rx="2"/><path d="M4 10h16M4 14.5h16M10 10v9M15 10v9"/></svg>表を選ぶ</h3><div class="narrow"><figure class="shot " style="aspect-ratio:260/176"><img src="shots/w-table.png" alt=""><span class="hl" style="left:calc(39.44% - 0.6mm);top:calc(50.25% - 0.6mm);width:calc(52.31% + 1.2mm);height:calc(15.34% + 1.2mm)"></span><span class="hl" style="left:calc(39.44% - 0.6mm);top:calc(65.59% - 0.6mm);width:calc(52.31% + 1.2mm);height:calc(22.73% + 1.2mm)"></span></figure></div><p>「空の表（2列）」か「素材表（名称・使用箇所・生地見本）」を選び、表のタイトルを書いて Enter。セルを書いているときは「行を足す」「列を足す」「画像を入れる」が出ます。</p></section>
+    <section class="soft blue"><h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>スマホでは</h3><figure class="shot " style="aspect-ratio:390/253"><img src="shots/phone-sheet.png" alt=""><span class="hl" style="left:calc(2.05% - 0.6mm);top:calc(69.96% - 0.6mm);width:calc(26.28% + 1.2mm);height:calc(13.44% + 1.2mm)"></span></figure><p>段落をタップすると、画面の下に「書く欄」が開きます。図・表は書く欄のボタンで、見出しは画面の下の「追加」から入れます。</p></section>
+  </div>
+  <footer class="folio"><span>6</span></footer>
+</section>
+<section class="sheet c-cover t">
+  <div class="c-top"><span class="chip">2026年度</span><span class="chip solid">教員用</span><span class="org">文化学園大学　国際ファッション文化学科</span></div>
+  <div class="c-hero">
+    <div class="dots"></div>
+    <p class="tool">卒業制作報告書 作成ツール</p>
+    <h1>使い方の手引き</h1>
+    <p class="catch">管理ページで、その年度の設定をととのえる。</p>
+    <figure class="pc" style="left:24mm;width:150mm"><img src="shots/admin-main.png" alt=""></figure>
+  </div>
+  <div class="flow3"><div class="card"><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg></span><b>年度をつくる</b><p>前の年度をコピーして準備</p></div><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg><div class="card"><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 19l1-4L16 5l3 3L9 18z"/><path d="M14 7l3 3"/></svg></span><b>設定する</b><p>題目・コース・指導教員・締切</p></div><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg><div class="card"><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15.5V4.5M7.5 9L12 4.5 16.5 9"/><path d="M5 14.5v5h14v-5"/></svg></span><b>公開する</b><p>学生のツールに反映</p></div></div>
+  <div class="c-bottom">
+    <div class="c-toc">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="5" cy="6.5" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="17.5" r="1"/></svg>もくじ</h2>
+      <ol><li><span class="n">1</span><span>このツールのしくみ</span><span class="pg">p.2</span></li><li><span class="n">2</span><span>管理ページを開く</span><span class="pg">p.3</span></li><li><span class="n">3</span><span>年度の設定をする</span><span class="pg">p.4</span></li><li><span class="n">4</span><span>コースのひな形を直す</span><span class="pg">p.6</span></li><li><span class="n">5</span><span>お知らせと書き間違えやすい語</span><span class="pg">p.7</span></li><li><span class="n">6</span><span>先生を登録する</span><span class="pg">p.8</span></li><li><span class="n">7</span><span>新年度の準備と公開</span><span class="pg">p.9</span></li><li><span class="n">8</span><span>学生から相談を受けたとき</span><span class="pg">p.10</span></li></ol>
+    </div>
+    <div class="c-qr">
+      <h2><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="7" y="3" width="10" height="18" rx="2"/><path d="M11 18h2"/></svg>学生に配る URL</h2>
+      <div class="q"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h33v33H0z"/><path stroke="#2f3e75" d="M0 0.5h7m4 0h3m2 0h4m1 0h3m2 0h7M0 1.5h1m5 0h1m2 0h1m1 0h5m1 0h1m2 0h1m5 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h1m1 0h4m2 0h1m2 0h5m2 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h2m1 0h1m2 0h2m2 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m1 0h1m2 0h1m1 0h1m1 0h1m1 0h3m1 0h1m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h2m1 0h2m2 0h3m8 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M8 7.5h3m1 0h1m1 0h2m2 0h1m2 0h2m1 0h1M0 8.5h1m1 0h5m3 0h1m2 0h3m1 0h1m4 0h3m1 0h5M0 9.5h1m7 0h4m6 0h6m2 0h2m1 0h2m1 0h1M1 10.5h3m1 0h7m3 0h1m1 0h2m2 0h1m2 0h1m1 0h1m1 0h1m1 0h2M0 11.5h2m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m3 0h1m1 0h4m1 0h1m2 0h5M0 12.5h2m1 0h1m1 0h3m1 0h1m2 0h1m2 0h1m1 0h1m2 0h1m1 0h4m2 0h2M2 13.5h2m1 0h1m1 0h2m2 0h1m2 0h3m2 0h3m1 0h1m2 0h1m2 0h1m1 0h2M1 14.5h1m1 0h4m1 0h5m4 0h1m2 0h3m2 0h2m1 0h2m1 0h1M1 15.5h1m2 0h2m1 0h1m8 0h1m3 0h3m2 0h2m2 0h2M0 16.5h3m1 0h3m2 0h1m1 0h3m3 0h1m2 0h1m1 0h1m1 0h2m1 0h3m2 0h1M0 17.5h3m2 0h1m3 0h1m3 0h2m1 0h1m1 0h3m2 0h1m2 0h2m1 0h4M0 18.5h1m2 0h2m1 0h1m1 0h1m5 0h3m3 0h1m3 0h5m1 0h2M0 19.5h1m1 0h1m2 0h1m1 0h1m3 0h6m1 0h1m2 0h3m1 0h8M0 20.5h3m1 0h1m1 0h7m1 0h5m3 0h3m2 0h3m1 0h2M0 21.5h3m1 0h2m2 0h1m5 0h2m1 0h4m1 0h2m2 0h1m2 0h2m1 0h1M0 22.5h1m1 0h1m1 0h3m2 0h1m1 0h6m1 0h1m7 0h1m3 0h2M0 23.5h1m3 0h2m2 0h4m3 0h1m3 0h1m1 0h4m1 0h1m2 0h2M0 24.5h1m2 0h5m3 0h2m1 0h4m4 0h1m1 0h6m2 0h1M8 25.5h2m3 0h1m2 0h2m1 0h3m2 0h1m3 0h1m1 0h1m1 0h1M0 26.5h7m2 0h1m1 0h5m1 0h1m2 0h5m1 0h1m1 0h1m1 0h1M0 27.5h1m5 0h1m1 0h1m5 0h2m3 0h1m1 0h4m3 0h5M0 28.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h3m3 0h3m3 0h6m1 0h2M0 29.5h1m1 0h3m1 0h1m1 0h5m1 0h3m1 0h4m1 0h3m2 0h1m1 0h3M0 30.5h1m1 0h3m1 0h1m1 0h3m2 0h1m6 0h8m1 0h1M0 31.5h1m5 0h1m2 0h1m1 0h4m1 0h1m1 0h1m1 0h4m1 0h2m1 0h3M0 32.5h7m1 0h2m1 0h2m1 0h1m2 0h1m1 0h1m2 0h4m1 0h1m1 0h1m1 0h1"/></svg>
+</div>
+      <p class="fn">junnosukekato.github.io/sotsugyo-seisaku-report/</p>
+    </div>
+  </div>
+  <div class="c-login"><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 5H6.5A1.5 1.5 0 005 6.5v11A1.5 1.5 0 006.5 19H10"/><path d="M14 8l4 4-4 4M18 12H9"/></svg></span><span>管理ページの URL は、管理者からのメールでお知らせします。大学の Google アカウントでログインし、登録された先生だけが開けます。</span></div>
+</section>
+<section class="sheet c-inner t">
+  <header class="c-ch"><span class="no">3</span><div><p class="kick">管理ページ</p><h1>年度の設定をする</h1></div><span class="chip tag">教員用</span></header>
+  <p class="c-lead">年度の設定は、管理者の先生が管理ページで行います。入力すると、すぐ右の見本（表紙と抄録）に出ます。</p>
+  <div class="shot-card set-card room"><figure class="shot " style="aspect-ratio:1440/758"><img src="shots/admin-main.png" alt=""><span class="hl" style="left:calc(14.66% - 0.6mm);top:calc(1.72% - 0.6mm);width:calc(15.07% + 1.2mm);height:calc(3.83% + 1.2mm)"></span><span class="hl" style="left:calc(88.73% - 0.6mm);top:calc(1.72% - 0.6mm);width:calc(10.02% + 1.2mm);height:calc(3.83% + 1.2mm)"></span><span class="ld" style="left:calc(0% - var(--mkgap) - var(--mkout));top:15.96%;width:calc(1.39% + var(--mkgap) + var(--mkout) - 0.6mm)"></span><span class="ld" style="left:calc(0% - var(--mkgap) - var(--mkout));top:25.59%;width:calc(1.39% + var(--mkgap) + var(--mkout) - 0.6mm)"></span><span class="ld" style="left:calc(0% - var(--mkgap) - var(--mkout));top:53.96%;width:calc(2.29% + var(--mkgap) + var(--mkout) - 0.6mm)"></span><span class="ld" style="left:calc(0% - var(--mkgap) - var(--mkout));top:63.32%;width:calc(2.29% + var(--mkgap) + var(--mkout) - 0.6mm)"></span><i class="mk" style="left:22.2%;top:calc(5.55% + var(--mkr) + var(--mkgap))">1</i><i class="mk" style="left:calc(0% - var(--mkr) + var(--mkgap) - var(--mkout));top:15.96%">2</i><i class="mk" style="left:calc(0% - var(--mkr) + var(--mkgap) - var(--mkout));top:25.59%">3</i><i class="mk" style="left:calc(0% - var(--mkr) + var(--mkgap) - var(--mkout));top:53.96%">4</i><i class="mk" style="left:calc(0% - var(--mkr) + var(--mkgap) - var(--mkout));top:63.32%">5</i><i class="mk" style="left:34.66%;top:14.8%">6</i><i class="mk" style="left:calc(98.75% + var(--mkr) + var(--mkgap));top:3.63%">7</i></figure></div>
+  <ol class="c-list2"><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg><i>1</i></span><b>年度を選ぶ</b><p>「公開中」は学生が使っている年度。「準備中」は、まだ学生に見えません。</p></li><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 6.5h14M12 6.5v12"/></svg><i>2</i></span><b>共通の題目</b><p>表紙と抄録に入ります。学生は変えられません。</p></li><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="5.5" width="16" height="14" rx="2"/><path d="M4 10h16M8.5 3.5v4M15.5 3.5v4"/></svg><i>3</i></span><b>最終締切</b><p>学生のツールの「締切まで○日」に使われます。</p></li><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6.5h11M9 12h11M9 17.5h11"/><circle cx="5" cy="6.5" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="17.5" r="1"/></svg><i>4</i></span><b>コースとサブタイトルの形</b><p>「―」＋学生の入力＋「の衣装制作―」の形。「学生に表示」を外すと選べなくなります。</p></li><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="9" r="3"/><path d="M3.5 19a5.5 5.5 0 0111 0"/><circle cx="16.5" cy="10" r="2.4"/><path d="M15 14.2a4.6 4.6 0 015.5 4.8"/></svg><i>5</i></span><b>指導教員</b><p>氏名を入力して Enter。× で外します。抄録に出ます。</p></li><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.5 12S6 5.5 12 5.5 21.5 12 21.5 12 18 18.5 12 18.5 2.5 12 2.5 12z"/><circle cx="12" cy="12" r="3"/></svg><i>6</i></span><b>右の見本</b><p>黄色は、年度の設定から入る部分です。</p></li><li><span class="icon"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 4.5h11l3 3v12H5z"/><path d="M8 4.5v5h7v-5M8 19.5v-5h8v5"/></svg><i>7</i></span><b>保存して学生に反映</b><p>公開中の年度は、1分ほどで学生のツールに反映されます。</p></li></ol>
+  <div class="c-row2">
+    <section class="soft blue">
+      <h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 15.5V4.5M7.5 9L12 4.5 16.5 9"/><path d="M5 14.5v5h14v-5"/></svg>新しい年度の準備と公開</h3>
+      <figure class="shot " style="aspect-ratio:632/56"><img src="shots/admin-draft.png" alt=""><span class="hl" style="left:calc(43.84% - 0.6mm);top:calc(23.21% - 0.6mm);width:calc(17.05% + 1.2mm);height:calc(51.79% + 1.2mm)"></span><span class="hl" style="left:calc(72.91% - 0.6mm);top:calc(23.21% - 0.6mm);width:calc(25.11% + 1.2mm);height:calc(51.79% + 1.2mm)"></span></figure>
+      <ol class="steps4"><li><span class="n">1</span><span><b>新年度を作成</b><small>前の年度をコピーして、準備中で作る</small></span></li><li><span class="n">2</span><span><b>直して「保存」</b><small>題目・コース・指導教員・締切を直す</small></span></li><li><span class="n">3</span><span><b>見本で確かめる</b><small>表紙と抄録の形</small></span></li><li><span class="n">4</span><span><b>この年度を学生に公開</b><small>前の年度は「終了」になる</small></span></li></ol>
+    </section>
+    <section class="soft">
+      <h3><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 4l9 16H3z"/><path d="M12 10v4.5M12 17.2v.3"/></svg>気をつけること</h3>
+      <ul class="care-list"><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span>年度の設定は「管理者」だけが変えられます（「先生」は、ひな形・お知らせ・書き間違えやすい語）。</span></li><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span>学生の原稿は、書き始めた年度の設定のまま開きます（新年度を公開しても表紙は変わりません）。</span></li><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span>ほかの人が先に保存していると保存できません。読み込み直してから直します。</span></li><li><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg><span>間違えたときは「変更履歴」から戻せます。</span></li></ul>
+    </section>
+  </div>
+  <footer class="folio"><span>4</span></footer>
+</section>
+</body>
+</html>

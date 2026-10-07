@@ -1,0 +1,139 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v25：使い方の手引き（学生用・教員用）</title>
+<style>
+  body { margin: 0; padding: 28px 32px 40px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  h2 { font-size: 17px; margin: 34px 0 4px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 13px; color: #5d6068; line-height: 1.8; max-width: 1150px; }
+  .trouble { margin: 0 0 10px; padding: 9px 14px; max-width: 1150px; border-radius: 10px; background: #fff; font-size: 13px; line-height: 1.8; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05); }
+  .trouble b { color: #b5443b; margin-right: 6px; }
+  figure { margin: 0 0 16px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid #ecebe8; }
+  figcaption b { display: block; font-size: 15px; margin-bottom: 3px; }
+  figcaption span { font-size: 12.5px; color: #5d6068; line-height: 1.7; }
+  img { display: block; width: 100%; }
+  .row { display: grid; gap: 14px; align-items: start; }
+  .c3 { grid-template-columns: 1fr 1fr 1fr; }
+  /* おすすめの印と理由 */
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: #2f3e75; color: #fff; font-size: 11.5px; font-style: normal; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  figure.is-rec { box-shadow: 0 0 0 2px #2f3e75, 0 2px 10px rgba(0, 0, 0, 0.08); }
+  .why { margin: 2px 0 8px; padding: 10px 14px; border-left: 3px solid #2f3e75; background: #f6f5f2; border-radius: 0 10px 10px 0; font-size: 13px; line-height: 1.8; max-width: 1150px; }
+  .why b { color: #2f3e75; }
+  /* 決めていただきたいことの一覧 */
+  .ask { margin: 0 0 8px; padding: 14px 18px 12px; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); max-width: 1150px; }
+  .ask h2 { margin: 0 0 8px; font-size: 15px; }
+  .ask ol { margin: 0; padding-left: 22px; font-size: 13.5px; line-height: 2; }
+  .ask ol span { color: #5d6068; font-size: 12.5px; }
+  .ask ol em { font-style: normal; color: #2f3e75; font-weight: 700; }
+  .flow { margin: 0 0 8px; padding: 10px 18px; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); max-width: 1150px; font-size: 13px; line-height: 1.9; }
+  .flow b { color: #2f3e75; }
+  .flow ul { margin: 2px 0 0; padding-left: 20px; }
+  /* 1つの案の4ページを並べる */
+  .strip { display: grid; gap: 1px; background: #ecebe8; align-items: start; }
+  .strip > div { background: #fff; align-self: stretch; padding: 12px 12px 0; }
+  .strip a { display: block; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.18); }
+  .strip small { display: block; padding: 7px 2px 10px; font-size: 12px; color: #5d6068; line-height: 1.6; }
+  .strip small b { color: #24262b; }
+  .s4 { grid-template-columns: repeat(4, 1fr); }
+  .s3 { grid-template-columns: repeat(3, 1fr); }
+  .pts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1px; background: #ecebe8; border-top: 1px solid #ecebe8; }
+  .pts > div { background: #fff; padding: 10px 16px 12px; font-size: 12.5px; line-height: 1.75; color: #3f4249; }
+  .pts b { display: block; color: #24262b; font-size: 13px; margin-bottom: 2px; }
+  .pdf { font-size: 12.5px; }
+  .pdf a { color: #2f3e75; }
+</style>
+</head>
+<body>
+  <h1>使い方の手引き：見た目の案（v25）</h1>
+  <p class="lead">ツールの「使い方の手引き」2冊（<b>学生用</b>・<b>教員用</b>。A4 縦の PDF で配り、印刷もできる冊子）の見た目を3案作りました。全体を作る前に方向を決めていただくための見本で、各案とも同じ4ページ（学生用の表紙・学生用「3 本文を書く」・教員用の表紙・教員用「3 年度の設定をする」）を並べています。画面の画像は本物のツールを撮ったもので（学生用はログインなしで試せる開発版、管理ページは試験用のサーバー）、番号の吹き出しを重ねています。文章は仮ですが、今のツールの動きに合わせて書いています。人名・学籍番号（文化　花子・00ZZ0123）と管理ページのメールアドレスは架空です。画像を押すと大きく見られます。<b>おすすめ</b>の案には印を付けています。</p>
+
+  <div class="ask">
+    <h2>この v25 で決めていただきたいこと</h2>
+    <ol>
+      <li>見た目の方向（案A／B／C） <span>おすすめ：<em>案A</em>（ツールと同じ藍と生成り。白黒で印刷しても崩れない）</span></li>
+      <li>学生用と教員用を同じ見た目にするか <span>おすすめ：<em>同じ案で、学生用だけ少しやわらかく</em>（例：案A に、案C の手順のアイコンを足す）</span></li>
+      <li>配り方：PDF だけか、印刷もするか（印刷するなら白黒か） <span>案B は、印刷するなら向きません（下の「白黒で印刷したとき」）</span></li>
+      <li>目次（章立て）はこの8章ずつでよいか <span>表紙の目次を見てください（ページ数は仮）</span></li>
+    </ol>
+  </div>
+  <div class="flow">
+    <b>どの案も同じところ</b>
+    <ul>
+      <li>文字：書体はツールと同じ BIZ UD明朝・BIZ UDPゴシック。<b>手順の説明・注意などの本文は 9.5pt 以上</b>（見出しは 10.5〜25pt）。9.5pt より小さいのは、柱（ページの上や下の小さな見出し）・ページ番号・表紙の添え書き（学科名・注記・「スマホで読み取る」など）・目次の補足・英字の飾り・A／B の記号だけで、8.5〜9pt です（作るときに、案ごとに文字の大きさを測って確かめています）。</li>
+      <li>画面の画像の中の字は、実物の画面を縮めたものなので小さくなります。そのため、押すところには番号の吹き出しと囲みを付け、番号と同じ順に横（下）で説明しています。</li>
+      <li>表紙には、ツールの URL と QR コード（スマホで読み取ると開く）。教員用は「学生に配る URL」として載せ、管理ページの URL は「管理者からのメールで知らせる」としています（公開の資料に管理ページの URL を載せないため）。</li>
+      <li>作り方：<span style="font-family:'Segoe UI',sans-serif">node scripts/mockup-shots-v25.mjs</span> で、画面を撮る → 案ごとの HTML → Edge で PDF（<span style="font-family:'Segoe UI',sans-serif">mockups/v25/a.pdf</span> など）→ ページの画像、まで作ります。全体を作るときも同じ流れで、画面が変わったら撮り直せます。</li>
+    </ul>
+  </div>
+
+  <!-- 案A -->
+  <h2>案A「紙と墨」：ツールと同じ藍と生成りの、端正な冊子</h2>
+  <figure class="is-rec">
+    <figcaption><b>案A　紙と墨<em class="rec">おすすめ</em></b><span>白い紙に藍の細い罫、見出しは明朝。表紙は「使い方の手引き」を原稿用紙のます目に縦書きで置き、下の生成りの帯に URL と QR コード。中のページは、左に画面の画像、右に番号つきの手順を並べる「教科書」の形。番号の吹き出しは藍の丸に白い数字（ツールの番号と同じ形）。学生用は藍、教員用は墨の「学生用／教員用」の札で見分けます</span></figcaption>
+    <div class="strip s4">
+      <div><a href="screens/a-1.png"><img src="screens/a-1.png" alt="案A 学生用の表紙"></a><small><b>学生用の表紙</b>：目次・ツールを開く手順・QR コード</small></div>
+      <div><a href="screens/a-2.png"><img src="screens/a-2.png" alt="案A 本文を書く"></a><small><b>学生用「3 本文を書く」</b>：画面に番号①〜⑥、右に手順。下に図を入れたところ・表を選ぶ・スマホ</small></div>
+      <div><a href="screens/a-3.png"><img src="screens/a-3.png" alt="案A 教員用の表紙"></a><small><b>教員用の表紙</b>：管理者と先生の役割・学生に配る URL</small></div>
+      <div><a href="screens/a-4.png"><img src="screens/a-4.png" alt="案A 年度の設定をする"></a><small><b>教員用「3 年度の設定をする」</b>：管理ページの画面に①〜⑦、準備と公開の順番・気をつけること</small></div>
+    </div>
+    <div class="pts">
+      <div><b>よいところ</b>ツールの画面と同じ色・書体なので、冊子と画面が「同じもの」とすぐ分かります。罫と余白で区切るので、教員用は落ち着いて要点が拾えます。</div>
+      <div><b>白黒で印刷したとき</b>藍はほぼ黒の濃いグレーになり、番号の丸（白い数字）も見出しもはっきり残ります。生成りの囲みは薄いグレーになりますが、文字はそのまま読めます。</div>
+      <div><b>気になる点</b>3案の中では学生用がいちばん「かため」です。明朝の見出しと字の間の広さが、人によっては教科書のように見えます。</div>
+    </div>
+    <p class="pdf" style="padding:0 16px 12px">PDF：<a href="a.pdf">a.pdf</a>（4ページ）</p>
+  </figure>
+
+  <!-- 案B -->
+  <h2>案B「雑誌風」：大きな画面写真・色の帯・大きな番号で見せる</h2>
+  <figure>
+    <figcaption><b>案B　雑誌風</b><span>表紙は紺（教員用は墨）の面に大きな題と「2026」、からし色（教員用は薄い藍）の帯に「学生用 FOR STUDENTS」。画面の写真を大きく、紙の右の端まではみ出させて置き、スマホも重ねます。中のページは「03」の大きな数字と太い罫で始まり、画面の画像をいちばん大きく見せ、手順は3列の格子に。左の端に色の帯（学生用はからし色、教員用は薄い藍）</span></figcaption>
+    <div class="strip s4">
+      <div><a href="screens/b-1.png"><img src="screens/b-1.png" alt="案B 学生用の表紙"></a><small><b>学生用の表紙</b>：PC とスマホの画面を大きく</small></div>
+      <div><a href="screens/b-2.png"><img src="screens/b-2.png" alt="案B 本文を書く"></a><small><b>学生用「03 本文を書く」</b>：画面とスマホを上に大きく、手順は3列×2段</small></div>
+      <div><a href="screens/b-3.png"><img src="screens/b-3.png" alt="案B 教員用の表紙"></a><small><b>教員用の表紙</b>：管理ページの画面を大きく</small></div>
+      <div><a href="screens/b-4.png"><img src="screens/b-4.png" alt="案B 年度の設定をする"></a><small><b>教員用「03 年度の設定をする」</b>：準備と公開を黒い帯で STEP 1〜4</small></div>
+    </div>
+    <div class="pts">
+      <div><b>よいところ</b>画面の画像がいちばん大きく、押すところが見つけやすい案です。ファッションの学科らしい華やかさがあり、PDF を画面で見るときに映えます。</div>
+      <div><b>白黒で印刷したとき</b>紺の面と黒い帯はほぼ黒になり、トナーを多く使います。からし色の番号は薄いグレーになりますが、黒い数字と黒い枠なので読めます。</div>
+      <div><b>気になる点</b>表紙と左の帯を紙の端まで塗っているので、学内のプリンターでは周りに白いふちが出ます（PDF で配るだけなら問題ありません）。英字の飾りが多く、教員用はやや派手です。</div>
+    </div>
+    <p class="pdf" style="padding:0 16px 12px">PDF：<a href="b.pdf">b.pdf</a>（4ページ）</p>
+  </figure>
+
+  <!-- 案C -->
+  <h2>案C「やわらか」：角の丸い枠・アイコン・余白多めで親しみやすく</h2>
+  <figure>
+    <figcaption><b>案C　やわらか</b><span>表紙は淡い藍（教員用はクリーム色）の角の丸い面に、題と PC・スマホの画面。その下に「書く → 確かめる → 提出する」（教員用は「年度をつくる → 設定する → 公開する」）の3つのカードと、もくじ・QR コード。中のページは、手順ごとにアイコンを付け、番号の吹き出しは珊瑚色の丸。下に3つの角丸のカード（図・表・スマホ）</span></figcaption>
+    <div class="strip s4">
+      <div><a href="screens/c-1.png"><img src="screens/c-1.png" alt="案C 学生用の表紙"></a><small><b>学生用の表紙</b>：3つの流れのカード・もくじ・QR コード</small></div>
+      <div><a href="screens/c-2.png"><img src="screens/c-2.png" alt="案C 本文を書く"></a><small><b>学生用「STEP 3 本文を書く」</b>：手順ごとにアイコン、「知っておくと安心」は画像の下</small></div>
+      <div><a href="screens/c-3.png"><img src="screens/c-3.png" alt="案C 教員用の表紙"></a><small><b>教員用の表紙</b>：クリーム色の面に管理ページの画面</small></div>
+      <div><a href="screens/c-4.png"><img src="screens/c-4.png" alt="案C 年度の設定をする"></a><small><b>教員用「3 年度の設定をする」</b>：準備と公開を丸い段で、気をつけることはチェックの印</small></div>
+    </div>
+    <div class="pts">
+      <div><b>よいところ</b>3案の中でいちばん親しみやすく、アイコンで「何をする手順か」が字を読む前に分かります。学生用には向いています。</div>
+      <div><b>白黒で印刷したとき</b>淡い藍・クリーム色の面はほとんど白になり、区切りが弱くなります（線で囲んだカードは残ります）。珊瑚色の番号は中くらいのグレーになり、白い数字がやや弱くなります。</div>
+      <div><b>気になる点</b>余白とカードが多い分、同じ中身でもページが増えやすい案です。教員用には少しかわいらしすぎるかもしれません。</div>
+    </div>
+    <p class="pdf" style="padding:0 16px 12px">PDF：<a href="c.pdf">c.pdf</a>（4ページ）</p>
+  </figure>
+
+  <!-- 白黒 -->
+  <h2>白黒で印刷したとき（学生用「本文を書く」のページ）</h2>
+  <p class="trouble"><b>確かめたこと</b>PDF をそのまま白黒（グレー）にして並べました。学内のプリンターや家のプリンターで白黒で刷っても、番号の吹き出しと手順の説明が読めるかを見ています。</p>
+  <figure>
+    <div class="strip s3">
+      <div><a href="screens/a-2-gray.png"><img src="screens/a-2-gray.png" alt="案A 白黒"></a><small><b>案A</b>：吹き出しは濃いグレーに白い数字。いちばんはっきり読めます</small></div>
+      <div><a href="screens/b-2-gray.png"><img src="screens/b-2-gray.png" alt="案B 白黒"></a><small><b>案B</b>：吹き出しは薄いグレーに黒い数字と黒い枠で読めます。帯と表紙は黒が多くなります</small></div>
+      <div><a href="screens/c-2-gray.png"><img src="screens/c-2-gray.png" alt="案C 白黒"></a><small><b>案C</b>：吹き出しは中くらいのグレー。淡い色の面は消えて、区切りが弱くなります</small></div>
+    </div>
+  </figure>
+
+  <p class="why"><b>おすすめは案A</b>：学生がふだん見るツールの画面と同じ藍・生成り・明朝なので、冊子のどこを見ても「あの画面の話だ」とつながります。配るのは PDF でも印刷でもよく、白黒で刷っても番号の吹き出しがいちばんはっきり残り、紙の端まで塗る部分も少ないので学内のプリンターでもそのまま刷れます。教員用は罫と余白で区切った落ち着いた紙面で、要点を拾いやすくできます。学生用の「やさしさ」が足りないと感じられたら、案C の手順のアイコンや「知っておくと安心」の角丸の囲みを、案A の学生用にだけ足すことができます。案B は画面の画像が大きく華やかですが、トナーの量と紙の端の白いふちが気になり、印刷して配るなら向きません（PDF だけで配るなら候補になります）。案C は学生には親しみやすい反面、白黒では淡い色の区切りが消え、教員用には少しやわらかすぎます。</p>
+</body>
+</html>

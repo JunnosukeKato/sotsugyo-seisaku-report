@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案A 紙と墨（v25 使い方の手引き）</title>
+<!-- node scripts/mockup-shots-v25.mjs pages で作る（手で直さない）。画面の画像は shots/、番号の吹き出しの場所は shots/marks.json -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udmincho/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udmincho/700.css">
+<style>
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; background: #e9e6e0; -webkit-font-smoothing: antialiased; }
+  .sheet { position: relative; width: 210mm; height: 297mm; overflow: hidden; background: #fff; break-after: page; }
+  .sheet:last-child { break-after: auto; }
+  @media screen { body { padding: 24px 0; } .sheet { margin: 0 auto 24px; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08), 0 20px 60px rgba(30, 25, 20, 0.16); } }
+  @media print { body { background: none; padding: 0; } .sheet { margin: 0; box-shadow: none; } }
+  h1, h2, h3, p, ol, ul, dl, dd, figure { margin: 0; }
+  ol, ul { padding: 0; list-style: none; }
+  b, strong { font-weight: 700; }
+  .fn { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; letter-spacing: 0.01em; }
+  .ic { width: 1em; height: 1em; display: inline-block; vertical-align: -0.14em; flex: none; }
+  .shot { position: relative; margin: 0; --mkr: 2.7mm; --mkgap: 0.5mm; --mkout: 1.4mm; }
+  .shot .ld { position: absolute; z-index: 1; height: 0.4mm; margin-top: -0.2mm; }
+  .shot > img { display: block; width: 100%; height: 100%; }
+  .shot .mk { position: absolute; transform: translate(-50%, -50%); display: grid; place-items: center; font-style: normal; line-height: 1; z-index: 2; }
+  .shot .hl { position: absolute; z-index: 1; pointer-events: none; }
+
+  :root { --ink: #23262b; --muted: #5b5e65; --ai: #2f3e75; --ai-soft: #e8ebf5; --kinari: #f5f1e8; --kinari-2: #e7e1d3; --line: #ddd7cc; --stage: #ebe8e3; }
+  body { font-family: 'BIZ UDPGothic', sans-serif; color: var(--ink); font-size: 9.5pt; line-height: 1.6; }
+  .min { font-family: 'BIZ UDMincho', serif; font-weight: 400; }
+  .shot .mk { width: 5.4mm; height: 5.4mm; border-radius: 50%; background: var(--ai); color: #fff; font: 700 9.5pt/1 'BIZ UDPGothic', sans-serif; box-shadow: 0 0 0 0.45mm #fff, 0 0.3mm 1mm rgba(0, 0, 0, 0.3); }
+  .shot .mk.sub { background: #fff; color: var(--ai); box-shadow: 0 0 0 0.4mm var(--ai), 0 0.3mm 1mm rgba(0, 0, 0, 0.25); font-family: 'Segoe UI', sans-serif; }
+  .shot .hl { border: 0.45mm solid var(--ai); border-radius: 1.6mm; }
+  .shot .ld { background: var(--ai); }
+  .frame.room { padding-left: 8mm; background: #fff; }
+  .frame { border: 0.3mm solid var(--line); border-radius: 1.6mm; background: var(--stage); }
+  .frame .shot > img { border-radius: 1.4mm; }
+
+  /* ---- 表紙 ---- */
+  .cover { padding: 15mm 16mm 0; display: flex; flex-direction: column; }
+  .c-top { display: flex; justify-content: space-between; align-items: baseline; padding-bottom: 2.6mm; border-bottom: 0.3mm solid var(--ai); font-size: 9pt; letter-spacing: 0.14em; color: var(--ai); }
+  .c-top .min { font-size: 11pt; letter-spacing: 0.1em; }
+  .rule2 { height: 0.9mm; border-bottom: 0.15mm solid var(--ai); margin-bottom: 9mm; }
+  .c-main { display: grid; grid-template-columns: 1fr 52mm; gap: 10mm; flex: 1; min-height: 0; }
+  .c-tool { display: flex; align-items: center; gap: 3mm; font-size: 14pt; letter-spacing: 0.08em; }
+  .seal { width: 10mm; height: 10mm; display: grid; place-items: center; border: 0.35mm solid var(--ai); border-radius: 2.4mm; color: var(--ai); font-size: 15pt; letter-spacing: 0; }
+  .c-for { margin: 6mm 0 7mm; }
+  .c-for b { display: inline-block; padding: 1.6mm 6mm 1.8mm; background: var(--ai); color: #fff; font-family: 'BIZ UDMincho', serif; font-weight: 400; font-size: 17pt; letter-spacing: 0.4em; text-indent: 0.4em; border-radius: 0.8mm; }
+  .c-for.t b { background: var(--ink); }
+  .c-lead { font-size: 10.5pt; line-height: 1.95; }
+  .c-feat { margin: 4mm 0 0; display: grid; gap: 1.2mm; }
+  .c-feat li { position: relative; padding-left: 4.6mm; font-size: 9.5pt; line-height: 1.6; }
+  .c-feat li::before { content: ''; position: absolute; left: 0.8mm; top: 2.1mm; width: 1.6mm; height: 1.6mm; background: var(--ai); transform: rotate(45deg); }
+  .c-toc-h { margin: 9mm 0 2.4mm; display: flex; align-items: center; gap: 3mm; font-size: 12pt; letter-spacing: 0.5em; color: var(--ai); }
+  .c-toc-h::after { content: ''; flex: 1; border-bottom: 0.2mm solid var(--line); }
+  .c-toc li { display: grid; grid-template-columns: 7mm 1fr auto; align-items: baseline; gap: 2mm; padding: 1.5mm 0; border-bottom: 0.15mm dotted #c9c2b4; }
+  .c-toc .no { font-size: 12pt; color: var(--ai); }
+  .c-toc b { font-size: 10.5pt; }
+  .c-toc small { margin-left: 2.4mm; font-size: 9pt; color: var(--muted); }
+  .c-toc .pg { font-size: 10.5pt; color: var(--muted); }
+  /* 縦書きの題（原稿用紙のます目） */
+  .c-title { display: flex; flex-direction: row-reverse; justify-content: flex-start; align-items: flex-start; gap: 3.5mm; padding-top: 1mm; }
+  .masu { display: flex; flex-direction: column; border: 0.35mm solid #9ea8c9; font-family: 'BIZ UDMincho', serif; font-size: 50pt; line-height: 1; color: var(--ink); }
+  .masu span { width: 24mm; height: 23.4mm; display: grid; place-items: center; }
+  .masu span + span { border-top: 0.25mm solid #c3c9de; }
+  .c-title .side { writing-mode: vertical-rl; font-family: 'BIZ UDMincho', serif; font-size: 12pt; letter-spacing: 0.32em; color: var(--ai); padding-top: 4mm; }
+  .c-band { margin: 9mm -16mm 0; padding: 8mm 16mm 7mm; background: var(--kinari); display: grid; grid-template-columns: 1fr auto; gap: 8mm; align-items: center; border-top: 0.3mm solid var(--kinari-2); }
+  .c-band h2 { font-family: 'BIZ UDMincho', serif; font-weight: 400; font-size: 13pt; letter-spacing: 0.2em; color: var(--ai); }
+  .c-band .url { margin: 2mm 0 3mm; font-size: 11pt; font-weight: 600; color: var(--ai); }
+  .c-band .txt { margin: 2mm 0 0; font-size: 9.5pt; line-height: 1.6; }
+  .c-band ol { counter-reset: s; display: grid; gap: 1.2mm; }
+  .c-band ol li { counter-increment: s; position: relative; padding-left: 6.4mm; font-size: 9.5pt; line-height: 1.6; }
+  .c-band ol li::before { content: counter(s); position: absolute; left: 0; top: 0.4mm; width: 4.4mm; height: 4.4mm; display: grid; place-items: center; border: 0.25mm solid var(--ai); border-radius: 50%; font-size: 8.5pt; color: var(--ai); line-height: 1; }
+  .c-band .roles { display: grid; grid-template-columns: auto 1fr; gap: 0.8mm 3mm; margin-top: 2.4mm; font-size: 9.5pt; }
+  .c-band .roles dt { color: var(--ai); font-weight: 700; }
+  .c-band .url.s { margin: 3mm 0 0; font-size: 10pt; }
+  .c-band .url.s span { font-family: 'BIZ UDPGothic', sans-serif; font-weight: 700; margin-right: 2mm; }
+  .qr { width: 38mm; padding: 3mm 3mm 2.4mm; background: #fff; border: 0.3mm solid var(--kinari-2); border-radius: 1.6mm; text-align: center; }
+  .qr svg { display: block; width: 32mm; height: 32mm; }
+  .qr b { display: block; margin-top: 1.8mm; font-size: 9pt; color: var(--ai); letter-spacing: 0.08em; }
+  .c-note { margin: 0 -16mm; padding: 0 16mm 6mm; background: var(--kinari); font-size: 8.5pt; color: var(--muted); }
+
+  /* ---- 中のページ ---- */
+  .inner { padding: 11mm 14mm 0; display: flex; flex-direction: column; }
+  .run { display: flex; justify-content: space-between; padding-bottom: 1.8mm; border-bottom: 0.2mm solid var(--line); font-size: 8.5pt; color: var(--muted); letter-spacing: 0.06em; }
+  .run b { color: var(--ai); }
+  .ch { display: flex; align-items: center; gap: 4mm; margin: 5mm 0 2.6mm; }
+  .ch-no { width: 13mm; height: 13mm; flex: none; display: grid; place-items: center; border: 0.35mm solid var(--ai); border-radius: 2.6mm; color: var(--ai); font-size: 22pt; }
+  .ch h1 { font-family: 'BIZ UDMincho', serif; font-weight: 400; font-size: 21pt; letter-spacing: 0.12em; line-height: 1.25; }
+  .ch-sub { font-size: 10pt; color: var(--ai); letter-spacing: 0.08em; }
+  .lead { font-size: 10pt; line-height: 1.8; padding-bottom: 3.4mm; margin-bottom: 4.5mm; border-bottom: 0.2mm solid var(--line); }
+  .w-main { display: grid; grid-template-columns: 88mm 1fr; gap: 6mm; align-items: start; }
+  .w-left { display: grid; gap: 4.5mm; }
+  .steps { display: grid; gap: 2mm; }
+  .steps li { display: grid; grid-template-columns: 6.4mm 1fr; gap: 0 2.4mm; }
+  .steps .no, .defs .no { grid-row: span 2; width: 5.4mm; height: 5.4mm; margin-top: 0.1mm; display: grid; place-items: center; border-radius: 50%; background: var(--ai); color: #fff; font-size: 9.5pt; font-weight: 700; line-height: 1; }
+  .steps b { font-size: 10.5pt; line-height: 1.45; }
+  .steps p { font-size: 9.5pt; line-height: 1.55; }
+  .sec-h { display: flex; align-items: center; gap: 2.4mm; margin-bottom: 2mm; font-family: 'BIZ UDMincho', serif; font-weight: 400; font-size: 12pt; color: var(--ai); letter-spacing: 0.1em; }
+  .sec-h::before { content: ''; width: 1.1mm; height: 3.8mm; background: var(--ai); }
+  .row2 { display: grid; grid-template-columns: 1.15fr 1fr; gap: 6mm; margin-top: 4mm; align-items: start; }
+  .row2 .fig .frame { width: 84mm; }
+  .row2 .tbl .frame { width: 54mm; }
+  .mini { display: grid; gap: 1.2mm; margin-top: 2.2mm; }
+  .mini li { display: grid; grid-template-columns: 5mm 1fr; gap: 1.6mm; font-size: 9.5pt; line-height: 1.6; }
+  .mini .k { width: 4.6mm; height: 4.6mm; margin-top: 0.3mm; display: grid; place-items: center; border-radius: 50%; border: 0.35mm solid var(--ai); color: var(--ai); font: 700 8.5pt/1 'Segoe UI', sans-serif; }
+  .row2 p { margin-top: 2.2mm; font-size: 9.5pt; line-height: 1.6; }
+  .phone { display: grid; grid-template-columns: 36mm 1fr; gap: 4mm; align-items: start; }
+  .tips.wide { margin-top: 4mm; }
+  .tips.wide ul { grid-template-columns: 1fr 1fr; gap: 1.3mm 7mm; }
+  .phone p { font-size: 9.5pt; line-height: 1.6; }
+  .tips, .care { padding: 3.4mm 4mm 3.6mm; background: var(--kinari); border-radius: 1.6mm; }
+  .tips ul, .care ul { display: grid; gap: 1.3mm; }
+  .tips li, .care li { position: relative; padding-left: 4mm; font-size: 9.5pt; line-height: 1.55; }
+  .tips li::before, .care li::before { content: ''; position: absolute; left: 0.6mm; top: 2mm; width: 1.5mm; height: 1.5mm; background: var(--ai); transform: rotate(45deg); }
+  .folio { margin-top: auto; padding: 2mm 0 6mm; text-align: center; font-family: 'BIZ UDMincho', serif; font-size: 9pt; color: var(--muted); letter-spacing: 0.3em; }
+  /* 年度の設定 */
+  .set-shot { margin-bottom: 4mm; }
+  .defs { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6mm 7mm; }
+  .defs > div { display: grid; grid-template-columns: 6.4mm 1fr; gap: 0 2.4mm; align-content: start; }
+  .defs dt { font-size: 10.5pt; font-weight: 700; line-height: 1.45; }
+  .defs dd { font-size: 9.5pt; line-height: 1.6; }
+  .row-set { display: grid; grid-template-columns: 1fr 1fr; gap: 6mm; margin-top: 4mm; align-items: start; }
+  .flow { counter-reset: f; display: grid; gap: 1.4mm; margin-top: 2.6mm; }
+  .flow li { counter-increment: f; display: grid; grid-template-columns: 6mm 1fr; gap: 2mm; align-items: baseline; font-size: 9.5pt; line-height: 1.55; }
+  .flow li::before { content: counter(f); font-family: 'BIZ UDMincho', serif; font-size: 13pt; color: var(--ai); text-align: center; }
+  .flow b { font-size: 10pt; }
+  .flow small { margin-left: 2mm; font-size: 9.5pt; color: var(--muted); }
+  .draft-shot { padding: 1.4mm; }
+  
+</style>
+</head>
+<body>
+
+<section class="sheet cover">
+  <header class="c-top"><span>文化学園大学　国際ファッション文化学科</span><span class="min">2026年度</span></header>
+  <div class="rule2"></div>
+  <div class="c-main">
+    <div>
+      <p class="c-tool"><span class="seal min">卒</span><span class="min">卒業制作報告書 作成ツール</span></p>
+      <p class="c-for"><b>学生用</b></p>
+      <p class="c-lead">表紙から作品写真まで、決まった形のまま1か所で書けるツールです。手順書のルールに合っているかをその場で確かめ（セルフチェック）、そのまま1つの PDF にして提出できます。</p>
+      <ul class="c-feat"><li>パソコンでもスマホでも書けます</li><li>原稿は自動で保存（この端末と、自分の Google ドライブ）</li><li>字の大きさ・行の間・見出しの番号は、ツールがそろえます</li></ul>
+      <h2 class="c-toc-h min">目次</h2>
+      <ol class="c-toc"><li><span class="no min">1</span><span><b>はじめに</b><small>開く・ログイン・コースを選ぶ</small></span><span class="pg min">2</span></li><li><span class="no min">2</span><span><b>表紙と抄録</b><small>学籍番号・氏名・サブタイトル・抄録</small></span><span class="pg min">4</span></li><li><span class="no min">3</span><span><b>本文を書く</b><small>段落・見出し・図・表</small></span><span class="pg min">6</span></li><li><span class="no min">4</span><span><b>作品写真と引用・参考文献</b></span><span class="pg min">8</span></li><li><span class="no min">5</span><span><b>セルフチェックで直す</b><small>エラーと警告・「直す」ボタン</small></span><span class="pg min">9</span></li><li><span class="no min">6</span><span><b>PDF にして提出する</b></span><span class="pg min">10</span></li><li><span class="no min">7</span><span><b>保存とバックアップ</b><small>自動保存・控え・ほかの端末で書く</small></span><span class="pg min">11</span></li><li><span class="no min">8</span><span><b>困ったとき</b></span><span class="pg min">12</span></li></ol>
+    </div>
+    <div class="c-title">
+      <div class="masu"><span>使</span><span>い</span><span>方</span><span>の</span><span>手</span><span>引</span><span>き</span></div>
+      <div class="side">卒業制作報告書 作成ツール</div>
+    </div>
+  </div>
+  <footer class="c-band">
+    <div>
+      <h2>ツールを開く</h2>
+      <p class="url fn">https://junnosukekato.github.io/sotsugyo-seisaku-report/</p>
+      <ol><li>大学の Google アカウント（<span class="fn">@bunka-wu.ac.jp</span>）でログインします</li><li>はじめて開くと、コースを選ぶ案内が出ます</li></ol>
+    </div>
+    <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h33v33H0z"/><path stroke="#1d2030" d="M0 0.5h7m4 0h3m2 0h4m1 0h3m2 0h7M0 1.5h1m5 0h1m2 0h1m1 0h5m1 0h1m2 0h1m5 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h1m1 0h4m2 0h1m2 0h5m2 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h2m1 0h1m2 0h2m2 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m1 0h1m2 0h1m1 0h1m1 0h1m1 0h3m1 0h1m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h2m1 0h2m2 0h3m8 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M8 7.5h3m1 0h1m1 0h2m2 0h1m2 0h2m1 0h1M0 8.5h1m1 0h5m3 0h1m2 0h3m1 0h1m4 0h3m1 0h5M0 9.5h1m7 0h4m6 0h6m2 0h2m1 0h2m1 0h1M1 10.5h3m1 0h7m3 0h1m1 0h2m2 0h1m2 0h1m1 0h1m1 0h1m1 0h2M0 11.5h2m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m3 0h1m1 0h4m1 0h1m2 0h5M0 12.5h2m1 0h1m1 0h3m1 0h1m2 0h1m2 0h1m1 0h1m2 0h1m1 0h4m2 0h2M2 13.5h2m1 0h1m1 0h2m2 0h1m2 0h3m2 0h3m1 0h1m2 0h1m2 0h1m1 0h2M1 14.5h1m1 0h4m1 0h5m4 0h1m2 0h3m2 0h2m1 0h2m1 0h1M1 15.5h1m2 0h2m1 0h1m8 0h1m3 0h3m2 0h2m2 0h2M0 16.5h3m1 0h3m2 0h1m1 0h3m3 0h1m2 0h1m1 0h1m1 0h2m1 0h3m2 0h1M0 17.5h3m2 0h1m3 0h1m3 0h2m1 0h1m1 0h3m2 0h1m2 0h2m1 0h4M0 18.5h1m2 0h2m1 0h1m1 0h1m5 0h3m3 0h1m3 0h5m1 0h2M0 19.5h1m1 0h1m2 0h1m1 0h1m3 0h6m1 0h1m2 0h3m1 0h8M0 20.5h3m1 0h1m1 0h7m1 0h5m3 0h3m2 0h3m1 0h2M0 21.5h3m1 0h2m2 0h1m5 0h2m1 0h4m1 0h2m2 0h1m2 0h2m1 0h1M0 22.5h1m1 0h1m1 0h3m2 0h1m1 0h6m1 0h1m7 0h1m3 0h2M0 23.5h1m3 0h2m2 0h4m3 0h1m3 0h1m1 0h4m1 0h1m2 0h2M0 24.5h1m2 0h5m3 0h2m1 0h4m4 0h1m1 0h6m2 0h1M8 25.5h2m3 0h1m2 0h2m1 0h3m2 0h1m3 0h1m1 0h1m1 0h1M0 26.5h7m2 0h1m1 0h5m1 0h1m2 0h5m1 0h1m1 0h1m1 0h1M0 27.5h1m5 0h1m1 0h1m5 0h2m3 0h1m1 0h4m3 0h5M0 28.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h3m3 0h3m3 0h6m1 0h2M0 29.5h1m1 0h3m1 0h1m1 0h5m1 0h3m1 0h4m1 0h3m2 0h1m1 0h3M0 30.5h1m1 0h3m1 0h1m1 0h3m2 0h1m6 0h8m1 0h1M0 31.5h1m5 0h1m2 0h1m1 0h4m1 0h1m1 0h1m1 0h4m1 0h2m1 0h3M0 32.5h7m1 0h2m1 0h2m1 0h1m2 0h1m1 0h1m2 0h4m1 0h1m1 0h1m1 0h1"/></svg>
+<b>スマホで読み取る</b></div>
+  </footer>
+  <p class="c-note">この手引きは 2026年度のツールの画面で作っています。画面は少し変わることがあります。</p>
+</section>
+<section class="sheet inner">
+  <header class="run"><span>卒業制作報告書 作成ツール　使い方の手引き　<b>学生用</b></span><span>3　本文を書く</span></header>
+  <div class="ch"><span class="ch-no min">3</span><div><h1>本文を書く</h1><p class="ch-sub">段落・見出し・図・表</p></div></div>
+  <p class="lead">紙面の上で、そのまま書きます。字の大きさ・行の間・見出しの番号は、ツールが手順書どおりにそろえます。</p>
+  <div class="w-main">
+    <div class="w-left">
+      <div class="frame"><figure class="shot " style="aspect-ratio:750/592"><img src="shots/w-main.png" alt=""><span class="hl" style="left:calc(3.27% - 0.6mm);top:calc(42.81% - 0.6mm);width:calc(9.6% + 1.2mm);height:calc(8.45% + 1.2mm)"></span><span class="hl" style="left:calc(3.27% - 0.6mm);top:calc(51.43% - 0.6mm);width:calc(9.6% + 1.2mm);height:calc(8.45% + 1.2mm)"></span><span class="hl" style="left:calc(3.27% - 0.6mm);top:calc(15.28% - 0.6mm);width:calc(9.6% + 1.2mm);height:calc(17.06% + 1.2mm)"></span><span class="hl" style="left:calc(3.27% - 0.6mm);top:calc(74.9% - 0.6mm);width:calc(9.6% + 1.2mm);height:calc(8.45% + 1.2mm)"></span><i class="mk" style="left:calc(29.75% - var(--mkr) + var(--mkgap));top:46%">1</i><i class="mk" style="left:calc(59.98% + var(--mkr) + var(--mkgap));top:48.66%">2</i><i class="mk" style="left:calc(12.87% + var(--mkr) + var(--mkgap));top:47.03%">3</i><i class="mk" style="left:calc(12.87% + var(--mkr) + var(--mkgap));top:55.66%">4</i><i class="mk" style="left:calc(12.87% + var(--mkr) + var(--mkgap));top:23.81%">5</i><i class="mk" style="left:calc(12.87% + var(--mkr) + var(--mkgap));top:79.13%">6</i></figure></div>
+      <section class="phone">
+        <div class="frame"><figure class="shot " style="aspect-ratio:390/253"><img src="shots/phone-sheet.png" alt=""><span class="hl" style="left:calc(2.05% - 0.6mm);top:calc(69.96% - 0.6mm);width:calc(26.28% + 1.2mm);height:calc(13.44% + 1.2mm)"></span></figure></div>
+        <div><h2 class="sec-h">スマホでは</h2><p>段落をタップすると、画面の下に「書く欄」が開きます。図・表は書く欄のボタンで、見出しは画面の下の「追加」から入れます。</p></div>
+      </section>
+    </div>
+    <ol class="steps"><li><span class="no">1</span><b>書きたいところをクリック</b><p>紙面の段落をクリックすると、その場に書く欄が開きます。書き終えたら Esc キーか、紙面の外をクリック。</p></li><li><span class="no">2</span><b>Enter で次の段落へ</b><p>段落を分けるところで Enter。「。」を忘れても自動で付きます。段落の頭で Backspace を押すと、前の段落とつながります。</p></li><li><span class="no">3</span><b>図を入れる</b><p>図を指したい文中の位置をクリックしてから押し、写真を選びます。</p></li><li><span class="no">4</span><b>表を入れる</b><p>図と同じく、入れたい位置をクリックしてから押します。</p></li><li><span class="no">5</span><b>見出しを足す</b><p>「小見出し」（ⅰ．）・「大見出し」（Ⅰ．）は、書いている段落の後ろに入ります。番号は自動です。</p></li><li><span class="no">6</span><b>元に戻す</b><p>間違えたら「元に戻す」（Ctrl＋Z）。直前の操作を取り消せます。</p></li></ol>
+  </div>
+  <div class="row2">
+    <section class="fig">
+      <h2 class="sec-h">図を入れたところ</h2>
+      <div class="frame" style="background:#fff"><figure class="shot " style="aspect-ratio:488/252"><img src="shots/w-figure.png" alt=""><i class="mk sub" style="left:calc(43.25% + var(--mkr) + var(--mkgap));top:12.1%">A</i><i class="mk sub" style="left:calc(65.5% + var(--mkr) + var(--mkgap));top:90.16%">B</i></figure></div>
+      <ol class="mini"><li><span class="k">A</span><span>書いていた位置に「（図1）」が入ります。番号は自動でそろいます。</span></li><li><span class="k">B</span><span>すぐ下に図が入り、タイトルの欄が開きます。書いて Enter で文の続きへ。</span></li></ol>
+    </section>
+    <section class="tbl">
+      <h2 class="sec-h">表を選ぶ</h2>
+      <div class="frame"><figure class="shot " style="aspect-ratio:260/176"><img src="shots/w-table.png" alt=""><span class="hl" style="left:calc(39.44% - 0.6mm);top:calc(50.25% - 0.6mm);width:calc(52.31% + 1.2mm);height:calc(15.34% + 1.2mm)"></span><span class="hl" style="left:calc(39.44% - 0.6mm);top:calc(65.59% - 0.6mm);width:calc(52.31% + 1.2mm);height:calc(22.73% + 1.2mm)"></span></figure></div>
+      <p>「空の表（2列）」か「素材表（名称・使用箇所・生地見本）」を選び、表のタイトルを書いて Enter。セルを書いているときは「行を足す」「列を足す」「画像を入れる」が出ます。</p>
+    </section>
+  </div>
+  <section class="tips wide"><h2 class="sec-h">知っておくと安心</h2><ul><li>ページは自動で分かれます（「改ページ」もあります）</li><li>原稿は自動で保存（この端末と Google ドライブ）</li><li>図・表が押せないときは、先に文中をクリック</li><li>ボタンにマウスを重ねると、入る場所に線が出ます</li></ul></section>
+  <footer class="folio">― 6 ―</footer>
+</section>
+<section class="sheet cover">
+  <header class="c-top"><span>文化学園大学　国際ファッション文化学科</span><span class="min">2026年度</span></header>
+  <div class="rule2"></div>
+  <div class="c-main">
+    <div>
+      <p class="c-tool"><span class="seal min">卒</span><span class="min">卒業制作報告書 作成ツール</span></p>
+      <p class="c-for t"><b>教員用</b></p>
+      <p class="c-lead">学生はこのツールで報告書を書き、セルフチェックを受けて、1つの PDF にして提出します。先生は「管理ページ」で、その年度の題目・コース・指導教員・締切と、コースごとのひな形・お知らせを決めます。</p>
+      <ul class="c-feat"><li>学生の原稿は、学生のブラウザと学生本人の Google ドライブにだけ保存されます（学科には集まりません）</li><li>保存すると、1分ほどで学生のツールに反映されます</li><li>「変更履歴」から、前の内容に戻せます</li></ul>
+      <h2 class="c-toc-h min">目次</h2>
+      <ol class="c-toc"><li><span class="no min">1</span><span><b>このツールのしくみ</b><small>学生の原稿はどこに保存されるか</small></span><span class="pg min">2</span></li><li><span class="no min">2</span><span><b>管理ページを開く</b><small>管理者と先生</small></span><span class="pg min">3</span></li><li><span class="no min">3</span><span><b>年度の設定をする</b><small>題目・コース・指導教員・締切</small></span><span class="pg min">4</span></li><li><span class="no min">4</span><span><b>コースのひな形を直す</b></span><span class="pg min">6</span></li><li><span class="no min">5</span><span><b>お知らせと書き間違えやすい語</b></span><span class="pg min">7</span></li><li><span class="no min">6</span><span><b>先生を登録する</b><small>管理者だけ</small></span><span class="pg min">8</span></li><li><span class="no min">7</span><span><b>新年度の準備と公開</b></span><span class="pg min">9</span></li><li><span class="no min">8</span><span><b>学生から相談を受けたとき</b></span><span class="pg min">10</span></li></ol>
+    </div>
+    <div class="c-title">
+      <div class="masu"><span>使</span><span>い</span><span>方</span><span>の</span><span>手</span><span>引</span><span>き</span></div>
+      <div class="side">卒業制作報告書 作成ツール</div>
+    </div>
+  </div>
+  <footer class="c-band">
+    <div>
+      <h2>管理ページと学生のツール</h2>
+      <p class="txt">管理ページの URL は、管理者からのメールでお知らせします。大学の Google アカウントでログインし、登録された先生だけが開けます。</p>
+      <dl class="roles"><dt>管理者</dt><dd>年度の設定と公開・先生の登録</dd><dt>先生</dt><dd>コースのひな形・お知らせ・書き間違えやすい語</dd></dl>
+      <p class="url s"><span>学生のツール</span></p><p class="url fn" style="margin:0.6mm 0 0;font-size:10pt">https://junnosukekato.github.io/sotsugyo-seisaku-report/</p>
+    </div>
+    <div class="qr"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 33 33" shape-rendering="crispEdges"><path fill="#ffffff" d="M0 0h33v33H0z"/><path stroke="#1d2030" d="M0 0.5h7m4 0h3m2 0h4m1 0h3m2 0h7M0 1.5h1m5 0h1m2 0h1m1 0h5m1 0h1m2 0h1m5 0h1m5 0h1M0 2.5h1m1 0h3m1 0h1m1 0h1m1 0h4m2 0h1m2 0h5m2 0h1m1 0h3m1 0h1M0 3.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h2m1 0h1m2 0h2m2 0h1m1 0h3m1 0h1M0 4.5h1m1 0h3m1 0h1m1 0h1m1 0h1m2 0h1m1 0h1m1 0h1m1 0h3m1 0h1m2 0h1m1 0h3m1 0h1M0 5.5h1m5 0h1m1 0h2m1 0h2m2 0h3m8 0h1m5 0h1M0 6.5h7m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h1m1 0h7M8 7.5h3m1 0h1m1 0h2m2 0h1m2 0h2m1 0h1M0 8.5h1m1 0h5m3 0h1m2 0h3m1 0h1m4 0h3m1 0h5M0 9.5h1m7 0h4m6 0h6m2 0h2m1 0h2m1 0h1M1 10.5h3m1 0h7m3 0h1m1 0h2m2 0h1m2 0h1m1 0h1m1 0h1m1 0h2M0 11.5h2m1 0h3m1 0h1m1 0h2m1 0h1m1 0h1m3 0h1m1 0h4m1 0h1m2 0h5M0 12.5h2m1 0h1m1 0h3m1 0h1m2 0h1m2 0h1m1 0h1m2 0h1m1 0h4m2 0h2M2 13.5h2m1 0h1m1 0h2m2 0h1m2 0h3m2 0h3m1 0h1m2 0h1m2 0h1m1 0h2M1 14.5h1m1 0h4m1 0h5m4 0h1m2 0h3m2 0h2m1 0h2m1 0h1M1 15.5h1m2 0h2m1 0h1m8 0h1m3 0h3m2 0h2m2 0h2M0 16.5h3m1 0h3m2 0h1m1 0h3m3 0h1m2 0h1m1 0h1m1 0h2m1 0h3m2 0h1M0 17.5h3m2 0h1m3 0h1m3 0h2m1 0h1m1 0h3m2 0h1m2 0h2m1 0h4M0 18.5h1m2 0h2m1 0h1m1 0h1m5 0h3m3 0h1m3 0h5m1 0h2M0 19.5h1m1 0h1m2 0h1m1 0h1m3 0h6m1 0h1m2 0h3m1 0h8M0 20.5h3m1 0h1m1 0h7m1 0h5m3 0h3m2 0h3m1 0h2M0 21.5h3m1 0h2m2 0h1m5 0h2m1 0h4m1 0h2m2 0h1m2 0h2m1 0h1M0 22.5h1m1 0h1m1 0h3m2 0h1m1 0h6m1 0h1m7 0h1m3 0h2M0 23.5h1m3 0h2m2 0h4m3 0h1m3 0h1m1 0h4m1 0h1m2 0h2M0 24.5h1m2 0h5m3 0h2m1 0h4m4 0h1m1 0h6m2 0h1M8 25.5h2m3 0h1m2 0h2m1 0h3m2 0h1m3 0h1m1 0h1m1 0h1M0 26.5h7m2 0h1m1 0h5m1 0h1m2 0h5m1 0h1m1 0h1m1 0h1M0 27.5h1m5 0h1m1 0h1m5 0h2m3 0h1m1 0h4m3 0h5M0 28.5h1m1 0h3m1 0h1m1 0h1m1 0h1m1 0h3m3 0h3m3 0h6m1 0h2M0 29.5h1m1 0h3m1 0h1m1 0h5m1 0h3m1 0h4m1 0h3m2 0h1m1 0h3M0 30.5h1m1 0h3m1 0h1m1 0h3m2 0h1m6 0h8m1 0h1M0 31.5h1m5 0h1m2 0h1m1 0h4m1 0h1m1 0h1m1 0h4m1 0h2m1 0h3M0 32.5h7m1 0h2m1 0h2m1 0h1m2 0h1m1 0h1m2 0h4m1 0h1m1 0h1m1 0h1"/></svg>
+<b>学生に配る URL</b></div>
+  </footer>
+  <p class="c-note">この手引きは 2026年度のツールの画面で作っています。画面は少し変わることがあります。</p>
+</section>
+<section class="sheet inner">
+  <header class="run"><span>卒業制作報告書 作成ツール　使い方の手引き　<b>教員用</b></span><span>3　年度の設定をする</span></header>
+  <div class="ch"><span class="ch-no min">3</span><div><h1>年度の設定をする</h1><p class="ch-sub">管理ページ ― 題目・コース・指導教員・締切</p></div></div>
+  <p class="lead">年度の設定は、管理者の先生が管理ページで行います。入力すると、すぐ右の見本（表紙と抄録）に出ます。</p>
+  <div class="frame set-shot room"><figure class="shot " style="aspect-ratio:1440/758"><img src="shots/admin-main.png" alt=""><span class="hl" style="left:calc(14.66% - 0.6mm);top:calc(1.72% - 0.6mm);width:calc(15.07% + 1.2mm);height:calc(3.83% + 1.2mm)"></span><span class="hl" style="left:calc(88.73% - 0.6mm);top:calc(1.72% - 0.6mm);width:calc(10.02% + 1.2mm);height:calc(3.83% + 1.2mm)"></span><span class="ld" style="left:calc(0% - var(--mkgap) - var(--mkout));top:15.96%;width:calc(1.39% + var(--mkgap) + var(--mkout) - 0.6mm)"></span><span class="ld" style="left:calc(0% - var(--mkgap) - var(--mkout));top:25.59%;width:calc(1.39% + var(--mkgap) + var(--mkout) - 0.6mm)"></span><span class="ld" style="left:calc(0% - var(--mkgap) - var(--mkout));top:53.96%;width:calc(2.29% + var(--mkgap) + var(--mkout) - 0.6mm)"></span><span class="ld" style="left:calc(0% - var(--mkgap) - var(--mkout));top:63.32%;width:calc(2.29% + var(--mkgap) + var(--mkout) - 0.6mm)"></span><i class="mk" style="left:22.2%;top:calc(5.55% + var(--mkr) + var(--mkgap))">1</i><i class="mk" style="left:calc(0% - var(--mkr) + var(--mkgap) - var(--mkout));top:15.96%">2</i><i class="mk" style="left:calc(0% - var(--mkr) + var(--mkgap) - var(--mkout));top:25.59%">3</i><i class="mk" style="left:calc(0% - var(--mkr) + var(--mkgap) - var(--mkout));top:53.96%">4</i><i class="mk" style="left:calc(0% - var(--mkr) + var(--mkgap) - var(--mkout));top:63.32%">5</i><i class="mk" style="left:34.66%;top:14.8%">6</i><i class="mk" style="left:calc(98.75% + var(--mkr) + var(--mkgap));top:3.63%">7</i></figure></div>
+  <dl class="defs"><div><span class="no">1</span><dt>年度を選ぶ</dt><dd>「公開中」は学生が使っている年度。「準備中」は、まだ学生に見えません。</dd></div><div><span class="no">2</span><dt>共通の題目</dt><dd>表紙と抄録に入ります。学生は変えられません。</dd></div><div><span class="no">3</span><dt>最終締切</dt><dd>学生のツールの「締切まで○日」に使われます。</dd></div><div><span class="no">4</span><dt>コースとサブタイトルの形</dt><dd>「―」＋学生の入力＋「の衣装制作―」の形。「学生に表示」を外すと選べなくなります。</dd></div><div><span class="no">5</span><dt>指導教員</dt><dd>氏名を入力して Enter。× で外します。抄録に出ます。</dd></div><div><span class="no">6</span><dt>右の見本</dt><dd>黄色は、年度の設定から入る部分です。</dd></div><div><span class="no">7</span><dt>保存して学生に反映</dt><dd>公開中の年度は、1分ほどで学生のツールに反映されます。</dd></div></dl>
+  <div class="row-set">
+    <section>
+      <h2 class="sec-h">新しい年度の準備と公開</h2>
+      <div class="frame draft-shot" style="background:#fff"><figure class="shot " style="aspect-ratio:632/56"><img src="shots/admin-draft.png" alt=""><span class="hl" style="left:calc(43.84% - 0.6mm);top:calc(23.21% - 0.6mm);width:calc(17.05% + 1.2mm);height:calc(51.79% + 1.2mm)"></span><span class="hl" style="left:calc(72.91% - 0.6mm);top:calc(23.21% - 0.6mm);width:calc(25.11% + 1.2mm);height:calc(51.79% + 1.2mm)"></span></figure></div>
+      <ol class="flow"><li><span><b>新年度を作成</b><small>前の年度をコピーして、準備中で作る</small></span></li><li><span><b>直して「保存」</b><small>題目・コース・指導教員・締切を直す</small></span></li><li><span><b>見本で確かめる</b><small>表紙と抄録の形</small></span></li><li><span><b>この年度を学生に公開</b><small>前の年度は「終了」になる</small></span></li></ol>
+    </section>
+    <section class="care"><h2 class="sec-h">気をつけること</h2><ul><li>年度の設定は「管理者」だけが変えられます（「先生」は、ひな形・お知らせ・書き間違えやすい語）。</li><li>学生の原稿は、書き始めた年度の設定のまま開きます（新年度を公開しても表紙は変わりません）。</li><li>ほかの人が先に保存していると保存できません。読み込み直してから直します。</li><li>間違えたときは「変更履歴」から戻せます。</li></ul></section>
+  </div>
+  <footer class="folio">― 4 ―</footer>
+</section>
+</body>
+</html>
