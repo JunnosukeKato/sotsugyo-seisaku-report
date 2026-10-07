@@ -27,6 +27,12 @@ await withEdge(async (browser) => {
   const clickButton = (text) => page.evaluate((text) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(text)).click(), text)
 
   check('公開中の2026年度が開く', await page.evaluate(() => document.querySelector('.badge.pub')?.textContent === '公開中'))
+  // 使い方の手引き（教員用の PDF。学生用ツールといっしょに公開している）を新しいタブで開くリンク
+  const guideLink = () => page.evaluate(() => {
+    const a = document.querySelector('.admin-header .howto')
+    return a ? `${a.getAttribute('href')} ${a.getAttribute('target')}` : ''
+  })
+  check('見出しの横に「使い方（教員用の手引き）」のリンクがあり、新しいタブで開く', (await guideLink()) === 'https://junnosukekato.github.io/sotsugyo-seisaku-report/guides/teacher-guide.pdf _blank', await guideLink())
 
   // 共通の題目を変えると、見本の表紙と抄録にすぐ反映される
   const title = await fieldInput('共通の題目')
@@ -123,6 +129,7 @@ await withEdge(async (browser) => {
   await teacher.waitForSelector('.teacher-main')
   check('先生には、ひな形の一覧だけの画面が出る（年度の設定の欄は出ない）', !(await teacher.$('.form')) && (await teacher.$$('.teacher-main .tpl-row')).length > 0)
   check('先生の画面にも、ソースコードの場所のリンクが出る（AGPL）', await teacher.evaluate(() => !!document.querySelector('.teacher-main .source a')?.href))
+  check('先生の画面にも、見出しの横に「使い方（教員用の手引き）」のリンクが出る', await teacher.evaluate(() => /guides\/teacher-guide\.pdf$/.test(document.querySelector('.admin-header .howto')?.getAttribute('href') ?? '')))
   await teacher.evaluate(() => document.querySelector('.teacher-main .tpl-row button').click())
   await teacher.waitForSelector('.tpl-modal')
   await teacher.evaluate(() => [...document.querySelectorAll('.tpl-modal .row input')].at(-1).focus())

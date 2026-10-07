@@ -259,6 +259,12 @@ await withEdge(async (browser) => {
   await page.click('.p-top .icon-btn')
   await page.waitForSelector('.sheet .sheet-body')
   check('メニューに「Word で書いた分を読み込む」のリンクがある', !!(await page.$('.sheet .word-link')))
+  // 使い方の手引き（学生用の PDF）を新しいタブで開くリンク
+  const guideLink = await page.evaluate(() => {
+    const a = document.querySelector('.sheet .howto-link')
+    return a ? { href: a.getAttribute('href'), target: a.getAttribute('target') } : null
+  })
+  check('メニューに「使い方（手引き）」のリンクがあり、学生用の手引きの PDF を新しいタブで開く', guideLink?.href === './guides/student-guide.pdf' && guideLink.target === '_blank', JSON.stringify(guideLink))
   await page.click('.sheet-close')
   await page.waitForFunction(() => !document.querySelector('.sheet'))
 

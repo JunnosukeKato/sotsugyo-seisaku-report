@@ -81,6 +81,14 @@ await withEdge(async (browser) => {
   check('コースを選ぶと、そのコースの下書きが本文に入り、「いいえ」で学籍番号の入力が始まる', !!s.report.basicInfo.courseId && s.report.body.length > 0 && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'paragraph' && b.hint), s.report.basicInfo.courseId)
   const noticeText = () => page.evaluate(() => document.querySelector('.side .notice')?.textContent ?? '')
   check('右の欄に、自分のコースのお知らせが出る', (await noticeText()).includes('映画・舞台衣装デザイナー コースからのお知らせ') && (await noticeText()).includes('衣装コースへのお知らせ'), await noticeText())
+  // 使い方の手引き（学生用の PDF。public/guides/ に置き、ツールといっしょに公開する）を新しいタブで開くリンク
+  const guideLink = await page.evaluate(async () => {
+    const a = document.querySelector('.side .howto-link')
+    if (!a) return null
+    const res = await fetch(a.getAttribute('href'), { method: 'HEAD' })
+    return { href: a.getAttribute('href'), target: a.getAttribute('target'), type: res.headers.get('content-type') }
+  })
+  check('右の欄に「使い方（手引き）」のリンクがあり、学生用の手引きの PDF を新しいタブで開く', guideLink?.href === './guides/student-guide.pdf' && guideLink.target === '_blank' && /pdf/.test(guideLink.type ?? ''), JSON.stringify(guideLink))
   await page.keyboard.type('00ZZ0123')
   await page.keyboard.press('Enter')
   await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:name', { timeout: 30000 })

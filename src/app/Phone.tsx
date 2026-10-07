@@ -5,7 +5,7 @@ import { findEditable, type EditableKind } from '../editor/reportOps'
 import type { Report } from '../model/types'
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
-import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
+import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, GuideLink, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
 import { keepFocus, PAGE_CONTEXT, pageName } from './uiShared'
 import { DriveChip, DriveMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
@@ -300,7 +300,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
           <div className="sub">{pageName(snap)}</div>
         </div>
         {drive ? <DriveChip drive={drive} compact /> : <SaveChip state={saveState} />}
-        <button className="icon-btn" aria-label="メニュー（手順書・バックアップなど）" onClick={() => setSheet('menu')}>
+        <button className="icon-btn" aria-label="メニュー（手順書・バックアップ・使い方など）" onClick={() => setSheet('menu')}>
           {PhoneIcon.menu}
         </button>
       </header>
@@ -416,6 +416,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
               }}
             />
           )}
+          <GuideLink />
           <SourceNotice />
         </Sheet>
       )}

@@ -688,6 +688,12 @@ body.resizing .page-viewport { pointer-events: none; }
 .word-link svg { width: 16px; height: 16px; flex: none; }
 .word-link::after { content: ''; position: absolute; inset: -9px -6px; }
 .sheet-body .word-link { margin: 0 0 8px; padding: 4px 0; font-size: 13.5px; }
+/* 使い方の手引き（PDF）を開く小さなリンク（「引用・参考文献を入れる」と同じ、目立ちすぎない形） */
+.howto-link { position: relative; display: block; width: fit-content; margin: 10px 0 0; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+.howto-link:hover { color: var(--accent); }
+.howto-link::after { content: ''; position: absolute; inset: -9px -6px; }
+.howto-link:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.sheet-body .howto-link { margin: 0 0 8px; padding: 4px 0; font-size: 13.5px; }
 /* ① はじめての案内：コースを選ぶ段階の「Word のひな形で書き始めている人へ」と、「Word で書き始めていますか？」の段階 */
 .g-word { margin-top: 12px; padding: 10px 12px; border-radius: 10px; background: var(--accent-soft); font-size: 12px; line-height: 1.7; color: #3f4249; }
 .g-word b { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; font-size: 12.5px; color: var(--accent); }

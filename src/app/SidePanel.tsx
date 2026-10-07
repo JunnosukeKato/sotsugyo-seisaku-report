@@ -10,7 +10,7 @@ import type { SaveState } from './useAutosave'
 import { WordImportLink } from './WordImport'
 
 /**
- * 右の欄。上から：名前・保存のようす・締切・手順書とバックアップ（今年度だけ「Word で書いた分を読み込む」）／
+ * 右の欄。上から：名前・保存のようす・締切・手順書とバックアップ（今年度だけ「Word で書いた分を読み込む」）・使い方（手引き）／
  * Word から写したあとの「つぎにすること」（今年度だけ）／学科からのお知らせ／ページ一覧／セルフチェック／PDFの書き出し
  */
 
@@ -226,6 +226,18 @@ export function SourceNotice() {
   )
 }
 
+/**
+ * 使い方の手引き（学生用の PDF）を新しいタブで開く小さなリンク。PDF は public/guides/ に置き、ツールといっしょに公開する
+ * （scripts/make-guides.mjs で作る）。PC は右の欄の上、スマホはメニューに出す
+ */
+export function GuideLink() {
+  return (
+    <a className="howto-link" href="./guides/student-guide.pdf" target="_blank" rel="noreferrer">
+      使い方（手引き）
+    </a>
+  )
+}
+
 /** セルフチェックの中身（進み具合のメーターと、場所ごとにまとめた指摘）。PC は右の欄、スマホは下から出る欄に置く */
 export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEditor; snap: EditorSnapshot; config: YearConfig; onPick?: () => void }) {
   const { findings, layout, report } = snap
@@ -343,6 +355,7 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
           </button>
         </div>
         {onWordImport && <WordImportLink onClick={onWordImport} />}
+        <GuideLink />
       </header>
 
       {wordTodo}

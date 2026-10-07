@@ -52,6 +52,21 @@ function SourceLink() {
   )
 }
 
+/**
+ * 使い方の手引き（教員用の PDF）の場所。学生用ツールといっしょに GitHub Pages で公開している（public/guides/。scripts/make-guides.mjs で作る）。
+ * 管理ページは Apps Script に置くので、相対ではなく学生用ツールの URL で書く（GitHub のリポジトリを移したら、ここも直す）
+ */
+const TEACHER_GUIDE_URL = 'https://junnosukekato.github.io/sotsugyo-seisaku-report/guides/teacher-guide.pdf'
+
+/** 使い方の手引き（教員用）を新しいタブで開く小さなリンク（見出しの横。管理者と先生の画面に出す） */
+function GuideLink() {
+  return (
+    <a className="howto" href={TEACHER_GUIDE_URL} target="_blank" rel="noreferrer">
+      使い方（教員用の手引き）
+    </a>
+  )
+}
+
 function Field({ label, children, hint }: { label: string; children: ReactNode; hint?: string }) {
   return (
     <label className="f">
@@ -332,6 +347,7 @@ export function AdminApp() {
     <div className="admin">
       <header className="admin-header">
         <b>卒業制作報告書 管理ページ</b>
+        <GuideLink />
         <select
           className="sel"
           value={year ?? ''}
@@ -656,6 +672,7 @@ function TeacherView({
     <div className="admin">
       <header className="admin-header">
         <b>卒業制作報告書 管理ページ</b>
+        <GuideLink />
         <select
           className="sel"
           value={row.year}
