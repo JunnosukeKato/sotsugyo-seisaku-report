@@ -1,0 +1,162 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v24：Wordから読み込む（今年度だけ）</title>
+<style>
+  body { margin: 0; padding: 28px 32px 40px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  h2 { font-size: 17px; margin: 34px 0 4px; letter-spacing: 0.04em; }
+  h3 { font-size: 13.5px; margin: 14px 0 8px; color: #5d6068; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 13px; color: #5d6068; line-height: 1.8; max-width: 1150px; }
+  .trouble { margin: 0 0 10px; padding: 9px 14px; max-width: 1150px; border-radius: 10px; background: #fff; font-size: 13px; line-height: 1.8; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.05); }
+  .trouble b { color: #b5443b; margin-right: 6px; }
+  figure { margin: 0 0 16px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid #ecebe8; }
+  figcaption b { display: block; font-size: 15px; margin-bottom: 3px; }
+  figcaption span { font-size: 12.5px; color: #5d6068; line-height: 1.7; }
+  img { display: block; width: 100%; }
+  .row { display: grid; gap: 14px; align-items: start; }
+  .c2 { grid-template-columns: 1fr 1fr; }
+  .c3 { grid-template-columns: 1fr 1fr 1fr; }
+  .c4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .wide-narrow { grid-template-columns: 1fr 1.4fr; }
+  /* おすすめの印と理由 */
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: #2f3e75; color: #fff; font-size: 11.5px; font-style: normal; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  figure.is-rec { box-shadow: 0 0 0 2px #2f3e75, 0 2px 10px rgba(0, 0, 0, 0.08); }
+  .why { margin: 2px 0 8px; padding: 10px 14px; border-left: 3px solid #2f3e75; background: #f6f5f2; border-radius: 0 10px 10px 0; font-size: 13px; line-height: 1.8; max-width: 1150px; }
+  .why b { color: #2f3e75; }
+  /* 決めていただきたいことの一覧 */
+  .ask { margin: 0 0 8px; padding: 14px 18px 12px; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); max-width: 1150px; }
+  .ask h2 { margin: 0 0 8px; font-size: 15px; }
+  .ask ol { margin: 0; padding-left: 22px; font-size: 13.5px; line-height: 2; }
+  .ask ol span { color: #5d6068; font-size: 12.5px; }
+  .ask ol em { font-style: normal; color: #2f3e75; font-weight: 700; }
+  .flow { margin: 0 0 8px; padding: 10px 18px; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.08); max-width: 1150px; font-size: 13px; line-height: 1.9; }
+  .flow b { color: #2f3e75; }
+  /* 画像の並び（1つの案の中で、場面ごとに並べる） */
+  .strip { display: grid; gap: 1px; background: #ecebe8; align-items: start; }
+  .strip > div { background: #fff; align-self: stretch; }
+  .strip small { display: block; padding: 6px 12px 8px; font-size: 12px; color: #5d6068; line-height: 1.6; }
+  .strip small b { color: #24262b; }
+  .s2 { grid-template-columns: 1fr 1fr; }
+  .pc-side-phone { grid-template-columns: 1.6fr 0.5fr 0.48fr; }
+  .pc-phone { grid-template-columns: 1.5fr 0.55fr; }
+  .pc-side { grid-template-columns: 1.6fr 0.52fr; }
+  .side-phone-note { grid-template-columns: 0.42fr 0.5fr 1fr; }
+  .note-cell { padding: 14px 16px; font-size: 12.5px; line-height: 1.8; color: #3f4249; }
+  .note-cell p { margin: 0 0 8px; }
+  /* ファイル名：BIZ UDPゴシックは小さい字で「_」が消えるので、英数字だけ Segoe UI で出す */
+  .fn { font-family: 'Segoe UI', 'BIZ UDPGothic', sans-serif; }
+  .phone { padding: 10px; background: #faf9f7; }
+  .phone img { border-radius: 12px; border: 1px solid #ddd; }
+  .c4 figcaption b { font-size: 13.5px; }
+</style>
+</head>
+<body>
+  <h1>Wordから読み込む：画面の案（v24）</h1>
+  <p class="lead">今年度だけ、学科の Word のひな形（<span class="fn">04_本文.docx</span>・<span class="fn">01_表紙.docx</span>）で書き始めた分を、ツールに写せるようにします（読み込みは学生のブラウザの中だけ。Word の見た目は写さず、ツールの決まった形で組み直します）。その入り口と、写す前・写したあとの画面の案です。どの画面も、本物のツールに案の部品を仮に足して撮っています（まだツールには入っていません）。中身の例は、ひな形に1章ぶん書いた想定（大見出し2・小見出し4・段落9・図3・表1、表紙は学籍番号・氏名・サブタイトル）で、人名・学籍番号（文化　花子・00ZZ0123）は架空です。<b>おすすめ</b>の案には印を付けています。</p>
+
+  <div class="ask">
+    <h2>この v24 で決めていただきたいこと</h2>
+    <ol>
+      <li>どこから読み込むか（入り口。案A／B／C） <span>おすすめ：<em>案C</em>（はじめての案内で聞き、あとからは右の欄の小さなリンク）</span></li>
+      <li>写す前の確認の窓の見せ方（案A／B／C） <span>おすすめ：<em>案A</em>（読み取った中身を一覧で見せる）</span></li>
+      <li>写したあとの知らせ方（案A／B／C） <span>おすすめ：<em>案B</em>（右の欄に「つぎにすること」を残す）</span></li>
+      <li>スマホの見え方（おすすめの組み合わせ） <span>この形でよいかを見てください</span></li>
+    </ol>
+  </div>
+  <div class="flow"><b>流れ</b>：入り口から「Wordから読み込む」 → Word のファイルを選ぶ（本文は必ず・表紙は書いていれば） → 読み取った中身を確かめる → 「読み込む」 → いまの原稿を自動の控えに残してから写す → 次にすること（セルフチェックの指摘を直す・図の位置を確かめる）を伝える</div>
+
+  <!-- ① -->
+  <h2>① 入り口：どこから読み込むか</h2>
+  <p class="trouble"><b>困りごと</b>Word で書き始めた学生が、ツールを開いても写し方が分からないと、1から打ち直してしまいます。いっぽう、今年度だけの機能なので、毎日使う画面をいつまでも混ませたくありません。</p>
+  <figure>
+    <figcaption><b>案A　右の欄に「Word で書き始めた人へ」の枠を出す</b><span>「バックアップ」のすぐ下に、薄い藍の枠と「Wordから読み込む」のボタン。スマホはメニューの中に同じ枠</span></figcaption>
+    <div class="strip pc-side-phone">
+      <div><img src="screens/1-a-pc.png" alt=""><small>PC（画面全体）</small></div>
+      <div><img src="screens/1-a-side.png" alt=""><small>右の欄を大きく</small></div>
+      <div class="phone"><img src="screens/1-a-phone.png" alt=""><small>スマホ：メニュー（右上の ≡）</small></div>
+    </div>
+  </figure>
+  <figure>
+    <figcaption><b>案B　「バックアップ」の窓の中に置く</b><span>右の欄（スマホはメニュー）の「バックアップ」を押すと、バックアップファイルの保存・復元の下に「Word から読み込む」が出る。ふだんの画面は今のまま</span></figcaption>
+    <div class="strip pc-phone">
+      <div><img src="screens/1-b-pc.png" alt=""><small>PC：「バックアップ」の窓</small></div>
+      <div class="phone"><img src="screens/1-b-phone.png" alt=""><small>スマホ</small></div>
+    </div>
+  </figure>
+  <figure class="is-rec">
+    <figcaption><b>案C　はじめての案内で聞き、あとからは小さなリンクから<em class="rec">おすすめ</em></b><span>はじめて開いたときの案内に「Word」の段を1つ足す（コースを選ぶ → Word で書き始めていますか？）。「はい」なら Word を選び、学籍番号・氏名・サブタイトルの入力は飛ばす。あとから読み込むときは、右の欄（スマホはメニュー）の小さなリンクから</span></figcaption>
+    <div class="strip s2">
+      <div><img src="screens/1-c-guide.png" alt=""><small><b>コースを選ぶ段階</b>：下に「Word のひな形で書き始めている人へ」（まずコースを選べば、次で読み込めると伝える）</small></div>
+      <div><img src="screens/1-c-next.png" alt=""><small><b>コースを選んだあと</b>：「Word で書き始めていますか？」はい／いいえ</small></div>
+    </div>
+    <div class="strip side-phone-note" style="border-top: 1px solid #ecebe8">
+      <div><img src="screens/1-c-side.png" alt=""><small>あとからは：右の欄の小さなリンク（「引用・参考文献を入れる」と同じ形）</small></div>
+      <div class="phone"><img src="screens/1-c-phone.png" alt=""><small>スマホ：コースを選ぶ段階</small></div>
+      <div class="note-cell">
+        <p>案内の「2 Word」の段と、右の欄のリンクは今年度だけ出します（来年度は外すだけで、ほかの画面は変わりません）。</p>
+        <p>スマホの「Word で書き始めていますか？」とメニューのリンクは、④にあります。</p>
+      </div>
+    </div>
+  </figure>
+  <p class="why"><b>おすすめは案C</b>：移る学生のほとんどは、はじめてツールを開いたときに移します。そこで聞けば見落としがなく、コースを選んだ流れのまま進めます（写せば表紙の入力も済みます）。案内を閉じた人や、あとで移す人のために、右の欄に「引用・参考文献を入れる」と同じ形の目立たないリンクを置きます。案Aは見つけやすい反面、移し終えた学生にも毎日見え、その分セルフチェックの欄が狭くなります。案Bは画面がすっきりしますが、「バックアップ」の中に Word があるとは思いつきにくく、案内の PDF で場所を伝える必要があります。</p>
+
+  <!-- ② -->
+  <h2>② 写す前の確認の窓</h2>
+  <p class="trouble"><b>困りごと</b>Word の書き方は学生によって少しずつ違うため、うまく読み取れないところが出ます（図のタイトルがない、見出しの形が違う など）。写したあとで気づくと、どこがおかしいのか分かりにくくなります。読み込む前に、何がどう入るかを見せて確かめてもらいます。</p>
+  <div class="row c2">
+    <figure><figcaption><b>「Wordから読み込む」を押したところ（どの案も同じ）</b><span>本文の Word（必ず）と表紙の Word（書いていれば）を選ぶ。OneDrive・Google ドライブにあるときの選び方も書く（スマホの書き方は④）。選ぶと「中身を確かめる」が押せるようになり、下の窓に進む</span></figcaption><img src="screens/2-start.png" alt=""></figure>
+    <div></div>
+  </div>
+  <figure class="is-rec">
+    <figcaption><b>案A　読み取った中身を一覧で見せる<em class="rec">おすすめ</em></b><span>数（大見出し・小見出し・段落・図・表）、章立ての一覧（見出しごとに段落・図・表の数）、表紙の3項目、図の小さな写真とタイトル。下に「いまの原稿は自動の控えに残す」。右は、読み取れなかったところがあるとき（上に黄土色の枠で理由とどう写すかを書き、一覧のその行にも印）</span></figcaption>
+    <div class="strip s2">
+      <div><img src="screens/2-a.png" alt=""><small>ふつうのとき</small></div>
+      <div><img src="screens/2-a-problem.png" alt=""><small><b>読み取れなかったところがあるとき</b>：図2のタイトルがない・「２．パターン」が見出しの形でない</small></div>
+    </div>
+  </figure>
+  <div class="row c2">
+    <figure><figcaption><b>案B　組んだ紙面の縮小で見せる</b><span>Word の中身をツールの形で組んだ表紙と本文のページを並べる。仕上がりの感じは分かるが、字は読めない</span></figcaption><img src="screens/2-b.png" alt=""></figure>
+    <figure><figcaption><b>案C　要約だけ</b><span>写すものの数と「読み取れなかったところ」の有無だけ。中身は「中身の一覧を見る」を押すと出る</span></figcaption><img src="screens/2-c.png" alt=""></figure>
+  </div>
+  <p class="why"><b>おすすめは案A</b>：章立てや図のタイトルが Word のとおりに読めたかを、文字で一つずつ確かめられます。読み取れなかったところも、その行に印が付くので、写したあとどこを直せばよいかが分かります。スマホでも縦に並べるだけで読めます。案Bは仕上がりの感じがつかめますが、紙面が小さく見出しや図のタイトルまでは読めず、スマホではさらに小さくなります。案Cは短くて分かりやすい反面、章の分かれ方の誤りなどに気づけません。</p>
+
+  <!-- ③ -->
+  <h2>③ 写したあとの知らせ</h2>
+  <p class="trouble"><b>困りごと</b>写し終えても、手順書のルールに合わないところ（Word では気づかなかった全角の数字や変換の誤りなど）や、Word と違う図の位置が残ります。学生が「移し終わった」と思って直さないまま途中点検に出さないよう、次にすることを伝えます。例では、写した直後にエラー5件・警告1件が出ています。</p>
+  <div class="row wide-narrow">
+    <figure><figcaption><b>案A　窓で「次にすること」を伝える</b><span>写したものと、次の3つ（指摘を直す・図の位置・表紙）を番号つきで。元に戻し方も書く。「セルフチェックを見る」で閉じる</span></figcaption><img src="screens/3-a.png" alt=""></figure>
+    <figure class="is-rec">
+      <figcaption><b>案B　右の欄に「つぎにすること」を残す<em class="rec">おすすめ</em></b><span>閉じる（×）まで右の欄の上に残る。済んだものには ✓（エラーが0になる・図を順に見る・表紙を開く）。「図1へ」で図を順に見て回れる。「読み込む前の原稿に戻す」もここから</span></figcaption>
+      <div class="strip pc-side">
+        <div><img src="screens/3-b.png" alt=""><small>PC（画面全体）</small></div>
+        <div><img src="screens/3-b-side.png" alt=""><small>右の欄を大きく</small></div>
+      </div>
+    </figure>
+  </div>
+  <div class="row c2">
+    <figure><figcaption><b>案C　画面の下に短い知らせ、紙面の図に「位置を確かめる」の札</b><span>知らせは10秒ほどで消える。札は、その図を押すまで紙面に残る（画面だけ。PDF には出ない）</span></figcaption><img src="screens/3-c.png" alt=""></figure>
+    <div></div>
+  </div>
+  <p class="why"><b>おすすめは案B</b>：直すのに何日かかかることもあるので、閉じるまで残り、済んだものに印が付く形にします。図の確かめは「図1へ」で順に回れ、元に戻すのもすぐです。スマホでは、写し終えるとチェックの欄が開き、そのいちばん上に出ます（④）。案Aは分かりやすいですが、閉じると次にすることが見えなくなります。案Cは邪魔になりませんが、知らせはすぐ消え、紙面の札は文字に重なります（以前、紙面に番号の札を付ける案は「うるさい」として見送っています）。</p>
+
+  <!-- ④ -->
+  <h2>④ スマホの見え方（おすすめの組み合わせ：①案C・②案A・③案B）</h2>
+  <p class="trouble"><b>困りごと</b>スマホの学生は、Word を OneDrive・Google ドライブ・iCloud Drive に置いていることが多く、そこから選べることを知らないと、パソコンを探しに行ってしまいます。また、確かめる窓は長くなるので、画面の小ささで読みにくくならないようにします。390×844 の画面です。</p>
+  <div class="row c4">
+    <figure><figcaption><b>入り口（はじめての案内）</b><span>コースを選ぶ段階の下に「Word のひな形で書き始めている人へ」</span></figcaption><div class="phone"><img src="screens/1-c-phone.png" alt=""></div></figure>
+    <figure><figcaption><b>コースを選んだあと</b><span>「Word で書き始めていますか？」はい／いいえ。画面の下に出す（今の案内の最後と同じ置き方）</span></figcaption><div class="phone"><img src="screens/4-guide-next.png" alt=""></div></figure>
+    <figure><figcaption><b>あとから読み込むとき</b><span>メニュー（右上の ≡）の「バックアップ」の下に小さなリンク</span></figcaption><div class="phone"><img src="screens/4-menu.png" alt=""></div></figure>
+    <figure><figcaption><b>ファイルを選ぶ</b><span>ボタンは横いっぱい。OneDrive・Google ドライブ・iCloud Drive からの選び方を、端末に合わせて書く（画像は iPhone の書き方。Android には Android の書き方を出す）</span></figcaption><div class="phone"><img src="screens/4-start.png" alt=""></div></figure>
+  </div>
+  <div class="row c4">
+    <figure><figcaption><b>中身を確かめる（上）</b><span>PC の2列を、縦1列に並べる</span></figcaption><div class="phone"><img src="screens/4-confirm-top.png" alt=""></div></figure>
+    <figure><figcaption><b>中身を確かめる（下までずらしたところ）</b><span>図の写真、控えに残すこと、「やめる」「読み込む」</span></figcaption><div class="phone"><img src="screens/4-confirm-bottom.png" alt=""></div></figure>
+    <figure><figcaption><b>読み取れなかったところがあるとき</b><span>上に理由。一覧の行が長いときは、数を次の行に送る</span></figcaption><div class="phone"><img src="screens/4-problem.png" alt=""></div></figure>
+    <figure class="is-rec"><figcaption><b>写したあと</b><span>チェックの欄が自動で開き、いちばん上に「つぎにすること」。× で閉じるまで、チェックの欄を開くたびに出る</span></figcaption><div class="phone"><img src="screens/4-after.png" alt=""></div></figure>
+  </div>
+  <p class="why"><b>スマホでのねらい</b>：入り口・確かめ方・写したあとの知らせは PC と同じ中身・同じ言葉にし、並べ方だけを縦にしています（学生への1枚の案内も、PC とスマホで同じ説明で済みます）。確かめる窓は長くなるので、上から順に読み、最後に「読み込む」を押す形です。</p>
+</body>
+</html>
