@@ -1,0 +1,100 @@
+{
+ "t-c1": {
+  "pages": [
+   {
+    "page": 1,
+    "chars": 278,
+    "minJp": 10.5,
+    "room": 10.2,
+    "problems": []
+   },
+   {
+    "page": 2,
+    "chars": 293,
+    "minJp": 10.5,
+    "room": 20.1,
+    "problems": []
+   },
+   {
+    "page": 3,
+    "chars": 244,
+    "minJp": 10.5,
+    "room": 12.5,
+    "problems": []
+   },
+   {
+    "page": 4,
+    "chars": 237,
+    "minJp": 10.5,
+    "room": 31.7,
+    "problems": []
+   }
+  ],
+  "pdfs": [
+   {
+    "label": "先生用",
+    "pages": [
+     1,
+     2
+    ],
+    "names": [
+     "先生用 おもて",
+     "先生用 うら"
+    ],
+    "pdf": "mockups/v26/t-c1-先生用.pdf"
+   },
+   {
+    "label": "管理者用",
+    "pages": [
+     3,
+     4
+    ],
+    "names": [
+     "管理者用 1",
+     "管理者用 2"
+    ],
+    "pdf": "mockups/v26/t-c1-管理者用.pdf"
+   }
+  ]
+ },
+ "t-c2": {
+  "pages": [
+   {
+    "page": 1,
+    "chars": 333,
+    "minJp": 10.5,
+    "room": 3.4,
+    "problems": []
+   },
+   {
+    "page": 2,
+    "chars": 337,
+    "minJp": 10.5,
+    "room": 18.7,
+    "problems": []
+   }
+  ],
+  "pdfs": [
+   {
+    "label": "先生用",
+    "pages": [
+     1
+    ],
+    "names": [
+     "先生用"
+    ],
+    "pdf": "mockups/v26/t-c2-先生用.pdf"
+   },
+   {
+    "label": "管理者用",
+    "pages": [
+     2
+    ],
+    "names": [
+     "管理者用"
+    ],
+    "pdf": "mockups/v26/t-c2-管理者用.pdf"
+   }
+  ]
+ }
+}

@@ -1,0 +1,184 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v27 指差し確認と使い方</title>
+<!-- node scripts/mockup-shots-v27.mjs review で作る（手で直さない） -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  h2 { font-size: 18px; margin: 40px 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 13.5px; color: var(--muted); line-height: 1.8; max-width: 1180px; }
+  .ask { margin: 0 0 8px; padding: 14px 18px 12px; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 1180px; }
+  .ask h2 { margin: 0 0 6px; font-size: 15px; }
+  .ask ol { margin: 0; padding-left: 22px; font-size: 13.5px; line-height: 2; }
+  .ask em { font-style: normal; color: var(--accent); font-weight: 700; }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 15.5px; margin-bottom: 3px; }
+  figcaption span { font-size: 13px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11.5px; font-style: normal; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .strip { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .strip > div { background: #fff; align-self: stretch; }
+  .strip small { display: block; padding: 6px 12px 9px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  .strip small b { color: var(--ink); }
+  .pc3 { grid-template-columns: repeat(3, 1fr); }
+  .pc2 { grid-template-columns: repeat(2, 1fr); }
+  .ph3 { grid-template-columns: repeat(3, 1fr) 1.6fr; }
+  .ph4 { grid-template-columns: 1fr 1fr 1fr 2.3fr; }
+  .pcz { grid-template-columns: 2.5fr 0.82fr 0.82fr 0.82fr; }
+  .ph2 { grid-template-columns: repeat(2, 1fr) 2.2fr; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 12px; border: 1px solid #ddd; }
+  .note-cell { padding: 14px 16px; font-size: 13px; line-height: 1.8; color: #3f4249; }
+  .note-cell p { margin: 0 0 8px; }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 10px 16px 12px; font-size: 13px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: #3f7a55; }
+  .pw .weak b { color: #b5443b; }
+  .pw ul { margin: 4px 0 0; padding-left: 18px; }
+  .why { margin: 2px 0 10px; padding: 11px 15px; border-left: 3px solid var(--accent); background: #f6f5f2; border-radius: 0 10px 10px 0; font-size: 13.5px; line-height: 1.85; max-width: 1180px; }
+  .why b { color: var(--accent); }
+  .entry { display: grid; grid-template-columns: 330px 210px 1fr 400px; gap: 1px; background: var(--line); }
+  .entry > div { background: #fff; }
+  .lists { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; }
+  .lists section { background: #fff; border-radius: 14px; padding: 14px 18px 16px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  .lists h3 { margin: 0 0 6px; font-size: 15px; }
+  .lists h3 span { font-size: 12.5px; font-weight: 400; color: var(--muted); margin-left: 6px; }
+  .tl { list-style: none; margin: 0; padding: 0; counter-reset: n; }
+  .tl li { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto; gap: 2px 8px; padding: 6px 0; border-bottom: 1px solid var(--line); font-size: 13.5px; line-height: 1.55; }
+  .tl li::before { counter-increment: n; content: counter(n); grid-row: 1 / 3; color: var(--muted); font-size: 12px; padding-top: 1px; }
+  .tl li.grp { display: block; padding: 12px 0 2px; border: 0; font-size: 11.5px; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); }
+  .tl li.grp::before { content: none; counter-increment: none; }
+  .tl b { grid-column: 2; }
+  .tl .sum { grid-column: 2; font-size: 12.5px; color: var(--muted); }
+  .tl .tags { grid-column: 3; grid-row: 1 / 3; display: flex; gap: 4px; align-items: start; padding-top: 2px; }
+  .tl i { font-style: normal; font-size: 11px; padding: 1px 7px; border-radius: 999px; white-space: nowrap; }
+  .tl i.s { background: #f1efeb; color: var(--muted); }
+  .tl i.v { background: #e8ebf5; color: var(--accent); }
+  .search-demo { margin: 10px 0 0; padding: 10px 14px; border-radius: 10px; background: #f6f5f2; font-size: 12.5px; line-height: 1.8; color: #3f4249; }
+  .search-demo b { color: var(--ink); }
+</style>
+</head>
+<body>
+  <h1>指差し確認と「？ 使い方」：画面の案（v27）</h1>
+  <p class="lead">紙の手引きを1〜2ページに減らし、くわしい説明はツールの中に移します。そのための2つの部品の案です。どの画面も、本物のツールに案の部品を仮に重ねて撮っています（まだツールには入っていません）。中身の例は、衣装コースの学生（文化　花子・00ZZ0123。架空）。画像を押すと、大きく開きます。<b>おすすめ</b>の案には印を付けています。</p>
+  <div class="ask">
+    <h2>この v27 で決めていただきたいこと</h2>
+    <ol>
+      <li>指差し確認（はじめての画面の見かた）の形：案A／B／C　<em>おすすめ：案A「スポットライト」</em></li>
+      <li>「？ 使い方」の出し方：案A／B／C　<em>おすすめ：案A「右の欄が切り替わる」</em></li>
+      <li>使い方に入れる項目（いちばん下の一覧。学生用 16・先生用 10）</li>
+    </ol>
+  </div>
+
+  <h2>① 指差し確認（はじめての画面の見かた）</h2>
+  <p class="lead">今の「はじめての案内」（コース → Word で書いた？ → 表紙）が終わり、「本文へ進む」を押した直後に出します。本文はまだコースの下書きのままです。PC は7か所（紙面・道具・ページの一覧・保存のようす・セルフチェック・PDFを書き出す・？使い方）、スマホは4か所（紙面・下の「チェック」「PDF」・メニュー・保存のようす）。どの案も、あとから「？ 使い方」の中の「指差し確認をもう一度見る」で、もう一度見られます。</p>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　スポットライト<em class="rec">おすすめ</em></b><span>1か所ずつ、そこだけを明るくして、横に吹き出し（ひとこと）。「次へ」で次の場所へ、「とばす」でいつでも終わり。上に「1 / 7」と点で、あといくつかが分かる。今の「はじめての案内」と同じ光の当て方</span></figcaption>
+    <div class="strip pc3">
+      <div class=""><a href="shots/tour-a-pc-1.png" target="_blank"><img src="shots/tour-a-pc-1.png" alt="" loading="lazy"></a><small><b>1 / 7 紙面</b>：段落1つに光を当てる</small></div>
+      <div class=""><a href="shots/tour-a-pc-4.png" target="_blank"><img src="shots/tour-a-pc-4.png" alt="" loading="lazy"></a><small><b>4 / 7 保存のようす</b>：小さな部品でも、そこだけ明るい</small></div>
+      <div class=""><a href="shots/tour-a-pc-7.png" target="_blank"><img src="shots/tour-a-pc-7.png" alt="" loading="lazy"></a><small><b>7 / 7 ？使い方</b>：最後は「おわり」と、もう一度見る方法</small></div>
+    </div>
+    <div class="strip ph3" style="border-top:1px solid var(--line)">
+      <div class="ph"><a href="shots/tour-a-ph-1.png" target="_blank"><img src="shots/tour-a-ph-1.png" alt="" loading="lazy"></a><small><b>スマホ 1 / 4</b>：紙面</small></div>
+      <div class="ph"><a href="shots/tour-a-ph-2.png" target="_blank"><img src="shots/tour-a-ph-2.png" alt="" loading="lazy"></a><small><b>2 / 4</b>：下のチェック・PDF</small></div>
+      <div class="ph"><a href="shots/tour-a-ph-3.png" target="_blank"><img src="shots/tour-a-ph-3.png" alt="" loading="lazy"></a><small><b>3 / 4</b>：メニュー</small></div>
+      <div class="note-cell"><p>スマホの吹き出しは横いっぱい（今の案内と同じ）。4つ目は上の帯の「保存のようす」。</p><p>押せるのは「次へ」「とばす」だけ（光の当たった所も押せない）。7つ見ても1分かからない長さにしています。</p></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>1つずつなので、目が迷わない。今の「はじめての案内」の続きとして自然に見える</li><li>「とばす」でいつでもやめられ、やめても困らない（あとから見直せる）</li><li>スマホでも同じ形で動く</li></ul></div><div class="weak"><b>弱い点</b><ul><li>7回「次へ」を押す手間がある（急いでいる学生は、すぐ「とばす」）</li><li>見ている間は、ほかの操作ができない</li></ul></div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　番号の付箋を一度に</b><span>全部の場所に番号を付けて一度に見せ、1枚のカードに1〜7の説明。「わかった」を1回押せば終わり</span></figcaption>
+    <div class="strip" style="grid-template-columns: 2.6fr 1fr">
+      <div class=""><a href="shots/tour-b-pc.png" target="_blank"><img src="shots/tour-b-pc.png" alt="" loading="lazy"></a><small><b>PC</b>：7か所の番号と、紙面の上のカード</small></div>
+      <div class="ph"><a href="shots/tour-b-ph.png" target="_blank"><img src="shots/tour-b-ph.png" alt="" loading="lazy"></a><small><b>スマホ</b>：4か所</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>1回押すだけで終わる</li><li>全体の配置が一度に分かる（どこに何があるかの地図になる）</li></ul></div><div class="weak"><b>弱い点</b><ul><li>見るところが多く、番号とカードの間を目が行き来する</li><li>カードが紙面に重なる。スマホは画面が狭く、番号どうしが近い</li><li>読まずに「わかった」を押されやすい</li></ul></div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C　光る点</b><span>暗くせず、操作も止めない。場所ごとに小さな点が光り、マウスを重ねる（スマホはタップ）とひとことが出る。その場所を使うと、点は消える。左下に「あといくつ」と「すべて消す」</span></figcaption>
+    <div class="strip pc2">
+      <div class=""><a href="shots/tour-c-pc-1.png" target="_blank"><img src="shots/tour-c-pc-1.png" alt="" loading="lazy"></a><small><b>はじめ</b>：7つの点。紙面の点に重ねたところ</small></div>
+      <div class=""><a href="shots/tour-c-pc-2.png" target="_blank"><img src="shots/tour-c-pc-2.png" alt="" loading="lazy"></a><small><b>書き始めたあと</b>：紙面と保存の点が消え、あと5つ。道具の点に重ねたところ</small></div>
+    </div>
+    <div class="strip ph2" style="border-top:1px solid var(--line)">
+      <div class="ph"><a href="shots/tour-c-ph-1.png" target="_blank"><img src="shots/tour-c-ph-1.png" alt="" loading="lazy"></a><small><b>スマホ</b>：紙面の点をタップ</small></div>
+      <div class="ph"><a href="shots/tour-c-ph-2.png" target="_blank"><img src="shots/tour-c-ph-2.png" alt="" loading="lazy"></a><small><b>書いたあと</b>：残り2つ</small></div>
+      <div class="note-cell"><p>点はその場所を使うまで残ります（「すべて消す」で全部消せる）。</p><p>スマホの点は小さいので、押せる範囲は見た目より広くします（指で押しやすい 44px ほど）。</p></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>すぐ書き始められ、じゃまにならない</li><li>使った所から消えるので、「まだ使っていない所」だけが残る</li></ul></div><div class="weak"><b>弱い点</b><ul><li>気づかない・点の意味が分からない学生がいる（説明しないと押さない）</li><li>しばらく画面に点が残り、散らかって見える。セルフチェックの赤い印と見分けにくいことも</li><li>スマホにはマウスを重ねる操作がなく、タップしないと読めない</li></ul></div></div>
+  </figure>
+  <p class="why"><b>おすすめは案A（スポットライト）</b>：学生はコースを選び表紙を書いた流れのまま、同じ光の当て方で「次はここ」を順に見られます。1回に読むのは1行だけなので、文が苦手な学生にも負担が軽く、「とばす」でやめても「？ 使い方」から見直せます。案Bは早く終わりますが、7か所とカードを見比べる必要があり、スマホでは窮屈です。案Cは書くことを止めない良さがある反面、何もしないと点の意味が伝わらず、画面に点が残り続けます。</p>
+
+  <h2>② 「？ 使い方」（ツールの中のヘルプ）</h2>
+  <p class="lead">右の欄（スマホはメニュー）の「使い方（手引き）」のリンクを、「？ 使い方」のボタンに替えます。中は、項目の一覧・開いた項目（短い文・画面の写真・動画）・言葉で探す、の3つ。動画（音なし・字幕つき 20〜40秒）はあとで作るので、今は「準備中」の見本です。「言葉で探す」は、入れた言葉が項目の文に入っているかを調べるだけで、AI ではありません。どこにも送りません。管理ページにも同じ「？ 使い方」を付け、先生用の項目を入れます。</p>
+  <figure>
+    <figcaption><b>入り口（どの案も同じ）</b><span>PC は右の欄の「バックアップ」の横、スマホはメニューの中。手順書のリンクがある年は、3つ並びます</span></figcaption>
+    <div class="entry">
+      <div class=""><a href="shots/entry-pc.png" target="_blank"><img src="shots/entry-pc.png" alt="" loading="lazy"></a><small><b>PC</b>：右の欄の上</small></div>
+      <div class="ph"><a href="shots/entry-ph.png" target="_blank"><img src="shots/entry-ph.png" alt="" loading="lazy"></a><small><b>スマホ</b>：メニュー（右上の ≡）</small></div>
+      <div class="note-cell"><p><b>言葉で探す</b>の例：「PDF 出ない」と入れると、両方の言葉が入っている項目（PDF の出し方・下書きの PDF）を先に、片方だけの項目をその下に出します。入っている言葉には黄色の印。</p><p>全角・半角や大文字・小文字の違いはそろえます（「ＰＤＦ」でも見つかる）。言い方の違い（「出ない」と「出せない」など）は、項目ごとに「よく使われる言い方」を足しておきます。</p><p><a href="help-try.html" target="_blank"><b>help-try.html</b></a> で、好きな言葉を入れて試せます（右の画像）。</p></div>
+      <div class=""><a href="shots/help-try.png" target="_blank"><img src="shots/help-try.png" alt="" loading="lazy"></a><small><b>試す画面</b>（help-try.html）：「消えた」と入れたところ</small></div>
+    </div>
+  </figure>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　右の欄が切り替わる<em class="rec">おすすめ</em></b><span>PC は右の欄（セルフチェックのところ）が、まるごと使い方に替わる。上に「言葉で探す」、項目を押すと中身、「← 一覧へ」で戻る、「閉じる」でセルフチェックに戻る。紙面と道具はそのまま使える。スマホは画面いっぱいの欄（ほかの下から出る欄と同じ形）</span></figcaption>
+    <div class="strip pcz"><div class=""><a href="shots/help-a-pc-topic.png" target="_blank"><img src="shots/help-a-pc-topic.png" alt="" loading="lazy"></a><small><b>PC（画面全体）</b>：開いた項目「PDF の出し方（端末ごと）」</small></div><div class=""><a href="shots/help-a-pc-list-z.png" target="_blank"><img src="shots/help-a-pc-list-z.png" alt="" loading="lazy"></a><small><b>大きく</b>：項目の一覧</small></div><div class=""><a href="shots/help-a-pc-topic-z.png" target="_blank"><img src="shots/help-a-pc-topic-z.png" alt="" loading="lazy"></a><small><b>開いた項目</b></small></div><div class=""><a href="shots/help-a-pc-search-z.png" target="_blank"><img src="shots/help-a-pc-search-z.png" alt="" loading="lazy"></a><small><b>言葉で探す</b>：「PDF 出ない」</small></div></div>
+    <div class="strip ph4" style="border-top:1px solid var(--line)">
+      <div class="ph"><a href="shots/help-a-ph-list.png" target="_blank"><img src="shots/help-a-ph-list.png" alt="" loading="lazy"></a><small><b>スマホ</b>：一覧</small></div>
+      <div class="ph"><a href="shots/help-a-ph-topic.png" target="_blank"><img src="shots/help-a-ph-topic.png" alt="" loading="lazy"></a><small><b>開いた項目</b>（iPhone を選んでいる）</small></div>
+      <div class="ph"><a href="shots/help-a-ph-search.png" target="_blank"><img src="shots/help-a-ph-search.png" alt="" loading="lazy"></a><small><b>言葉で探す</b></small></div>
+      <div class=""><a href="shots/help-a-admin.png" target="_blank"><img src="shots/help-a-admin.png" alt="" loading="lazy"></a><small><b>管理ページ：右の端に同じ欄（見本の上に重なる）</b></small></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>紙面を見ながら、手順のとおりに操作できる（説明と画面を行き来しない）</li><li>ほかの欄（ページ一覧・メニュー）と同じ場所・同じ形で、新しい形を覚えなくてよい</li><li>スマホも今の「下から出る欄」と同じ</li></ul></div><div class="weak"><b>弱い点</b><ul><li>幅が狭い（312px）ので、画面の写真が小さい（押すと大きくする）</li><li>開いている間は、セルフチェックが見えない</li></ul></div></div>
+  </figure>
+<figure>
+    <figcaption><b>案B　真ん中の大きな窓</b><span>画面の真ん中に大きな窓。左に項目の一覧（探した結果）、右に中身。広いので、文は左、動画と画面の写真は右に並べる。スマホは窓の中で、一覧と中身を1つずつ</span></figcaption>
+    <div class="strip"><div class=""><a href="shots/help-b-pc-topic.png" target="_blank"><img src="shots/help-b-pc-topic.png" alt="" loading="lazy"></a><small><b>PC（画面全体）</b>：開いた項目「PDF の出し方（端末ごと）」</small></div></div>
+    <div class="strip pc2" style="border-top:1px solid var(--line)"><div class=""><a href="shots/help-b-pc-list-z.png" target="_blank"><img src="shots/help-b-pc-list-z.png" alt="" loading="lazy"></a><small><b>窓を大きく</b>：開いたところ（項目の一覧と、最初の項目）</small></div><div class=""><a href="shots/help-b-pc-search-z.png" target="_blank"><img src="shots/help-b-pc-search-z.png" alt="" loading="lazy"></a><small><b>言葉で探す</b>：「PDF 出ない」</small></div></div>
+    <div class="strip ph4" style="border-top:1px solid var(--line)">
+      <div class="ph"><a href="shots/help-b-ph-list.png" target="_blank"><img src="shots/help-b-ph-list.png" alt="" loading="lazy"></a><small><b>スマホ</b>：一覧</small></div>
+      <div class="ph"><a href="shots/help-b-ph-topic.png" target="_blank"><img src="shots/help-b-ph-topic.png" alt="" loading="lazy"></a><small><b>開いた項目</b>（iPhone を選んでいる）</small></div>
+      <div class="ph"><a href="shots/help-b-ph-search.png" target="_blank"><img src="shots/help-b-ph-search.png" alt="" loading="lazy"></a><small><b>言葉で探す</b></small></div>
+      <div class=""><a href="shots/help-b-admin.png" target="_blank"><img src="shots/help-b-admin.png" alt="" loading="lazy"></a><small><b>管理ページ：同じ窓（「年度の設定」を開いたところ）</b></small></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>広くて読みやすい。写真・動画が大きい</li><li>一覧と中身が同時に見え、ほかの項目へ移りやすい</li></ul></div><div class="weak"><b>弱い点</b><ul><li>紙面がかくれるので、読みながら操作できない（閉じると手順を忘れる）</li><li>スマホでは窓のまわりが少し見えるだけで、案Aとほぼ同じになる</li></ul></div></div>
+  </figure>
+<figure>
+    <figcaption><b>案C　左から出る引き出し</b><span>左から引き出しが出て、ページの一覧の上に重なる。上に「言葉で探す」、項目を押すと中身。右の欄（セルフチェック）は見えたまま。スマホは左から、画面の9割ほど</span></figcaption>
+    <div class="strip pcz"><div class=""><a href="shots/help-c-pc-topic.png" target="_blank"><img src="shots/help-c-pc-topic.png" alt="" loading="lazy"></a><small><b>PC（画面全体）</b>：開いた項目「PDF の出し方（端末ごと）」</small></div><div class=""><a href="shots/help-c-pc-list-z.png" target="_blank"><img src="shots/help-c-pc-list-z.png" alt="" loading="lazy"></a><small><b>大きく</b>：項目の一覧</small></div><div class=""><a href="shots/help-c-pc-topic-z.png" target="_blank"><img src="shots/help-c-pc-topic-z.png" alt="" loading="lazy"></a><small><b>開いた項目</b></small></div><div class=""><a href="shots/help-c-pc-search-z.png" target="_blank"><img src="shots/help-c-pc-search-z.png" alt="" loading="lazy"></a><small><b>言葉で探す</b>：「PDF 出ない」</small></div></div>
+    <div class="strip ph4" style="border-top:1px solid var(--line)">
+      <div class="ph"><a href="shots/help-c-ph-list.png" target="_blank"><img src="shots/help-c-ph-list.png" alt="" loading="lazy"></a><small><b>スマホ</b>：一覧</small></div>
+      <div class="ph"><a href="shots/help-c-ph-topic.png" target="_blank"><img src="shots/help-c-ph-topic.png" alt="" loading="lazy"></a><small><b>開いた項目</b>（iPhone を選んでいる）</small></div>
+      <div class="ph"><a href="shots/help-c-ph-search.png" target="_blank"><img src="shots/help-c-ph-search.png" alt="" loading="lazy"></a><small><b>言葉で探す</b></small></div>
+      <div class=""><a href="shots/help-c-admin.png" target="_blank"><img src="shots/help-c-admin.png" alt="" loading="lazy"></a><small><b>管理ページ：左の入力欄の上に重なる</b></small></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>セルフチェックを見ながら使える</li><li>案Aより少し広い（384px）</li></ul></div><div class="weak"><b>弱い点</b><ul><li>道具（紙面の左わき）とページの一覧がかくれる。図の入れ方を読みながら道具を押せない</li><li>「？ 使い方」のボタンは右の欄にあるのに、左から出る（目が左右に動く）</li></ul></div></div>
+  </figure>
+  <p class="why"><b>おすすめは案A（右の欄が切り替わる）</b>：使い方を開く学生は、たいてい「いま、この操作をしたい」ときです。案Aなら紙面と道具を出したまま、右の手順を見て、そのとおりに押せます。スマホも今の「下から出る欄」と同じ形で、新しく覚えることがありません。写真が小さいのは、押すと大きく開くようにして補います。案Bは読みやすさでは一番ですが、紙面がかくれるため「読む → 閉じる → 操作」を繰り返すことになります。案Cは道具とページの一覧をかくしてしまい、図・表の入れ方のような「道具を使う説明」と相性がよくありません。管理ページも、同じ考えで右の端に出します。</p>
+
+  <h2>③ 使い方に入れる項目</h2>
+  <p class="lead">今の手引き（学生用4ページ・教員用8ページ）から作った案です。1つの項目は、ひとこと＋手順2〜3つ（＋うまくいかないとき）まで。「画面」は手引きの画面の写真をそのまま使えるもの、「動画」はあとで作る動画（音なし・字幕つき）の候補と長さの目安です。</p>
+  <div class="lists">
+    <section><h3>学生用<span>16項目（画面 13・動画 7）</span></h3><ul class="tl"><li class="grp">はじめる</li><li><b>はじめ方・ログインできない</b><span class="sum">大学の Google アカウント（@bunka-wu.ac.jp）でログインします。</span><span class="tags"><i class="s">画面</i></span></li><li><b>もう一度ログイン</b><span class="sum">ログインの許可は、約1時間で切れます。「ログインし直す」を押します。</span><span class="tags"><i class="s">画面</i></span></li><li class="grp">書く</li><li><b>書き方（クリックして書く）</b><span class="sum">紙面の文をクリック（スマホはタップ）すると、その場で書けます。</span><span class="tags"><i class="s">画面</i><i class="v">動画 25秒</i></span></li><li><b>図・表の入れ方</b><span class="sum">文中の入れたい位置をクリックしてから、道具の「図を入れる」「表を入れる」。</span><span class="tags"><i class="v">動画 30秒</i></span></li><li><b>作品写真</b><span class="sum">作品写真のページの枠をクリックして、写真を選びます。</span><span class="tags"><i class="v">動画 20秒</i></span></li><li><b>抄録（先生の許可）</b><span class="sum">本文を書き終えて、先生の許可が出てから書きます。</span><span class="tags"><i class="s">画面</i></span></li><li><b>Word からの移し方（今年度だけ）</b><span class="sum">右の欄（スマホはメニュー）の「Word で書いた分を読み込む」から。</span><span class="tags"><i class="s">画面</i><i class="v">動画 40秒</i></span></li><li class="grp">確かめる・直す</li><li><b>セルフチェック（エラー・警告）</b><span class="sum">手順書のルールに合っているかを、ツールが確かめます。</span><span class="tags"><i class="s">画面</i><i class="v">動画 30秒</i></span></li><li><b>原稿を前に戻す（元に戻す・自動の控え）</b><span class="sum">直前の操作は、道具の「元に戻す」で戻せます。</span><span class="tags"><i class="s">画面</i><i class="v">動画 25秒</i></span></li><li class="grp">保存と端末</li><li><b>自動保存とドライブ</b><span class="sum">書くたびに、この端末と自分の Google ドライブに保存されます。</span><span class="tags"><i class="s">画面</i></span></li><li><b>共用のパソコン</b><span class="sum">使い終わったら、原稿をこの端末から消します。</span><span class="tags"><i class="s">画面</i></span></li><li><b>2つのタブ</b><span class="sum">2つのタブで開くと、あとから開いた方では書けません。</span><span class="tags"><i class="s">画面</i></span></li><li><b>別の端末で書いた原稿</b><span class="sum">2つの端末で書いて食い違うと、どちらで続けるかを聞かれます。</span><span class="tags"><i class="s">画面</i></span></li><li class="grp">PDF</li><li><b>PDF の出し方（端末ごと）</b><span class="sum">エラーを0件にしてから書き出します。</span><span class="tags"><i class="s">画面</i><i class="v">動画 35秒</i></span></li><li><b>下書きの PDF</b><span class="sum">途中経過を先生に見せるときに使います。</span><span class="tags"><i class="s">画面</i></span></li><li class="grp">そのほか</li><li><b>指差し確認をもう一度見る</b><span class="sum">画面のどこに何があるかを、もう一度たどります（1分ほど）。</span><span class="tags"></span></li></ul></section>
+    <section><h3>先生用（管理ページ）<span>10項目（画面 9・動画 3）</span></h3><ul class="tl"><li class="grp">管理ページ</li><li><b>管理ページの開き方と役割</b><span class="sum">大学の Google アカウントでログイン。登録された先生だけが開けます。</span><span class="tags"><i class="s">画面</i></span></li><li><b>年度の設定（題目・締切・コース・指導教員）</b><span class="sum">入力すると、右の見本（表紙と抄録）にすぐ出ます。</span><span class="tags"><i class="s">画面</i><i class="v">動画 40秒</i></span></li><li><b>保存と反映（学生に届くまで）</b><span class="sum">「保存して学生に反映」を押すまで、学生には届きません。</span><span class="tags"></span></li><li class="grp">コース</li><li><b>コースの下書きのひな形</b><span class="sum">学生が最初に見る本文の組み立てを、コースごとに決めます。</span><span class="tags"><i class="s">画面</i><i class="v">動画 40秒</i></span></li><li><b>コースのお知らせ</b><span class="sum">そのコースの学生のツールの、右の欄に出ます（1000字まで）。</span><span class="tags"><i class="s">画面</i></span></li><li><b>書き間違えやすい語</b><span class="sum">学生のセルフチェックで指摘し、「直す」で置き換えます（例：見頃 → 身頃）。</span><span class="tags"><i class="s">画面</i></span></li><li class="grp">年度と先生</li><li><b>新年度の準備と公開・変更履歴</b><span class="sum">いまの年度をコピーして「準備中」で作り、直してから公開します。</span><span class="tags"><i class="s">画面</i><i class="v">動画 35秒</i></span></li><li><b>先生の登録</b><span class="sum">「先生の登録」で、メールアドレスを貼り付けます（何人分でも）。</span><span class="tags"><i class="s">画面</i></span></li><li class="grp">学生の指導</li><li><b>学生の画面と指導（途中点検・抄録）</b><span class="sum">途中点検は、学生が書き出す「下書きの PDF」で見ます。</span><span class="tags"><i class="s">画面</i></span></li><li><b>困ったとき（学生の相談・Google の障害）</b><span class="sum">学生がログインできない・学生が原稿をなくした・全員がログインできない</span><span class="tags"><i class="s">画面</i></span></li></ul>
+      <div class="search-demo"><b>紙の手引きに残すもの（1〜2ページ）</b>：ツールの URL と QR、ログイン、最初に知っておくこと3つ（自動保存・セルフチェック・PDF）、「困ったら ？ 使い方」の一文。</div>
+    </section>
+  </div>
+</body>
+</html>

@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案C1 両面1枚（v26 学生用の手引き）</title>
+<!-- デザイン案 v26 案C1「両面1枚」：表は、はじめてから提出までの5つの手順（写真つき）と URL・QR。裏は、保存と困ったとき（1ページ 300字まで）。
+     画像は docs/guide-images/ のもの。PDF とページの画像は node scripts/mockup-shots-v26.mjs で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<link rel="stylesheet" href="../../docs/guide-images/guide.css">
+<link rel="stylesheet" href="student.css">
+</head>
+<body data-img-base="../../docs/guide-images/">
+
+<!-- ================= 表：はじめてから提出まで ================= -->
+<section class="sheet flow">
+  <header class="band bleed">
+    <div class="hero-top"><span class="d">BUNKA GAKUEN UNIVERSITY</span><span>国際ファッション文化学科</span></div>
+    <div class="year d">2026</div>
+    <p class="kick">卒業制作報告書 作成ツール</p>
+    <h1>使い方の手引き</h1>
+    <p class="for"><b>学生用</b><span class="d">FOR STUDENTS</span><span class="d">2026年度</span></p>
+  </header>
+
+  <ol class="cards">
+    <li class="card">
+      <div class="hd"><span class="n d">1</span><b>ログイン</b></div>
+      <div class="stage" style="height:54mm"><figure class="shot lift" data-shot="g-login" data-badges="" data-hl="1" style="width:100%"></figure></div>
+      <p><span class="btn">大学のアカウントでログイン</span></p>
+      <p class="sub">LINE・Instagram の中ではできません。Safari・Chrome で。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><span class="n d">2</span><b>コースを選ぶ</b></div>
+      <div class="stage" style="height:54mm"><figure class="shot lift" data-shot="g-course" data-badges="" data-hl="1" style="width:41mm"></figure></div>
+      <p>自分のコースを押す。</p>
+      <p class="sub">氏名などは、画面の案内どおりに。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><span class="n d">3</span><b>書く</b></div>
+      <div class="stage" style="height:54mm"><figure class="shot lift" data-shot="g-write" data-badges="" style="width:100%"></figure></div>
+      <p>紙面の段落をクリックして書く。</p>
+      <p class="sub">スマホはタップ。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><span class="n d">4</span><b>エラーを0に</b></div>
+      <div class="stage" style="height:68mm"><figure class="shot lift" data-shot="g-check" data-badges="" data-hl="3" style="width:39mm"></figure></div>
+      <p>右の欄の × がなくなるまで直す。</p>
+      <p class="sub"><span class="btn">直す</span> を押すと直ります。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><span class="n d">5</span><b>PDF にする</b></div>
+      <div class="stage" style="height:68mm"><figure class="shot lift" data-shot="g-export" data-badges="" style="width:100%"></figure></div>
+      <p><span class="btn">PDFを書き出す</span> → 画面に出る手順どおりに保存。</p>
+      <p class="sub">提出の方法は、先生の案内に従う。</p>
+    </li>
+    <li class="card dark-card">
+      <div class="hd"><span class="n d">→</span><b>ツールを開く</b></div>
+      <div style="margin-top:3mm;display:grid;place-items:center"><div style="width:36mm;height:36mm;padding:2mm;background:#fff"><img src="../../docs/guide-images/qr-guide.svg" alt="ツールの URL の QR コード" style="display:block;width:100%;height:100%"></div></div>
+      <p class="fn" style="font-size:10.5pt;font-weight:600">junnosukekato.github.io/<br>sotsugyo-seisaku-report/</p>
+      <p class="sub">大学の Google アカウントで。</p>
+    </li>
+  </ol>
+
+  <div class="bottom-lines">
+    <div class="tip"><b>途中を見せる</b><span><span class="btn">下書きの PDF を書き出す</span>（エラーがあっても出せる。提出には使えない）</span></div>
+    <div class="tip plain"><b>Word で書いた人</b><span>別紙「Word で書き始めた人へ」を見てください。</span></div>
+  </div>
+</section>
+
+<!-- ================= 裏：保存と、困ったとき ================= -->
+<section class="sheet inner">
+  <div class="edge bleed"><span class="d">STUDENT GUIDE</span></div>
+  <header class="ch">
+    <span class="num d">Q&amp;A</span>
+    <div><p class="kick2 d">BACK ─ SAVE &amp; TROUBLES</p><h1>保存と、困ったとき</h1></div>
+  </header>
+
+  <div class="cols block" style="grid-template-columns: 64mm 32mm 1fr; gap: 5mm; align-items: center">
+    <figure class="shot lift" data-shot="g-drive" data-badges="" data-hl="2"></figure>
+    <div class="phone"><figure class="shot" data-shot="g-phone-menu" data-badges="" data-hl="1"></figure></div>
+    <ol class="lines" style="margin-top:0">
+      <li><span class="no">1</span><span>保存は自動<small>この端末と、自分の Google ドライブに</small></span></li>
+      <li><span class="no">2</span><span>別の端末でも、続きが開く<small>同じアカウントでログインすれば</small></span></li>
+      <li><span class="no">3</span><span>共用のパソコンは、最後に<br><span class="btn">この端末から原稿を消す</span></span></li>
+    </ol>
+  </div>
+
+  <ol class="qa1" style="margin-top:6mm">
+    <li><span class="d">Q</span><b class="q">ログインできない</b><span class="a">Safari・Chrome で開き直す。ポップアップを許可。</span></li>
+    <li><span class="d">Q</span><b class="q">「もう一度ログインしてください」</b><span class="a"><span class="btn">ログインし直す</span> を押す（約1時間ごとに出ます）。</span></li>
+    <li><span class="d">Q</span><b class="q">「別の端末で書いた原稿が…」</b><span class="a">「新しい」の印の方を選ぶ。</span></li>
+    <li><span class="d">Q</span><b class="q">「PDFを書き出す」で提出用が出ない</b><span class="a">× のエラーが残っています。先に直す。</span></li>
+    <li><span class="d">Q</span><b class="q">前の状態に戻したい</b><span class="a"><span class="btn">バックアップ</span> の「自動の控え」から戻す。</span></li>
+    <li><span class="d">Q</span><b class="q">「別のタブで開いています」</b><span class="a">もう一方を閉じて <span class="btn">こちらで続ける</span></span></li>
+  </ol>
+
+  <div class="ask">
+    <span class="d">?</span>
+    <div><b>それでも困ったら、担当の先生に相談</b></div>
+  </div>
+  <footer class="folio"><span>使い方の手引き　学生用</span><span class="d">BACK</span></footer>
+</section>
+
+<script src="../../docs/guide-images/marks.js"></script>
+<script src="../../docs/guide-images/guide.js"></script>
+</body>
+</html>

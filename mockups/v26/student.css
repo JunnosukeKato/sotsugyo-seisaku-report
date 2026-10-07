@@ -1,0 +1,105 @@
+/*
+  デザイン案 v26 学生用（学生用の手引きを軽くする。a・b・c.html で使う）。docs/guide-images/guide.css（案B「雑誌風」）の上に重ねる。
+  文を少なく、画面の写真を大きく。本文の文字は 10.5pt 以上（scripts/mockup-shots-v26.mjs が確かめる）。
+*/
+body { font-size: 10.5pt; line-height: 1.5; }
+.hero-lead { font-size: 11.5pt; }
+.foot .k { font-size: 10.5pt; }
+.foot p { font-size: 10.5pt; }
+.ch h1 { font-size: 27pt; }
+.ch .lead { font-size: 11.5pt; }
+.no { width: 7mm; height: 7mm; font-size: 13pt; }
+.btn { padding: 0 1.6mm; }
+
+/* 大きな写真の台 */
+.big { display: grid; place-items: center; margin-top: 5mm; padding: 5mm; background: var(--gray); }
+.big.row { display: flex; justify-content: center; align-items: center; gap: 6mm; }
+/* ページの残りの高さいっぱいに広げる（写真は台の真ん中） */
+.big.fill { flex: 1; min-height: 0; }
+
+/* 1行の手順（番号＋1文） */
+.lines { display: grid; gap: 2.6mm; margin-top: 5mm; }
+.lines li { display: grid; grid-template-columns: 8mm 1fr; gap: 2.6mm; align-items: center; font-size: 13pt; line-height: 1.45; font-weight: 700; }
+.lines li .no { width: 8mm; height: 8mm; font-size: 14pt; }
+.lines small { display: block; font-size: 10.5pt; font-weight: 400; color: var(--muted); }
+
+/* 1行の注意・ひと言 */
+.tip { display: flex; align-items: center; gap: 4mm; margin-top: 3mm; padding: 2.6mm 4mm; background: var(--mustard-soft); border-left: 1.6mm solid var(--mustard); font-size: 11pt; line-height: 1.5; }
+.tip > b { flex: none; color: var(--mustard-ink); font-size: 11pt; }
+.tip.plain { background: var(--gray); border-left-color: var(--ink); }
+.tip.plain > b { color: var(--ink); }
+.tip.navy { background: var(--navy); border-left-color: var(--mustard); color: #fff; }
+.tip.navy > b { color: var(--mustard); }
+
+/* 1行の Q&A */
+.qa1 { display: grid; gap: 0; margin-top: 4mm; }
+.qa1 li { display: grid; grid-template-columns: 8mm 1fr; gap: 0.6mm 3mm; padding: 2.6mm 0; border-top: 0.3mm solid var(--ink); }
+.qa1 li:last-child { border-bottom: 0.3mm solid var(--ink); }
+.qa1 .d { grid-row: span 2; display: grid; place-items: center; width: 7.4mm; height: 7.4mm; background: var(--navy); color: #fff; font-size: 13pt; font-weight: 700; }
+.qa1 .q { font-size: 12pt; font-weight: 700; line-height: 1.4; }
+.qa1 .a { font-size: 11pt; line-height: 1.5; }
+.qa1 .shot { margin-top: 2mm; }
+/* 写真つきの Q&A（写真は右に） */
+.qa1.pic li { grid-template-columns: 8mm 1fr 76mm; align-items: start; }
+.qa1.pic .q, .qa1.pic .a { grid-column: 2; }
+.qa1.pic .shot { grid-column: 3; grid-row: 1 / span 2; margin: 0; }
+
+/* 相談の帯 */
+.ask b { font-size: 15pt; }
+.ask p { font-size: 11pt; }
+.ask .d { font-size: 26pt; }
+
+/* 表紙の目次（大きな番号の列） */
+.toc-row { position: absolute; left: 14mm; right: 14mm; display: grid; gap: 0 4mm; }
+.toc-row li { padding-top: 2mm; border-top: 0.8mm solid var(--ink); }
+.toc-row .n { display: block; font-size: 22pt; font-weight: 700; line-height: 1; color: var(--navy); }
+.toc-row b { display: block; margin-top: 1mm; font-size: 12pt; line-height: 1.35; }
+.toc-row small { font-size: 10.5pt; color: var(--muted); }
+
+/* 表紙の「覚えておくこと」（1行ずつ） */
+.keep3 { position: absolute; left: 14mm; right: 14mm; display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 5mm; }
+.keep3 li { display: grid; grid-template-columns: auto 1fr; gap: 0 2.4mm; align-items: center; padding-top: 2.4mm; border-top: 0.8mm solid var(--ink); }
+.keep3 .n { font-size: 30pt; font-weight: 700; line-height: 0.85; color: var(--navy); }
+.keep3 b { font-size: 12pt; line-height: 1.4; }
+
+/* 写真つきの手順（4つ並べる・2つ並べるなど） */
+.pics { display: grid; gap: 4mm; margin-top: 4.5mm; }
+.pics > li { display: flex; flex-direction: column; min-width: 0; }
+.pics .hd { display: flex; align-items: center; gap: 2mm; margin-bottom: 1.6mm; font-size: 12pt; font-weight: 700; line-height: 1.3; }
+.pics .stage { padding: 2.4mm; }
+.pics p { margin-top: 1.6mm; font-size: 10.5pt; line-height: 1.5; }
+
+/* ===== 案C1・C2（枚数を少なく） ===== */
+.flow { display: flex; flex-direction: column; }
+/* 上の紺の帯（題・学生用・QR） */
+.band { position: relative; flex: none; padding: 10mm 14mm 6mm; background: var(--navy); color: #fff; overflow: hidden; }
+.band .year { top: 2mm; font-size: 120pt; }
+.band .kick { position: relative; margin-top: 4mm; font-size: 12pt; }
+.band h1 { position: relative; margin-top: 0.6mm; font-size: 36pt; line-height: 1.15; letter-spacing: 0.04em; }
+.band .for { margin-top: 3mm; padding: 1.2mm 4mm 1.4mm; }
+.band .for b { font-size: 14pt; }
+.band .for .d { font-size: 10.5pt; }
+.band .qr-box { position: absolute; right: 14mm; bottom: 6mm; display: grid; grid-template-columns: auto 24mm; gap: 3mm; align-items: end; text-align: right; }
+.band .qr-box .qr { width: 24mm; height: 24mm; padding: 1.5mm; background: #fff; }
+.band .qr-box .qr img { display: block; width: 100%; height: 100%; }
+.band .qr-box p { font-size: 10.5pt; line-height: 1.45; color: rgba(255, 255, 255, 0.9); }
+.band .qr-box .k { font-weight: 700; color: var(--mustard); }
+.band .url { font-size: 10.5pt; font-weight: 600; }
+/* 手順のカード（3列） */
+.cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5mm 5mm; padding: 5mm 14mm 0; }
+.card { display: flex; flex-direction: column; min-width: 0; }
+.card .hd { display: flex; align-items: flex-end; gap: 2.2mm; padding-bottom: 1.4mm; border-bottom: 0.7mm solid var(--ink); }
+.card .hd .n { font-size: 26pt; font-weight: 700; line-height: 0.82; color: var(--navy); }
+.card .hd b { font-size: 13pt; line-height: 1.25; }
+.card .stage { margin-top: 2.4mm; padding: 2.6mm; }
+.card p { margin-top: 1.8mm; font-size: 11pt; line-height: 1.5; }
+.card p + p { margin-top: 0.8mm; }
+.card .sub { font-size: 10.5pt; color: var(--muted); }
+.card.dark-card { padding: 3mm 3.4mm; background: var(--ink); color: #fff; }
+.card.dark-card .hd { border-bottom-color: var(--mustard); }
+.card.dark-card .hd .n { color: var(--mustard); }
+.card.dark-card .sub { color: rgba(255, 255, 255, 0.8); }
+.card.dark-card .btn { color: var(--ink); }
+/* 下の1行（ページの下にそろえる） */
+.bottom-lines { margin-top: auto; padding: 0 14mm 7mm; }
+.bottom-lines .tip { margin-top: 2.4mm; }

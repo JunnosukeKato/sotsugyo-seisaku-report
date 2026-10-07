@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v27 使い方を試す</title>
+<!-- デザイン案 v27：「？ 使い方」（案A の右の欄）を、この画面だけで試せるようにしたもの。「言葉で探す」に好きな言葉を入れて、何が出るかを確かめられる -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<link rel="stylesheet" href="v27.css">
+<style>
+  /* 学生用ツールの色（src/index.css の :root と同じ） */
+  :root { --stage-bg: #ebe8e3; --panel-bg: #fbfaf8; --line: #e6e2dc; --ink: #23262b; --muted: #686b72; --accent: #2f3e75; --accent-soft: #e8ebf5; --error: #b5443b; --warn: #8a5e0f; --warn-soft: #f6f0e3; --ok: #3f7a55; --chip-bg: #f1efeb; --palette-hover: #f2f0ec; --r-md: 8px; --float-shadow: 0 1px 2px rgba(30, 25, 20, 0.04), 0 10px 28px rgba(30, 25, 20, 0.08); }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; }
+  body { display: flex; justify-content: center; gap: 28px; padding: 24px 16px; background: var(--stage-bg); font-family: 'BIZ UDPGothic', sans-serif; color: var(--ink); }
+  .about { width: 300px; font-size: 13px; line-height: 1.8; color: #3f4249; }
+  .about h1 { font-size: 17px; margin: 0 0 8px; color: var(--ink); }
+  .about p { margin: 0 0 10px; }
+  .about .who { display: flex; gap: 6px; margin: 4px 0 14px; }
+  .about .who button { flex: 1; padding: 8px 0; border: 1px solid var(--line); border-radius: 8px; background: #fff; font: inherit; font-size: 13px; color: var(--ink); cursor: pointer; }
+  .about .who button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+  .about .ex button { margin: 0 4px 6px 0; padding: 3px 10px; border: 1px solid #c9cfe6; border-radius: 999px; background: #fff; color: var(--accent); font: inherit; font-size: 12.5px; cursor: pointer; }
+  .frame { width: 340px; height: calc(100vh - 48px); max-height: 860px; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; box-shadow: var(--float-shadow); }
+  @media (max-width: 720px) { body { flex-direction: column; align-items: center; } .about { width: 100%; max-width: 360px; } .frame { width: 100%; max-width: 360px; height: 720px; } }
+</style>
+</head>
+<body>
+  <div class="about">
+    <h1>「？ 使い方」を試す（v27）</h1>
+    <p>ツールの右の欄に出る「使い方」（案A）と同じものです。項目を押すと中身、「一覧へ」で戻ります。</p>
+    <p><b>言葉で探す</b>に好きな言葉を入れてみてください。入れた言葉が項目の文に入っているかを調べるだけです（AI ではありません。どこにも送りません）。</p>
+    <div class="who"><button data-who="student" class="on">学生用</button><button data-who="teacher">先生用</button></div>
+    <div class="ex">例：<button>PDF 出ない</button><button>消えた</button><button>ログイン</button><button>保存</button><button>反映 されない</button></div>
+  </div>
+  <div class="frame" id="frame"></div>
+  <script>window.V27_IMG_BASE = '../../docs/guide-images/'</script>
+  <script src="help-data.js"></script>
+  <script src="v27.js"></script>
+  <script>
+    const frame = document.getElementById('frame')
+    const st = { who: 'student', mode: 'list', topic: null, q: '', device: 'pc', from: 'list' }
+    frame.innerHTML = `<div class="v27h v27h-panel"><div class="top"></div><div class="body"></div></div>`
+    const topEl = frame.querySelector('.top')
+    const body = frame.querySelector('.body')
+    const drawTop = () => {
+      topEl.innerHTML = `<div class="v27h-head"><span class="v27h-title">${v27.IC.help}使い方${st.who === 'teacher' ? '<small>先生用</small>' : ''}</span></div>${v27.searchBox(st.q, { who: st.who })}`
+      const input = topEl.querySelector('input')
+      input.addEventListener('input', () => {
+        st.q = input.value
+        st.mode = st.q.trim() ? 'search' : 'list'
+        topEl.querySelector('.v27h-search').classList.toggle('filled', !!st.q)
+        draw()
+      })
+      return input
+    }
+    const draw = () => {
+      if (st.mode === 'topic') body.innerHTML = v27.topic(st.who, st.topic, { device: st.device, terms: st.from === 'search' ? V27_HELP.termsOf(st.q) : null, backLabel: st.from === 'search' ? '探した結果へ' : '一覧へ' })
+      else if (st.mode === 'search') body.innerHTML = v27.results(st.who, st.q).html
+      else body.innerHTML = v27.list(st.who)
+    }
+    body.addEventListener('click', (e) => {
+      const t = e.target.closest('[data-topic]')
+      if (t) {
+        st.from = st.mode
+        st.mode = 'topic'
+        st.topic = t.dataset.topic
+        draw()
+        body.scrollTop = 0
+        return
+      }
+      if (e.target.closest('.v27h-back')) {
+        st.mode = st.from === 'search' && st.q.trim() ? 'search' : 'list'
+        draw()
+        return
+      }
+      const tab = e.target.closest('.v27h-dev .tabs button')
+      if (tab) {
+        const tp = (st.who === 'teacher' ? V27_HELP.teacher : V27_HELP.student).find((x) => x.id === st.topic)
+        st.device = tp.devices.find((d) => d.label === tab.textContent).id
+        draw()
+        return
+      }
+      const rel = e.target.closest('.v27h-rel button')
+      if (rel) {
+        const tp = (st.who === 'teacher' ? V27_HELP.teacher : V27_HELP.student).find((x) => x.title === rel.textContent)
+        st.topic = tp.id
+        draw()
+        body.scrollTop = 0
+      }
+    })
+    topEl.addEventListener('click', (e) => {
+      if (e.target.closest('.clear')) {
+        st.q = ''
+        st.mode = 'list'
+        drawTop().focus()
+        draw()
+      }
+    })
+    for (const b of document.querySelectorAll('.who button'))
+      b.addEventListener('click', () => {
+        st.who = b.dataset.who
+        st.q = ''
+        st.mode = 'list'
+        for (const x of document.querySelectorAll('.who button')) x.classList.toggle('on', x === b)
+        drawTop()
+        draw()
+      })
+    for (const b of document.querySelectorAll('.ex button'))
+      b.addEventListener('click', () => {
+        if (b.textContent.startsWith('反映') && st.who !== 'teacher') document.querySelector('.who [data-who="teacher"]').click()
+        st.q = b.textContent
+        st.mode = 'search'
+        drawTop()
+        draw()
+      })
+    drawTop()
+    draw()
+  </script>
+</body>
+</html>

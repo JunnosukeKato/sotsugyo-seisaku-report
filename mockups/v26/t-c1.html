@@ -1,0 +1,205 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>デザイン案 v26 教員用・案C1（先生用 両面1枚＋管理者用 2ページ）</title>
+<!--
+  デザイン案 v26：教員用の手引きを軽くする案C1。
+  先生用は両面1枚（1・2ページ）、管理者用は別の2ページ（3・4ページ）。PDF は先生用と管理者用に分けて作る。
+  見た目は docs/guide-images/guide.css（v25 で選んだ「雑誌風」）のまま。上に mockups/v26/t-lite.css を重ねる。
+  文の中身は docs/手引き_教員用.html（本物のツールで確かめたもの）から選んで短くした。
+  作り方：node scripts/mockup-shots-v26-teacher.mjs
+-->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<link rel="stylesheet" href="../../docs/guide-images/guide.css">
+<link rel="stylesheet" href="t-lite.css">
+</head>
+<body data-img-base="../../docs/guide-images/">
+
+<!-- ================= 先生用 おもて ================= -->
+<section class="sheet t lite front">
+  <div class="lhero bleed">
+    <div class="hero-top"><span class="d">BUNKA GAKUEN UNIVERSITY</span><span class="d">FACULTY GUIDE 2026</span></div>
+    <div class="year d">2026</div>
+    <p class="kick">卒業制作報告書 作成ツール</p>
+    <div class="ttl"><h1>使い方の手引き</h1><p class="for"><b>先生用</b><span class="d">FOR FACULTY</span></p></div>
+    <div class="lqr"><img src="../../docs/guide-images/qr-guide.svg" alt="学生用ツールの URL の QR コード"><span>学生用ツール</span></div>
+  </div>
+
+  <header class="lh" style="margin-top:6mm"><span class="num d">01</span><div><span class="k d">HOW IT WORKS</span><h2>ツールのしくみ</h2></div></header>
+  <div class="map2">
+    <div class="node"><span class="who">先生</span><h3>管理ページ</h3><p>ひな形・お知らせを決める</p></div>
+    <div class="arrow"><span>設定を<br>配る</span></div>
+    <div class="node stu"><span class="who">学生</span><h3>学生用ツール</h3><p>書く・確かめる・PDF にする</p></div>
+    <div class="arrow both"><i class="ah"></i><span>自動で<br>保存</span></div>
+    <div class="node data stu"><span class="who">原稿</span><h3>学生の端末と、本人の Google ドライブ</h3></div>
+    <div class="wall2"><b>原稿は、先生・学科に届かない</b><i>→</i><span>見るのは、学生が書き出した PDF</span></div>
+  </div>
+
+  <header class="lh"><span class="num d">02</span><div><span class="k d">STUDENT'S YEAR</span><h2>学生の1年<small>水色は先生の出番</small></h2></div></header>
+  <section class="flow-band block">
+    <ol class="chain" style="grid-template-columns: repeat(6, 1fr)">
+      <li><span class="d">1</span><b>ログイン</b><small>大学のアカウント</small></li>
+      <li><span class="d">2</span><b>コースを選ぶ</b><small>ひな形が入る</small></li>
+      <li><span class="d">3</span><b>本文を書く</b><small>セルフチェックで直す</small></li>
+      <li class="me"><span class="d">4</span><b>途中点検</b><small>下書きの PDF</small></li>
+      <li class="me"><span class="d">5</span><b>抄録</b><small>先生の許可のあと</small></li>
+      <li><span class="d">6</span><b>提出用 PDF</b><small>エラー0件で</small></li>
+    </ol>
+  </section>
+
+  <header class="lh"><span class="num d">03</span><div><span class="k d">WHAT TO CHECK</span><h2>指導で見るところ</h2></div></header>
+  <ol class="look" style="grid-template-columns: 50mm 1fr 50mm; --stage: 76mm">
+    <li>
+      <div class="stage"><figure class="shot lift flat" data-shot="g-draft-page" aria-label="下書きの PDF（透かし入り）" style="height:70mm"></figure></div>
+      <p class="tt"><span class="no">1</span>下書きの PDF</p>
+      <p>途中点検用。提出には使えない</p>
+    </li>
+    <li>
+      <div class="stage"><figure class="shot lift" data-shot="g-abstract" data-badges="" data-hl="1" aria-label="抄録のページの「先生の許可が出た」" style="width:100%"></figure></div>
+      <p class="tt"><span class="no">2</span>抄録の許可</p>
+      <p>許可が出たら、学生がこのボタンを押す</p>
+    </li>
+    <li>
+      <div class="stage"><figure class="shot lift crop" role="img" aria-label="セルフチェック" style="width:100%; aspect-ratio: 622 / 800; background-image: url(../../docs/guide-images/g-check.jpg)"><span class="hl" style="left:calc(6.43% - 0.6mm);top:calc(49.25% - 0.6mm);width:calc(5.14% + 1.2mm);height:calc(4% + 1.2mm)"></span></figure></div>
+      <p class="tt"><span class="no">3</span><span class="x">×</span>エラーは0件に</p>
+      <p>1件でも残ると、提出用 PDF は出せない</p>
+    </li>
+  </ol>
+  <footer class="folio"><span>先生用</span><span class="d">1 / 2</span></footer>
+</section>
+
+<!-- ================= 先生用 うら ================= -->
+<section class="sheet inner t lite">
+  <div class="edge bleed"><span class="d">FACULTY GUIDE</span></div>
+  <header class="lh"><span class="num d">04</span><div><span class="k d">ADMIN PAGE</span><h2>管理ページを開く</h2></div></header>
+  <div class="cols block" style="grid-template-columns: 1fr 100mm; gap: 5mm">
+    <ul class="dots">
+      <li>URL は、管理者からメールで届く</li>
+      <li>大学の Google アカウントでログイン</li>
+      <li>登録された人だけが開ける</li>
+    </ul>
+    <table class="tbl roles">
+      <thead><tr><th></th><th class="c">先生</th><th class="c">管理者</th></tr></thead>
+      <tbody>
+        <tr><td>ひな形・お知らせ・書き間違えやすい語</td><td class="c"><b>○</b></td><td class="c"><b>○</b></td></tr>
+        <tr><td>年度の設定・先生の登録</td><td class="c">－</td><td class="c"><b>○</b></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <header class="lh"><span class="num d">05</span><div><span class="k d">TEMPLATE &amp; NOTICE</span><h2>ひな形とお知らせを直す</h2></div></header>
+  <figure class="shot lift block" data-shot="g-admin-teacher" aria-label="先生の画面"></figure>
+  <div class="cols" style="grid-template-columns: 1fr 98mm; gap: 6mm; margin-top: 4.4mm">
+    <ol class="list1">
+      <li><span class="no">1</span><p><span class="btn">編集する</span> → <span class="btn">反映する</span><br>書き始めた原稿は変わらない</p></li>
+      <li><span class="no">2</span><p>お知らせを書く<br>連絡先などは書かない</p></li>
+      <li><span class="no">3</span><p><span class="btn">保存して学生に反映</span><br>1分ほどで届く</p></li>
+      <li><span class="no">✓</span><p>書き間違えやすい語は、画面の下から<br>エラーの語は、提出用 PDF を止める</p></li>
+    </ol>
+    <div><figure class="shot lift" data-shot="g-admin-template" aria-label="下書きのひな形の窓"></figure>
+      <p class="cap"><b>1 で開く窓</b></p></div>
+  </div>
+
+  <header class="lh"><span class="num d">06</span><div><span class="k d">TROUBLE</span><h2>困ったとき</h2></div></header>
+  <table class="tbl block trouble">
+    <tbody>
+      <tr><th>ログインできない</th><td>アプリ内（LINE など）なら、Safari・Chrome で開く</td></tr>
+      <tr><th>原稿をなくした</th><td><span class="btn">バックアップ</span> →「自動の控え」</td></tr>
+      <tr><th>エラーが消せない</th><td>下書きの PDF で見る</td></tr>
+      <tr><th>変更が出ない</th><td>保存を確かめる。学生は開き直す</td></tr>
+      <tr><th>全員ログインできない</th><td>Google の障害かも。管理者へ</td></tr>
+    </tbody>
+  </table>
+  <footer class="folio"><span>先生用</span><span class="d">2 / 2</span></footer>
+</section>
+
+<!-- ================= 管理者用 1 ================= -->
+<section class="sheet t lite front">
+  <div class="lhero adm bleed">
+    <div class="hero-top"><span class="d">BUNKA GAKUEN UNIVERSITY</span><span class="d">ADMIN GUIDE 2026</span></div>
+    <div class="year d">2026</div>
+    <p class="kick">卒業制作報告書 作成ツール</p>
+    <div class="ttl"><h1>使い方の手引き</h1><p class="for"><b>管理者用</b><span class="d">FOR ADMINS</span></p></div>
+    <p class="who-for"><b>管理者（1〜2人）</b>の作業</p>
+  </div>
+
+  <header class="lh" style="margin-top:6mm"><span class="num d">01</span><div><span class="k d">YEAR SETTINGS</span><h2>年度の設定</h2></div></header>
+  <figure class="shot lift block" data-shot="g-admin-main" data-badges="1,2,3,4,5,7" data-hl="7" aria-label="管理ページ（年度の設定）" style="margin-left:8mm; width:calc(100% - 8mm)"></figure>
+  <ol class="nums two block" style="margin-top:4mm">
+    <li><span class="no">1</span><div><b>年度</b><p>「公開中」は、学生が使っている年度</p></div></li>
+    <li><span class="no">2</span><div><b>共通の題目</b><p>表紙と抄録に入る</p></div></li>
+    <li><span class="no">3</span><div><b>最終締切</b><p>学生の「締切まで○日」になる</p></div></li>
+    <li><span class="no">4</span><div><b>コース</b><p>「学生に表示」を外すと選べない</p></div></li>
+    <li><span class="no">5</span><div><b>指導教員</b><p>氏名を入れて Enter。抄録に出る</p></div></li>
+    <li><span class="no">7</span><div><b><span class="btn">保存して学生に反映</span></b><p>1分ほどで学生に届く</p></div></li>
+  </ol>
+
+  <header class="lh"><span class="num d">02</span><div><span class="k d">NEW YEAR</span><h2>毎年の準備と公開</h2></div></header>
+  <section class="flow-band block">
+    <div class="stage" style="background:#fff;padding:1mm;margin-bottom:2.6mm"><figure class="shot flat" data-shot="g-admin-draft" data-badges="" data-hl="1,2" aria-label="準備中の年度の見出しの欄" style="width:100%"></figure></div>
+    <ol class="chain" style="grid-template-columns: repeat(4, 1fr)">
+      <li><span class="d">STEP 1</span><b><span class="btn">新年度を作成</span></b><small>今の年度をコピーし「準備中」で作る</small></li>
+      <li><span class="d">STEP 2</span><b>直して <span class="btn">保存</span></b><small>学生にはまだ見えない</small></li>
+      <li><span class="d">STEP 3</span><b>見本で確かめる</b><small>表紙と抄録の形</small></li>
+      <li><span class="d">STEP 4</span><b><span class="btn">この年度を学生に公開</span></b><small>前の年度は「終了」に</small></li>
+    </ol>
+  </section>
+  <ul class="dots block"><li>学生の原稿は、書き始めた年度の設定のまま</li></ul>
+  <footer class="folio"><span>管理者用</span><span class="d">1 / 2</span></footer>
+</section>
+
+<!-- ================= 管理者用 2 ================= -->
+<section class="sheet inner t lite airy">
+  <div class="edge bleed"><span class="d">ADMIN GUIDE</span></div>
+  <header class="lh"><span class="num d">03</span><div><span class="k d">MEMBERS</span><h2>先生の登録</h2></div></header>
+  <figure class="shot lift crop block" role="img" aria-label="管理者と先生の登録" style="aspect-ratio: 1520 / 445; background-image: url(../../docs/guide-images/g-admin-members.jpg)"></figure>
+  <ol class="row-steps fit" style="margin-top: 3.4mm">
+    <li><span class="no">1</span><p><span class="btn">先生の登録</span> を開く</p></li>
+    <li><span class="no">2</span><p>大学のアドレスを貼り付ける</p></li>
+    <li><span class="no">3</span><p>役割を選んで登録</p></li>
+  </ol>
+
+  <header class="lh"><span class="num d">04</span><div><span class="k d">HISTORY</span><h2>変更履歴で元に戻す</h2></div></header>
+  <div class="cols block" style="grid-template-columns: 112mm 1fr; gap: 6mm; align-items:center">
+    <figure class="shot lift" data-shot="g-admin-history" data-badges="" data-hl="1" aria-label="変更履歴"></figure>
+    <ul class="dots">
+      <li>保存・公開のたびに残る</li>
+      <li><span class="btn">この内容を読み込む</span><br>→ 確かめて保存で、元に戻る</li>
+    </ul>
+  </div>
+
+  <header class="lh"><span class="num d">05</span><div><span class="k d">GOOGLE OUTAGE</span><h2>Google の障害のとき<small>詳細設定</small></h2></div></header>
+  <div class="cols block" style="grid-template-columns: 108mm 1fr; gap: 6mm; align-items:center">
+    <figure class="shot lift" data-shot="g-admin-switch" data-badges="" data-hl="1" aria-label="学生のドライブ保存の切り替え"></figure>
+    <ul class="dots">
+      <li>学生が全員ログインできないときだけ「止める」にして保存</li>
+      <li>学生はログインせずに書ける</li>
+      <li>直ったら「必須」に戻す</li>
+    </ul>
+  </div>
+
+  <div class="cols" style="grid-template-columns: 1fr 70mm; gap: 5mm; margin-top: 7mm">
+    <div class="dark">
+      <h3>SECURITY ─ 守ること</h3>
+      <ul class="dots">
+        <li>管理者・先生の Google アカウントは<b>2段階認証</b>に</li>
+        <li>管理用スプレッドシートの共有は「制限付き」。編集者は管理者2人程度</li>
+        <li><b>管理者は2人以上</b>にしておく</li>
+      </ul>
+    </div>
+    <div class="note" style="display:block">
+      <b>担当の引き継ぎ</b>
+      <p style="margin-top:1mm">手順は <span class="fn">docs/引き継ぎ手順.md</span></p>
+      <p style="margin-top:0.6mm">管理者が0人のときの直し方も</p>
+    </div>
+  </div>
+  <footer class="folio"><span>管理者用</span><span class="d">2 / 2</span></footer>
+</section>
+
+<script src="../../docs/guide-images/marks.js"></script>
+<script src="../../docs/guide-images/guide.js"></script>
+</body>
+</html>

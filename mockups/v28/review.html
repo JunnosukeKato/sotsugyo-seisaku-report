@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v28 PDF をそのまま保存する</title>
+<!-- node scripts/mockup-shots-v28.mjs review で作る（手で直さない） -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  h2 { font-size: 18px; margin: 36px 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 13.5px; color: var(--muted); line-height: 1.8; max-width: 1180px; }
+  .ask { margin: 0 0 8px; padding: 14px 18px 12px; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 1180px; }
+  .ask h2 { margin: 0 0 6px; font-size: 15px; }
+  .ask ol { margin: 0; padding-left: 22px; font-size: 13.5px; line-height: 2; }
+  .ask em { font-style: normal; color: var(--accent); font-weight: 700; }
+  .flow { margin: 0 0 8px; padding: 10px 18px; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 1180px; font-size: 13px; line-height: 1.9; }
+  .flow b { color: var(--accent); }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 15.5px; margin-bottom: 3px; }
+  figcaption span { font-size: 13px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11.5px; font-style: normal; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  img { display: block; width: 100%; }
+  .strip { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .strip > div { background: #fff; align-self: stretch; }
+  .strip small { display: block; padding: 6px 12px 9px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  .strip small b { color: var(--ink); }
+  .pc3 { grid-template-columns: repeat(3, 1fr); }
+  .pc2 { grid-template-columns: repeat(2, 1fr); }
+  .ph4 { grid-template-columns: repeat(4, 1fr); }
+  .ph3 { grid-template-columns: repeat(3, 1fr) 1.4fr; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 12px; border: 1px solid #ddd; }
+  .note-cell { padding: 14px 16px; font-size: 13px; line-height: 1.8; color: #3f4249; }
+  .note-cell p { margin: 0 0 8px; }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 10px 16px 12px; font-size: 13px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: #3f7a55; }
+  .pw .weak b { color: #b5443b; }
+  .pw ul { margin: 4px 0 0; padding-left: 18px; }
+  .why { margin: 2px 0 10px; padding: 11px 15px; border-left: 3px solid var(--accent); background: #f6f5f2; border-radius: 0 10px 10px 0; font-size: 13.5px; line-height: 1.85; max-width: 1180px; }
+  .why b { color: var(--accent); }
+  .test { background: #fff; border-radius: 14px; padding: 14px 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 1180px; font-size: 13.5px; line-height: 1.85; }
+  .test h3 { margin: 6px 0 4px; font-size: 14px; }
+  .test ul { margin: 0 0 6px; padding-left: 20px; }
+</style>
+</head>
+<body>
+  <h1>「PDFを書き出す」で、PDF をそのまま保存する：画面の案（v28）</h1>
+  <p class="lead">今は「印刷の画面」を開いて、学生が端末ごとに選び方を変えて PDF に保存しています。これを、ツールの中で PDF を作って（紙面の各ページを画像にして1つの PDF にまとめる。試作の src/pdf/pagesToPdf.ts）、そのまま保存するようにします。PDF の文字は画像になるので選べませんが、見た目は印刷と同じです。印刷の画面は「うまくいかないとき」の予備に残します。どの画面も、本物のツールに案の部品を仮に重ねて撮っています（まだツールには入っていません）。中身の例は、衣装コースの学生（文化花子・00ZZ0123。架空）の原稿です。<b>おすすめ</b>の案には印を付けています。</p>
+  <div class="ask">
+    <h2>この v28 で決めていただきたいこと</h2>
+    <ol>
+      <li>作っている間と、できたあとの見せ方：案A／B／C　<em>おすすめ：案C「できたページを見せる」</em></li>
+      <li>予備の「印刷の画面から保存」の置き場所（いちばん下の小さなリンク・作れなかったときの窓）でよいか</li>
+      <li>iPhone は「PDF を作る」→ できたら「保存する」の2回押しでよいか（下の「実際の端末で確かめてほしいこと」）</li>
+    </ol>
+  </div>
+  <div class="flow"><b>流れ</b>：「PDFを書き出す」→ 3つを確かめる（今と同じ）→「PDF を保存する」（iPhone は「PDF を作る」）→ ページを1枚ずつ画像にする（進み具合「3 / 10ページ」。パソコンで10ページ3秒・20ページ8秒ほど、スマホはもう少し）→ パソコン・Android：そのまま「ダウンロード」に保存（「PDF を開く」で確かめる）／ iPhone：「保存する」をもう一度押す →「"ファイル"に保存」。ファイル名は今と同じ「2026_卒業制作報告書_学籍番号_氏名.pdf」（下書きは「_下書き」を付け、どのページにも透かし）。</div>
+
+  <h2>① どの案も同じところ</h2>
+  <p class="lead">3つの確かめは今と同じです。印刷の画面での選び方の説明（端末ごと）はなくなり、代わりに保存するファイル名と、どこに保存されるかを1行で出します。予備の「印刷の画面から保存」は、窓のいちばん下の左に小さく置きます。エラーが残っているときの「下書きの PDF」も、同じように保存します。</p>
+  <figure>
+    <figcaption><b>3つを確かめる・エラーが残っているとき（下書き）</b><span>ボタンは、パソコン・Android は「PDF を保存する」、iPhone は「PDF を作る」（保存はできたあとに押す）。下書きのボタンは「下書きの PDF を保存する」</span></figcaption>
+    <div class="strip pc2">
+      <div class=""><a href="shots/common-confirm-pc.png" target="_blank"><img src="shots/common-confirm-pc.png" alt="" loading="lazy"></a><small><b>パソコン：3つを確かめる</b>（左下に小さく「うまくいかないとき：印刷の画面から保存」）</small></div>
+      <div class=""><a href="shots/common-draft-pc.png" target="_blank"><img src="shots/common-draft-pc.png" alt="" loading="lazy"></a><small><b>パソコン：エラーが残っているとき</b>（下書きの PDF を保存する）</small></div>
+    </div>
+    <div class="strip ph3" style="border-top:1px solid var(--line)">
+      <div class="ph"><a href="shots/common-confirm-ph.png" target="_blank"><img src="shots/common-confirm-ph.png" alt="" loading="lazy"></a><small><b>iPhone：3つを確かめる</b>（ボタンは「PDF を作る」）</small></div>
+      <div class="ph"><a href="shots/common-draft-ph.png" target="_blank"><img src="shots/common-draft-ph.png" alt="" loading="lazy"></a><small><b>iPhone：エラーが残っているとき</b></small></div>
+      <div class="ph"><a href="shots/a-error-ph.png" target="_blank"><img src="shots/a-error-ph.png" alt="" loading="lazy"></a><small><b>作れなかったとき</b>（案A・C）：印刷の画面から保存</small></div>
+      <div class="note-cell"><p><b>作れなかったとき</b>（メモリが足りない・古いブラウザなど）は、「PDF を作れませんでした」と出し、今の書き出しと同じ「印刷の画面での選び方」（その端末の分）と「印刷の画面を開く」を出します。</p><p>パソコンの同じ窓は、案A の段にあります。</p></div>
+    </div>
+  </figure>
+
+  <h2>② 作っている間と、できたあと</h2>
+  <figure>
+    <figcaption><b>案A　窓の中で進める</b><span>「PDF を保存する」を押すと、同じ窓のまま進み具合（棒と「3 / 10ページ」）を出し、できたら「保存しました」に変わる。iPhone は「PDF ができました」と大きな「保存する」</span></figcaption>
+    <div class="strip pc3">
+      <div class=""><a href="shots/a-build-pc.png" target="_blank"><img src="shots/a-build-pc.png" alt="" loading="lazy"></a><small><b>作っている</b>：進み具合と「やめる」</small></div>
+      <div class=""><a href="shots/a-done-pc.png" target="_blank"><img src="shots/a-done-pc.png" alt="" loading="lazy"></a><small><b>保存した</b>：ファイル名・ページの数・大きさと「PDF を開く」</small></div>
+      <div class=""><a href="shots/a-error-pc.png" target="_blank"><img src="shots/a-error-pc.png" alt="" loading="lazy"></a><small><b>作れなかった</b>：印刷の画面から保存</small></div>
+    </div>
+    <div class="strip ph3" style="border-top:1px solid var(--line)">
+      <div class="ph"><a href="shots/a-build-ph.png" target="_blank"><img src="shots/a-build-ph.png" alt="" loading="lazy"></a><small><b>iPhone：作っている</b></small></div>
+      <div class="ph"><a href="shots/a-done-ph.png" target="_blank"><img src="shots/a-done-ph.png" alt="" loading="lazy"></a><small><b>iPhone：できた</b> →「保存する」</small></div>
+      <div class="ph"><a href="shots/a-error-ph.png" target="_blank"><img src="shots/a-error-ph.png" alt="" loading="lazy"></a><small><b>iPhone：作れなかった</b></small></div>
+      <div class="note-cell"><p>「保存する」を押すと、iPhone の共有の画面が開きます。そこで「"ファイル"に保存」を選びます。</p></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>今の書き出しの窓のまま進むので、迷わない</li><li>作っている間は窓が前にあるので、原稿を書き換えてしまわない（PDF が古い原稿にならない）</li><li>iPhone の2回目の「保存する」も、同じ窓の中で自然に押せる</li></ul></div><div class="weak"><b>弱い点</b><ul><li>数秒〜十数秒、棒が進むのを見ているだけになる</li><li>保存したあと、ページの数と写真を確かめるには、PDF を開く必要がある（iPhone は「ファイル」アプリから開く手間がある）</li></ul></div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　窓を閉じて、小さな帯で知らせる</b><span>3つを確かめたら窓を閉じ、パソコンは紙面の下、スマホは上の帯のすぐ下に、進み具合の帯を出す。できたら「保存しました［開く］」（iPhone は「PDF ができました［保存する］」）。作っている間は、紙面を見ることはできるが書けない</span></figcaption>
+    <div class="strip pc3">
+      <div class=""><a href="shots/b-build-pc.png" target="_blank"><img src="shots/b-build-pc.png" alt="" loading="lazy"></a><small><b>作っている</b>：紙面の下の帯（紙面は薄くして、書けない）</small></div>
+      <div class=""><a href="shots/b-done-pc.png" target="_blank"><img src="shots/b-done-pc.png" alt="" loading="lazy"></a><small><b>保存した</b>：帯に「開く」</small></div>
+      <div class=""><a href="shots/b-error-pc.png" target="_blank"><img src="shots/b-error-pc.png" alt="" loading="lazy"></a><small><b>作れなかった</b>：帯に「印刷の画面から保存」</small></div>
+    </div>
+    <div class="strip ph3" style="border-top:1px solid var(--line)">
+      <div class="ph"><a href="shots/b-build-ph.png" target="_blank"><img src="shots/b-build-ph.png" alt="" loading="lazy"></a><small><b>iPhone：作っている</b>（上の帯の下）</small></div>
+      <div class="ph"><a href="shots/b-done-ph.png" target="_blank"><img src="shots/b-done-ph.png" alt="" loading="lazy"></a><small><b>iPhone：できた</b> →「保存する」</small></div>
+      <div class="ph"><a href="shots/b-error-ph.png" target="_blank"><img src="shots/b-error-ph.png" alt="" loading="lazy"></a><small><b>iPhone：作れなかった</b></small></div>
+      <div class="note-cell"><p>帯は、閉じる（×）か次の操作をするまで残します。</p></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>窓が消えるので、待っている間も紙面が見える</li><li>保存したことが、帯で短く伝わる</li></ul></div><div class="weak"><b>弱い点</b><ul><li>作っている間に書くと PDF が古い原稿になるため、結局は書けないようにする必要がある（見えるのに書けない、が分かりにくい）</li><li>帯は小さく、iPhone の「保存する」を見落とすと、保存されないまま終わる</li><li>作れなかったときの、印刷の画面での選び方を書く場所がない（帯から、改めて窓を開くことになる）</li></ul></div></div>
+  </figure>
+
+  <figure class="is-rec">
+    <figcaption><b>案C　窓の中で、できたページを見せる<em class="rec">おすすめ</em></b><span>案Aと同じく窓の中で進めるが、進み具合を「できたページの小さな絵」で見せる（1枚ずつ増える）。できたら全ページの絵が並ぶので、ページの数と写真を、PDF を開かずに確かめられる。iPhone は「保存する」、Android はパソコンと同じく「保存しました」</span></figcaption>
+    <div class="strip pc2">
+      <div class=""><a href="shots/c-build-pc.png" target="_blank"><img src="shots/c-build-pc.png" alt="" loading="lazy"></a><small><b>作っている</b>：できたページが1枚ずつ並ぶ（いま作っているページに枠）</small></div>
+      <div class=""><a href="shots/c-done-pc.png" target="_blank"><img src="shots/c-done-pc.png" alt="" loading="lazy"></a><small><b>保存した</b>：全ページの小さな絵と「PDF を開く」</small></div>
+    </div>
+    <div class="strip ph4" style="border-top:1px solid var(--line)">
+      <div class="ph"><a href="shots/c-build-ph.png" target="_blank"><img src="shots/c-build-ph.png" alt="" loading="lazy"></a><small><b>iPhone：作っている</b></small></div>
+      <div class="ph"><a href="shots/c-done-ph.png" target="_blank"><img src="shots/c-done-ph.png" alt="" loading="lazy"></a><small><b>iPhone：できた</b> →「保存する」</small></div>
+      <div class="ph"><a href="shots/c-done-an.png" target="_blank"><img src="shots/c-done-an.png" alt="" loading="lazy"></a><small><b>Android：保存した</b>（そのまま「ダウンロード」）</small></div>
+      <div class="ph"><a href="shots/c-draftdone-ph.png" target="_blank"><img src="shots/c-draftdone-ph.png" alt="" loading="lazy"></a><small><b>iPhone：下書きの PDF</b>（ファイル名に「_下書き」）</small></div>
+    </div>
+    <div class="strip pc2" style="border-top:1px solid var(--line)">
+      <div class=""><a href="shots/c-draftdone-pc.png" target="_blank"><img src="shots/c-draftdone-pc.png" alt="" loading="lazy"></a><small><b>パソコン：下書きの PDF を保存した</b>（どのページにも透かし）</small></div>
+      <div class="note-cell"><p>小さな絵は、PDF に入れるのと同じ画像を縮めたもの（作る途中で1枚ずつできるので、時間はほとんど増えません）。</p><p>作れなかったときは、案Aと同じ窓（① の右下・案A の段）。</p></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>待っている間に、ページが1枚ずつ並ぶので、進んでいることが分かりやすい</li><li>今の「保存したら PDF を開いて、ページの数と写真を確かめる」を、窓の中でそのまま済ませられる（iPhone で PDF を開き直す手間が要らない）</li><li>案Aと同じく、作っている間に原稿を書き換えない</li></ul></div><div class="weak"><b>弱い点</b><ul><li>窓が少し大きくなる（スマホは、ページが多いと窓の中を上下に動かす）</li><li>小さな絵は字が読めないので、文の誤りは確かめられない（ページの数・図と写真の位置を見るため）</li></ul></div></div>
+  </figure>
+  <p class="why"><b>おすすめは案C</b>：今の窓の流れ（確かめる → 保存する）のまま、待ち時間を「できたページが並んでいく」時間にでき、そのまま「ページの数と写真を確かめる」ことまで済みます。iPhone では、保存した PDF を「ファイル」アプリから開いて確かめるのが手間なので、窓の中で見られる利点が大きいです。案Aはいちばん簡単に作れますが、確かめのために PDF を開く手間が残ります。案Bは紙面が見える代わりに、作っている間は書けないことが分かりにくく、iPhone の「保存する」を見落としやすくなります。</p>
+
+  <h2>③ 実際の端末で確かめてほしいこと</h2>
+  <div class="test">
+    <h3>iPhone（Safari）</h3>
+    <ul>
+      <li>「保存する」を押すと共有の画面が開き、「"ファイル"に保存」で PDF が保存できるか。保存した PDF の名前が「2026_卒業制作報告書_学籍番号_氏名.pdf」になっているか</li>
+      <li>作るのに時間がかかったあとでも、「保存する」の1回のタップで共有の画面が開くか（作り終えてから押すので、開くはずです）</li>
+      <li>ページの多い原稿（20ページ・写真多め）で、途中で止まったり、ページが再読み込みされたりしないか（メモリ）。かかった時間</li>
+      <li>共有の画面で「×」でやめたとき、もう一度「保存する」を押せるか</li>
+      <li>iPad でも同じように保存できるか</li>
+    </ul>
+    <h3>Android（Chrome）</h3>
+    <ul>
+      <li>「PDF を保存する」で、そのまま「ダウンロード」に保存され、通知から開けるか（共有の画面を使わずに済むか）</li>
+      <li>ファイル名が化けたり、「.pdf」が付かなかったりしないか</li>
+      <li>LINE などのアプリの中のブラウザで開いたときは、保存できないことがある（その場合は「作れませんでした」と同じく、Chrome で開き直す案内が要るか）</li>
+    </ul>
+    <h3>パソコン</h3>
+    <ul>
+      <li>ブラウザの設定で「保存する場所を毎回聞く」になっていると、保存の窓が出る（その場合も保存できるか）</li>
+      <li>Mac の Safari で、ファイル名と保存先が正しいか</li>
+      <li>大学の共用のパソコンで、「ダウンロード」に保存したあと、学生が自分のドライブや USB に移せるか（今の印刷からの保存と同じ）</li>
+    </ul>
+  </div>
+</body>
+</html>

@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>デザイン案 v26 教員用・案C2（先生用 片面1枚＋管理者用 片面1枚）</title>
+<!--
+  デザイン案 v26：教員用の手引きを軽くする案C2。
+  先生用は片面1枚（1ページ）、管理者用も片面1枚（2ページ）。PDF は先生用と管理者用に分けて作る。
+  くわしいこと（困ったとき・各欄の説明など）は、管理ページと学生用ツールの中のヘルプ（？）に移す想定。
+  見た目は docs/guide-images/guide.css（v25 で選んだ「雑誌風」）のまま。上に mockups/v26/t-lite.css を重ねる。
+  文の中身は docs/手引き_教員用.html（本物のツールで確かめたもの）から選んで短くした。
+  作り方：node scripts/mockup-shots-v26-teacher.mjs
+-->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<link rel="stylesheet" href="../../docs/guide-images/guide.css">
+<link rel="stylesheet" href="t-lite.css">
+</head>
+<body data-img-base="../../docs/guide-images/">
+
+<!-- ================= 先生用（片面） ================= -->
+<section class="sheet t lite front compact">
+  <div class="lhero sm bleed">
+    <div class="hero-top"><span class="d">BUNKA GAKUEN UNIVERSITY</span><span class="d">FACULTY GUIDE 2026</span></div>
+    <div class="year d">2026</div>
+    <p class="kick">卒業制作報告書 作成ツール</p>
+    <div class="ttl"><h1>使い方の手引き</h1><p class="for"><b>先生用</b><span class="d">FOR FACULTY</span></p></div>
+    <div class="lqr"><img src="../../docs/guide-images/qr-guide.svg" alt="学生用ツールの URL の QR コード"><span>学生用ツール</span></div>
+  </div>
+
+  <header class="lh" style="margin-top:5mm"><span class="num d">01</span><div><span class="k d">HOW IT WORKS</span><h2>しくみと学生の1年</h2></div></header>
+  <div class="map2 sm">
+    <div class="node"><span class="who">先生</span><h3>管理ページ</h3></div>
+    <div class="arrow"><span>設定</span></div>
+    <div class="node stu"><span class="who">学生</span><h3>学生用ツール</h3></div>
+    <div class="arrow both"><i class="ah"></i><span>保存</span></div>
+    <div class="node data stu"><span class="who">原稿</span><h3>学生の端末と本人のドライブ</h3></div>
+    <div class="wall2"><b>原稿は、先生には届かない</b><i>→</i><span>見るのは、学生が書き出した PDF</span></div>
+  </div>
+  <section class="flow-band block">
+    <ol class="chain" style="grid-template-columns: repeat(6, 1fr)">
+      <li><span class="d">1</span><b>ログイン</b><small>大学のアカウント</small></li>
+      <li><span class="d">2</span><b>コースを選ぶ</b><small>ひな形が入る</small></li>
+      <li><span class="d">3</span><b>本文を書く</b><small>セルフチェックで直す</small></li>
+      <li class="me"><span class="d">4</span><b>途中点検</b><small>下書きの PDF</small></li>
+      <li class="me"><span class="d">5</span><b>抄録</b><small>先生の許可のあと</small></li>
+      <li><span class="d">6</span><b>提出用 PDF</b><small>エラー0件で</small></li>
+    </ol>
+  </section>
+
+  <header class="lh"><span class="num d">02</span><div><span class="k d">WHAT TO CHECK</span><h2>指導で見るところ</h2></div></header>
+  <ol class="look sm" style="grid-template-columns: 50mm 1fr 50mm">
+    <li>
+      <div class="stage"><figure class="shot lift flat" data-shot="g-draft-page" aria-label="下書きの PDF（透かし入り）" style="height:35mm"></figure></div>
+      <p class="ln"><span class="no">1</span><span>途中点検は、下書きの PDF（透かし入り）</span></p>
+    </li>
+    <li>
+      <div class="stage"><figure class="shot lift" data-shot="g-abstract" data-badges="" data-hl="1" aria-label="抄録のページの「先生の許可が出た」" style="height:35mm"></figure></div>
+      <p class="ln"><span class="no">2</span><span>抄録は、先生の許可が出てから</span></p>
+    </li>
+    <li>
+      <div class="stage"><figure class="shot lift crop" role="img" aria-label="セルフチェック" style="height:35mm; aspect-ratio: 622 / 585; background-image: url(../../docs/guide-images/g-check.jpg)"><span class="hl" style="left:calc(6.43% - 0.6mm);top:calc(67.35% - 0.6mm);width:calc(5.14% + 1.2mm);height:calc(5.47% + 1.2mm)"></span></figure></div>
+      <p class="ln"><span class="no">3</span><span><span class="x">×</span> エラーが残ると、提出用 PDF は出せない</span></p>
+    </li>
+  </ol>
+
+  <header class="lh"><span class="num d">03</span><div><span class="k d">ADMIN PAGE</span><h2>ひな形とお知らせを直す</h2></div></header>
+  <ul class="dots block">
+    <li>管理ページの URL は、管理者からメールで届く。大学のアカウントで開く</li>
+  </ul>
+  <figure class="shot lift block" data-shot="g-admin-teacher" aria-label="先生の画面"></figure>
+  <ol class="row-steps fit" style="margin-top:3.4mm">
+    <li><span class="no">1</span><p><span class="btn">編集する</span> で、ひな形を直す</p></li>
+    <li><span class="no">2</span><p>お知らせを書く（誰でも読める）</p></li>
+    <li><span class="no">3</span><p><span class="btn">保存して学生に反映</span></p></li>
+  </ol>
+  <div class="help block"><span>くわしくは、管理ページの <span class="qmark">?</span>（使い方）から</span><small>書き間違えやすい語・困ったときも</small></div>
+  <footer class="folio"><span>先生用</span><span class="d">2026</span></footer>
+</section>
+
+<!-- ================= 管理者用（片面） ================= -->
+<section class="sheet t lite front compact">
+  <div class="lhero sm adm bleed">
+    <div class="hero-top"><span class="d">BUNKA GAKUEN UNIVERSITY</span><span class="d">ADMIN GUIDE 2026</span></div>
+    <div class="year d">2026</div>
+    <p class="kick">卒業制作報告書 作成ツール</p>
+    <div class="ttl"><h1>使い方の手引き</h1><p class="for"><b>管理者用</b><span class="d">FOR ADMINS</span></p></div>
+    <p class="who-for"><b>管理者（1〜2人）</b>の作業</p>
+  </div>
+
+  <header class="lh" style="margin-top:5mm"><span class="num d">01</span><div><span class="k d">EVERY YEAR</span><h2>毎年の準備と公開</h2></div></header>
+  <div class="stage strip block"><figure class="shot flat" data-shot="g-admin-draft" data-badges="1,2,3,4" data-renum="2:4" data-labels="3:A,4:B" data-hl="1,2" aria-label="準備中の年度の見出しの欄" style="width:100%"></figure></div>
+  <section class="flow-band" style="margin-top:2.4mm">
+    <ol class="chain" style="grid-template-columns: repeat(4, 1fr)">
+      <li><span class="d">STEP 1</span><b><span class="btn">新年度を作成</span></b><small>今の年度をコピーし「準備中」で作る</small></li>
+      <li><span class="d">STEP 2</span><b>直して <span class="btn">保存</span></b><small>学生にはまだ見えない</small></li>
+      <li><span class="d">STEP 3</span><b>見本で確かめる</b><small>表紙と抄録の形</small></li>
+      <li><span class="d">STEP 4</span><b><span class="btn">この年度を学生に公開</span></b><small>前の年度は「終了」に</small></li>
+    </ol>
+  </section>
+  <div class="cols block" style="grid-template-columns: 136mm 1fr; gap: 5mm; align-items:center">
+    <figure class="shot lift" data-shot="g-admin-main" data-badges="" data-hl="6" aria-label="管理ページ（年度の設定）"></figure>
+    <div>
+      <p class="cap"><b>STEP 2 で直すところ</b></p>
+      <ul class="dots" style="margin-top:1mm">
+        <li>共通の題目</li>
+        <li>最終締切</li>
+        <li>コースと指導教員</li>
+        <li>囲みは見本（STEP 3）</li>
+      </ul>
+    </div>
+  </div>
+
+  <header class="lh"><span class="num d">02</span><div><span class="k d">ALSO</span><h2>そのほかの作業</h2></div></header>
+  <div class="cols block" style="grid-template-columns: 1fr 58mm; gap: 6mm; align-items:center">
+    <ul class="list1">
+      <li><span class="no">B</span><p><span class="btn">先生の登録</span>：大学のメールアドレスを貼り付け、役割を選ぶ</p></li>
+      <li><span class="no">A</span><p><span class="btn">変更履歴</span>：<span class="btn">この内容を読み込む</span> → 保存で元に戻る</p></li>
+      <li><span class="no">!</span><p><b>詳細設定</b>：Google の障害で全員ログインできないときだけ「止める」。直ったら「必須」に</p></li>
+    </ul>
+    <figure class="shot lift" data-shot="g-admin-switch" data-badges="" data-hl="1" aria-label="学生のドライブ保存の切り替え"></figure>
+  </div>
+
+  <div class="cols" style="grid-template-columns: 1fr 70mm; gap: 5mm; margin-top: 5mm">
+    <div class="dark">
+      <h3>SECURITY ─ 守ること</h3>
+      <ul class="dots">
+        <li>管理者・先生の Google アカウントは<b>2段階認証</b>に</li>
+        <li>管理用スプレッドシートの共有は「制限付き」。編集者は管理者2人程度</li>
+        <li><b>管理者は2人以上</b>にしておく</li>
+      </ul>
+    </div>
+    <div class="note" style="display:block">
+      <b>担当の引き継ぎ</b>
+      <p style="margin-top:1mm">手順は <span class="fn">docs/引き継ぎ手順.md</span></p>
+      <p style="margin-top:0.6mm">管理者が0人のときの直し方も</p>
+    </div>
+  </div>
+  <footer class="folio"><span>管理者用</span><span class="d">2026</span></footer>
+</section>
+
+<script src="../../docs/guide-images/marks.js"></script>
+<script>
+  // 準備中の年度の見出しの欄：番号を、ボタンの上ではなく下に出す（このデザイン案だけ。marks.js は直さない）
+  ;(window.GUIDE_MARKS['g-admin-draft'] || { marks: [] }).marks.forEach(function (m) { m.at = 'b' })
+</script>
+<script src="../../docs/guide-images/guide.js"></script>
+</body>
+</html>

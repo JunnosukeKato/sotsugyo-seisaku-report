@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案C2 片面1枚（v26 学生用の手引き）</title>
+<!-- デザイン案 v26 案C2「片面1枚」：URL・QR、5つの手順（1行ずつ・小さな写真）、共用のパソコン、困ったとき3つ、先生に相談（350字まで）。
+     くわしいことは、ツールの中の使い方（？）に任せる前提。画像は docs/guide-images/ のもの。PDF とページの画像は node scripts/mockup-shots-v26.mjs で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<link rel="stylesheet" href="../../docs/guide-images/guide.css">
+<link rel="stylesheet" href="student.css">
+<style>
+  /* 片面1枚：写真を少し小さく、1行ずつ */
+  .one .cards { gap: 4mm 5mm; padding-top: 4.5mm; }
+  .one .card .stage { height: 52mm; }
+  .one .card p { margin-top: 1.4mm; }
+  .one .qa-mini { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 5mm; }
+  .one .qa-mini li { padding-top: 1.8mm; border-top: 0.7mm solid var(--ink); }
+  .one .qa-mini b { display: block; font-size: 11.5pt; line-height: 1.4; }
+  .one .qa-mini li > span { display: block; margin-top: 0.6mm; font-size: 10.5pt; line-height: 1.5; }
+  .one .sec-h { margin-bottom: 2mm; font-size: 13pt; }
+  .one .ask { margin: 3mm 0 0; padding: 3mm 5mm; }
+  .one .help { display: flex; align-items: center; gap: 3mm; margin-top: 3mm; font-size: 11pt; }
+  .one .help .q { display: inline-grid; place-items: center; width: 7mm; height: 7mm; border-radius: 50%; background: var(--navy); color: #fff; font-weight: 700; font-size: 12pt; }
+</style>
+</head>
+<body data-img-base="../../docs/guide-images/">
+
+<section class="sheet flow one">
+  <header class="band bleed" style="padding-bottom:7mm">
+    <div class="hero-top"><span class="d">BUNKA GAKUEN UNIVERSITY</span><span>国際ファッション文化学科</span></div>
+    <div class="year d">2026</div>
+    <p class="kick">卒業制作報告書 作成ツール</p>
+    <h1>使い方の手引き</h1>
+    <p class="for"><b>学生用</b><span class="d">2026年度</span></p>
+    <div class="qr-box">
+      <div><p class="k">スマホは QR コードで</p><p class="url fn">junnosukekato.github.io/<br>sotsugyo-seisaku-report/</p></div>
+      <div class="qr"><img src="../../docs/guide-images/qr-guide.svg" alt="ツールの URL の QR コード"></div>
+    </div>
+  </header>
+
+  <ol class="cards">
+    <li class="card">
+      <div class="hd"><span class="n d">1</span><b>ログイン</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-login" data-badges="" data-hl="1" style="width:100%"></figure></div>
+      <p>大学のアカウントで。LINE などの中では不可。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><span class="n d">2</span><b>コースを選ぶ</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-course" data-badges="" data-hl="1" style="width:37mm"></figure></div>
+      <p>あとは画面の案内どおりに。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><span class="n d">3</span><b>書く</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-write" data-badges="" style="width:100%"></figure></div>
+      <p>紙面をクリックして、そのまま書く。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><span class="n d">4</span><b>エラーを0に</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-check" data-badges="" data-hl="3" style="width:27mm"></figure></div>
+      <p>右の欄の × がなくなるまで直す。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><span class="n d">5</span><b>PDF にする</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-export" data-badges="" style="width:100%"></figure></div>
+      <p><span class="btn">PDFを書き出す</span> → 画面の手順どおりに。</p>
+    </li>
+    <li class="card dark-card">
+      <div class="hd"><span class="n d">!</span><b>保存は自動</b></div>
+      <p>この端末と、自分のドライブに保存。</p>
+      <p>共用のパソコンでは、最後に</p>
+      <p><span class="btn">この端末から原稿を消す</span></p>
+      <p class="sub">途中を見せるときは「下書きの PDF」。</p>
+    </li>
+  </ol>
+
+  <div class="bottom-lines" style="padding-bottom:6mm">
+    <h2 class="sec-h">困ったとき</h2>
+    <ol class="qa-mini">
+      <li><b>ログインできない</b><span>Safari・Chrome で開き直す。</span></li>
+      <li><b>「もう一度ログイン」と出た</b><span><span class="btn">ログインし直す</span> を押す。</span></li>
+      <li><b>提出用の PDF が出ない</b><span>× のエラーを先に直す。</span></li>
+    </ol>
+    <p class="help"><span class="q">?</span><span>くわしくは、ツールの <span class="btn">？（使い方）</span> から。Word で書いた人は、別紙を見てください。</span></p>
+    <div class="ask">
+      <span class="d">?</span>
+      <div><b>それでも困ったら、担当の先生に相談</b></div>
+    </div>
+  </div>
+</section>
+
+<script src="../../docs/guide-images/marks.js"></script>
+<script src="../../docs/guide-images/guide.js"></script>
+</body>
+</html>

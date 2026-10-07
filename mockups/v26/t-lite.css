@@ -1,0 +1,143 @@
+/*
+  デザイン案 v26（教員用の手引き・軽い版：案C1・案C2）の見た目。
+  docs/guide-images/guide.css（v25 で選んだ「雑誌風」）の上に重ねる。色・大きな番号・画面の写真はそのままで、
+  文を減らし、画像を大きく、本文の文字を 10.5pt 以上にする。
+  作り方：node scripts/mockup-shots-v26-teacher.mjs
+*/
+body { font-size: 10.5pt; line-height: 1.5; }
+.lite .sec-h small, .lite .tbl thead th, .lite .node .who, .lite .arrow, .lite .chain small, .lite .note > b { font-size: 10.5pt; }
+.lite .folio { font-size: 10.5pt; padding: 1.6mm 0 5mm; }
+.lite .folio .d { font-size: 12pt; }
+.lite .btn { padding: 0 1.2mm; }
+.lite p + p { margin-top: 0; }
+.lite .nums b { font-size: 11pt; }
+
+/* ---- おもてのページ：上に黒い帯（紙の端まで）、その下に中身。左の色帯はなし ---- */
+.front { display: flex; flex-direction: column; padding: 0 14mm; }
+.lhero { position: relative; flex: none; margin: 0 -14mm; padding: 8mm 14mm 0; height: 46mm; background: var(--ink); color: #fff; overflow: hidden; }
+.lhero.sm { height: 34mm; padding-top: 6.4mm; }
+.lhero .hero-top { font-size: 8.5pt; }
+.lhero .year { top: 4mm; right: 44mm; font-size: 118pt; }
+.lhero.sm .year { font-size: 100pt; top: 2mm; }
+.lhero .kick { margin-top: 5mm; font-size: 12pt; }
+.lhero.sm .kick { margin-top: 2.6mm; font-size: 11pt; }
+.lhero .ttl { position: relative; display: flex; align-items: center; gap: 5mm; margin-top: 0.6mm; }
+.lhero h1 { font-size: 31pt; line-height: 1.2; letter-spacing: 0.04em; }
+.lhero.sm h1 { font-size: 27pt; }
+.lhero .for { margin-top: 0; padding: 1.2mm 4mm 1.4mm; background: var(--sky); }
+.lhero .for b { font-size: 15pt; letter-spacing: 0.16em; }
+.lhero .for .d { font-size: 10pt; }
+/* 管理者用は、からし色の札（先生用と取り違えないように） */
+.lhero.adm .for { background: var(--mustard); }
+.lqr { position: absolute; right: 14mm; bottom: 5mm; display: flex; flex-direction: column; align-items: center; gap: 1mm; }
+.lqr img { display: block; width: 21mm; height: 21mm; padding: 1.2mm; background: #fff; }
+.lqr span { font-size: 10.5pt; font-weight: 700; color: var(--sky); letter-spacing: 0.06em; }
+.lhero.sm .who-for { top: 13mm; }
+.lhero.sm .lqr { bottom: 3.4mm; flex-direction: row-reverse; align-items: flex-end; gap: 2.4mm; }
+.lhero.sm .lqr img { width: 17mm; height: 17mm; }
+.lhero .who-for { position: absolute; right: 14mm; top: 17mm; text-align: right; font-size: 10.5pt; line-height: 1.5; color: rgba(255, 255, 255, 0.9); }
+.lhero .who-for b { color: var(--mustard); }
+
+/* ---- 節の見出し（大きな番号＋英字の小見出し＋題） ---- */
+.lh { display: grid; grid-template-columns: auto 1fr; gap: 3.4mm; align-items: end; margin-top: 5.2mm; padding-bottom: 1.6mm; border-bottom: 0.7mm solid var(--ink); }
+.lh:first-child { margin-top: 0; }
+.lh .num { font-size: 38pt; font-weight: 700; line-height: 0.78; color: var(--ink); }
+.lh .k { display: block; font-size: 8.5pt; font-weight: 700; letter-spacing: 0.24em; color: var(--navy); line-height: 1.2; }
+.lh h2 { font-size: 17pt; line-height: 1.25; letter-spacing: 0.04em; }
+.lh h2 small { margin-left: 2.4mm; font-size: 10.5pt; font-weight: 400; color: var(--muted); letter-spacing: 0; }
+.lite .block { margin-top: 3.2mm; }
+/* 片面1枚に収める版（案C2）：見出しを少しだけ小さく */
+.compact .lh { margin-top: 4mm; padding-bottom: 1.4mm; }
+/* 中身の少ないページ：見出しのあいだを少し広く */
+.airy .lh { margin-top: 8mm; }
+.airy .lh:first-of-type { margin-top: 0; }
+.airy .block { margin-top: 4.4mm; }
+.compact .lh .num { font-size: 32pt; }
+.compact .lh h2 { font-size: 16pt; }
+
+/* ---- しくみの図（学生の原稿は先生に届かない） ---- */
+.map2 { display: grid; grid-template-columns: 1fr 19mm 1fr 19mm 1.25fr; align-items: stretch; margin-top: 3.4mm; }
+.map2 .node { padding: 2mm 2.6mm 2.2mm; }
+.map2 .node h3 { font-size: 12pt; }
+.map2 .node p { margin-top: 0.4mm; line-height: 1.4; }
+.map2 .node.data { grid-row: auto; }
+.map2 .arrow { font-size: 10.5pt; }
+.map2 .arrow.both::after { left: 2.4mm; }
+.map2 .arrow .ah { position: absolute; left: 0.8mm; top: 50%; margin-top: -1.4mm; border: 1.4mm solid transparent; border-right: 2.2mm solid var(--ink); border-left: 0; }
+.map2 .arrow span { line-height: 1.25; }
+.wall2 { grid-column: 1 / -1; display: flex; align-items: center; justify-content: center; gap: 4mm; margin-top: 2.6mm; padding: 1.8mm 3mm; border: 0.45mm dashed var(--red); }
+.wall2 b { color: var(--red); font-size: 11pt; }
+.wall2 span { font-size: 10.5pt; }
+.wall2 i { font-style: normal; color: var(--red); font-weight: 700; }
+/* 小さい図（案C2） */
+.map2.sm { grid-template-columns: 1fr 17mm 1fr 17mm 1.25fr; margin-top: 2.6mm; }
+.map2.sm .node { padding: 1.4mm 2.4mm 1.6mm; }
+.map2.sm .node h3 { font-size: 11pt; }
+.map2.sm .node .who { margin-bottom: 0.4mm; }
+.map2.sm .wall2 { margin-top: 2mm; padding: 1.2mm 3mm; }
+
+/* ---- 学生の1年（黒い帯に6つ） ---- */
+.lite .flow-band { padding: 2.8mm 4mm 3mm; }
+.lite .chain { gap: 0 5.5mm; }
+.lite .chain .d { font-size: 12pt; }
+.lite .chain b { font-size: 11pt; margin-top: 0.6mm; }
+.lite .chain small { line-height: 1.4; margin-top: 0.3mm; }
+/* 先生の出番（途中点検・抄録の許可）は水色の地 */
+.lite .chain li.me { background: var(--sky); box-shadow: 0 0 0 1.6mm var(--sky); color: var(--ink); }
+.lite .chain li.me .d, .lite .chain li.me small { color: var(--ink); }
+.lite .chain li.me + li::before { left: -3.6mm; }
+
+/* ---- 指導で見るところ（3つ：画像を大きく、下に1〜2行） ---- */
+.look { display: grid; grid-template-columns: repeat(3, 1fr); gap: 0 5mm; margin-top: 3.4mm; }
+.look li { display: flex; flex-direction: column; min-width: 0; }
+.look .stage { height: var(--stage, 66mm); padding: 2.6mm; }
+.look .tt { display: flex; align-items: center; gap: 1.8mm; margin-top: 2mm; font-size: 11.5pt; font-weight: 700; line-height: 1.3; }
+.look .tt .no { width: 6mm; height: 6mm; font-size: 11pt; }
+.look p { margin-top: 0.8mm; line-height: 1.45; }
+.look.sm .stage { height: 39mm; padding: 2mm; }
+.look.sm .tt { font-size: 11pt; margin-top: 1.6mm; }
+.look .ln { display: grid; grid-template-columns: 6.6mm 1fr; gap: 0 1.6mm; align-items: start; margin-top: 2mm; line-height: 1.45; }
+.look .ln .no { margin-top: 0.2mm; }
+/* 細長い見出しの欄の画像：番号を画像の下に出すので、下を空ける */
+.stage.strip { padding: 2mm 3mm 7mm; }
+/* 記号（× エラー・! 警告） */
+.x, .w { display: inline-grid; place-items: center; flex: none; width: 5mm; height: 5mm; border-radius: 50%; background: #c0392b; color: #fff; font: 700 10.5pt/1 'Segoe UI', sans-serif; vertical-align: -0.1em; }
+.w { border-radius: 0.15em; transform: rotate(45deg) scale(0.86); background: #8a5a0b; }
+.w > span { transform: rotate(-45deg); }
+
+/* ---- 番号つきの手順（画像の番号と対応。横に並べる） ---- */
+.row-steps { display: grid; gap: 0 5mm; margin-top: 2.4mm; }
+.row-steps.fit { grid-auto-flow: column; grid-auto-columns: max-content; justify-content: space-between; }
+.row-steps li { display: grid; grid-template-columns: 6.6mm 1fr; gap: 0 1.6mm; align-items: start; line-height: 1.45; }
+.row-steps .no { margin-top: 0.2mm; }
+.row-steps b { font-size: 11pt; }
+.list1 li { display: grid; grid-template-columns: 6.6mm 1fr; gap: 0 1.6mm; align-items: start; line-height: 1.45; }
+.list1 li + li { margin-top: 1.4mm; }
+.list1 .no { margin-top: 0.2mm; }
+.lite .dots li { line-height: 1.5; }
+.lite .dots li + li { margin-top: 1.2mm; }
+.lite .dots li::before { top: 1.9mm; }
+
+/* ---- 画像の下の見出しつき説明 ---- */
+.cap { margin-top: 1.6mm; line-height: 1.45; }
+.cap b { display: block; font-size: 11pt; }
+.pics { display: grid; gap: 5mm; align-items: start; }
+
+/* 画像の上の部分だけを見せる（下の部分には、大学のドメインのアドレスが写っているため） */
+.shot.crop { border: 0.3mm solid var(--line); background-repeat: no-repeat; background-size: 100% auto; background-position: center top; }
+
+/* ---- 表（役割・困ったとき） ---- */
+.lite .tbl th, .lite .tbl td { padding: 1.3mm 2mm; line-height: 1.45; }
+.lite .tbl tbody th { width: 46mm; }
+.roles td.c, .roles th.c { width: 16mm; text-align: center; }
+.roles .c b { font-size: 12pt; }
+
+/* ---- 黒い帯（セキュリティ）・水色の囲み（引き継ぎ・ヘルプ） ---- */
+.lite .dark { padding: 3mm 4.4mm 3.4mm; }
+.lite .dark h3 { font-size: 11pt; margin-bottom: 1.6mm; }
+.lite .note { align-items: center; padding: 2.6mm 4mm; }
+.lite .note > b { font-size: 11pt; }
+.help { display: flex; align-items: center; gap: 3mm; padding: 2.4mm 4mm; background: var(--sky-soft); border-left: 1.4mm solid var(--sky); font-size: 11.5pt; font-weight: 700; }
+.qmark { display: inline-grid; place-items: center; width: 6.4mm; height: 6.4mm; border-radius: 50%; border: 0.4mm solid var(--navy); color: var(--navy); font: 700 12pt/1 'Segoe UI', sans-serif; vertical-align: middle; background: #fff; }
+.help small { margin-left: auto; font-size: 10.5pt; font-weight: 400; color: var(--muted); }
+.tag-adm { display: inline-block; padding: 0.2mm 2mm; background: var(--mustard); font-size: 10.5pt; font-weight: 700; }

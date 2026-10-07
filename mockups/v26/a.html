@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>案A 1ページ1つのこと（v26 学生用の手引き）</title>
+<!-- デザイン案 v26 案A：1ページに1つのこと。大きな画面の写真1枚と、1行の手順3つまで（1ページ 200字まで）。
+     画像は docs/guide-images/ のもの。PDF とページの画像は node scripts/mockup-shots-v26.mjs で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<link rel="stylesheet" href="../../docs/guide-images/guide.css">
+<link rel="stylesheet" href="student.css">
+</head>
+<body data-img-base="../../docs/guide-images/">
+
+<!-- ================= 表紙 ================= -->
+<section class="sheet cover">
+  <div class="hero bleed">
+    <div class="hero-top"><span class="d">BUNKA GAKUEN UNIVERSITY</span><span>国際ファッション文化学科</span></div>
+    <div class="year d">2026</div>
+    <p class="kick">卒業制作報告書 作成ツール</p>
+    <h1>使い方の手引き</h1>
+    <p class="for"><b>学生用</b><span class="d">FOR STUDENTS</span><span class="d">2026年度</span></p>
+    <p class="hero-lead">くわしい操作は、ツールの画面に出ます。</p>
+  </div>
+  <figure class="pc bleed" style="top:96mm"><img src="../../docs/guide-images/g-pc-full.jpg" alt="パソコンで書いているところ"></figure>
+  <figure class="ph" style="top:90mm"><img src="../../docs/guide-images/g-phone-write.jpg" alt="スマホで書いているところ"></figure>
+  <ol class="toc-row" style="top:218mm; grid-template-columns: repeat(5, 1fr)">
+    <li><span class="n d">01</span><b>はじめる</b></li>
+    <li><span class="n d">02</span><b>書く</b></li>
+    <li><span class="n d">03</span><b>保存</b></li>
+    <li><span class="n d">04</span><b>PDFで出す</b></li>
+    <li><span class="n d">05</span><b>困ったとき</b></li>
+  </ol>
+  <footer class="foot bleed">
+    <div class="qr"><img src="../../docs/guide-images/qr-guide.svg" alt="ツールの URL の QR コード"></div>
+    <div>
+      <p class="k">ツールを開く ─ スマホは QR コードで</p>
+      <p class="url fn">https://junnosukekato.github.io/sotsugyo-seisaku-report/</p>
+      <p>大学の Google アカウントでログインします。</p>
+    </div>
+  </footer>
+</section>
+
+<!-- ================= 01 はじめる ================= -->
+<section class="sheet inner">
+  <div class="edge bleed"><span class="d">STUDENT GUIDE</span></div>
+  <header class="ch">
+    <span class="num d">01</span>
+    <div><p class="kick2 d">STEP 01 ─ START</p><h1>はじめる</h1><p class="lead">ツールを開いて、ログインします。</p></div>
+  </header>
+  <div class="big fill"><figure class="shot lift" data-shot="g-login" data-hl="1" data-renum="1:2" style="width:160mm"></figure></div>
+  <ol class="lines">
+    <li><span class="no">1</span><span>QR コードか URL で、ツールを開く</span></li>
+    <li><span class="no">2</span><span><span class="btn">大学のアカウントでログイン</span> を押す<small><span class="fn">@bunka-wu.ac.jp</span> のアカウントを選ぶ</small></span></li>
+    <li><span class="no">3</span><span>画面の案内どおりに、コースと氏名を入れる</span></li>
+  </ol>
+  <div class="tip"><b>ログインできない</b><span>LINE・Instagram の中では、ログインできません。<br>Safari・Chrome で開き直します。</span></div>
+  <div class="tip plain"><b>Word で書いた人</b><span>別紙「Word で書き始めた人へ」を見てください。</span></div>
+  <footer class="folio"><span>使い方の手引き　学生用　─　はじめる</span><span class="d">02</span></footer>
+</section>
+
+<!-- ================= 02 書く ================= -->
+<section class="sheet inner">
+  <div class="edge bleed"><span class="d">STUDENT GUIDE</span></div>
+  <header class="ch">
+    <span class="num d">02</span>
+    <div><p class="kick2 d">STEP 02 ─ WRITE</p><h1>書く</h1><p class="lead">紙面の上で、そのまま書きます。</p></div>
+  </header>
+  <div class="big fill"><figure class="shot lift" data-shot="g-write" data-badges="1,2" data-hl="2" style="width:164mm"></figure></div>
+  <ol class="lines">
+    <li><span class="no">1</span><span>書きたい段落をクリックして書く<small>スマホはタップ</small></span></li>
+    <li><span class="no">2</span><span>図は、入れたい位置をクリックしてから <span class="btn">図を入れる</span></span></li>
+    <li><span class="no">3</span><span>右の欄の × がなくなるまで直す<small>右の欄の「セルフチェック」（スマホは「チェック」）</small></span></li>
+  </ol>
+  <div class="tip plain"><b>抄録</b><span>先生の許可が出てから書きます。</span></div>
+  <footer class="folio"><span>使い方の手引き　学生用　─　書く</span><span class="d">03</span></footer>
+</section>
+
+<!-- ================= 03 保存 ================= -->
+<section class="sheet inner">
+  <div class="edge bleed"><span class="d">STUDENT GUIDE</span></div>
+  <header class="ch">
+    <span class="num d">03</span>
+    <div><p class="kick2 d">STEP 03 ─ SAVE</p><h1>保存</h1><p class="lead">保存は自動です。ボタンはありません。</p></div>
+  </header>
+  <div class="big row fill">
+    <figure class="shot lift" data-shot="g-drive" data-badges="1,2" data-hl="2" data-renum="2:3" style="width:104mm"></figure>
+    <div class="phone" style="width:52mm"><figure class="shot" data-shot="g-phone-menu" data-badges="" data-hl="1"></figure></div>
+  </div>
+  <ol class="lines">
+    <li><span class="no">1</span><span>この端末と、自分の Google ドライブに保存</span></li>
+    <li><span class="no">2</span><span>別の端末でも、ログインすれば続きが開く</span></li>
+    <li><span class="no">3</span><span>共用のパソコンでは、最後に<br><span class="btn">この端末から原稿を消す</span></span></li>
+  </ol>
+  <footer class="folio"><span>使い方の手引き　学生用　─　保存</span><span class="d">04</span></footer>
+</section>
+
+<!-- ================= 04 PDFで出す ================= -->
+<section class="sheet inner">
+  <div class="edge bleed"><span class="d">STUDENT GUIDE</span></div>
+  <header class="ch">
+    <span class="num d">04</span>
+    <div><p class="kick2 d">STEP 04 ─ PDF</p><h1>PDF で出す</h1><p class="lead">書き終えたら、1つの PDF にします。</p></div>
+  </header>
+  <div class="big fill"><figure class="shot lift" data-shot="g-export" data-badges="" data-hl="3" style="width:160mm"></figure></div>
+  <ol class="lines">
+    <li><span class="no">1</span><span>× エラーを0件にする</span></li>
+    <li><span class="no">2</span><span><span class="btn">PDFを書き出す</span> を押す</span></li>
+    <li><span class="no">3</span><span>画面に出る手順どおりに、PDF に保存</span></li>
+  </ol>
+  <div class="tip"><b>途中を見せる</b><span><span class="btn">下書きの PDF を書き出す</span>（提出には使えません）</span></div>
+  <div class="tip plain"><b>提出</b><span>出し方は、先生の案内に従います。</span></div>
+  <footer class="folio"><span>使い方の手引き　学生用　─　PDF で出す</span><span class="d">05</span></footer>
+</section>
+
+<!-- ================= 05 困ったとき ================= -->
+<section class="sheet inner">
+  <div class="edge bleed"><span class="d">STUDENT GUIDE</span></div>
+  <header class="ch">
+    <span class="num d">05</span>
+    <div><p class="kick2 d">STEP 05 ─ Q &amp; A</p><h1>困ったとき</h1><p class="lead">書いた分は、まず消えません。</p></div>
+  </header>
+  <ol class="qa1 pic">
+    <li><span class="d">Q</span><b class="q">ログインできない</b><span class="a">Safari・Chrome で開き直す。<br>ポップアップを許可する。</span></li>
+    <li><span class="d">Q</span><b class="q">「もう一度ログインしてください」</b><span class="a"><span class="btn">ログインし直す</span> を押す。<br>約1時間ごとに出ます。</span><figure class="shot lift" data-shot="g-relogin" data-badges="" data-hl="1"></figure></li>
+    <li><span class="d">Q</span><b class="q">「別の端末で書いた原稿が…」</b><span class="a">「新しい」の印の方を選ぶ。</span><figure class="shot lift" data-shot="g-conflict" data-badges=""></figure></li>
+    <li><span class="d">Q</span><b class="q">前の状態に戻したい</b><span class="a"><span class="btn">バックアップ</span> の<br>「自動の控え」から戻す。</span><figure class="shot lift" data-shot="g-backup" data-badges="" data-hl="1"></figure></li>
+    <li><span class="d">Q</span><b class="q">「別のタブで開いています」</b><span class="a">もう一方を閉じて <span class="btn">こちらで続ける</span></span></li>
+  </ol>
+  <div class="ask">
+    <span class="d">?</span>
+    <div><b>それでも困ったら、担当の先生に相談</b></div>
+  </div>
+  <footer class="folio"><span>使い方の手引き　学生用　─　困ったとき</span><span class="d">06</span></footer>
+</section>
+
+<script src="../../docs/guide-images/marks.js"></script>
+<script src="../../docs/guide-images/guide.js"></script>
+</body>
+</html>

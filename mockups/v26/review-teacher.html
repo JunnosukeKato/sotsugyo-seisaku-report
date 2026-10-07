@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>デザイン案 v26：教員用の手引きを軽くする（案C1・案C2）</title>
+<!-- node scripts/mockup-shots-v26-teacher.mjs が書き出す（字数は PDF を作るときに測った数）。直すときはスクリプトの reviewHtml を直す -->
+<style>
+  body { margin: 0; padding: 26px 28px 40px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: #24262b; }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  h2 { font-size: 17px; margin: 30px 0 8px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 14px; font-size: 14px; color: #4b4e56; line-height: 1.8; max-width: 1300px; }
+  .box { margin: 0 0 12px; padding: 12px 18px; max-width: 1300px; background: #fff; border-radius: 12px; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06); font-size: 14px; line-height: 1.85; }
+  .box b { color: #1f2b5b; }
+  .box ul { margin: 4px 0 0; padding-left: 20px; }
+  .box.help { border-left: 4px solid #a9b8e8; }
+  .box.help h3 { margin: 0 0 4px; font-size: 15px; }
+  /* 2つの案を横に並べる：左が案C1（2列）、右が案C2（1列） */
+  .grid { display: grid; grid-template-columns: 1fr 1fr 1px 1fr; gap: 0 14px; align-items: start; }
+  .grid .sep { grid-row: 1 / span 5; grid-column: 3; align-self: stretch; background: #c9c5bd; }
+  .hd { padding: 10px 14px 9px; background: #fff; border-radius: 12px; box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06); }
+  .hd b { font-size: 19px; margin-right: 10px; }
+  .hd .pc { font-size: 15px; font-weight: 700; color: #1f2b5b; }
+  .hd .cc { display: block; margin-top: 2px; font-size: 14px; }
+  .hd .cc em { font-style: normal; font-weight: 700; font-size: 16px; color: #1f2b5b; }
+  .hd .t { display: block; font-size: 13px; color: #5d6068; }
+  .c1h { grid-column: 1 / span 2; }
+  .c2h { grid-column: 4; }
+  .row { grid-column: 1 / -1; margin: 18px 0 6px; font-size: 15px; font-weight: 700; letter-spacing: 0.06em; }
+  .row span { display: inline-block; padding: 2px 12px; background: #15171c; color: #fff; }
+  .row.adm span { background: #f2b632; color: #15171c; }
+  .pg a { display: block; box-shadow: 0 2px 10px rgba(0, 0, 0, 0.18); background: #fff; }
+  .pg img { display: block; width: 100%; }
+  .pg small { display: block; padding: 6px 2px 0; font-size: 13px; color: #5d6068; }
+  .pg small b { color: #24262b; margin-right: 8px; }
+  .empty { align-self: stretch; display: grid; place-items: center; border: 2px dashed #c9c5bd; border-radius: 10px; color: #8a8d94; font-size: 14px; min-height: 120px; }
+  .pdf { margin-top: 10px; font-size: 13.5px; }
+  .pdf a { color: #1f2b5b; }
+  .why { margin: 22px 0 8px; padding: 12px 16px; border-left: 4px solid #1f2b5b; background: #f6f5f2; border-radius: 0 10px 10px 0; font-size: 14px; line-height: 1.85; max-width: 1300px; }
+  .why b { color: #1f2b5b; }
+</style>
+</head>
+<body>
+  <h1>教員用の手引き：もっと軽くする案（v26）</h1>
+  <p class="lead">いまの教員用の手引き（8ページ、1ページに300〜1200字）を、先生がすぐ読める量に減らした2案です。見た目は今の冊子（雑誌風・黒と水色・大きな番号・本物の画面）のままで、<b>文を減らし、画面の画像を大きく</b>しました。本文の文字は 10.5pt 以上、1つの項目は2行（40字）までです。ほとんどの先生は「先生」の役割（ひな形・お知らせ・書き間違えやすい語を直す、学生を指導する）なので、<b>先生用と管理者用（1〜2人）を分けました</b>。画像を押すと大きく見られます。</p>
+  <div class="box"><b>字数の数え方</b>：ページの中の文字から、空白と半角の英数字・記号を除いた数（画面の画像の中の字は数えません）。いまの冊子は 297〜1197字／ページです。</div>
+
+  <div class="grid">
+    <div class="hd c1h"><b>案C1</b><span class="pc">4ページ（先生用 2ページ＋管理者用 2ページ）</span><span class="cc">1ページの字数：<em>278・293・244・237</em>字（目標 300字以下・最大 293字）</span><span class="t">先生用は両面1枚、管理者用は別に2ページ</span></div>
+    <div class="sep"></div>
+    <div class="hd c2h"><b>案C2</b><span class="pc">2ページ（先生用 1ページ＋管理者用 1ページ）</span><span class="cc">1ページの字数：<em>333・337</em>字（目標 350字以下・最大 337字）</span><span class="t">先生用は片面1枚、管理者用も片面1枚（くわしくはアプリの中のヘルプ）</span></div>
+
+    <div class="row"><span>先生用（先生全員に配る）</span></div>
+    <div class="pg"><a href="shots-teacher/t-c1-1.png"><img src="shots-teacher/t-c1-1.png" alt="先生用 おもて"></a><small><b>先生用 おもて</b>278字</small></div>
+    <div class="pg"><a href="shots-teacher/t-c1-2.png"><img src="shots-teacher/t-c1-2.png" alt="先生用 うら"></a><small><b>先生用 うら</b>293字</small></div>
+    <div></div>
+    <div class="pg"><a href="shots-teacher/t-c2-1.png"><img src="shots-teacher/t-c2-1.png" alt="先生用（片面）"></a><small><b>先生用（片面）</b>333字</small></div>
+
+    <div class="row adm"><span>管理者用（管理者 1〜2人に配る）</span></div>
+    <div class="pg"><a href="shots-teacher/t-c1-3.png"><img src="shots-teacher/t-c1-3.png" alt="管理者用 1"></a><small><b>管理者用 1</b>244字</small></div>
+    <div class="pg"><a href="shots-teacher/t-c1-4.png"><img src="shots-teacher/t-c1-4.png" alt="管理者用 2"></a><small><b>管理者用 2</b>237字</small></div>
+    <div></div>
+    <div class="pg"><a href="shots-teacher/t-c2-2.png"><img src="shots-teacher/t-c2-2.png" alt="管理者用（片面）"></a><small><b>管理者用（片面）</b>337字</small></div>
+
+    <p class="pdf" style="grid-column: 1 / span 2">PDF：<a href="t-c1-先生用.pdf">t-c1-先生用.pdf</a>　<a href="t-c1-管理者用.pdf">t-c1-管理者用.pdf</a></p>
+    <p class="pdf" style="grid-column: 4">PDF：<a href="t-c2-先生用.pdf">t-c2-先生用.pdf</a>　<a href="t-c2-管理者用.pdf">t-c2-管理者用.pdf</a></p>
+  </div>
+
+  <h2>2つの案のちがい</h2>
+  <div class="box">
+    <ul>
+      <li><b>案C1</b>：先生用は両面1枚。おもてに「しくみの図・学生の1年・指導で見るところ」、うらに「管理ページの開き方・ひな形とお知らせの直し方・困ったとき（5つ）」。管理者用は別の2ページで、年度の設定・毎年の準備と公開・先生の登録・変更履歴・Google の障害のとき・セキュリティ・引き継ぎ。<b>紙だけで足ります</b>（ツールに手を入れなくてよい）。</li>
+      <li><b>案C2</b>：先生用も管理者用も片面1枚ずつ。くわしいこと（困ったとき・年度の設定の各欄・書き間違えやすい語の決まりなど）は、<b>ツールと管理ページの中のヘルプ（？）に移す</b>想定です。紙は「全体の流れ」と「どこを押すか」だけ。</li>
+    </ul>
+  </div>
+  <div class="box help">
+    <h3>ヘルプができたら（案C2）</h3>
+    案C2 は、管理ページと学生用ツールに「？（使い方）」のヘルプ欄ができることが前提です。ヘルプができるまでは、紙から外したこと（困ったときの表、年度の設定の各欄の説明、書き間違えやすい語の決まり、登録の細かい決まりなど）は、今の8ページの冊子か、案C1 の紙で補います。
+  </div>
+</body>
+</html>

@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>v26 学生用の手引きを1枚に（2案）</title>
+<!-- node scripts/mockup-shots-v26.mjs review で作る（手で直さない） -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  body { margin: 0; padding: 24px 28px 40px; background: #e9e6e0; color: #15171c; font-family: 'BIZ UDPGothic', sans-serif; font-size: 14px; line-height: 1.6; }
+  h1 { margin: 0 0 4px; font-size: 22px; }
+  .lead { margin: 0 0 18px; color: #50545d; }
+  .col { margin-bottom: 26px; padding: 16px 18px 18px; background: #fff; border-radius: 8px; }
+  .col h2 { margin: 0; font-size: 19px; }
+  .meta { margin: 4px 0 0; }
+  .meta b { color: #1f2b5b; }
+  .note { margin: 2px 0 12px; color: #50545d; }
+  .help { margin: -6px 0 12px; padding: 8px 12px; border-left: 4px solid #f2b632; background: #fdf3d9; }
+  .pages { display: flex; flex-wrap: wrap; gap: 14px; }
+  figure { margin: 0; }
+  figure img { display: block; width: 300px; border: 1px solid #dedad2; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+  figcaption { margin-top: 4px; font-size: 13px; color: #50545d; text-align: center; }
+</style>
+</head>
+<body>
+<h1>学生用の使い方の手引きを1枚に（v26・案C1／C2）</h1>
+<p class="lead">今の手引き：4ページ、ページごとの文字数 320・726・907・760字。どの案も、本文の文字は 10.5pt 以上・1つの項目は2行（40字ほど）まで。画面の写真は本番と同じもの。</p>
+<section class="col">
+  <h2>案C1「両面1枚」</h2>
+  <p class="meta"><b>2ページ</b>　ページごとの文字数 <b>270・283</b>（合計 553字・目安 300字まで）　本文の文字 10.5pt 以上</p>
+  <p class="note">表：はじめてから提出までの5つの手順（写真つき）と URL・QR。裏：保存（共用のパソコン）と困ったとき6つ、先生に相談</p>
+  <div class="pages"><figure><img src="shots/c1-1.png" alt=""><figcaption>1ページ　270字</figcaption></figure><figure><img src="shots/c1-2.png" alt=""><figcaption>2ページ　283字</figcaption></figure></div>
+</section>
+<section class="col">
+  <h2>案C2「片面1枚」</h2>
+  <p class="meta"><b>1ページ</b>　ページごとの文字数 <b>319</b>（合計 319字・目安 350字まで）　本文の文字 10.5pt 以上</p>
+  <p class="note">1ページに URL・QR、5つの手順（1行ずつ・小さな写真）、保存と共用のパソコン、困ったとき3つ、先生に相談</p>
+  <p class="help">ヘルプができたら：ツールに「？（使い方）」の欄と、はじめて開いたときの案内（指さしのツアー）を足す前提の案です。紙から外した説明（端末ごとの PDF の保存のしかた、別の端末・2つのタブ・控えから戻すなどの困ったとき、セルフチェックの見方、抄録の許可、図・表の入れ方）は、その「？」の中に入れます。</p>
+  <div class="pages"><figure><img src="shots/c2-1.png" alt=""><figcaption>1ページ　319字</figcaption></figure></div>
+</section>
+</body>
+</html>
