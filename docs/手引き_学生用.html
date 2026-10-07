@@ -5,214 +5,84 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>使い方の手引き（学生用）</title>
 <!--
-  卒業制作報告書 作成ツール「使い方の手引き」学生用（A4 縦 4ページ）。見た目は案B「雑誌風」（docs/guide-images/guide.css）。
+  卒業制作報告書 作成ツール「使い方の手引き」学生用（A4 片面1枚）。見た目は案B「雑誌風」（guide-images/guide.css）に
+  guide-images/student.css を重ねたもの（デザイン案 mockups/v26 の案C2）。
+  ・学生は長い文を読まないので、紙には「はじめてから提出まで」と困ったとき3つだけを書く。くわしいことは、ツールの「？ 使い方」に任せる。
   ・文は、このファイルに直接書く。直したら node scripts/make-guides.mjs --pdf-only で PDF だけ作り直せる
-    （ページ数・はみ出し・文字の大きさを確かめ、public/guides/student-guide.pdf にも写す）。
-  ・画面の画像は <figure class="shot" data-shot="g-…"> の場所に入る（docs/guide-images/g-*.jpg。番号の吹き出しは guide.js が重ねる）。
+    （1ページか・はみ出し・文字の大きさ 10.5pt 以上・350字までを確かめ、public/guides/student-guide.pdf にも写す）。
+  ・画面の画像は <figure class="shot" data-shot="g-…"> の場所に入る（guide-images/g-*.jpg。番号と枠は guide.js が重ねる）。
     ツールの画面が変わったら node scripts/make-guides.mjs で撮り直す。
-  ・学生は長い文を読まないので、省くと困ることだけを短く書く。細かい操作はツールの画面の説明に任せる。
   ・公開のリポジトリと、ツールの中（public/guides/）に置くので、先生の名前・連絡先は書かない。
 -->
 <link rel="stylesheet" href="../node_modules/@fontsource/biz-udpgothic/400.css">
 <link rel="stylesheet" href="../node_modules/@fontsource/biz-udpgothic/700.css">
 <link rel="stylesheet" href="guide-images/guide.css">
+<link rel="stylesheet" href="guide-images/student.css">
 </head>
 <body>
 
-<!-- ================= 1 表紙 ================= -->
-<section class="sheet cover">
-  <div class="hero bleed">
+<section class="sheet flow">
+  <header class="band bleed">
     <div class="hero-top"><span class="d">BUNKA GAKUEN UNIVERSITY</span><span>国際ファッション文化学科</span></div>
     <div class="year d">2026</div>
     <p class="kick">卒業制作報告書 作成ツール</p>
     <h1>使い方の手引き</h1>
-    <p class="for"><b>学生用</b><span class="d">FOR STUDENTS</span><span class="d">2026年度</span></p>
-    <p class="hero-lead">卒業制作報告書を、表紙から作品写真まで、決まった形のまま書けるツールです。パソコンでもスマホでも使えます。くわしい操作は、ツールの画面に説明が出ます。</p>
-    <p class="mini-toc"><span><span class="d">01</span>はじめる・書く　p.2</span><span><span class="d">02</span>保存と PDF　p.3</span><span><span class="d">03</span>困ったとき　p.4</span></p>
-  </div>
-  <figure class="pc bleed"><img src="guide-images/g-pc-full.jpg" alt="パソコンで書いているところ"></figure>
-  <figure class="ph"><img src="guide-images/g-phone-write.jpg" alt="スマホで書いているところ"></figure>
-  <section class="three">
-    <h2>最初に知っておくこと <span class="d">3 THINGS</span></h2>
-    <ol>
-      <li><span class="n d">1</span><b>大学の Google アカウントでログイン</b><p><span class="fn">@bunka-wu.ac.jp</span> のアカウントで。ログインするまでは書けません。</p></li>
-      <li><span class="n d">2</span><b>原稿は自動で保存</b><p>この端末と、自分の Google ドライブに保存されます。保存の操作はいりません。</p></li>
-      <li><span class="n d">3</span><b>手順書のルールは、ツールが確かめる</b><p>セルフチェックのエラーを0件にすると、提出用の PDF を書き出せます。</p></li>
-    </ol>
-  </section>
-  <footer class="foot bleed">
-    <div class="qr"><img src="guide-images/qr-guide.svg" alt="ツールの URL の QR コード"></div>
-    <div>
-      <p class="k">ツールを開く ─ スマホは QR コードで</p>
-      <p class="url fn">https://junnosukekato.github.io/sotsugyo-seisaku-report/</p>
-      <p>この手引きは、ツールの右の欄（スマホはメニュー）の「使い方（手引き）」からも開けます。</p>
+    <p class="for"><b>学生用</b><span class="d">2026年度</span></p>
+    <div class="qr-box">
+      <div><p class="k">スマホは QR コードで</p><p class="url fn">junnosukekato.github.io/<br>sotsugyo-seisaku-report/</p></div>
+      <div class="qr"><img src="guide-images/qr-guide.svg" alt="ツールの URL の QR コード"></div>
     </div>
-  </footer>
-</section>
-
-<!-- ================= 2 はじめる・書く ================= -->
-<section class="sheet inner">
-  <div class="edge bleed"><span class="d">STUDENT GUIDE</span></div>
-  <header class="ch">
-    <span class="num d">01</span>
-    <div><p class="kick2 d">CHAPTER 01 ─ START &amp; WRITE</p><h1>はじめる・書く</h1><p class="lead">はじめて開くと、ログインのあと、表紙の上に案内が出ます。そのとおりに進めます。くわしい操作は、ツールの画面に説明が出ます。</p></div>
   </header>
-  <ol class="steps">
-    <li>
-      <div class="hd"><span class="no">1</span>ログイン</div>
+
+  <ol class="cards">
+    <li class="card">
+      <div class="hd"><span class="n d">1</span><b>ログイン</b></div>
       <div class="stage"><figure class="shot lift" data-shot="g-login" data-badges="" data-hl="1" aria-label="ログインの画面" style="width:100%"></figure></div>
-      <p><span class="btn">大学のアカウントでログイン</span> を押し、<span class="fn">@bunka-wu.ac.jp</span> のアカウントを選びます。</p>
+      <p>大学のアカウントで。</p>
+      <p class="sub">LINE などのアプリの中ではログインできません。Safari・Chrome で。</p>
     </li>
-    <li>
-      <div class="hd"><span class="no">2</span>コースを選ぶ</div>
-      <div class="stage"><figure class="shot lift" data-shot="g-course" data-badges="" data-hl="1" aria-label="コースを選ぶ案内" style="width:30mm"></figure></div>
-      <p>自分のコースを押すと、本文にコースの下書き（章立て）が入ります。</p>
+    <li class="card">
+      <div class="hd"><span class="n d">2</span><b>コースを選ぶ</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-course" data-badges="" data-hl="1" aria-label="コースを選ぶ案内" style="width:37mm"></figure></div>
+      <p>あとは画面の案内どおりに。</p>
     </li>
-    <li>
-      <div class="hd"><span class="no">3</span>Word で書いた？</div>
-      <div class="stage"><figure class="shot lift" data-shot="g-word" data-badges="" data-hl="1,2" aria-label="Word で書き始めていますか？" style="width:100%"></figure></div>
-      <p>今年度だけ。Word に書いた人は「はい」（別紙「Word で書き始めた人へ」）、ほかは「いいえ」。</p>
+    <li class="card">
+      <div class="hd"><span class="n d">3</span><b>書く</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-write" data-badges="" aria-label="本文を書いているところ" style="width:100%"></figure></div>
+      <p>紙面をクリックして、そのまま書く。</p>
     </li>
-    <li>
-      <div class="hd"><span class="no">4</span>表紙を書く</div>
-      <div class="stage"><figure class="shot lift" data-shot="g-cover" data-badges="" aria-label="表紙の氏名を書いているところ" style="width:100%"></figure></div>
-      <p>学籍番号はアカウントから入ります。氏名・サブタイトルを書いて Enter。</p>
+    <li class="card">
+      <div class="hd"><span class="n d">4</span><b>エラーを0に</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-check" data-badges="" data-hl="3" aria-label="右の欄のセルフチェック" style="width:27mm"></figure></div>
+      <p>右の欄の × がなくなるまで直す。</p>
     </li>
-  </ol>
-  <div class="note block"><b>ログインできない</b><p>LINE・Instagram などのアプリの中で開くと、ログインできません。Safari・Chrome で開き直します。ログインの窓が開かないときは、ポップアップを許可します。</p></div>
-
-  <div class="cols block" style="grid-template-columns: 84mm 1fr">
-    <figure class="shot lift" data-shot="g-write" data-badges="1,2,3" data-hl="2,3" aria-label="本文を書いているところ"></figure>
-    <div>
-      <h2 class="sec-h">書く</h2>
-      <ol class="nums">
-        <li><span class="no">1</span><div><b>紙面をクリックして書く</b><p>段落をクリック（スマホはタップ）すると、その場で書けます。Enter で次の段落へ。薄い字は「何を書くか」の説明で、書くと消えます。</p></div></li>
-        <li><span class="no">2</span><div><b>図・表は、入れたい位置で</b><p>文中の入れたい位置をクリックしてから <span class="btn">図を入れる</span><span class="no sm" style="margin-left:1mm">2</span> <span class="btn">表を入れる</span><span class="no sm" style="margin-left:1mm">3</span>。本文に「（図1）」、すぐ下に図が入ります。</p></div></li>
-        <li><span class="no">✓</span><div><b>作品写真</b><p>作品写真のページの枠をクリックして、写真を選びます。</p></div></li>
-        <li><span class="no">✓</span><div><b>抄録は、先生の許可のあと</b><p>本文を書き終えて許可が出たら、抄録のページの <span class="btn">先生の許可が出た</span> を押して書きます。</p></div></li>
-      </ol>
-    </div>
-  </div>
-
-  <div class="cols block" style="grid-template-columns: 34mm 1fr">
-    <figure class="shot lift sm" data-shot="g-check" data-badges="1,2,3,4" aria-label="セルフチェック"></figure>
-    <div>
-      <h2 class="sec-h">セルフチェック</h2>
-      <p>手順書のルールに合っているかを、ツールが確かめます。直すところが、右の欄（スマホは下の「チェック」）に出ます。</p>
-      <ol class="nums two" style="margin-top:2mm">
-        <li><span class="no">1</span><div><b>× エラー</b><p>手順書のルールなどに合っていないところ。0件にしないと、提出用の PDF を書き出せません。</p></div></li>
-        <li><span class="no">2</span><div><b>! 警告</b><p>確かめて、よければそのままで構いません。</p></div></li>
-        <li><span class="no">3</span><div><b>直す</b><p>押すと、正しい形に直ります。指摘を押すと、その箇所へ移ります。</p></div></li>
-        <li><span class="no">4</span><div><b>このままにする（確認済み）</b><p>「補助」の印の指摘で、書いたとおりで正しいときに押します。</p></div></li>
-      </ol>
-    </div>
-  </div>
-  <footer class="folio"><span>使い方の手引き　学生用　─　はじめる・書く</span><span class="d">02</span></footer>
-</section>
-
-<!-- ================= 3 保存と PDF ================= -->
-<section class="sheet inner">
-  <div class="edge bleed"><span class="d">STUDENT GUIDE</span></div>
-  <header class="ch">
-    <span class="num d">02</span>
-    <div><p class="kick2 d">CHAPTER 02 ─ SAVE &amp; PDF</p><h1>保存と PDF</h1><p class="lead">原稿は自動で保存されます。書き終えたら、エラーを0件にして、PDF を書き出します。</p></div>
-  </header>
-
-  <div class="cols block" style="grid-template-columns: 48mm 1fr">
-    <figure class="shot lift" data-shot="g-drive" data-badges="1,2" data-hl="2" aria-label="右の欄の保存のようす"></figure>
-    <div>
-      <h2 class="sec-h">原稿は自動で保存</h2>
-      <ul class="dots">
-        <li>書くたびに、<b>この端末（ブラウザ）</b>と、<b>自分の Google ドライブ</b>（「卒業制作報告書」フォルダ）に保存されます。保存の操作はいりません。</li>
-        <li>右の欄（スマホは上の帯）の「ドライブに保存」<span class="no sm" style="margin-left:1mm">1</span> の時刻が、最後にドライブに保存した時刻です。</li>
-        <li>別の端末（家のパソコン・スマホ）でも、同じアカウントでログインすれば続きが開きます。</li>
-        <li>2つの端末で書いて原稿が食い違ったときは、どちらの原稿で続けるかを聞かれます（p.4）。</li>
-      </ul>
-    </div>
-  </div>
-  <div class="cols" style="grid-template-columns: 1fr 1fr; gap: 4mm; margin-top: 3mm">
-    <div class="note"><b>共用の<br>パソコン</b><p>使い終わったら <span class="btn">ドライブに保存</span> → <span class="btn">この端末から原稿を消す</span><span class="no sm" style="margin-left:1mm">2</span>。Google からのログアウトも。</p></div>
-    <div class="note"><b>2つの<br>タブ</b><p>2つのタブで開くと、あとから開いた方では書けません。もう一方を閉じて <span class="btn">こちらで続ける</span>。</p></div>
-  </div>
-
-  <div class="block">
-    <h2 class="sec-h">PDF にして提出する</h2>
-    <div class="cols" style="grid-template-columns: 1fr 66mm">
-      <ol class="nums">
-        <li><span class="no">1</span><div><b>エラーを0件にする</b><p>セルフチェックの × がなくなるまで直します。</p></div></li>
-        <li><span class="no">2</span><div><b><span class="btn">PDFを書き出す</span> を押す</b><p>右の欄のいちばん下（スマホは下の「PDF」）。</p></div></li>
-        <li><span class="no">3</span><div><b>3つを確かめて、チェックを入れる</b><p>題目は申告書と同じか・作品写真は自分で撮ったものか・指導教員の了承を得たか。<span class="btn">印刷の画面を開く</span> を押します。</p></div></li>
-        <li><span class="no">4</span><div><b>印刷の画面で、PDF に保存</b><p>下の表のとおりに選びます（ツールの画面にも、使っている端末の手順が出ます）。ファイル名は「<span class="fn">2026_卒業制作報告書_学籍番号_氏名.pdf</span>」。保存したら開いて、ページの数と写真を確かめます。</p></div></li>
-      </ol>
-      <figure class="shot lift" data-shot="g-export" data-badges="" aria-label="提出用の PDF を書き出す画面"></figure>
-    </div>
-    <table class="tbl" style="margin-top:2.6mm">
-      <thead><tr><th>使っている端末</th><th>印刷の画面で選ぶもの</th></tr></thead>
-      <tbody>
-        <tr><th>パソコンの Chrome・Edge</th><td>送信先：<b>PDF に保存</b>（Edge は <b>PDF として保存</b>）／用紙サイズ：<b>A4</b>／倍率：<b>既定（100%）</b>／詳細設定の「ヘッダーとフッター」：<b>オフ</b>、「背景のグラフィック」：<b>オン</b></td></tr>
-        <tr><th>Mac の Safari</th><td><b>詳細を表示</b> → 用紙サイズ：<b>A4</b>／「背景をプリント」：<b>入れる</b>／「ヘッダとフッタをプリント」：<b>外す</b> → 左下の <b>PDF</b> から <b>PDF として保存</b></td></tr>
-        <tr><th>iPhone・iPad</th><td>右上（または下）の <b>共有のボタン</b>（四角に上向きの矢印）→ <b>"ファイル"に保存</b> → 場所を選んで「保存」。うまくいかないときは、パソコンで</td></tr>
-        <tr><th>Android</th><td>上のプリンターを <b>PDF 形式で保存</b> に／用紙サイズ：<b>A4</b> → <b>PDF のボタン</b> を押して保存</td></tr>
-      </tbody>
-    </table>
-  </div>
-
-  <div class="dark block">
-    <h3 class="d">DRAFT ─ 途中経過を先生に見せるとき</h3>
-    <ul class="dots">
-      <li>エラーが残っていても、<span class="btn">PDFを書き出す</span> → <span class="btn">下書きの PDF を書き出す</span> で書き出せます。どのページにも「下書き」の透かしが入ります（提出には使えません）。</li>
-      <li>提出の方法（どこへ・いつまでに）は、先生の案内に従ってください。</li>
-    </ul>
-  </div>
-  <footer class="folio"><span>使い方の手引き　学生用　─　保存と PDF</span><span class="d">03</span></footer>
-</section>
-
-<!-- ================= 4 困ったとき ================= -->
-<section class="sheet inner">
-  <div class="edge bleed"><span class="d">STUDENT GUIDE</span></div>
-  <header class="ch">
-    <span class="num d">03</span>
-    <div><p class="kick2 d">CHAPTER 03 ─ Q &amp; A</p><h1>困ったとき</h1><p class="lead">よくある困りごとと、そのときにすることです。書いた原稿は、ふつうは消えません。あわてずに。</p></div>
-  </header>
-  <ol class="qa">
-    <li>
-      <p class="q"><span class="d">Q</span><b>ログインできない</b></p>
-      <ul class="dots a">
-        <li>LINE・Instagram などのアプリの中で開いていたら、Safari・Chrome で開き直します。</li>
-        <li>ログインの窓が開かないときは、ポップアップを許可します。</li>
-        <li><span class="fn">@bunka-wu.ac.jp</span> のアカウントを選んでいるかを確かめます。</li>
-        <li>インターネットにつながっていないと、ログインのボタンは押せません。</li>
-      </ul>
+    <li class="card">
+      <div class="hd"><span class="n d">5</span><b>PDF にする</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-export" data-badges="" aria-label="提出用の PDF を書き出す画面" style="width:100%"></figure></div>
+      <p><span class="btn">PDFを書き出す</span> → 画面の手順どおりに。</p>
     </li>
-    <li>
-      <p class="q"><span class="d">Q</span><b>「もう一度ログインしてください」と出た</b></p>
-      <p class="a">Google の決まりで、ログインの許可は約1時間で切れます。<span class="btn">ログインし直す</span> を押してください。押すまでも、書いた分はこの端末に保存されていて、消えません。</p>
-      <figure class="shot lift" data-shot="g-relogin" data-badges="" data-hl="1" aria-label="もう一度ログインしてください"></figure>
-    </li>
-    <li>
-      <p class="q"><span class="d">Q</span><b>「別の端末で書いた原稿が、ドライブにあります」と出た</b></p>
-      <p class="a">別の端末で書いたあと、この端末でも書いたときに出ます。どちらで続けるかを選びます（ふつうは「新しい」の印の方）。選ばなかった方は「自動の控え」に残ります。</p>
-      <figure class="shot lift" data-shot="g-conflict" data-badges="" aria-label="どちらの原稿で続けるかを選ぶ画面"></figure>
-    </li>
-    <li>
-      <p class="q"><span class="d">Q</span><b>「PDFを書き出す」で提出用が出ない</b></p>
-      <p class="a">エラーが残っています。出てきた一覧（またはセルフチェック）の項目を押すと、その箇所へ移るので、直します。抄録をまだ書いていないときもエラーです。途中経過を見せるときは「下書きの PDF」を使います。</p>
-    </li>
-    <li>
-      <p class="q"><span class="d">Q</span><b>原稿が消えた・前の状態に戻したい</b></p>
-      <p class="a">直前の操作は、道具の <span class="btn">元に戻す</span> で戻せます。それより前に戻すときは、<span class="btn">バックアップ</span> の「自動の控え」（10分ごと）から <span class="btn">この時点に戻す</span>。原稿はドライブにもあるので、ほかの端末でもログインすれば開きます。</p>
-      <figure class="shot lift" data-shot="g-backup" data-badges="" data-hl="1" aria-label="バックアップと復元"></figure>
-    </li>
-    <li>
-      <p class="q"><span class="d">Q</span><b>Word で書いた分を移したい（今年度だけ）</b></p>
-      <p class="a">右の欄（スマホはメニュー）の「Word で書いた分を読み込む（今年度だけ）」から、自分の Word（<span class="fn">04_本文.docx</span>・<span class="fn">01_表紙.docx</span>）を選びます。くわしくは、別紙「Word で書き始めた人へ」を見てください。</p>
+    <li class="card dark-card">
+      <div class="hd"><span class="n d">!</span><b>保存は自動</b></div>
+      <p>この端末と、自分のドライブに保存。</p>
+      <p>共用のパソコンでは、最後に</p>
+      <p><span class="btn">この端末から原稿を消す</span></p>
+      <p class="sub">途中を見せるときは「下書きの PDF」。</p>
     </li>
   </ol>
-  <div class="ask">
-    <span class="d">?</span>
-    <div><b>それでも困ったら、担当の先生に相談してください。</b><p>どの画面で、何をしたら、何と出たかを伝えると、早く解決できます（画面の写真があると確実です）。</p></div>
+
+  <div class="bottom-lines">
+    <h2 class="sec-h">困ったとき</h2>
+    <ol class="qa-mini">
+      <li><b>ログインできない</b><span>Safari・Chrome で開き直す。</span></li>
+      <li><b>「もう一度ログイン」と出た</b><span><span class="btn">ログインし直す</span> を押す。</span></li>
+      <li><b>提出用の PDF が出ない</b><span>× のエラーを先に直す。</span></li>
+    </ol>
+    <p class="help"><span class="q">?</span><span>くわしくは、ツールの <span class="btn">？ 使い方</span> から。Word で書いた人は、別紙を見てください。</span></p>
+    <div class="ask">
+      <span class="d">?</span>
+      <div><b>それでも困ったら、担当の先生に相談</b></div>
+    </div>
   </div>
-  <footer class="folio"><span>使い方の手引き　学生用　─　困ったとき</span><span class="d">04</span></footer>
 </section>
 
 <script src="guide-images/marks.js"></script>

@@ -80,6 +80,21 @@ export const Icon = {
   prev: svg(<path d="M14.5 5l-7 7 7 7" />),
   next: svg(<path d="M9.5 5l7 7-7 7" />),
   fit: svg(<rect x="6" y="3.5" width="12" height="17" rx="1.5" />),
+  // 使い方（？の丸）・言葉で探す（虫めがね）・動画（再生の印）。mockups/v27
+  help: svg(
+    <>
+      <circle cx="12" cy="12" r="8.6" />
+      <path d="M9.6 9.7a2.45 2.45 0 014.75.85c0 1.65-2.35 1.95-2.35 3.5" />
+      <path d="M12 16.9v.15" strokeWidth={2.3} />
+    </>,
+  ),
+  search: svg(<path d="M15.5 15.5L20 20M17 11a6 6 0 11-12 0 6 6 0 0112 0z" />),
+  play: svg(
+    <>
+      <circle cx="12" cy="12" r="8.6" />
+      <path d="M10.3 8.7v6.6l5.2-3.3z" fill="currentColor" stroke="none" />
+    </>,
+  ),
   zoom: svg(
     <>
       <circle cx="11" cy="11" r="6" />

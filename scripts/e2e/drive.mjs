@@ -37,6 +37,13 @@ const setInfo = (page, patch) => page.evaluate((patch) => window.__editor.update
 const savedChip = (page) =>
   page.waitForFunction(() => [...document.querySelectorAll('.chip.ok')].some((c) => /ドライブに保存|\d+:\d+/.test(c.textContent)) && !document.querySelector('.chip .dot.busy'), { timeout: 30000 })
 const clickText = (page, selector, text) => page.evaluate((selector, text) => [...document.querySelectorAll(selector)].find((b) => b.textContent.includes(text)).click(), selector, text)
+/** 指差し確認（mockups/v27）が出るのを待つ（出たら true） */
+const tourAppears = (page, timeout = 15000) => page.waitForSelector('.tour .tour-tip', { timeout }).then(() => true, () => false)
+/** 指差し確認を「とばす」 */
+const skipTour = async (page) => {
+  await page.click('.tour-acts .skip')
+  await page.waitForFunction(() => !document.querySelector('.tour'), { timeout: 10000 })
+}
 const snapshotsOf = (page) =>
   page.evaluate(
     () =>
@@ -96,6 +103,10 @@ await withEdge(async (browser) => {
   await editorReady(pc.page)
   await gateClosed(pc.page)
   check('読み込み直しても、このタブではログインし直さずに続けられる', (await pc.page.evaluate(() => window.__logins ?? 0)) === 0 && (await nameOn(pc.page)) === '文化　花子')
+  // 案内を終えずに閉じた（指差し確認を見ていない）学生は、次に開いたとき（ログインのあと）に、指差し確認が1回出る
+  check('指差し確認を見ていなければ、次に開いたとき（ログインのあと）に指差し確認が出る', await tourAppears(pc.page))
+  await skipTour(pc.page)
+  check('「とばす」で閉じ、この端末に覚える', (await pc.page.evaluate(() => localStorage.getItem('sotsugyo-seisaku-report-tour'))) === 'done')
 
   // ---- スマホ：別の端末でログインすると、ドライブの原稿が開く ----
   const phone = await device(browser, drive, { phone: true })
@@ -105,6 +116,9 @@ await withEdge(async (browser) => {
   await gateClosed(phone.page)
   await editorReady(phone.page)
   check('別の端末でログインすると、ドライブの原稿が開く（コースの案内は出ない）', (await nameOn(phone.page)) === '文化　花子' && !(await phone.page.$('.guide')))
+  // 指差し確認は端末ごとに覚えるので、別の端末では、その端末で1回出る
+  check('別の端末では、その端末で指差し確認が1回出る（端末ごとに覚える）', await tourAppears(phone.page))
+  await skipTour(phone.page)
   await setInfo(phone.page, { name: '文化　次郎' })
   check('スマホで書いた内容も、ドライブに保存される', await until(() => drive.report()?.report.basicInfo.name === '文化　次郎'))
   await savedChip(phone.page)
@@ -163,6 +177,7 @@ await withEdge(async (browser) => {
   await pc.page.click('.login-btn')
   await gateClosed(pc.page)
   check('前のアカウントでログインし直すと、続きを書ける', (await nameOn(pc.page)) === '文化　次郎')
+  check('一度とばした指差し確認は、この端末では次に開いても出ない', !(await tourAppears(pc.page, 2500)))
 
   // ---- 共用のパソコンで書き終えたとき：この端末から原稿を消す ----
   await pc.page.click('.drive-chip-wrap .chip')
@@ -202,8 +217,8 @@ await withEdge(async (browser) => {
   await editorReady(stopped.page)
   await stopped.page.click('.login-btn')
   await stopped.page.waitForFunction(() => [...document.querySelectorAll('.modal h2')].some((h) => h.textContent.includes('学籍番号')), { timeout: 30000 })
-  const mismatch = await stopped.page.evaluate(() => ({ text: document.querySelector('.modal .id-compare')?.textContent ?? '', gate: !!document.querySelector('.login-over') }))
-  check('表紙の学籍番号がログインしたアカウントと違うと、ドライブに送る前に知らせる（後ろの原稿は見せないまま）', mismatch.text.includes('00ZZ555') && mismatch.gate && drive.report()?.report.basicInfo.name === '文化　次郎', JSON.stringify(mismatch))
+  const mismatch = await stopped.page.evaluate(() => ({ text: document.querySelector('.modal .id-compare')?.textContent ?? '', gate: !!document.querySelector('.login-over'), tour: !!document.querySelector('.tour') }))
+  check('表紙の学籍番号がログインしたアカウントと違うと、ドライブに送る前に知らせる（後ろの原稿は見せないまま。指差し確認も出さない）', mismatch.text.includes('00ZZ555') && mismatch.gate && !mismatch.tour && drive.report()?.report.basicInfo.name === '文化　次郎', JSON.stringify(mismatch))
   await stopped.page.screenshot({ path: 'poc-output/e2e/drive-id-mismatch.png' })
   await clickText(stopped.page, '.modal button', '自分の原稿ではない')
   await gateClosed(stopped.page)

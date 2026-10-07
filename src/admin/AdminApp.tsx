@@ -1,8 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Icon } from '../app/icons'
 import { useDialogFocus } from '../app/useDialogFocus'
 import { DEFAULT_WORD_CHECKS } from '../checker/textRules'
 import type { Course, WordCheck, YearConfig } from '../config'
 import { validateConfig } from '../config/validate'
+import { HelpView } from '../help/HelpView'
+import { TEACHER_TOPICS } from '../help/helpTopics'
+import { ADMIN_GUIDE_URL, TEACHER_GUIDE_URL, TEACHER_HELP_IMAGES } from '../help/links'
 import { MembersDialog } from './Members'
 import { Preview } from './Preview'
 import { isMockServer, roleOf, server, type AdminState, type HistoryRow, type TemplateSet, type YearRow } from './server'
@@ -53,17 +57,34 @@ function SourceLink() {
 }
 
 /**
- * 使い方の手引き（教員用の PDF）の場所。学生用ツールといっしょに GitHub Pages で公開している（public/guides/。scripts/make-guides.mjs で作る）。
- * 管理ページは Apps Script に置くので、相対ではなく学生用ツールの URL で書く（GitHub のリポジトリを移したら、ここも直す）
+ * 「？ 使い方」のボタン（見出しの横。管理者と先生の画面に出す。mockups/v27 案A）。押すと、右の端に先生用の使い方の欄が出る。
+ * 印刷用の手引き（先生用・管理者用の PDF）は、使い方の一覧のいちばん下から開く
  */
-const TEACHER_GUIDE_URL = 'https://junnosukekato.github.io/sotsugyo-seisaku-report/guides/teacher-guide.pdf'
-
-/** 使い方の手引き（教員用）を新しいタブで開く小さなリンク（見出しの横。管理者と先生の画面に出す） */
-function GuideLink() {
+function HelpButton({ open, onClick }: { open: boolean; onClick: () => void }) {
   return (
-    <a className="howto" href={TEACHER_GUIDE_URL} target="_blank" rel="noreferrer">
-      使い方（教員用の手引き）
-    </a>
+    <button className={`help-open${open ? ' on' : ''}`} aria-pressed={open} onClick={onClick}>
+      {Icon.help}使い方
+    </button>
+  )
+}
+
+/**
+ * 先生用の使い方の欄（右の端に重ねる）。画面の写真と印刷用の手引きは、学生用ツールといっしょに GitHub Pages で公開している
+ * （管理ページは Apps Script に置くので、学生用ツールの URL から読む。src/help/links.ts。開発中だけは、開発サーバーの public/help/ から読む）
+ */
+function AdminHelp({ onClose }: { onClose: () => void }) {
+  return (
+    <HelpView
+      topics={TEACHER_TOPICS}
+      who="teacher"
+      imageBase={import.meta.env.DEV ? '/help/' : TEACHER_HELP_IMAGES}
+      guides={[
+        { label: '先生用', href: TEACHER_GUIDE_URL },
+        { label: '管理者用', href: ADMIN_GUIDE_URL },
+      ]}
+      variant="dock"
+      onClose={onClose}
+    />
   )
 }
 
@@ -232,6 +253,8 @@ export function AdminApp() {
   const [editingWords, setEditingWords] = useState(false)
   const [history, setHistory] = useState<HistoryRow[]>([])
   const [newYear, setNewYear] = useState('')
+  /** 「？ 使い方」の欄を開いている */
+  const [help, setHelp] = useState(false)
 
   const row: YearRow | undefined = state?.years.find((y) => y.year === year)
   const dirty = !!row && !!draft && !same(row.config, draft)
@@ -344,10 +367,10 @@ export function AdminApp() {
   }
 
   return (
-    <div className="admin">
+    <div className={help ? 'admin help-on' : 'admin'}>
       <header className="admin-header">
         <b>卒業制作報告書 管理ページ</b>
-        <GuideLink />
+        <HelpButton open={help} onClick={() => setHelp(!help)} />
         <select
           className="sel"
           value={year ?? ''}
@@ -539,6 +562,7 @@ export function AdminApp() {
           <Preview config={draft} courseId={draft.courses[focusedCourse]?.id ?? draft.courses[0]?.id ?? ''} />
         </section>
       </main>
+      {help && <AdminHelp onClose={() => setHelp(false)} />}
 
       {editingTemplate !== null && draft.courses[editingTemplate] && (
         <TemplateEditor
@@ -650,6 +674,8 @@ function TeacherView({
 }) {
   const [editing, setEditing] = useState<number | null>(null)
   const [editingWords, setEditingWords] = useState(false)
+  /** 「？ 使い方」の欄を開いている */
+  const [help, setHelp] = useState(false)
   const isPublished = row.status === '公開中'
   const save = () => {
     const templates: TemplateSet = {}
@@ -669,10 +695,10 @@ function TeacherView({
     onSave(templates, words, notices)
   }
   return (
-    <div className="admin">
+    <div className={help ? 'admin help-on' : 'admin'}>
       <header className="admin-header">
         <b>卒業制作報告書 管理ページ</b>
-        <GuideLink />
+        <HelpButton open={help} onClick={() => setHelp(!help)} />
         <select
           className="sel"
           value={row.year}
@@ -716,6 +742,7 @@ function TeacherView({
         <WordsSection words={draft.wordChecks ?? DEFAULT_WORD_CHECKS} onOpen={() => setEditingWords(true)} />
         <SourceLink />
       </main>
+      {help && <AdminHelp onClose={() => setHelp(false)} />}
       {editingWords && (
         <WordsEditor
           words={draft.wordChecks ?? DEFAULT_WORD_CHECKS}

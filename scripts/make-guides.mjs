@@ -1,10 +1,13 @@
-// 使い方の手引き（学生用 4ページ・教員用 8ページ。A4 縦の PDF）を作る。デザインは案B「雑誌風」（mockups/v25/b.html）。
+// 使い方の手引き（学生用・先生用・管理者用。どれも A4 片面1枚の PDF）を作る。デザインは案B「雑誌風」（mockups/v25/b.html）を
+// 軽くした案C2（mockups/v26 の c2・t-c2）。くわしいことは、ツールと管理ページの「？ 使い方」に任せる。
 //   1. 本物のツール（学生用ツール・管理ページの試験版）を Edge で操作して、画面の画像を撮る（docs/guide-images/g-*.jpg）。
 //      番号の吹き出しを付ける場所（画面の部品の位置）も書き出す（docs/guide-images/marks.js。HTML の中の guide.js が読んで重ねる）
 //   2. ツールの URL の QR コードを作る（docs/guide-images/qr-guide.svg）
-//   3. 手引きの HTML（docs/手引き_学生用.html・docs/手引き_教員用.html。文は HTML に手で書く）を Edge で PDF にする。
-//      ページ数・用紙からのはみ出し・文字の大きさ（本文 9.5pt 以上）・書体・画像を確かめ、外れていたら失敗にする
-//   4. PDF を public/guides/（student-guide.pdf・teacher-guide.pdf）に写す（ツールの「使い方（手引き）」から開ける。GitHub Pages で公開される）
+//      手引きで使っていない画像も撮っている（前の版の手引きで使っていたもの。デザイン案 mockups/v26・v27 が読む）
+//   3. 手引きの HTML（docs/手引き_学生用.html・手引き_先生用.html・手引き_管理者用.html。文は HTML に手で書く）を Edge で PDF にする。
+//      ページ数（1ページ）・用紙からのはみ出し・文字の大きさ（本文 10.5pt 以上）・1ページの文字数（350字まで）・書体・画像を確かめ、
+//      外れていたら失敗にする
+//   4. PDF を public/guides/（student-guide.pdf・teacher-guide.pdf（先生用）・admin-guide.pdf（管理者用））に写す（GitHub Pages で公開される）
 // 使い方: node scripts/make-guides.mjs            … 画面を撮り直して PDF を作る（開発サーバーが http://localhost:5173 で動いていること）
 //         node scripts/make-guides.mjs --pdf-only … HTML の文だけを直したあと、PDF だけ作り直す（画面は撮り直さない）
 //   SHOTS=student（学生用ツール。スマホも）／SHOTS=admin（管理ページ） node scripts/make-guides.mjs … 画面の画像を一部だけ撮り直す
@@ -35,12 +38,16 @@ const SAMPLE_OUT = `${IMG}/sample`
 /** 依頼者が作る見本の画像の置き場所（公開のリポジトリの外） */
 const SAMPLE_IN = resolve('..', '手引き用の画像')
 const GUIDES = [
-  { html: 'docs/手引き_学生用.html', pdf: 'docs/手引き_学生用.pdf', publish: 'public/guides/student-guide.pdf', pages: 4 },
-  { html: 'docs/手引き_教員用.html', pdf: 'docs/手引き_教員用.pdf', publish: 'public/guides/teacher-guide.pdf', pages: 8 },
+  { html: 'docs/手引き_学生用.html', pdf: 'docs/手引き_学生用.pdf', publish: 'public/guides/student-guide.pdf', pages: 1 },
+  { html: 'docs/手引き_先生用.html', pdf: 'docs/手引き_先生用.pdf', publish: 'public/guides/teacher-guide.pdf', pages: 1 },
+  { html: 'docs/手引き_管理者用.html', pdf: 'docs/手引き_管理者用.pdf', publish: 'public/guides/admin-guide.pdf', pages: 1 },
 ]
 /** 本文の文字の大きさの下限（pt）。柱・ページ番号・英字の飾りの見出し（MIN_EXEMPT）は除く */
-const MIN_PT = 9.5
-const MIN_EXEMPT = '.folio, .edge, .hero-top, .kick2, .year, .shot .mk'
+const MIN_PT = 10.5
+const MIN_EXEMPT = '.folio, .edge, .hero-top, .kick2, .year, .shot .mk, .lh .k'
+/** 1ページの文字数の上限（学生は長い文を読まないため）。数えるのは、ひらがな・カタカナ・漢字と全角の記号（英数字・URL は数えない） */
+const MAX_CHARS = 350
+const JP = /[\u3000-\u30ff\u4e00-\u9fff\uff00-\uffef]/g
 const pdfOnly = process.argv.includes('--pdf-only')
 const SHOT_ONLY = (process.env.SHOTS ?? '').split(',').filter(Boolean)
 const doShot = (k) => !SHOT_ONLY.length || SHOT_ONLY.includes(k)
@@ -402,7 +409,10 @@ const SHOT_CSS = `
   .no-guide .guide { display: none !important; }
 `
 
-/** 撮影のあいだに src/ が直されても、画面が入れ替わらないようにする（開発サーバーの即時反映をつながない） */
+/**
+ * 撮影のあいだに src/ が直されても、画面が入れ替わらないようにする（開発サーバーの即時反映をつながない）。
+ * はじめての案内のあとに出る指差し確認（ツアー）は、見たことにしておく（出ると画面が覆われ、撮影が先へ進めない）
+ */
 const noHotReload = (page) =>
   page.evaluateOnNewDocument(() => {
     const Real = window.WebSocket
@@ -410,6 +420,9 @@ const noHotReload = (page) =>
       if (String(protocols).includes('vite-hmr')) return { readyState: 0, addEventListener() {}, removeEventListener() {}, send() {}, close() {} }
       return new Real(url, protocols)
     }
+    try {
+      localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+    } catch {}
   })
 
 const ready = (page, phone = false) =>
@@ -466,8 +479,11 @@ const writeMarks = () =>
 /**
  * 画面を切り抜いて撮り（docs/guide-images/<name>.jpg）、吹き出しの番号の場所を書き出す。
  * clip：切り抜く範囲（CSS px）。marks：[{ n, box（部品の範囲）, at：吹き出しを置く側（l・r・t・b・tl・tr・bl・br・c・ol）, dx, dy（px） }]
+ * optional：見つからなくてもよい印（画面が変わりやすい部品。見つからなければ、その番号は付けない）
  */
 async function capture(page, name, clip, marks = []) {
+  for (const m of marks) if (!m.box && m.optional) console.log(`  （${name}：${m.n} の場所が見つからないので、番号を付けません）`)
+  marks = marks.filter((m) => m.box || !m.optional)
   const vp = page.viewport()
   const x = Math.max(0, Math.round(clip.x))
   const y = Math.max(0, Math.round(clip.y))
@@ -722,7 +738,7 @@ async function studentShots(browser, config, images) {
     await capture(page, 'g-drive', union(head, pad(pop, 10)), [
       { n: 1, box: await page.evaluate(rectOf, '.side .drive-chip-wrap .chip'), at: 'l' },
       { n: 2, box: await page.evaluate(rectOf, '.drive-pop button', 'この端末から原稿を消す'), at: 'l' },
-      { n: 3, box: await page.evaluate(rectOf, '.side .howto-link'), at: 'l' },
+      { n: 3, box: await page.evaluate(rectOf, '.side .side-head a, .side .side-head button', '使い方'), at: 'l', optional: true },
     ])
   }
   await page.keyboard.press('Escape')
@@ -763,7 +779,7 @@ async function studentShots(browser, config, images) {
   await sleep(600)
   await capture(pp, 'g-phone-menu', { x: 0, y: 0, w: PHONE.width, h: PHONE.height }, [
     { n: 1, box: await pp.evaluate(rectOf, '.sheet .drive-pop button', 'この端末から原稿を消す'), at: 'l' },
-    { n: 2, box: await pp.evaluate(rectOf, '.sheet .howto-link'), at: 'r' },
+    { n: 2, box: await pp.evaluate(rectOf, '.sheet .sheet-body a, .sheet .sheet-body button', '使い方'), at: 'r', optional: true },
   ])
   await pp.click('.sheet-close')
   await sleep(400)
@@ -813,7 +829,7 @@ async function studentShots(browser, config, images) {
   await context.close()
 }
 
-/** 管理ページ（試験版）を開く。as：teacher なら先生の画面 */
+/** 管理ページ（試験版）を開く。as：teacher なら先生の画面（試験版の管理者・先生のアドレスは example.ac.jp） */
 async function openAdmin(browser, { as } = {}) {
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
@@ -887,25 +903,8 @@ async function adminShots(browser) {
     { n: 5, box: await fieldBox('指導教員'), at: 'ol' },
     { n: 6, box: previewPage, at: 'tl', dx: 10, dy: 10 },
     { n: 7, box: await page.evaluate(rectOf, '.admin-header .btn', '保存して学生に反映'), at: 'b' },
-    { n: 8, box: await page.evaluate(rectOf, '.admin-header .howto'), at: 'b' },
+    { n: 8, box: await page.evaluate(rectOf, '.admin-header a, .admin-header button', '使い方'), at: 'b', optional: true },
   ])
-
-  // 見出しの欄（左と右に分けて、字が読める大きさで載せる）
-  {
-    const header = await page.evaluate(rectOf, '.admin-header')
-    const left = union(await page.evaluate(rectOf, '.admin-header > b'), await page.evaluate(rectOf, '.admin-header .badge.warn'))
-    const right = union(await page.evaluate(rectOf, '.admin-header .user'), await page.evaluate(rectOf, '.admin-header .btn', '保存して学生に反映'))
-    await capture(page, 'g-admin-head-l', { x: left.x - 12, y: header.y, w: left.w + 24, h: header.h }, [
-      { n: 1, box: await page.evaluate(rectOf, '.admin-header .howto'), at: 'b' },
-      { n: 2, box: await page.evaluate(rectOf, '.admin-header .sel'), at: 'b' },
-    ])
-    await capture(page, 'g-admin-head-r', { x: right.x - 12, y: header.y, w: right.w + 24, h: header.h }, [
-      { n: 3, box: await page.evaluate(rectOf, '.admin-header .link', '変更履歴'), at: 'b' },
-      { n: 4, box: await page.evaluate(rectOf, '.admin-header .link', '先生の登録'), at: 'b' },
-      { n: 5, box: await page.evaluate(rectOf, '.admin-header .btn', '新年度を作成'), at: 'b' },
-      { n: 6, box: await page.evaluate(rectOf, '.admin-header .btn', '保存して学生に反映'), at: 'b' },
-    ])
-  }
 
   // コースのカード（下書きのひな形・お知らせ。お知らせの欄は、入っている例の薄い字のまま）
   await page.evaluate(() => document.querySelector('.form .course').scrollIntoView({ block: 'start' }))
@@ -950,22 +949,6 @@ async function adminShots(browser) {
     { n: 1, box: await page.evaluate(rectOf, '.drive-switch .seg2 button', '止める'), at: 'r' },
   ])
 
-  // 先生の登録：メーリングリストの宛先を貼り付ける（架空のアドレス）
-  await page.evaluate(() => window.scrollTo(0, 0))
-  await clickText(page, '.admin-header button', '先生の登録')
-  await page.waitForSelector('.modal.members .member-list li')
-  const box = await page.$('.member-add textarea')
-  await box.type('文化 太郎 <t-bunka@bunka-wu.ac.jp>, "衣装 花子" <h-isho@bunka-wu.ac.jp>;\n00zz0456@bunka-wu.ac.jp, someone@example.com')
-  await page.waitForSelector('.bulk-table tbody tr')
-  await page.evaluate(() => document.activeElement?.blur())
-  await sleep(400)
-  await capture(page, 'g-admin-members', await page.evaluate(rectOf, '.modal.members'), [
-    { n: 1, box: await page.evaluate(rectOf, '.member-add textarea'), at: 'l' },
-    { n: 2, box: await page.evaluate(rectOf, '.bulk-table'), at: 'l' },
-    { n: 3, box: await page.evaluate(rectOf, '.member-add button.primary'), at: 'b' },
-  ])
-  await clickText(page, '.modal.members .row-buttons button', '閉じる')
-
   // 保存して学生に反映 → 新年度を作成（準備中）。画面の上の欄だけ
   await clickText(page, '.admin-header button', '保存して学生に反映')
   await page.waitForFunction(() => document.querySelector('.message.ok'))
@@ -980,10 +963,10 @@ async function adminShots(browser) {
     const head = union(await page.evaluate(rectOf, '.admin-header .sel'), await page.evaluate(rectOf, '.admin-header .btn.primary'))
     const header = await page.evaluate(rectOf, '.admin-header')
     await capture(page, 'g-admin-draft', { x: head.x - 12, y: header.y, w: head.w + 24, h: header.h }, [
-      { n: 1, box: await page.evaluate(rectOf, '.admin-header .btn', '新年度を作成'), at: 'c' },
-      { n: 2, box: await page.evaluate(rectOf, '.admin-header .btn.primary'), at: 'c' },
-      { n: 3, box: await page.evaluate(rectOf, '.admin-header .link', '変更履歴'), at: 'c' },
-      { n: 4, box: await page.evaluate(rectOf, '.admin-header .link', '先生の登録'), at: 'c' },
+      { n: 1, box: await page.evaluate(rectOf, '.admin-header .btn', '新年度を作成'), at: 'b' },
+      { n: 2, box: await page.evaluate(rectOf, '.admin-header .btn.primary'), at: 'b' },
+      { n: 3, box: await page.evaluate(rectOf, '.admin-header .link', '変更履歴'), at: 'b' },
+      { n: 4, box: await page.evaluate(rectOf, '.admin-header .link', '先生の登録'), at: 'b' },
     ])
   }
 
@@ -1024,7 +1007,7 @@ async function makePdf(browser, guide) {
   await page.goto(pathToFileURL(resolve(guide.html)).href, { waitUntil: 'networkidle0' })
   await page.evaluate(() => document.fonts.ready)
   await page.waitForFunction(() => document.body.dataset.ready === 'true', { timeout: 30000 })
-  const check = await page.evaluate((exempt) => {
+  const check = await page.evaluate((exempt, minPt, jp) => {
     const fonts = ['BIZ UDPGothic'].filter((f) => !document.fonts.check(`16px "${f}"`) || !document.fonts.check(`bold 16px "${f}"`))
     const images = [...document.images].filter((i) => !i.complete || !i.naturalWidth).map((i) => i.getAttribute('src'))
     const missing = [...document.querySelectorAll('figure[data-shot]')].filter((f) => !f.querySelector('img')).map((f) => f.dataset.shot)
@@ -1044,7 +1027,7 @@ async function makePdf(browser, guide) {
       for (const e of s.querySelectorAll('.fit')) {
         if (e.scrollHeight - e.clientHeight > 1) worst = { px: Math.max(worst.px, e.scrollHeight - e.clientHeight), who: `.fit「${e.textContent.trim().slice(0, 14)}」の中があふれています` }
       }
-      return { page: i + 1, ...worst }
+      return { page: i + 1, chars: (s.innerText.match(new RegExp(jp, 'g')) ?? []).length, ...worst }
     })
     // 文字の大きさ（pt）。柱・ページ番号・飾りの英字（exempt）は除く
     let min = { pt: 99, who: '' }
@@ -1055,18 +1038,19 @@ async function makePdf(browser, guide) {
       const pt = Math.round(parseFloat(getComputedStyle(e).fontSize) * 0.75 * 10) / 10
       const who = `${e.tagName.toLowerCase()}.${String(e.className).split(' ')[0]}「${e.textContent.trim().slice(0, 12)}」`
       if (pt < min.pt) min = { pt, who }
-      if (pt < 9.5) small.push(`${pt}pt ${who}`)
+      if (pt < minPt) small.push(`${pt}pt ${who}`)
     }
     return { fonts, images, missing, sheets: sheets.length, over, min, small }
-  }, MIN_EXEMPT)
+  }, MIN_EXEMPT, MIN_PT, JP.source)
   const problems = [...failed]
   if (check.fonts.length) problems.push(`書体を読み込めませんでした：${check.fonts.join(', ')}（node_modules/@fontsource があるか確かめてください）`)
   if (check.images.length) problems.push(`読み込めなかった画像：${check.images.join(', ')}`)
   if (check.missing.length) problems.push(`画面の画像がありません（先に画面を撮ってください）：${check.missing.join(', ')}`)
   if (check.sheets !== guide.pages) problems.push(`${guide.pages}ページのはずが、${check.sheets}ページあります`)
   for (const o of check.over) if (o.px > 0) problems.push(`${o.page}ページ：用紙・枠から ${o.px}px はみ出しています（${o.who}）。文を短くしてください`)
+  for (const o of check.over) if (o.chars > MAX_CHARS) problems.push(`${o.page}ページ：${o.chars}字あります（${MAX_CHARS}字まで）。文を短くしてください`)
   if (check.small.length) problems.push(`文字が ${MIN_PT}pt より小さいところがあります：${check.small.slice(0, 6).join('　')}`)
-  console.log(`  ${guide.html}：いちばん小さい文字 ${check.min.pt}pt（${check.min.who}。柱・ページ番号などを除く）`)
+  console.log(`  ${guide.html}：${check.over.map((o) => o.chars).join('・')}字　いちばん小さい文字 ${check.min.pt}pt（${check.min.who}。柱・ページ番号などを除く）`)
   await page.pdf({ path: guide.pdf, printBackground: true, preferCSSPageSize: true })
   await page.close()
   const doc = await getDocument({ data: new Uint8Array(readFileSync(guide.pdf)), useSystemFonts: false, verbosity: 0 }).promise
@@ -1079,7 +1063,7 @@ async function makePdf(browser, guide) {
     return false
   }
   copyFileSync(guide.pdf, guide.publish)
-  console.log(`  ${guide.publish} に写しました（ツールの「使い方（手引き）」から開けます）`)
+  console.log(`  ${guide.publish} に写しました`)
   return true
 }
 

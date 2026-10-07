@@ -259,14 +259,64 @@ await withEdge(async (browser) => {
   await page.click('.p-top .icon-btn')
   await page.waitForSelector('.sheet .sheet-body')
   check('メニューに「Word で書いた分を読み込む」のリンクがある', !!(await page.$('.sheet .word-link')))
-  // 使い方の手引き（学生用の PDF）を新しいタブで開くリンク
-  const guideLink = await page.evaluate(() => {
-    const a = document.querySelector('.sheet .howto-link')
-    return a ? { href: a.getAttribute('href'), target: a.getAttribute('target') } : null
+  // 「？ 使い方」（メニューの中。押すと画面いっぱいの使い方の欄。mockups/v27 案A）
+  check('メニューに「？ 使い方」のボタンがある', !!(await page.$('.sheet .links .help-btn')))
+  await page.click('.sheet .help-btn')
+  await page.waitForSelector('.help-sheet')
+  await wait(400)
+  const helpSheet = await page.evaluate(() => {
+    const r = document.querySelector('.help-sheet').getBoundingClientRect()
+    return { top: Math.round(r.top), left: r.left, right: r.right, width: innerWidth, menu: !!document.querySelector('.sheet'), topics: document.querySelectorAll('.help-list button').length, modal: document.querySelector('.help-sheet').getAttribute('aria-modal'), pdf: document.querySelector('.help-foot .help-pdf')?.getAttribute('href') }
   })
-  check('メニューに「使い方（手引き）」のリンクがあり、学生用の手引きの PDF を新しいタブで開く', guideLink?.href === './guides/student-guide.pdf' && guideLink.target === '_blank', JSON.stringify(guideLink))
-  await page.click('.sheet-close')
-  await page.waitForFunction(() => !document.querySelector('.sheet'))
+  await shot('8a-help')
+  check('メニューの「？ 使い方」で、画面いっぱいの使い方の欄が出る（メニューは閉じる・項目16・印刷用の手引き（PDF））', helpSheet.top <= 12 && helpSheet.left === 0 && helpSheet.right === helpSheet.width && !helpSheet.menu && helpSheet.topics === 16 && helpSheet.modal === 'true' && helpSheet.pdf === './guides/student-guide.pdf', JSON.stringify(helpSheet))
+  await page.type('.help-search input', 'PDF 出ない')
+  await wait(300)
+  const phoneFound = await page.evaluate(() => ({ titles: [...document.querySelectorAll('.help-results .t')].map((t) => t.textContent).slice(0, 2), marks: document.querySelectorAll('.help-results mark').length }))
+  check('スマホでも「PDF 出ない」で探すと、言葉に印が付いた項目が出る', phoneFound.titles[0] === 'PDF の出し方（端末ごと）' && phoneFound.marks > 0, JSON.stringify(phoneFound))
+  await page.evaluate(() => document.querySelector('.help-results button').click())
+  await page.waitForSelector('.help-topic')
+  await wait(300)
+  const phoneTopic = await page.evaluate(() => ({ device: document.querySelector('.help-dev .tabs .on')?.textContent, here: !!document.querySelector('.help-dev .here'), cut: document.querySelector('.help-sheet .help-body').scrollWidth > document.querySelector('.help-sheet .help-body').clientWidth + 1 }))
+  await shot('8b-help-topic')
+  check('項目を開くと、使っている端末（Android）の PDF の保存のしかたを先に出し、横にはみ出さない', phoneTopic.device === 'Android' && phoneTopic.here && !phoneTopic.cut, JSON.stringify(phoneTopic))
+  await page.click('.help-sheet .help-close')
+  await wait(300)
+  check('「×」で使い方の欄が閉じる', !(await page.$('.help-sheet')))
+
+  // ---- 指差し確認（スマホは4か所。mockups/v27 案A）：案内を「あとで」にした学生は、次に開いたときに出る ----
+  check('案内を「あとで」で閉じた直後は、指差し確認を出さない', !(await page.$('.tour')))
+  await page.reload({ waitUntil: 'networkidle0' })
+  await ready()
+  const phoneTour = await page.waitForSelector('.tour .tour-tip', { timeout: 20000 }).then(() => true, () => false)
+  const tourTitles = []
+  for (let i = 0; phoneTour && i < 6; i++) {
+    const st = await page.evaluate(() => {
+      const r = document.querySelector('.tour-tip').getBoundingClientRect()
+      return { title: document.querySelector('.tour-tip h2')?.textContent, next: document.querySelector('.tour-acts .next')?.textContent, inside: r.left >= 0 && r.right <= innerWidth && r.top >= 0 && r.bottom <= innerHeight }
+    })
+    tourTitles.push(st)
+    if (i === 1) await shot('8c-tour')
+    await page.click('.tour-acts .next')
+    await wait(300)
+    if (st.next === 'おわり') break
+  }
+  check('次に開くと指差し確認が出て、4か所（紙面・チェックと PDF・保存のようす・メニュー）を順に見られる（吹き出しは画面の中）', tourTitles.map((x) => x.title).join(',') === '紙面,チェックと PDF,保存のようす,メニュー' && tourTitles.every((x) => x.inside) && !(await page.$('.tour')), JSON.stringify(tourTitles))
+  // 使い方の「指差し確認をもう一度見る」から、もう一度。「とばす」で終わる
+  await page.click('.p-top .icon-btn')
+  await page.waitForSelector('.sheet .help-btn')
+  await wait(300)
+  await page.click('.sheet .help-btn')
+  await page.waitForSelector('.help-sheet [data-topic="tour"]')
+  await page.evaluate(() => document.querySelector('.help-sheet [data-topic="tour"]').click())
+  await page.waitForSelector('.help-action')
+  await page.click('.help-action')
+  const phoneReplay = await page.waitForSelector('.tour .tour-tip', { timeout: 15000 }).then(() => true, () => false)
+  await page.click('.tour-acts .skip')
+  await wait(300)
+  check('使い方から指差し確認をもう一度見られ、「とばす」で終わる', phoneReplay && !(await page.$('.tour')) && !(await page.$('.help-sheet')))
+  await page.evaluate(() => window.__editor.goToPage(0, 'none'))
+  await ready()
 
   // 指で左にはらうと次のページ（はらった直後のタップは、ブラウザが勢いを止める操作として扱うため、最後に確かめる）
   await page.touchscreen.touchStart(300, 400)

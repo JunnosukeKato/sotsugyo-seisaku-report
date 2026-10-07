@@ -1,0 +1,115 @@
+/*
+ * 使い方（ヘルプ）の欄（mockups/v27 案A「右の欄が切り替わる」）。学生用ツールと管理ページで使う。
+ * 色はそれぞれのページの :root の色（--accent など）を使う。管理ページにない色は、admin.css の .help-dock で決める
+ */
+.help, .help * { box-sizing: border-box; }
+.help { display: flex; flex-direction: column; min-height: 0; background: var(--panel-bg); color: var(--ink); font-family: 'BIZ UDPGothic', sans-serif; font-size: 13px; line-height: 1.65; }
+.help button { font: inherit; cursor: pointer; }
+.help-top { flex: none; padding: 16px 20px 12px; border-bottom: 1px solid var(--line); }
+.help-head { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.help-title { display: flex; align-items: center; gap: 7px; margin: 0; font-size: 15.5px; letter-spacing: 0.06em; white-space: nowrap; }
+.help-title:focus { outline: none; }
+.help-title svg { width: 21px; height: 21px; flex: none; color: var(--accent); }
+.help-title small { font-size: 11.5px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
+.help-close { position: relative; margin-left: auto; flex: none; display: flex; align-items: center; gap: 3px; padding: 4px 4px 4px 8px; border: 0; border-radius: 8px; background: none; color: var(--accent); font-size: 12.5px; }
+.help-close span { font-size: 18px; line-height: 1; }
+.help-close::after { content: ''; position: absolute; inset: -8px -4px; }
+.help-search { position: relative; }
+.help-search input { width: 100%; padding: 9px 36px 9px 35px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; color: var(--ink); font: inherit; font-size: 14px; }
+.help-search input::placeholder { color: #8c8f96; }
+.help-search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.help-search.filled input { border-color: var(--accent); }
+.help-search > svg { position: absolute; left: 10px; top: 50%; width: 18px; height: 18px; transform: translateY(-50%); color: var(--muted); pointer-events: none; }
+.help-clear { position: absolute; right: 5px; top: 50%; width: 28px; height: 28px; transform: translateY(-50%); border: 0; border-radius: 50%; background: var(--chip-bg); color: var(--muted); font-size: 15px; line-height: 1; }
+.help-note { margin: 5px 2px 0; font-size: 11px; line-height: 1.5; color: var(--muted); }
+.help-body { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 20px 22px; }
+
+/* 項目の一覧 */
+.help-group { margin-top: 12px; }
+.help-group h3 { margin: 0 0 2px 8px; font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); }
+.help-list { list-style: none; margin: 0; padding: 0; }
+.help-list button { display: flex; align-items: center; gap: 8px; width: 100%; padding: 6px 8px; border: 0; border-radius: 8px; background: none; color: var(--ink); font-size: 13.5px; line-height: 1.5; text-align: left; }
+.help-list button:hover { background: var(--palette-hover); color: var(--accent); }
+.help-list button.action { color: var(--accent); }
+.help-mark { margin-left: auto; flex: none; display: flex; color: var(--accent); }
+.help-mark svg { width: 15px; height: 15px; }
+.help-foot { margin: 16px 8px 4px; padding-top: 10px; border-top: 1px solid var(--line); font-size: 11.5px; line-height: 1.7; color: var(--muted); }
+.help-foot p { margin: 0 0 6px; }
+.help-pdf { position: relative; color: var(--muted); font-size: 12px; }
+.help-foot a { color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.help-foot a:hover { color: var(--accent); }
+
+/* 探した結果 */
+.help-count { margin: 12px 4px 4px; font-size: 12px; color: var(--muted); }
+.help-count b { color: var(--ink); }
+.help-results { list-style: none; margin: 0; padding: 0; display: grid; gap: 2px; }
+.help-results button { display: grid; gap: 2px; width: 100%; padding: 8px 9px; border: 0; border-radius: 8px; background: none; text-align: left; }
+.help-results button:hover { background: var(--palette-hover); }
+.help-results .t { font-size: 13.5px; font-weight: 700; line-height: 1.5; color: var(--ink); }
+.help-results .s { font-size: 12.5px; line-height: 1.6; color: #50535a; }
+.help-results .s em { font-style: normal; color: var(--muted); }
+.help-results .w { font-size: 11.5px; color: var(--muted); }
+.help-part { margin: 6px 9px 2px; padding-top: 8px; border-top: 1px dashed var(--line); font-size: 11px; color: var(--muted); }
+.help-miss { margin: 12px 4px 0; font-size: 11.5px; line-height: 1.6; color: var(--muted); }
+mark.help-hit { padding: 0 1px; border-radius: 2px; background: #ffe48a; color: inherit; }
+
+/* 開いた項目 */
+.help-topic { padding-top: 10px; }
+.help-back { display: inline-flex; align-items: center; gap: 2px; margin: 0 0 2px -4px; padding: 4px 6px 4px 2px; border: 0; border-radius: 6px; background: none; color: var(--accent); font-size: 12.5px; }
+.help-back svg { width: 17px; height: 17px; }
+.help-crumb { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; color: var(--muted); }
+.help-topic h3 { margin: 2px 0 6px; font-size: 16.5px; line-height: 1.45; letter-spacing: 0.02em; }
+.help-topic h3:focus { outline: none; }
+.help-lead { margin: 0 0 12px; font-size: 13.5px; line-height: 1.7; }
+.help-steps { list-style: none; margin: 0 0 12px; padding: 0; counter-reset: n; display: grid; gap: 7px; }
+.help-steps li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 9px; font-size: 13.5px; line-height: 1.6; }
+.help-steps li::before { counter-increment: n; content: counter(n); width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+.help-dev { margin: 0 0 12px; border: 1px solid var(--line); border-radius: 10px; background: #fff; overflow: hidden; }
+.help-dev .tabs { display: flex; gap: 2px; padding: 3px; background: var(--chip-bg); }
+.help-dev .tabs button { flex: 1; min-width: 0; padding: 6px 2px; border: 0; border-radius: 7px; background: none; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.help-dev .tabs button.on { background: #fff; color: var(--accent); font-weight: 700; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.12); }
+.help-dev .here { display: block; padding: 7px 12px 0; font-size: 11px; color: var(--ok); }
+.help-dev ul { margin: 0; padding: 6px 12px 10px 28px; font-size: 13px; line-height: 1.75; }
+.help-item { margin: 0 0 8px; padding: 8px 11px; border-radius: 8px; background: #f6f4ef; font-size: 13px; line-height: 1.6; }
+.help-item b { display: block; font-size: 12.5px; }
+.help-item.warn { background: var(--warn-soft); }
+.help-item.warn b { color: var(--warn); }
+.help-action { display: inline-flex; align-items: center; margin: 2px 0 12px; padding: 9px 20px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; font-size: 13.5px; font-weight: 700; }
+.help-shot { margin: 4px 0 12px; }
+.help-shot-btn { display: block; width: 100%; padding: 0; border: 1px solid var(--line); border-radius: 8px; background: #fff; overflow: hidden; cursor: zoom-in; }
+.help-shot-btn img { display: block; width: 100%; height: auto; }
+.help-shot figcaption { display: flex; gap: 8px; margin-top: 4px; font-size: 11.5px; color: var(--muted); }
+.help-shot figcaption span { margin-left: auto; flex: none; color: var(--accent); }
+.help-video { margin: 0 0 12px; }
+.help-video video { display: block; width: 100%; border-radius: 8px; background: #2b2e36; }
+.help-video figcaption { margin-top: 4px; font-size: 11.5px; color: var(--muted); }
+.help-rel { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 2px 0 6px; font-size: 11.5px; color: var(--muted); }
+.help-rel button { padding: 3px 10px; border: 1px solid #c9cfe6; border-radius: 999px; background: #fff; color: var(--accent); font-size: 12px; }
+/* キーボードで操作しているときの、いまの場所の枠 */
+.help button:focus-visible, .help a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* 画面の写真を大きく出す */
+.help-zoom { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px; background: rgba(20, 22, 30, 0.72); cursor: zoom-out; }
+.help-zoom img { max-width: 100%; max-height: 100%; border-radius: 8px; background: #fff; box-shadow: 0 16px 48px rgba(0, 0, 0, 0.35); }
+.help-zoom .close { position: absolute; right: 12px; top: 10px; width: 42px; height: 42px; border: 0; border-radius: 50%; background: rgba(255, 255, 255, 0.92); color: var(--ink); font-size: 24px; line-height: 1; }
+
+/* ---- PC の学生用ツール：右の欄がまるごと使い方に替わる ---- */
+.side .help-side { flex: 1; }
+
+/* ---- スマホ：画面いっぱいの欄（下から出る欄と同じ形で、いちばん上まで） ---- */
+.help-sheet { position: fixed; z-index: 41; left: 0; right: 0; bottom: 0; top: 10px; padding-bottom: env(safe-area-inset-bottom); border-radius: 18px 18px 0 0; box-shadow: 0 -10px 30px rgba(30, 25, 20, 0.18); animation: sheet-up 0.22s ease; }
+.help-sheet .grab { flex: none; width: 40px; height: 4px; margin: 8px auto 2px; border-radius: 2px; background: #d6d3cd; }
+.help-sheet .help-top { padding: 4px 10px 10px 18px; }
+.help-sheet .help-body { padding: 4px 18px 24px; }
+.help-sheet .help-close { width: 42px; height: 42px; padding: 0; justify-content: center; color: var(--muted); font-size: 22px; }
+/* スマホ：入力欄の文字は 16px（それより小さいと、iPhone が入力するときに画面を勝手に拡大する） */
+.help-sheet .help-search input { font-size: 16px; }
+.help-sheet .help-list button { padding: 9px 8px; font-size: 14.5px; }
+.help-sheet .help-steps li, .help-sheet .help-lead { font-size: 14.5px; }
+.help-sheet .help-item, .help-sheet .help-dev ul { font-size: 14px; }
+
+/* ---- 管理ページ：右の端に重ねる ---- */
+.help-dock { position: fixed; z-index: 40; right: 0; top: 56px; bottom: 0; width: min(380px, 100vw); border-left: 1px solid var(--line); box-shadow: -10px 0 30px rgba(20, 30, 50, 0.1); }
+
+@media (prefers-reduced-motion: reduce) { .help-sheet { animation: none; } }
+@media print { .help, .help-zoom, .help-scrim { display: none !important; } }

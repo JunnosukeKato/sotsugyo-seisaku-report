@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使い方の手引き（管理者用）</title>
+<!--
+  卒業制作報告書 作成ツール「使い方の手引き」管理者用（A4 片面1枚）。見た目は案B「雑誌風」（guide-images/guide.css）に
+  guide-images/teacher.css を重ねたもの（デザイン案 mockups/v26 の t-c2）。先生の作業は「手引き_先生用」。
+  ・くわしいこと（各欄の説明・困ったときなど）は、管理ページの「？ 使い方」と docs/引き継ぎ手順.md に任せる。
+  ・文は、このファイルに直接書く。直したら node scripts/make-guides.mjs --pdf-only で PDF だけ作り直せる
+    （1ページか・はみ出し・文字の大きさ 10.5pt 以上・350字までを確かめ、public/guides/ にも写す）。
+  ・画面の画像は <figure class="shot" data-shot="g-…"> の場所に入る（guide-images/g-*.jpg。番号と枠は guide.js が重ねる）。
+    ツールや管理ページの画面が変わったら node scripts/make-guides.mjs で撮り直す。
+  ・管理ページの URL は載せない（管理者からメールで知らせる）。公開の場所に置くので、先生の名前・連絡先・大学のメールアドレスも載せない。
+  ・くわしい手順・担当の引き継ぎは docs/引き継ぎ手順.md。食い違わないよう、片方を直したらもう片方も確かめる。
+-->
+<link rel="stylesheet" href="../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/biz-udpgothic/700.css">
+<link rel="stylesheet" href="guide-images/guide.css">
+<link rel="stylesheet" href="guide-images/teacher.css">
+</head>
+<body>
+
+<!-- ================= 管理者用（片面） ================= -->
+<section class="sheet t lite front compact">
+  <div class="lhero sm adm bleed">
+    <div class="hero-top"><span class="d">BUNKA GAKUEN UNIVERSITY</span><span class="d">ADMIN GUIDE 2026</span></div>
+    <div class="year d">2026</div>
+    <p class="kick">卒業制作報告書 作成ツール</p>
+    <div class="ttl"><h1>使い方の手引き</h1><p class="for"><b>管理者用</b><span class="d">FOR ADMINS</span></p></div>
+    <p class="who-for"><b>管理者（1〜2人）</b>の作業</p>
+  </div>
+
+  <header class="lh" style="margin-top:5mm"><span class="num d">01</span><div><span class="k d">EVERY YEAR</span><h2>毎年の準備と公開</h2></div></header>
+  <div class="stage strip block"><figure class="shot flat" data-shot="g-admin-draft" data-badges="1,2,3,4" data-renum="2:4" data-labels="3:A,4:B" data-hl="1,2" aria-label="準備中の年度の見出しの欄" style="width:100%"></figure></div>
+  <section class="flow-band" style="margin-top:2.4mm">
+    <ol class="chain" style="grid-template-columns: repeat(4, 1fr)">
+      <li><span class="d">STEP 1</span><b><span class="btn">新年度を作成</span></b><small>今の年度をコピーし「準備中」で作る</small></li>
+      <li><span class="d">STEP 2</span><b>直して <span class="btn">保存</span></b><small>学生にはまだ見えない</small></li>
+      <li><span class="d">STEP 3</span><b>見本で確かめる</b><small>表紙と抄録の形</small></li>
+      <li><span class="d">STEP 4</span><b><span class="btn">この年度を学生に公開</span></b><small>前の年度は「終了」に</small></li>
+    </ol>
+  </section>
+  <div class="cols block" style="grid-template-columns: 136mm 1fr; gap: 5mm; align-items:center">
+    <figure class="shot lift" data-shot="g-admin-main" data-badges="" data-hl="6" aria-label="管理ページ（年度の設定）"></figure>
+    <div>
+      <p class="cap"><b>STEP 2 で直すところ</b></p>
+      <ul class="dots" style="margin-top:1mm">
+        <li>共通の題目</li>
+        <li>最終締切</li>
+        <li>コースと指導教員</li>
+        <li>囲みは見本（STEP 3）</li>
+      </ul>
+    </div>
+  </div>
+
+  <header class="lh"><span class="num d">02</span><div><span class="k d">ALSO</span><h2>そのほかの作業</h2></div></header>
+  <div class="cols block" style="grid-template-columns: 1fr 58mm; gap: 6mm; align-items:center">
+    <ul class="list1">
+      <li><span class="no">B</span><p><span class="btn">先生の登録</span>：大学のメールアドレスを貼り付け、役割を選ぶ</p></li>
+      <li><span class="no">A</span><p><span class="btn">変更履歴</span>：<span class="btn">この内容を読み込む</span> → 保存で元に戻る</p></li>
+      <li><span class="no">!</span><p><b>詳細設定</b>：Google の障害で全員ログインできないときだけ「止める」。直ったら「必須」に</p></li>
+    </ul>
+    <figure class="shot lift" data-shot="g-admin-switch" data-badges="" data-hl="1" aria-label="学生のドライブ保存の切り替え"></figure>
+  </div>
+
+  <div class="cols" style="grid-template-columns: 1fr 70mm; gap: 5mm; margin-top: 5mm">
+    <div class="dark">
+      <h3>SECURITY ─ 守ること</h3>
+      <ul class="dots">
+        <li>管理者・先生の Google アカウントは<b>2段階認証</b>に</li>
+        <li>スプレッドシートの共有は「制限付き」。編集者は管理者2人程度</li>
+        <li><b>管理者は2人以上</b>にしておく</li>
+      </ul>
+    </div>
+    <div class="note" style="display:block">
+      <b>担当の引き継ぎ</b>
+      <p style="margin-top:1mm">手順は <span class="fn">docs/引き継ぎ手順.md</span></p>
+      <p style="margin-top:0.6mm">管理者が0人のときも</p>
+    </div>
+  </div>
+  <div class="help block" style="margin-top:5mm"><span>くわしくは、管理ページの <span class="btn">？ 使い方</span> から</span></div>
+  <footer class="folio"><span>管理者用</span><span class="d">2026</span></footer>
+</section>
+
+<script src="guide-images/marks.js"></script>
+<script src="guide-images/guide.js"></script>
+</body>
+</html>

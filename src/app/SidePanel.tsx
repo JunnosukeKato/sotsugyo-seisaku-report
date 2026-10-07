@@ -10,7 +10,7 @@ import type { SaveState } from './useAutosave'
 import { WordImportLink } from './WordImport'
 
 /**
- * 右の欄。上から：名前・保存のようす・締切・手順書とバックアップ（今年度だけ「Word で書いた分を読み込む」）・使い方（手引き）／
+ * 右の欄。上から：名前・保存のようす・締切・手順書とバックアップと「？ 使い方」（今年度だけ「Word で書いた分を読み込む」）／
  * Word から写したあとの「つぎにすること」（今年度だけ）／学科からのお知らせ／ページ一覧／セルフチェック／PDFの書き出し
  */
 
@@ -28,6 +28,8 @@ interface Props {
   /** 「PDFを書き出す」を押して、紙面を確かめている途中 */
   exporting?: boolean
   onReferences: () => void
+  /** 「？ 使い方」：右の欄を使い方に切り替える（mockups/v27 案A） */
+  onHelp: () => void
   /** 今年度だけ：「Word で書いた分を読み込む」の小さなリンク（mockups/v24 ① 案C）。渡したときだけ出す */
   onWordImport?: () => void
   /** 今年度だけ：Word から写したあとの「つぎにすること」（mockups/v24 ③ 案B）。右の欄の上に出す */
@@ -227,14 +229,14 @@ export function SourceNotice() {
 }
 
 /**
- * 使い方の手引き（学生用の PDF）を新しいタブで開く小さなリンク。PDF は public/guides/ に置き、ツールといっしょに公開する
- * （scripts/make-guides.mjs で作る）。PC は右の欄の上、スマホはメニューに出す
+ * 「？ 使い方」のボタン（mockups/v27 案A）。PC は右の欄の「バックアップ」の横（押すと右の欄が使い方に替わる）、
+ * スマホはメニューの中（押すと画面いっぱいの使い方の欄）。印刷用の手引き（PDF）は、使い方の一覧のいちばん下から開く
  */
-export function GuideLink() {
+export function HelpButton({ onClick }: { onClick: () => void }) {
   return (
-    <a className="howto-link" href="./guides/student-guide.pdf" target="_blank" rel="noreferrer">
-      使い方（手引き）
-    </a>
+    <button className="link-btn help-btn" onClick={onClick}>
+      {Icon.help}使い方
+    </button>
   )
 }
 
@@ -326,7 +328,7 @@ export function Tally({ snap }: { snap: EditorSnapshot }) {
   )
 }
 
-export function SidePanel({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onReferences, onWordImport, wordTodo }: Props) {
+export function SidePanel({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onReferences, onHelp, onWordImport, wordTodo }: Props) {
   const errors = snap.findings.filter((f) => f.severity === 'error').length
   return (
     <aside className="side">
@@ -353,9 +355,9 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
           <button className="link-btn" onClick={onBackup}>
             {Icon.backup}バックアップ
           </button>
+          <HelpButton onClick={onHelp} />
         </div>
         {onWordImport && <WordImportLink onClick={onWordImport} />}
-        <GuideLink />
       </header>
 
       {wordTodo}

@@ -204,6 +204,11 @@ textarea.in { resize: vertical; }
 .drive-switch .warn { font-size: 12px; color: var(--error); line-height: 1.7; }
 .drive-switch .hint { line-height: 1.7; }
 
-/* 使い方の手引き（教員用の PDF）を開く小さなリンク（見出しの横。ソースコードのリンクと同じ、目立ちすぎない形） */
-.admin-header .howto { font-size: 12px; color: var(--muted); }
-.admin-header .howto:hover { color: var(--accent); }
+/* 「？ 使い方」のボタン（見出しの横。mockups/v27 案A）と、右の端に出る使い方の欄（src/help/help.css）の、このページにない色 */
+.admin-header .help-open { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px 5px 8px; border: 1px solid #c9cfe6; border-radius: 8px; background: #fff; color: var(--accent); font-size: 13px; }
+.admin-header .help-open svg { width: 17px; height: 17px; }
+.admin-header .help-open.on { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+.admin-header .help-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.help-dock { --panel-bg: #fff; --chip-bg: #eef0f3; --palette-hover: #f2f4f7; }
+/* 使い方の欄を開いている間は、入力欄と見本をその分だけ左に寄せる（欄の下に隠さない） */
+.admin.help-on .admin-main, .admin.help-on .teacher-main { margin-right: min(380px, 100vw); }

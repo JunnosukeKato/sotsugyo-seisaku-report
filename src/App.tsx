@@ -19,11 +19,16 @@ import { useKeyboardInset, useNarrow, useSwipe, useWheelPaging } from './app/uiS
 import { SidePanel, PageColumn } from './app/SidePanel'
 import { StartGuide, type GuideStep } from './app/StartGuide'
 import { TabLockedOverlay } from './app/TabLock'
+import { Tour } from './app/Tour'
+import { markTourSeen, tourSeen } from './app/tourMemory'
 import { useTabLock } from './app/useTabLock'
 import { useAutosave } from './app/useAutosave'
 import { usePanelWidths } from './app/usePanelWidths'
 import { WordImportDialog, WordTodoCard } from './app/WordImport'
 import { useWordTodo, wordImportOffered } from './app/useWordTodo'
+import { HelpView } from './help/HelpView'
+import { STUDENT_TOPICS } from './help/helpTopics'
+import { STUDENT_GUIDE_PATH, STUDENT_HELP_IMAGES } from './help/links'
 
 const noopSubscribe = () => () => {}
 const nullSnapshot = () => null
@@ -118,6 +123,11 @@ export default function App() {
   const [loadError, setLoadError] = useState<string | null>(null)
   // はじめて使う学生への案内（コース →（今年度だけ）Word で書き始めているか → 学籍番号 → 氏名 → サブタイトル）
   const [guide, setGuide] = useState<GuideStep | null>(null)
+  // 使い方（ヘルプ）：PC は右の欄が使い方に替わり、スマホは画面いっぱいの欄（mockups/v27 案A）
+  const [help, setHelp] = useState(false)
+  // 指差し確認（mockups/v27 案A）：出したい（tourWanted）→ ほかの窓や案内がなく、紙面が落ち着いたら出す（tourOn）
+  const [tourWanted, setTourWanted] = useState(false)
+  const [tourOn, setTourOn] = useState(false)
   const [configSource, setConfigSource] = useState<ConfigSource>('remote')
   const autosave = useAutosave()
   const snap = useSyncExternalStore(editor?.subscribe ?? noopSubscribe, editor?.getSnapshot ?? nullSnapshot) as EditorSnapshot | null
@@ -156,16 +166,19 @@ export default function App() {
   useKeyboardInset()
   useSwipe(stageRef, editor, narrow)
   // ホイールでページを送る（コースを選ぶ案内・Word で書き始めているかを聞く案内や、画面の上に出る窓が開いている間は送らない）
-  useWheelPaging(stageRef, scrollerRef, editor, !dialog && !gate && !driveDialog && !tabLock.locked && guide !== 'course' && guide !== 'word')
+  useWheelPaging(stageRef, scrollerRef, editor, !dialog && !gate && !driveDialog && !tabLock.locked && !tourOn && guide !== 'course' && guide !== 'word')
   useEffect(() => {
     if (editor && hasLayout) editor.setSheetHost(narrow ? sheetHostRef.current : null)
   }, [editor, narrow, hasLayout])
 
   // はじめて開いたときは、コースを選ぶところから案内する（コースが1つだけなら学籍番号から）。コースを選んでいない原稿も、コースを選ぶ案内を出す。
-  // 今年度だけ、コースが決まっている新しい原稿は、Word で書き始めているかを聞くところから
+  // 今年度だけ、コースが決まっている新しい原稿は、Word で書き始めているかを聞くところから。
+  // 案内を出さないとき（書き始めている原稿を開いた）は、この端末でまだ見ていなければ、指差し確認を出す
+  // （このツールに指差し確認ができる前に、案内を終えていた学生にも1回。ログインやどの原稿で続けるかが決まってから呼ばれる）
   const startGuide = useCallback((cfg: YearConfig, report: Report, isNew: boolean) => {
     if (!findCourse(cfg, report.basicInfo.courseId)) setGuide('course')
     else if (isNew) setGuide(wordImportOffered(cfg) ? 'word' : report.basicInfo.studentId.trim() ? 'name' : 'studentId')
+    else if (!tourSeen()) setTourWanted(true)
   }, [])
 
   /** 学生のアカウントなら、表紙の学籍番号が空のときだけ、メールアドレスの学籍番号を入れる（学生は直せる） */
@@ -450,8 +463,8 @@ export default function App() {
   // ←→・PageUp／PageDown（入力欄の外）でページを送る
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
-      // ログインするまでは、何もできないようにする
-      if (!editor || gate || tabLock.locked) return
+      // ログインするまでは、何もできないようにする（指差し確認の間も）
+      if (!editor || gate || tabLock.locked || tourOn) return
       if (e.ctrlKey || e.metaKey) {
         if (e.key === 'z' && !isTyping(e.target)) {
           e.preventDefault()
@@ -474,7 +487,7 @@ export default function App() {
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [editor, dialog, guide, gate, driveDialog, tabLock.locked])
+  }, [editor, dialog, guide, gate, driveDialog, tabLock.locked, tourOn])
 
   const saveBackup = useCallback(async () => {
     if (!snap) return
@@ -559,6 +572,43 @@ export default function App() {
     setWordTodo(null)
   }, [editor, wordTodo, setWordTodo, matchYear])
 
+  /** 使い方の「指差し確認をもう一度見る」：使い方を閉じて、指差し確認を出す */
+  const replayTour = useCallback(() => {
+    setHelp(false)
+    editorRef.current?.finishEditing()
+    setTourWanted(true)
+  }, [])
+  const endTour = useCallback(() => {
+    markTourSeen()
+    setTourWanted(false)
+    setTourOn(false)
+  }, [])
+  const reloginShown = !!drive && !gate && !driveDialog && !reloginLater && driveState?.status.kind === 'expired'
+  // 指差し確認を出さないとき：ログインの窓・どの原稿で続けるか・学籍番号の確かめ・Word の読み込みなどの窓・別のタブで開いている・
+  // はじめての案内・使い方を開いている
+  const tourBlocked = !snap?.layout || !!loadError || !!guide || !!gate || !!dialog || !!driveDialog || tabLock.locked || help || reloginShown
+  // 紙面を組み直している・ページを送っている・書いている途中は、始めない（光を当てる場所が動くため）
+  const tourSettling = !snap || snap.rendering || snap.turning || !!snap.editingId
+  // 出したいとき、出せるようになったら出す（描く途中で合わせる。一度出したら、とばすか見終えるまで出したまま）
+  if (tourWanted && !tourOn && !tourBlocked && !tourSettling) setTourOn(true)
+  // PC：使い方を閉じたら、右の欄の「？ 使い方」に戻る（キーボードで続けられるように）
+  const helpWasOpen = useRef(false)
+  useEffect(() => {
+    if (!help && helpWasOpen.current && !narrow) document.querySelector<HTMLElement>('.side .help-btn')?.focus()
+    helpWasOpen.current = help
+  }, [help, narrow])
+  const helpView = (variant: 'side' | 'sheet') => (
+    <HelpView
+      topics={STUDENT_TOPICS}
+      who="student"
+      imageBase={STUDENT_HELP_IMAGES}
+      guides={[{ label: '学生用', href: STUDENT_GUIDE_PATH }]}
+      variant={variant}
+      onClose={() => setHelp(false)}
+      onTour={replayTour}
+    />
+  )
+
   const ready = editor && snap
   const wordOffered = wordImportOffered(config)
   // 右の欄（スマホはメニュー）の小さなリンク。写したあとの「つぎにすること」が出ている間は出さない（読み直すときは「読み込む前の原稿に戻す」から）
@@ -620,6 +670,7 @@ export default function App() {
           driveStopped={driveStopped}
           sheetHostRef={sheetHostRef}
           onReferences={() => setDialog({ kind: 'references' })}
+          onHelp={() => setHelp(true)}
           onBackup={async () => setDialog({ kind: 'backup', snapshots: await listSnapshots() })}
           exporting={exporting}
           onExport={startExport}
@@ -627,12 +678,16 @@ export default function App() {
           wordTodo={wordTodo ? todoCard : undefined}
           checkRequest={checkRequest}
         />
+      ) : ready && help ? (
+        // PC の使い方：右の欄がまるごと使い方に替わる（紙面と道具は、そのまま使える）
+        <aside className="side">{helpView('side')}</aside>
       ) : ready ? (
         <SidePanel
           editor={editor}
           snap={snap}
           config={config}
           onReferences={() => setDialog({ kind: 'references' })}
+          onHelp={() => setHelp(true)}
           saveState={autosave.state}
           drive={driveStopped ? undefined : driveControls}
           driveStopped={driveStopped}
@@ -687,8 +742,16 @@ export default function App() {
           }}
           wordImport={wordOffered}
           onWordImport={() => setDialog({ kind: 'word' })}
+          onFinish={() => {
+            // 案内を終えたら、指差し確認を出す（この端末でまだ見ていなければ）
+            if (!tourSeen()) setTourWanted(true)
+          }}
         />
       )}
+      {/* スマホの使い方：画面いっぱいの欄（メニューの「？ 使い方」から） */}
+      {ready && narrow && help && helpView('sheet')}
+      {/* 指差し確認（ほかの窓や案内が出ている間は出さない） */}
+      {ready && tourOn && !tourBlocked && <Tour narrow={narrow} drive={!!drive && !driveStopped} onDone={endTour} />}
       {dialog?.kind === 'word' && snap && editor && (
         <WordImportDialog config={config} courseId={snap.report.basicInfo.courseId} onImport={importWord} onClose={() => setDialog(null)} />
       )}
@@ -870,7 +933,7 @@ export default function App() {
           }}
         />
       )}
-      {drive && !gate && !driveDialog && !reloginLater && driveState?.status.kind === 'expired' && (
+      {reloginShown && (
         <ReloginDialog
           busy={driveBusy}
           error={reloginError}

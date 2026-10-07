@@ -76,9 +76,11 @@ interface Props {
   wordImport?: boolean
   /** 「はい、Word から読み込む」（ファイルを選ぶ窓を開く） */
   onWordImport?: () => void
+  /** 最後の「表紙ができました」で「本文へ進む」「閉じる」を押した（このあと指差し確認を出す。mockups/v27） */
+  onFinish?: () => void
 }
 
-export function StartGuide({ editor, snap, config, configMissing, narrow, step, onStep, onChooseCourse, wordImport, onWordImport }: Props) {
+export function StartGuide({ editor, snap, config, configMissing, narrow, step, onStep, onChooseCourse, wordImport, onWordImport, onFinish }: Props) {
   const field = FIELD_OF[step]
   const [rect, setRect] = useState<DOMRect | null>(null)
   const tipRef = useRef<HTMLDivElement>(null)
@@ -251,10 +253,24 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
             <p>次は本文を書きます（抄録は、本文を書き終えて先生の許可が出てから書きます）。紙面の薄い字は「ここに何を書くか」の説明で、書き始めると消えます（PDFには出ません）。</p>
             <div className="g-actions">
               {/* 表紙の次は抄録・目次のページなので、本文の最初のページへ移る */}
-              <button className="primary" onClick={() => { close(); editor.goToArea('body') }}>
+              <button
+                className="primary"
+                onClick={() => {
+                  close()
+                  editor.goToArea('body')
+                  onFinish?.()
+                }}
+              >
                 本文へ進む
               </button>
-              <button onClick={close}>閉じる</button>
+              <button
+                onClick={() => {
+                  close()
+                  onFinish?.()
+                }}
+              >
+                閉じる
+              </button>
             </div>
           </>
         )

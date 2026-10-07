@@ -81,14 +81,8 @@ await withEdge(async (browser) => {
   check('コースを選ぶと、そのコースの下書きが本文に入り、「いいえ」で学籍番号の入力が始まる', !!s.report.basicInfo.courseId && s.report.body.length > 0 && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'paragraph' && b.hint), s.report.basicInfo.courseId)
   const noticeText = () => page.evaluate(() => document.querySelector('.side .notice')?.textContent ?? '')
   check('右の欄に、自分のコースのお知らせが出る', (await noticeText()).includes('映画・舞台衣装デザイナー コースからのお知らせ') && (await noticeText()).includes('衣装コースへのお知らせ'), await noticeText())
-  // 使い方の手引き（学生用の PDF。public/guides/ に置き、ツールといっしょに公開する）を新しいタブで開くリンク
-  const guideLink = await page.evaluate(async () => {
-    const a = document.querySelector('.side .howto-link')
-    if (!a) return null
-    const res = await fetch(a.getAttribute('href'), { method: 'HEAD' })
-    return { href: a.getAttribute('href'), target: a.getAttribute('target'), type: res.headers.get('content-type') }
-  })
-  check('右の欄に「使い方（手引き）」のリンクがあり、学生用の手引きの PDF を新しいタブで開く', guideLink?.href === './guides/student-guide.pdf' && guideLink.target === '_blank' && /pdf/.test(guideLink.type ?? ''), JSON.stringify(guideLink))
+  // 「？ 使い方」のボタン（右の欄の「バックアップ」の横。mockups/v27 案A。印刷用の手引きの PDF は、使い方の一覧のいちばん下から開く）
+  check('右の欄の「バックアップ」の横に「？ 使い方」のボタンがある', await page.evaluate(() => [...document.querySelectorAll('.side .links .link-btn')].map((b) => b.textContent.trim()).join(',').includes('バックアップ,使い方')))
   await page.keyboard.type('00ZZ0123')
   await page.keyboard.press('Enter')
   await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:name', { timeout: 30000 })
@@ -112,6 +106,108 @@ await withEdge(async (browser) => {
   s = await snap()
   check('案内に沿って、表紙の学籍番号・氏名・サブタイトルを入力できる', s.report.basicInfo.studentId === '00ZZ0123' && s.report.basicInfo.name === '文化　花子' && s.report.basicInfo.subtitleInput === 'シンドバッド' && !(await page.$('.guide')), JSON.stringify(s.report.basicInfo))
   check('表紙の未入力の指摘が消える', !s.findings.some((f) => f.ruleId === 'required-field'))
+
+  // ---- 指差し確認（はじめての案内を終えたあと、1か所ずつ光を当てる。mockups/v27 案A） ----
+  const TOUR_KEY = 'sotsugyo-seisaku-report-tour'
+  const pause0 = (ms) => new Promise((r) => setTimeout(r, ms))
+  const tourStep = () =>
+    page.evaluate(() => ({
+      count: document.querySelector('.tour-k span')?.textContent ?? '',
+      title: document.querySelector('.tour-tip h2')?.textContent ?? '',
+      focus: document.activeElement?.classList.contains('next') ?? false,
+      spot: !!document.querySelector('.tour-spot'),
+      next: document.querySelector('.tour-acts .next')?.textContent ?? '',
+      skip: !!document.querySelector('.tour-acts .skip'),
+      again: document.querySelector('.tour-again')?.textContent ?? '',
+    }))
+  const tourShown = await page.waitForSelector('.tour .tour-tip', { timeout: 20000 }).then(() => true, () => false)
+  await pause0(300)
+  const steps = []
+  for (let i = 0; tourShown && i < 10; i++) {
+    const st = await tourStep()
+    steps.push(st)
+    if (st.next === 'おわり') break
+    // 「次へ」は、吹き出しに移っているので Enter で押せる
+    await page.keyboard.press('Enter')
+    await pause0(250)
+  }
+  await page.screenshot({ path: `${OUT}/0-tour-last.png` })
+  check(
+    '案内を終えると指差し確認が出て、「次へ」（Enter）で7か所を順に見られる（光の枠・「1 / 7」・「次へ」に移っている・「とばす」）',
+    steps.map((x) => x.title).join(',') === '紙面,道具,ページの一覧,保存のようす,セルフチェック,PDFを書き出す,？ 使い方' && steps.every((x) => x.spot && x.focus) && steps[0].count === '1 / 7' && steps[0].skip,
+    JSON.stringify(steps.map((x) => `${x.count} ${x.title}${x.focus ? '' : '（移っていない）'}`)),
+  )
+  const lastStep = steps.at(-1)
+  check('最後は「？ 使い方」を指し、「おわり」と、使い方からもう一度見られることを伝える（「とばす」はない）', lastStep?.next === 'おわり' && !lastStep.skip && lastStep.again.includes('使い方'), JSON.stringify(lastStep))
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => !document.querySelector('.tour'), { timeout: 10000 }).catch(() => {})
+  check('「おわり」で閉じ、見たことをこの端末に覚える', !(await page.$('.tour')) && (await page.evaluate((k) => localStorage.getItem(k), TOUR_KEY)) === 'done')
+
+  // ---- 使い方（PC：右の欄が使い方に替わる。mockups/v27 案A） ----
+  await page.click('.side .help-btn')
+  await page.waitForSelector('.side .help-side')
+  await pause0(300)
+  const helpOpen = await page.evaluate(() => ({
+    topics: document.querySelectorAll('.help-list button').length,
+    check: !!document.querySelector('.side .sec.check'),
+    focus: document.activeElement?.classList.contains('help-title') ?? false,
+    pdf: document.querySelector('.help-foot .help-pdf')?.getAttribute('href'),
+    paper: !!document.querySelector('.palette'),
+  }))
+  check('「？ 使い方」で、右の欄が使い方に替わる（項目16・見出しに移る・紙面と道具はそのまま・いちばん下に印刷用の手引き（PDF））', helpOpen.topics === 16 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf', JSON.stringify(helpOpen))
+  await page.type('.help-search input', 'PDF 出ない')
+  await pause0(300)
+  const found = await page.evaluate(() => ({
+    count: document.querySelector('.help-count')?.textContent ?? '',
+    titles: [...document.querySelectorAll('.help-results .t')].map((t) => t.textContent),
+    marks: [...new Set([...document.querySelectorAll('.help-results mark')].map((m) => m.textContent))],
+    part: !!document.querySelector('.help-part'),
+  }))
+  await page.screenshot({ path: `${OUT}/0-help-search.png` })
+  check('「言葉で探す」に「PDF 出ない」と入れると、両方の言葉が入っている項目が先に出て、言葉に印（黄色）が付く', found.titles[0] === 'PDF の出し方（端末ごと）' && found.titles[1] === '下書きの PDF' && found.part && found.marks.includes('PDF') && found.marks.includes('出ない') && found.count.includes('件'), JSON.stringify(found))
+  await page.evaluate(() => document.querySelector('.help-results button').click())
+  await page.waitForSelector('.help-topic')
+  await pause0(400)
+  const topic = await page.evaluate(() => ({
+    title: document.querySelector('.help-topic h3')?.textContent,
+    back: document.querySelector('.help-back')?.textContent,
+    steps: document.querySelectorAll('.help-steps li').length,
+    device: document.querySelector('.help-dev .tabs .on')?.textContent,
+    marks: document.querySelectorAll('.help-topic mark').length,
+    img: (() => {
+      const i = document.querySelector('.help-shot img')
+      return i ? { src: i.getAttribute('src'), loaded: i.complete && i.naturalWidth > 0 } : null
+    })(),
+    focus: document.activeElement?.tagName,
+  }))
+  check('探した結果から項目を開くと、手順・端末ごとの手順・画面の写真が出て、言葉に印が付く（「探した結果へ」で戻れる）', topic.title === 'PDF の出し方（端末ごと）' && topic.back?.includes('探した結果へ') && topic.steps === 3 && topic.device === 'パソコン' && topic.marks > 0 && topic.img?.src === './help/export.jpg' && topic.img.loaded && topic.focus === 'H3', JSON.stringify(topic))
+  await page.click('.help-shot-btn')
+  await page.waitForSelector('.help-zoom img')
+  await page.keyboard.press('Escape')
+  await pause0(200)
+  check('「押すと大きく」で画面の写真を大きく出し、Esc でそれだけを閉じる', !(await page.$('.help-zoom')) && !!(await page.$('.side .help-side')))
+  await page.click('.help-back')
+  await page.click('.help-clear')
+  await pause0(200)
+  // 使い方の「指差し確認をもう一度見る」→「いま見る」：使い方を閉じて、指差し確認を出す。Esc は「とばす」
+  await page.evaluate(() => document.querySelector('.help-list [data-topic="tour"]').click())
+  await page.waitForSelector('.help-action')
+  await page.click('.help-action')
+  const replayed = await page.waitForSelector('.tour .tour-tip', { timeout: 15000 }).then(() => true, () => false)
+  const replayInfo = await tourStep()
+  await page.keyboard.press('Escape')
+  await pause0(300)
+  check('使い方の「指差し確認をもう一度見る」から、もう一度見られ（使い方は閉じる）、Esc でとばせる', replayed && replayInfo.count === '1 / 7' && !(await page.$('.help-side')) && !(await page.$('.tour')), JSON.stringify(replayInfo))
+  await page.click('.side .help-btn')
+  await page.waitForSelector('.side .help-side')
+  await page.click('.help-close')
+  await pause0(200)
+  check('使い方の「閉じる」で、セルフチェックの欄に戻る（「？ 使い方」に戻る）', !(await page.$('.help-side')) && !!(await page.$('.side .sec.check')) && (await page.evaluate(() => document.activeElement?.classList.contains('help-btn'))))
+  // 一度見たら、読み込み直しても出ない
+  await page.reload({ waitUntil: 'networkidle0' })
+  await ready()
+  await pause0(1200)
+  check('指差し確認は、一度見たら（とばしたら）この端末では次から出ない', !(await page.$('.tour')) && !(await page.$('.guide')))
 
   // ---- キーボード：紙面の欄に Tab で移り、Enter で書き始め、Esc で戻る（mockups/v23 ④） ----
   const focused = () =>
@@ -949,7 +1045,9 @@ async function wordImportCheck(browser) {
   await ready()
   const coverDone = await page.evaluate(() => [...document.querySelectorAll('.side .word-todo li')].find((li) => li.textContent.includes('表紙を確かめる'))?.className)
   check('表紙のページを開くと、「表紙を確かめる」に ✓ が付く', coverDone === 'done', coverDone)
-  // 閉じるまで残る（読み込み直しても）
+  check('Word から読み込んだあと（案内を終えていない）は、指差し確認を出さない', !(await page.$('.tour')))
+  // 閉じるまで残る（読み込み直しても）。読み込み直すと指差し確認が出るので、見たことにしておく（指差し確認は上の確かめで見る）
+  await page.evaluate(() => localStorage.setItem('sotsugyo-seisaku-report-tour', 'done'))
   await page.reload({ waitUntil: 'networkidle0' })
   await ready()
   await pause(300)

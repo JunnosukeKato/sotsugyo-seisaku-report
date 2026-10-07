@@ -5,7 +5,7 @@ import { findEditable, type EditableKind } from '../editor/reportOps'
 import type { Report } from '../model/types'
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
-import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, GuideLink, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
+import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, HelpButton, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
 import { keepFocus, PAGE_CONTEXT, pageName } from './uiShared'
 import { DriveChip, DriveMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
@@ -263,6 +263,8 @@ interface Props {
   /** 「PDFを書き出す」を押して、紙面を確かめている途中 */
   exporting?: boolean
   onReferences: () => void
+  /** 「？ 使い方」：画面いっぱいの使い方の欄を開く（メニューから。mockups/v27 案A） */
+  onHelp: () => void
   sheetHostRef: React.RefObject<HTMLDivElement | null>
   /** 今年度だけ：メニューの「Word で書いた分を読み込む」の小さなリンク（mockups/v24 ① 案C）。渡したときだけ出す */
   onWordImport?: () => void
@@ -273,7 +275,7 @@ interface Props {
 }
 
 /** スマホ版の、紙面のまわりの部品（紙面そのものは App の .stage） */
-export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onReferences, sheetHostRef, onWordImport, wordTodo, checkRequest }: Props) {
+export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onReferences, onHelp, sheetHostRef, onWordImport, wordTodo, checkRequest }: Props) {
   const [sheet, setSheet] = useState<SheetKind>(null)
   const close = () => setSheet(null)
   // checkRequest が増えたら、チェックの欄を開く（描く途中で合わせる。React の「前の値と比べて state を変える」書き方）
@@ -346,10 +348,10 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
         <button className="add" onClick={() => setSheet('add')}>
           <span className="plus">{PhoneIcon.plus}</span>追加
         </button>
-        <button onClick={() => setSheet('check')}>
+        <button className="nav-check" onClick={() => setSheet('check')}>
           {PhoneIcon.check}チェック{errors > 0 && <i className="badge">{errors}</i>}
         </button>
-        <button onClick={onExport} disabled={exporting}>
+        <button className="nav-pdf" onClick={onExport} disabled={exporting}>
           {Icon.pdf}
           {exporting ? '確認中…' : 'PDF'}
         </button>
@@ -407,6 +409,12 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
             >
               {Icon.backup}バックアップ
             </button>
+            <HelpButton
+              onClick={() => {
+                close()
+                onHelp()
+              }}
+            />
           </div>
           {onWordImport && (
             <WordImportLink
@@ -416,7 +424,6 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
               }}
             />
           )}
-          <GuideLink />
           <SourceNotice />
         </Sheet>
       )}

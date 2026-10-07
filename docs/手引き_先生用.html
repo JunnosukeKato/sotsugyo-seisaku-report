@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>使い方の手引き（先生用）</title>
+<!--
+  卒業制作報告書 作成ツール「使い方の手引き」先生用（A4 片面1枚）。見た目は案B「雑誌風」（guide-images/guide.css）に
+  guide-images/teacher.css を重ねたもの（デザイン案 mockups/v26 の t-c2）。管理者の作業は「手引き_管理者用」に分けた。
+  ・くわしいこと（困ったとき・各欄の説明など）は、管理ページの「？ 使い方」に任せる。
+  ・文は、このファイルに直接書く。直したら node scripts/make-guides.mjs --pdf-only で PDF だけ作り直せる
+    （1ページか・はみ出し・文字の大きさ 10.5pt 以上・350字までを確かめ、public/guides/ にも写す）。
+  ・画面の画像は <figure class="shot" data-shot="g-…"> の場所に入る（guide-images/g-*.jpg。番号と枠は guide.js が重ねる）。
+    ツールや管理ページの画面が変わったら node scripts/make-guides.mjs で撮り直す。
+  ・管理ページの URL は載せない（管理者からメールで知らせる）。公開の場所に置くので、先生の名前・連絡先・大学のメールアドレスも載せない。
+  ・くわしい手順・担当の引き継ぎは docs/引き継ぎ手順.md。食い違わないよう、片方を直したらもう片方も確かめる。
+-->
+<link rel="stylesheet" href="../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/biz-udpgothic/700.css">
+<link rel="stylesheet" href="guide-images/guide.css">
+<link rel="stylesheet" href="guide-images/teacher.css">
+</head>
+<body>
+
+<!-- ================= 先生用（片面） ================= -->
+<section class="sheet t lite front compact">
+  <div class="lhero sm bleed">
+    <div class="hero-top"><span class="d">BUNKA GAKUEN UNIVERSITY</span><span class="d">FACULTY GUIDE 2026</span></div>
+    <div class="year d">2026</div>
+    <p class="kick">卒業制作報告書 作成ツール</p>
+    <div class="ttl"><h1>使い方の手引き</h1><p class="for"><b>先生用</b><span class="d">FOR FACULTY</span></p></div>
+    <div class="lqr"><img src="guide-images/qr-guide.svg" alt="学生用ツールの URL の QR コード"><span>学生用ツール</span></div>
+  </div>
+
+  <header class="lh" style="margin-top:5mm"><span class="num d">01</span><div><span class="k d">HOW IT WORKS</span><h2>しくみと学生の1年</h2></div></header>
+  <div class="map2 sm">
+    <div class="node"><span class="who">先生</span><h3>管理ページ</h3></div>
+    <div class="arrow"><span>設定</span></div>
+    <div class="node stu"><span class="who">学生</span><h3>学生用ツール</h3></div>
+    <div class="arrow both"><i class="ah"></i><span>保存</span></div>
+    <div class="node data stu"><span class="who">原稿</span><h3>学生の端末と本人のドライブ</h3></div>
+    <div class="wall2"><b>原稿は、先生には届かない</b><i>→</i><span>見るのは、学生が書き出した PDF</span></div>
+  </div>
+  <section class="flow-band block">
+    <ol class="chain" style="grid-template-columns: repeat(6, 1fr)">
+      <li><span class="d">1</span><b>ログイン</b><small>大学のアカウント</small></li>
+      <li><span class="d">2</span><b>コースを選ぶ</b><small>ひな形が入る</small></li>
+      <li><span class="d">3</span><b>本文を書く</b><small>セルフチェックで直す</small></li>
+      <li class="me"><span class="d">4</span><b>途中点検</b><small>下書きの PDF</small></li>
+      <li class="me"><span class="d">5</span><b>抄録</b><small>先生の許可のあと</small></li>
+      <li><span class="d">6</span><b>提出用 PDF</b><small>エラー0件で</small></li>
+    </ol>
+  </section>
+
+  <header class="lh"><span class="num d">02</span><div><span class="k d">WHAT TO CHECK</span><h2>指導で見るところ</h2></div></header>
+  <ol class="look sm" style="grid-template-columns: 50mm 1fr 50mm">
+    <li>
+      <div class="stage"><figure class="shot lift flat" data-shot="g-draft-page" aria-label="下書きの PDF（透かし入り）" style="height:35mm"></figure></div>
+      <p class="ln"><span class="no">1</span><span>途中点検は、下書きの PDF（透かし入り）</span></p>
+    </li>
+    <li>
+      <div class="stage"><figure class="shot lift" data-shot="g-abstract" data-badges="" data-hl="1" aria-label="抄録のページの「先生の許可が出た」" style="height:35mm"></figure></div>
+      <p class="ln"><span class="no">2</span><span>抄録は、先生の許可が出てから</span></p>
+    </li>
+    <li>
+      <div class="stage"><figure class="shot lift" data-shot="g-check" data-crop-h="56.14" data-badges="" data-hl="1" aria-label="セルフチェック" style="height:35mm"></figure></div>
+      <p class="ln"><span class="no">3</span><span><span class="x">×</span> エラーが残ると、提出用 PDF は出せない</span></p>
+    </li>
+  </ol>
+
+  <header class="lh"><span class="num d">03</span><div><span class="k d">ADMIN PAGE</span><h2>ひな形とお知らせを直す</h2></div></header>
+  <ul class="dots block">
+    <li>管理ページの URL は、管理者からメールで届く。大学のアカウントで開く</li>
+  </ul>
+  <figure class="shot lift block" data-shot="g-admin-teacher" aria-label="先生の画面"></figure>
+  <ol class="row-steps fit" style="margin-top:3.4mm">
+    <li><span class="no">1</span><p><span class="btn">編集する</span> で、ひな形を直す</p></li>
+    <li><span class="no">2</span><p>お知らせを書く（誰でも読める）</p></li>
+    <li><span class="no">3</span><p><span class="btn">保存して学生に反映</span></p></li>
+  </ol>
+  <div class="help block"><span>くわしくは、管理ページの <span class="btn">？ 使い方</span> から</span><small>書き間違えやすい語・困ったときも</small></div>
+  <footer class="folio"><span>先生用</span><span class="d">2026</span></footer>
+</section>
+
+<script src="guide-images/marks.js"></script>
+<script src="guide-images/guide.js"></script>
+</body>
+</html>

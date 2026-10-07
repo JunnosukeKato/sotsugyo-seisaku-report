@@ -27,12 +27,36 @@ await withEdge(async (browser) => {
   const clickButton = (text) => page.evaluate((text) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(text)).click(), text)
 
   check('公開中の2026年度が開く', await page.evaluate(() => document.querySelector('.badge.pub')?.textContent === '公開中'))
-  // 使い方の手引き（教員用の PDF。学生用ツールといっしょに公開している）を新しいタブで開くリンク
-  const guideLink = () => page.evaluate(() => {
-    const a = document.querySelector('.admin-header .howto')
-    return a ? `${a.getAttribute('href')} ${a.getAttribute('target')}` : ''
+  // 「？ 使い方」（見出しの横。右の端に先生用の使い方の欄が出る。mockups/v27 案A）
+  await page.click('.admin-header .help-open')
+  await page.waitForSelector('.help-dock')
+  const adminHelp = await page.evaluate(() => ({
+    topics: document.querySelectorAll('.help-dock .help-list button').length,
+    pressed: document.querySelector('.admin-header .help-open')?.getAttribute('aria-pressed'),
+    pdf: [...document.querySelectorAll('.help-dock .help-foot a')].map((a) => `${a.textContent} ${a.getAttribute('href')} ${a.getAttribute('target')}`),
+    form: !!document.querySelector('.admin .form'),
+  }))
+  check(
+    '見出しの横の「？ 使い方」で、右の端に先生用の使い方が出る（項目10・いちばん下に印刷用の手引き（先生用・管理者用の PDF）を新しいタブで）',
+    adminHelp.topics === 10 && adminHelp.pressed === 'true' && adminHelp.form &&
+      adminHelp.pdf.join('|') === '先生用 https://junnosukekato.github.io/sotsugyo-seisaku-report/guides/teacher-guide.pdf _blank|管理者用 https://junnosukekato.github.io/sotsugyo-seisaku-report/guides/admin-guide.pdf _blank',
+    JSON.stringify(adminHelp),
+  )
+  await page.type('.help-dock .help-search input', '反映 されない')
+  await new Promise((r) => setTimeout(r, 300))
+  const adminFound = await page.evaluate(() => ({ first: document.querySelector('.help-dock .help-results .t')?.textContent, marks: [...new Set([...document.querySelectorAll('.help-dock .help-results mark')].map((m) => m.textContent))] }))
+  check('先生用の使い方でも「言葉で探す」が使え、言葉に印が付く（「反映 されない」→ 保存と反映）', adminFound.first === '保存と反映（学生に届くまで）' && adminFound.marks.includes('反映'), JSON.stringify(adminFound))
+  await page.evaluate(() => document.querySelector('.help-dock .help-results button').click())
+  await page.waitForSelector('.help-dock .help-topic')
+  await new Promise((r) => setTimeout(r, 500))
+  const adminTopic = await page.evaluate(() => {
+    const i = document.querySelector('.help-dock .help-shot img')
+    return { title: document.querySelector('.help-dock .help-topic h3')?.textContent, img: i?.getAttribute('src'), loaded: !!i && i.complete && i.naturalWidth > 0 }
   })
-  check('見出しの横に「使い方（教員用の手引き）」のリンクがあり、新しいタブで開く', (await guideLink()) === 'https://junnosukekato.github.io/sotsugyo-seisaku-report/guides/teacher-guide.pdf _blank', await guideLink())
+  // 画面の写真は、本番（Apps Script）では学生用ツールの URL から読む。開発中は開発サーバーの public/help/ から
+  check('項目を開くと、画面の写真が出る（開発中は public/help/ から）', adminTopic.title === '保存と反映（学生に届くまで）' && adminTopic.img === '/help/admin-save.jpg' && adminTopic.loaded, JSON.stringify(adminTopic))
+  await page.click('.help-dock .help-close')
+  check('「閉じる」で使い方の欄が閉じる', !(await page.$('.help-dock')))
 
   // 共通の題目を変えると、見本の表紙と抄録にすぐ反映される
   const title = await fieldInput('共通の題目')
@@ -129,7 +153,13 @@ await withEdge(async (browser) => {
   await teacher.waitForSelector('.teacher-main')
   check('先生には、ひな形の一覧だけの画面が出る（年度の設定の欄は出ない）', !(await teacher.$('.form')) && (await teacher.$$('.teacher-main .tpl-row')).length > 0)
   check('先生の画面にも、ソースコードの場所のリンクが出る（AGPL）', await teacher.evaluate(() => !!document.querySelector('.teacher-main .source a')?.href))
-  check('先生の画面にも、見出しの横に「使い方（教員用の手引き）」のリンクが出る', await teacher.evaluate(() => /guides\/teacher-guide\.pdf$/.test(document.querySelector('.admin-header .howto')?.getAttribute('href') ?? '')))
+  await teacher.click('.admin-header .help-open')
+  await teacher.waitForSelector('.help-dock')
+  const teacherHelp = await teacher.evaluate(() => ({ topics: document.querySelectorAll('.help-dock .help-list button').length, main: !!document.querySelector('.admin.help-on .teacher-main') }))
+  check('先生の画面にも、見出しの横に「？ 使い方」があり、右の端に先生用の使い方が出る（その分、画面を左に寄せる）', teacherHelp.topics === 10 && teacherHelp.main, JSON.stringify(teacherHelp))
+  await teacher.keyboard.press('Escape')
+  await teacher.waitForFunction(() => !document.querySelector('.help-dock'), { timeout: 5000 }).catch(() => {})
+  check('Esc でも使い方の欄が閉じる', !(await teacher.$('.help-dock')))
   await teacher.evaluate(() => document.querySelector('.teacher-main .tpl-row button').click())
   await teacher.waitForSelector('.tpl-modal')
   await teacher.evaluate(() => [...document.querySelectorAll('.tpl-modal .row input')].at(-1).focus())
