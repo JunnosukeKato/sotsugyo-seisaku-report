@@ -10,6 +10,7 @@ import { keepFocus, PAGE_CONTEXT, pageName } from './uiShared'
 import { DriveChip, DriveMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
 import { useDialogFocus } from './useDialogFocus'
+import { WordImportLink } from './WordImport'
 
 /**
  * スマホ版の画面（mockups/v7 案2「下から書く欄が出る」）。
@@ -263,12 +264,24 @@ interface Props {
   exporting?: boolean
   onReferences: () => void
   sheetHostRef: React.RefObject<HTMLDivElement | null>
+  /** 今年度だけ：メニューの「Word で書いた分を読み込む」の小さなリンク（mockups/v24 ① 案C）。渡したときだけ出す */
+  onWordImport?: () => void
+  /** 今年度だけ：Word から写したあとの「つぎにすること」（mockups/v24 ④）。チェックの欄のいちばん上に出す。onPick：紙面へ移る前に欄を閉じる */
+  wordTodo?: (onPick: () => void) => ReactNode
+  /** 増えたら、チェックの欄を開く（Word から写し終えたとき） */
+  checkRequest?: number
 }
 
 /** スマホ版の、紙面のまわりの部品（紙面そのものは App の .stage） */
-export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onReferences, sheetHostRef }: Props) {
+export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onReferences, sheetHostRef, onWordImport, wordTodo, checkRequest }: Props) {
   const [sheet, setSheet] = useState<SheetKind>(null)
   const close = () => setSheet(null)
+  // checkRequest が増えたら、チェックの欄を開く（描く途中で合わせる。React の「前の値と比べて state を変える」書き方）
+  const [handledRequest, setHandledRequest] = useState(checkRequest)
+  if (checkRequest !== handledRequest) {
+    setHandledRequest(checkRequest)
+    setSheet('check')
+  }
   const errors = snap.findings.filter((f) => f.severity === 'error').length
   const kind = snap.layout?.kinds[snap.page]
   const showSelection = !snap.editingId && (snap.selection || kind === 'photos')
@@ -356,6 +369,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
       )}
       {sheet === 'check' && (
         <Sheet title="セルフチェック" extra={<Tally snap={snap} />} onClose={close}>
+          {wordTodo?.(close)}
           <CheckBody editor={editor} snap={snap} config={config} onPick={close} />
           <button
             className="export"
@@ -394,6 +408,14 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
               {Icon.backup}バックアップ
             </button>
           </div>
+          {onWordImport && (
+            <WordImportLink
+              onClick={() => {
+                close()
+                onWordImport()
+              }}
+            />
+          )}
           <SourceNotice />
         </Sheet>
       )}

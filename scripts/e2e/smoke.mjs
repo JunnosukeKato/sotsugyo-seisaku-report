@@ -1,13 +1,27 @@
 // 通しの動作確認（Edge を自動で操作する）。
 // 新しい報告書に、表紙・抄録・本文を入力し、指摘を直し、図を入れ、PDF に書き出すまでを行う。
 // 使い方: node scripts/e2e/smoke.mjs（開発サーバーが http://localhost:5173 で動いていること）
-import { mkdirSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { withEdge } from '../poc/edge.mjs'
 import { stubConfig } from './configStub.mjs'
 
+// 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
+const APP = process.env.APP_URL ?? 'http://localhost:5173'
+/**
+ * 確かめている途中に src/ が直されても、画面が入れ替わらないようにする（開発サーバーの即時反映をつながない。
+ * 入れ替わると、案内や書いている途中の状態が消えて、確かめが途中で止まる。開いた時点のツールで確かめる）
+ */
+const noHotReload = (page) =>
+  page.evaluateOnNewDocument(() => {
+    const Real = window.WebSocket
+    window.WebSocket = function (url, protocols) {
+      if (String(protocols).includes('vite-hmr')) return { readyState: 0, addEventListener() {}, removeEventListener() {}, send() {}, close() {} }
+      return new Real(url, protocols)
+    }
+  })
 const OUT = 'poc-output/e2e'
 mkdirSync(OUT, { recursive: true })
 const results = []
@@ -20,10 +34,11 @@ await withEdge(async (browser) => {
   // 毎回まっさらな状態から始める（ブラウザ内の保存データを消す）
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
+  await noHotReload(page)
   await stubConfig(page)
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
   await page.setViewport({ width: 1440, height: 900 })
-  await page.goto('http://localhost:5173/?nodrive', { waitUntil: 'networkidle0' })
+  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
   await page.evaluate(() => new Promise((r) => { const req = indexedDB.deleteDatabase('sotsugyo-seisaku-report'); req.onsuccess = req.onerror = req.onblocked = () => r() }))
   await page.reload({ waitUntil: 'networkidle0' })
   const ready = () =>
@@ -50,11 +65,20 @@ await withEdge(async (browser) => {
   }
 
   // ---- はじめての案内：コースを選び、表紙の項目を順に入力する ----
-  check('はじめて開くと、表紙の上でコースを選ぶ案内が出る', !!(await page.$('.guide.step-course .g-opts button')))
+  check('はじめて開くと、表紙の上でコースを選ぶ案内が出る（今年度だけ、Word で書き始めた人への説明も出る）', !!(await page.$('.guide.step-course .g-opts button')) && !!(await page.$('.guide.step-course .g-word')))
   await page.evaluate(() => document.querySelector('.g-opts button').click())
+  // 今年度だけ：コースを選ぶと「Word で書き始めていますか？」と聞く（mockups/v24 ① 案C）。「いいえ」で今までどおり学籍番号へ
+  await page.waitForSelector('.guide.step-word .g-word-opt.no')
+  const wordStep = await page.evaluate(() => ({
+    steps: document.querySelector('.g-steps')?.textContent ?? '',
+    modal: document.querySelector('.g-tip')?.getAttribute('aria-modal'),
+    focus: document.activeElement?.tagName,
+  }))
+  check('コースを選ぶと「Word で書き始めていますか？」と聞く（案内の段階は 1 コース 2 Word 3 学籍番号…。窓として扱い、見出しに移る）', wordStep.steps.includes('2 Word') && wordStep.steps.includes('3 学籍番号') && wordStep.modal === 'true' && wordStep.focus === 'H2', JSON.stringify(wordStep))
+  await page.evaluate(() => document.querySelector('.g-word-opt.no').click())
   await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:studentId', { timeout: 30000 })
   let s = await snap()
-  check('コースを選ぶと、そのコースの下書きが本文に入り、学籍番号の入力が始まる', !!s.report.basicInfo.courseId && s.report.body.length > 0 && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'paragraph' && b.hint), s.report.basicInfo.courseId)
+  check('コースを選ぶと、そのコースの下書きが本文に入り、「いいえ」で学籍番号の入力が始まる', !!s.report.basicInfo.courseId && s.report.body.length > 0 && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'paragraph' && b.hint), s.report.basicInfo.courseId)
   const noticeText = () => page.evaluate(() => document.querySelector('.side .notice')?.textContent ?? '')
   check('右の欄に、自分のコースのお知らせが出る', (await noticeText()).includes('映画・舞台衣装デザイナー コースからのお知らせ') && (await noticeText()).includes('衣装コースへのお知らせ'), await noticeText())
   await page.keyboard.type('00ZZ0123')
@@ -755,10 +779,11 @@ await withEdge(async (browser) => {
 
   // ---- 同じパソコンで2つめのタブを開くと、そのタブでは書けない（mockups/v22 ③ 案A） ----
   const page2 = await context.newPage()
+  await noHotReload(page2)
   await stubConfig(page2)
   page2.on('pageerror', (e) => console.log('pageerror(2):', e.message))
   await page2.setViewport({ width: 1440, height: 900 })
-  await page2.goto('http://localhost:5173/?nodrive', { waitUntil: 'networkidle0' })
+  await page2.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
   const lockedShown = await page2.waitForSelector('.tab-locked', { timeout: 30000 }).then(() => true, () => false)
   check('2つめのタブで開くと、「別のタブで開いています」の窓が出て、そのタブでは書けない', lockedShown && !(await page.$('.tab-locked')))
   await page2.screenshot({ path: `${OUT}/tab-locked.png` })
@@ -771,7 +796,170 @@ await withEdge(async (browser) => {
   check('「こちらで続ける」を押すと、そのタブで書けるようになり、もう一方のタブが書けなくなる', firstLocked && !(await page2.$('.tab-locked')))
   await page2.close()
   await context.close()
+
+  // ---- 今年度だけ：Word から読み込む（mockups/v24。見本の Word は scripts/e2e/fixtures） ----
+  await wordImportCheck(browser)
 })
+
+/** 見本の Word（本文・表紙）を、はじめての案内から読み込み、写したあとの「つぎにすること」と「読み込む前の原稿に戻す」までを確かめる */
+async function wordImportCheck(browser) {
+  // 見本の Word の置き場所（WORD_FIXTURES で変えられる）
+  const FIX = process.env.WORD_FIXTURES ?? 'scripts/e2e/fixtures'
+  const bodyDocx = `${FIX}/word-sample-body.docx`
+  const coverDocx = `${FIX}/word-sample-cover.docx`
+  if (!existsSync(bodyDocx) || !existsSync(coverDocx)) {
+    check('見本の Word（scripts/e2e/fixtures/word-sample-body.docx・word-sample-cover.docx）がある', false)
+    return
+  }
+  // まっさらな状態から（別の入れ物で開く）
+  const context = await browser.createBrowserContext()
+  const page = await context.newPage()
+  await noHotReload(page)
+  await stubConfig(page)
+  page.on('pageerror', (e) => console.log('pageerror(word):', e.message))
+  await page.setViewport({ width: 1440, height: 900 })
+  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  const ready = () =>
+    page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
+  await ready()
+  const pause = (ms = 400) => new Promise((r) => setTimeout(r, ms))
+  const choose = async (row, path) => {
+    const [chooser] = await Promise.all([page.waitForFileChooser(), page.evaluate((row) => document.querySelectorAll('.word-file .acts button:not(.link)')[row].click(), row)])
+    await chooser.accept([path])
+    await pause(200)
+  }
+  const clickButton = (sel, text) => page.evaluate((sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.includes(text)).click(), sel, text)
+
+  await page.waitForSelector('.guide.step-course .g-opts button')
+  await page.evaluate(() => document.querySelector('.g-opts button').click())
+  await page.waitForSelector('.guide.step-word .g-word-opt.yes')
+  await ready()
+  const template = await page.evaluate(() => window.__editor.getSnapshot().report)
+  await page.evaluate(() => document.querySelector('.g-word-opt.yes').click())
+  await page.waitForSelector('.modal.word-mid')
+  const start = await page.evaluate(() => ({
+    guide: !!document.querySelector('.guide'),
+    disabled: [...document.querySelectorAll('.modal .row-buttons button')].find((b) => b.textContent.includes('中身を確かめる'))?.disabled,
+    accept: document.querySelector('.word-file input[type="file"]')?.getAttribute('accept') ?? '',
+    hint: document.querySelector('.word-hint')?.textContent ?? '',
+  }))
+  check('「はい、Word から読み込む」で Word を選ぶ窓が開く（案内は隠れる。.docx だけ選べ、本文を選ぶまで「中身を確かめる」は押せない。PC の選び方の説明）', !start.guide && start.disabled === true && start.accept.startsWith('.docx') && start.hint.includes('OneDrive'), JSON.stringify(start))
+  // 「やめる」で、案内の「Word で書き始めていますか？」に戻る
+  await clickButton('.modal .row-buttons button', 'やめる')
+  await page.waitForSelector('.guide.step-word .g-word-opt.yes')
+  check('「やめる」で窓を閉じると、案内の「Word で書き始めていますか？」に戻る', !(await page.$('.modal')))
+  await page.evaluate(() => document.querySelector('.g-word-opt.yes').click())
+  await page.waitForSelector('.modal.word-mid')
+  // 古い形の Word（.doc）は、選んだところで理由を出す
+  const docPath = join(tmpdir(), 'sotsugyo-e2e-old.doc')
+  writeFileSync(docPath, 'old')
+  await choose(0, docPath)
+  const docError = await page.evaluate(() => document.querySelector('.word-file small.err')?.textContent ?? '')
+  check('古い形の Word（.doc）を選ぶと、その場で理由と直し方が出る', docError.includes('.doc') && docError.includes('.docx'), docError)
+
+  // 見本の本文・表紙を選んで、中身を確かめる
+  await choose(0, bodyDocx)
+  await choose(1, coverDocx)
+  await clickButton('.modal .row-buttons button', '中身を確かめる')
+  await page.waitForSelector('.modal.word-modal, .word-error', { timeout: 60000 })
+  const readError = await page.evaluate(() => document.querySelector('.word-error')?.textContent ?? '')
+  if (readError) {
+    check('見本の Word を読み取れる', false, readError)
+    await context.close()
+    return
+  }
+  // 図の小さな画像が読み込まれるのを待つ
+  await page.waitForFunction(() => [...document.querySelectorAll('.word-figs img')].every((i) => i.complete), { timeout: 20000 })
+  const shown = await page.evaluate(() => ({
+    chapters: document.querySelectorAll('.word-outline li.ch').length,
+    rows: document.querySelectorAll('.word-outline li').length,
+    counts: Object.fromEntries([...document.querySelectorAll('.word-count span')].map((s) => [s.firstChild.textContent.trim(), Number(s.querySelector('b').textContent)])),
+    cover: [...document.querySelectorAll('.word-cover dd')].map((d) => d.textContent),
+    figures: document.querySelectorAll('.word-figs figure').length,
+    loaded: [...document.querySelectorAll('.word-figs img')].filter((i) => i.naturalWidth > 0).length,
+    keep: document.querySelector('.word-keep')?.textContent ?? '',
+    focus: document.activeElement?.className ?? '',
+    font: getComputedStyle(document.querySelector('.word-picked .fn')).fontFamily,
+  }))
+  await page.screenshot({ path: `${OUT}/word-confirm.png` })
+  check(
+    '本文と表紙の Word を読み取ると、写す前に、組み立ての一覧・数・表紙の項目・図の小さな画像・控えに残すことを見せる',
+    shown.chapters > 0 && shown.rows >= shown.chapters && shown.counts['大見出し'] > 0 && shown.cover.length === 3 && shown.figures === shown.counts['図'] && shown.loaded > 0 && shown.keep.includes('自動の控え'),
+    JSON.stringify(shown),
+  )
+  check('確かめる窓は、上（選んだファイル）から読み上げる。ファイル名は英数字の書体で出す（「_」が見えるように）', shown.focus === 'word-picked' && shown.font.startsWith('"Segoe UI"'), `${shown.focus} / ${shown.font}`)
+
+  await clickButton('.modal .row-buttons button', '読み込む')
+  await page.waitForFunction(() => !document.querySelector('.modal'), { timeout: 60000 })
+  await pause(500)
+  await ready()
+  const after = await page.evaluate(async () => {
+    const { allImages, listSnapshots } = await import('/src/model/storage.ts')
+    const s = window.__editor.getSnapshot()
+    const figures = s.report.body.flatMap((c) => c.blocks).flatMap((b) => (b.type === 'figureRow' ? b.figures : []))
+    const stored = new Set((await allImages()).map((i) => i.id))
+    return {
+      report: s.report,
+      kind: s.layout.kinds[s.page],
+      figures: figures.filter((f) => f.imageId).length,
+      storedAll: figures.filter((f) => f.imageId).every((f) => stored.has(f.imageId)),
+      kept: (await listSnapshots()).filter((x) => x.keep).length,
+      guide: document.querySelector('.guide')?.className ?? null,
+      todo: document.querySelector('.side .word-todo')?.textContent ?? '',
+      link: !!document.querySelector('.side .word-link'),
+    }
+  })
+  await page.screenshot({ path: `${OUT}/word-after.png` })
+  const b = after.report.basicInfo
+  check(
+    '「読み込む」で本文が Word の中身に入れ替わり、図の画像もこの端末に入る（年度・コースはそのまま。今の原稿は控えに残る）',
+    after.report.body.length === shown.chapters && after.figures === shown.counts['図'] && after.storedAll && after.report.fiscalYear === template.fiscalYear && b.courseId === template.basicInfo.courseId && after.kept >= 1,
+    JSON.stringify({ chapters: after.report.body.map((c) => c.title), figures: after.figures, kept: after.kept }),
+  )
+  const coverRead = shown.cover.every((t) => !t.includes('読み取れませんでした'))
+  check(
+    '表紙の項目が読み取れていれば表紙に入り、案内を閉じて本文へ進む（読み取れなかった項目があれば、その項目の案内に進む）',
+    coverRead ? !!b.studentId && !!b.name && !!b.subtitleInput && after.guide === null && after.kind === 'body' : after.guide !== null,
+    JSON.stringify({ basicInfo: b, guide: after.guide, page: after.kind }),
+  )
+  check('右の欄の上に「Word から写しました」の「つぎにすること」が出る（リンクは隠す）', after.todo.includes('Word から写しました') && after.todo.includes('読み込む前の原稿に戻す') && !after.link, after.todo)
+  if (after.guide) {
+    await page.evaluate(() => document.querySelector('.g-later')?.click())
+    await ready()
+  }
+
+  // 「図1へ」で、図1を選んで見せる。表紙のページを開くと「表紙を確かめる」が済みになる
+  if (after.figures > 0) {
+    await clickButton('.side .word-todo .go', '図1へ')
+    await pause(700)
+    await ready()
+    const fig = await page.evaluate(() => ({ sel: window.__editor.getSnapshot().selection, next: [...document.querySelectorAll('.side .word-todo .go')].map((x) => x.textContent) }))
+    check('「図1へ」で図1のページへ移って図を選び、ボタンが「図2へ」に進む（図が1枚なら済みになる）', fig.sel?.kind === 'figure' && (after.figures === 1 || fig.next.includes('図2へ')), JSON.stringify(fig))
+  }
+  await page.evaluate(() => window.__editor.goToPage(0, 'none'))
+  await pause(300)
+  await ready()
+  const coverDone = await page.evaluate(() => [...document.querySelectorAll('.side .word-todo li')].find((li) => li.textContent.includes('表紙を確かめる'))?.className)
+  check('表紙のページを開くと、「表紙を確かめる」に ✓ が付く', coverDone === 'done', coverDone)
+  // 閉じるまで残る（読み込み直しても）
+  await page.reload({ waitUntil: 'networkidle0' })
+  await ready()
+  await pause(300)
+  check('「つぎにすること」は、読み込み直しても閉じるまで残る（済んだものの ✓ も）', await page.evaluate(() => !!document.querySelector('.side .word-todo li.done')))
+
+  // 読み込む前の原稿に戻す（ツールのひな形のままの原稿に戻る）
+  page.once('dialog', (d) => d.accept())
+  await clickButton('.side .word-todo .undo', '読み込む前の原稿に戻す')
+  await page.waitForFunction(() => !document.querySelector('.side .word-todo'), { timeout: 20000 })
+  await pause(300)
+  await ready()
+  const restored = await page.evaluate(() => {
+    const r = window.__editor.getSnapshot().report
+    return { body: JSON.stringify(r.body), basicInfo: r.basicInfo, link: !!document.querySelector('.side .word-link') }
+  })
+  check('「読み込む前の原稿に戻す」で、読み込む前の原稿に戻り、「つぎにすること」は消えてリンクが戻る', restored.body === JSON.stringify(template.body) && restored.basicInfo.name === template.basicInfo.name && restored.link, JSON.stringify(restored.basicInfo))
+  await context.close()
+}
 
 const failed = results.filter((r) => !r.ok)
 console.log(`\n${results.length - failed.length}/${results.length} 件 合格`)

@@ -180,6 +180,9 @@ await withEdge(async (browser) => {
   check('ログインすると窓が消え、はじめての人にはコースを選ぶ案内が出る', !!(await pc.page.$('.guide .g-opts button')))
   await clickText(pc.page, '.guide .g-opts button', 'コース')
   await editorReady(pc.page)
+  // 今年度だけ：「Word で書き始めていますか？」には「いいえ」（mockups/v24）
+  await pc.page.waitForSelector('.guide.step-word .g-word-opt.no')
+  await pc.page.evaluate(() => document.querySelector('.g-word-opt.no').click())
   await pc.page.waitForSelector('.guide .g-tip h2')
   check(
     '学生のアカウントなら、表紙の学籍番号にメールアドレスの学籍番号（大文字）が入り、案内は氏名から',

@@ -4,14 +4,17 @@ import { findCourse } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { FIELD_IDS } from '../layout/document'
 import { useDialogFocus } from './useDialogFocus'
+import { WordIcon } from './WordImport'
 
 /**
  * はじめて使う学生への案内（mockups/v8 案3「表紙の上で順に案内する」）。
  * 表紙のコース欄に光を当ててコースを選ばせ、選んだコースの下書きを本文に入れる。
  * 続けて、学籍番号・氏名・サブタイトルの欄を順に案内する（どの段階でも「あとで」で閉じられる）。
+ * 今年度だけ、コースを選んだあとに「Word で書き始めていますか？」と聞き、「はい」なら Word から読み込む（mockups/v24 ① 案C）。
  */
 
-export type GuideStep = 'course' | 'studentId' | 'name' | 'subtitle' | 'done'
+/** word：今年度だけ、コースを選んだあとに「Word で書き始めていますか？」と聞く（mockups/v24 ① 案C） */
+export type GuideStep = 'course' | 'word' | 'studentId' | 'name' | 'subtitle' | 'done'
 
 const FIELD_OF: Partial<Record<GuideStep, string>> = {
   course: FIELD_IDS.course,
@@ -19,16 +22,21 @@ const FIELD_OF: Partial<Record<GuideStep, string>> = {
   name: FIELD_IDS.name,
   subtitle: FIELD_IDS.subtitleInput,
 }
-const NEXT: Record<GuideStep, GuideStep | null> = { course: 'studentId', studentId: 'name', name: 'subtitle', subtitle: 'done', done: null }
+const NEXT: Record<GuideStep, GuideStep | null> = { course: 'studentId', word: 'studentId', studentId: 'name', name: 'subtitle', subtitle: 'done', done: null }
 const STEP_LABELS: [GuideStep, string][] = [
   ['course', 'コース'],
+  ['word', 'Word'],
   ['studentId', '学籍番号'],
   ['name', '氏名'],
   ['subtitle', 'サブタイトル'],
 ]
 
+/** 選ぶまで、ほかの操作をできないようにする段階（コースを選ぶ・Word で書き始めているか） */
+const isChoiceStep = (step: GuideStep) => step === 'course' || step === 'word'
+
 /**
- * コースを選ぶ段階の間だけ、案内を窓として扱う（開くと案内の見出しに移り、Tab で裏のボタンへ行かない。Esc では閉じない）。
+ * コースを選ぶ段階（と、Word で書き始めているかを聞く段階）の間だけ、案内を窓として扱う
+ * （開くと案内の見出しに移り、Tab で裏のボタンへ行かない。Esc では閉じない）。
  * 段階が変わって外れると、開く前の場所に戻る
  */
 function CourseStepFocus({ tip }: { tip: RefObject<HTMLDivElement | null> }) {
@@ -64,9 +72,13 @@ interface Props {
   step: GuideStep
   onStep: (step: GuideStep | null) => void
   onChooseCourse: (courseId: string) => void
+  /** 今年度だけ：コースを選んだあとに「Word で書き始めていますか？」と聞く（mockups/v24 ① 案C） */
+  wordImport?: boolean
+  /** 「はい、Word から読み込む」（ファイルを選ぶ窓を開く） */
+  onWordImport?: () => void
 }
 
-export function StartGuide({ editor, snap, config, configMissing, narrow, step, onStep, onChooseCourse }: Props) {
+export function StartGuide({ editor, snap, config, configMissing, narrow, step, onStep, onChooseCourse, wordImport, onWordImport }: Props) {
   const field = FIELD_OF[step]
   const [rect, setRect] = useState<DOMRect | null>(null)
   const tipRef = useRef<HTMLDivElement>(null)
@@ -110,29 +122,34 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
     if (field && step !== 'course' && was === field && snap.editingId !== field) onStep(NEXT[step])
   }, [snap.editingId, field, step, onStep])
 
+  // 光を当てる欄。Word で書き始めているかを聞く段階は、どの欄も指さない（画面の真ん中に出し、紙面は一様に暗くする。mockups/v24 ① 案C）
+  const spot = step === 'word' ? null : rect
+
   // 案内の吹き出しを、欄のすぐ下に置く（画面からはみ出さないように）
   useLayoutEffect(() => {
     const tip = tipRef.current
     if (!tip || narrow) return
-    if (!rect) {
+    if (!spot) {
       tip.style.left = `${(window.innerWidth - tip.offsetWidth) / 2}px`
       tip.style.top = `${Math.max(24, (window.innerHeight - tip.offsetHeight) / 2)}px`
       return
     }
-    const left = Math.max(12, Math.min(rect.left - 24, window.innerWidth - tip.offsetWidth - 12))
-    const below = rect.bottom + 18
-    const top = below + tip.offsetHeight > window.innerHeight - 12 ? Math.max(12, rect.top - tip.offsetHeight - 18) : below
+    const left = Math.max(12, Math.min(spot.left - 24, window.innerWidth - tip.offsetWidth - 12))
+    const below = spot.bottom + 18
+    const top = below + tip.offsetHeight > window.innerHeight - 12 ? Math.max(12, spot.top - tip.offsetHeight - 18) : below
     tip.style.left = `${left}px`
     tip.style.top = `${top}px`
-    tip.style.setProperty('--arrow-x', `${Math.max(18, Math.min(rect.left - left + 24, tip.offsetWidth - 30))}px`)
-    tip.classList.toggle('above', top < rect.top)
-  }, [rect, step, narrow])
+    tip.style.setProperty('--arrow-x', `${Math.max(18, Math.min(spot.left - left + 24, tip.offsetWidth - 30))}px`)
+    tip.classList.toggle('above', top < spot.top)
+  }, [spot, step, narrow])
 
   const course = findCourse(config, snap.report.basicInfo.courseId)
   const [subtitleBefore, subtitleAfter] = course ? course.subtitleTemplate.split('{input}') : ['', '']
   const pad = 8
   const close = () => onStep(null)
-  const index = STEP_LABELS.findIndex(([s]) => s === step)
+  // 「Word」の段は、今年度だけ出す
+  const stepLabels = wordImport ? STEP_LABELS : STEP_LABELS.filter(([s]) => s !== 'word')
+  const index = stepLabels.findIndex(([s]) => s === step)
   // コースを選ぶ段階の見出し：開いたときはここに移る（読み上げで、案内の初めから読まれるように）。
   // 最初のコースのボタンに移すと、そのコースを選んでいるように見えてしまうため、見出しにする（見出しの枠は出さない。CSS）
   const courseTitle = { id: titleId, tabIndex: -1, 'data-autofocus': true, onKeyDown: wrapToLast }
@@ -167,6 +184,40 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
                 ))}
             </div>
             <span className="g-note">コースはあとから変えられます（下書きを入れ替えるときは確認します）</span>
+            {wordImport && (
+              <div className="g-word">
+                <b>
+                  <WordIcon />
+                  Word のひな形で書き始めている人へ
+                </b>
+                まずコースを選んでください。次の画面で、書いた Word を読み込めます（学籍番号・氏名・サブタイトルも写ります）。
+              </div>
+            )}
+          </>
+        )
+      case 'word':
+        return (
+          <>
+            <h2 {...courseTitle}>Word で書き始めていますか？</h2>
+            <p>
+              学科が配った Word のひな形（<span className="fn">04_本文.docx</span> など）に書いた分があれば、このツールに写せます。
+            </p>
+            <div className="g-opts">
+              <button className="g-word-opt yes" onClick={onWordImport}>
+                <WordIcon />
+                <span>
+                  はい、Word から読み込む
+                  <small>本文の Word と、書いていれば表紙の Word を選びます</small>
+                </span>
+              </button>
+              <button className="g-word-opt no" onClick={() => onStep(snap.report.basicInfo.studentId.trim() ? 'name' : 'studentId')}>
+                <span>
+                  いいえ、ここから書き始める
+                  <small>学籍番号・氏名・サブタイトルを順に案内します</small>
+                </span>
+              </button>
+            </div>
+            <span className="g-note">あとからでも、{narrow ? 'メニュー' : '右の欄'}の「Word で書いた分を読み込む」から読み込めます（今年度だけ）。</span>
           </>
         )
       case 'studentId':
@@ -214,11 +265,12 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
   const typingOnPhone = narrow && !!field && snap.editingId === field
   return (
     <div className={`guide step-${step}${narrow ? ' narrow' : ''}`}>
-      {/* コースを選ぶまでは、ほかの操作をできないようにする（指・マウスは g-block、キーボードと読み上げは CourseStepFocus と aria-modal） */}
-      {step === 'course' && <div className="g-block" />}
-      {step === 'course' && <CourseStepFocus tip={tipRef} />}
-      {typingOnPhone ? null : rect ? (
-        <div className="g-spot" style={{ left: rect.left - pad, top: rect.top - pad, width: rect.width + pad * 2, height: rect.height + pad * 2 }} />
+      {/* コースを選ぶまで（Word で書き始めているかを答えるまで）は、ほかの操作をできないようにする（指・マウスは g-block、キーボードと読み上げは CourseStepFocus と aria-modal）。
+          段階が変わったら、新しい段階の見出しに移す（key） */}
+      {isChoiceStep(step) && <div className="g-block" />}
+      {isChoiceStep(step) && <CourseStepFocus key={step} tip={tipRef} />}
+      {typingOnPhone ? null : spot ? (
+        <div className="g-spot" style={{ left: spot.left - pad, top: spot.top - pad, width: spot.width + pad * 2, height: spot.height + pad * 2 }} />
       ) : (
         <div className="g-dim" />
       )}
@@ -227,14 +279,14 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
         className="g-tip"
         ref={tipRef}
         role="dialog"
-        aria-modal={step === 'course' ? true : undefined}
+        aria-modal={isChoiceStep(step) ? true : undefined}
         aria-label="はじめての案内"
         aria-describedby={titleId}
         onMouseDown={(e) => e.preventDefault()}
       >
         {step !== 'done' && (
           <div className="g-steps">
-            {STEP_LABELS.map(([s, label], i) => (
+            {stepLabels.map(([s, label], i) => (
               <span key={s} className={i === index ? 'on' : i < index ? 'past' : ''}>
                 {i + 1} {label}
               </span>
@@ -242,7 +294,7 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
           </div>
         )}
         {body}
-        {step !== 'course' && step !== 'done' && (
+        {!isChoiceStep(step) && step !== 'done' && (
           <button className="g-later" onClick={close}>
             あとで入力する（案内を閉じる）
           </button>

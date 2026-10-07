@@ -1,9 +1,20 @@
 // スマホ版の動作確認（Edge をスマホの画面の大きさ・タッチ操作にして動かす）。
 // 使い方: node scripts/e2e/phone.mjs（開発サーバーが http://localhost:5173 で動いていること）
-import { mkdirSync } from 'node:fs'
+import { existsSync, mkdirSync } from 'node:fs'
 import { withEdge } from '../poc/edge.mjs'
 import { stubConfig } from './configStub.mjs'
 
+// 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
+const APP = process.env.APP_URL ?? 'http://localhost:5173'
+/** 確かめている途中に src/ が直されても、画面が入れ替わらないようにする（smoke.mjs と同じ） */
+const noHotReload = (page) =>
+  page.evaluateOnNewDocument(() => {
+    const Real = window.WebSocket
+    window.WebSocket = function (url, protocols) {
+      if (String(protocols).includes('vite-hmr')) return { readyState: 0, addEventListener() {}, removeEventListener() {}, send() {}, close() {} }
+      return new Real(url, protocols)
+    }
+  })
 const OUT = 'poc-output/e2e-phone'
 mkdirSync(OUT, { recursive: true })
 const results = []
@@ -16,11 +27,12 @@ const wait = (ms) => new Promise((r) => setTimeout(r, ms))
 await withEdge(async (browser) => {
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
+  await noHotReload(page)
   await stubConfig(page)
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
   await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36')
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
-  await page.goto('http://localhost:5173/?nodrive', { waitUntil: 'networkidle0' })
+  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
   await page.evaluate(() => new Promise((r) => { const req = indexedDB.deleteDatabase('sotsugyo-seisaku-report'); req.onsuccess = req.onerror = req.onblocked = () => r() }))
   await page.reload({ waitUntil: 'networkidle0' })
   const ready = () =>
@@ -37,6 +49,15 @@ await withEdge(async (browser) => {
   // はじめての案内：コースを選び、案内に沿って学籍番号を入力する
   check('はじめて開くと、コースを選ぶ案内が出る', !!(await page.$('.guide.step-course .g-opts button')))
   await page.evaluate(() => document.querySelector('.g-opts button').click())
+  // 今年度だけ：「Word で書き始めていますか？」（画面の下に出す）。「いいえ」で学籍番号へ
+  await page.waitForSelector('.guide.step-word .g-word-opt.no')
+  await wait(300)
+  const wordTip = await page.evaluate(() => {
+    const r = document.querySelector('.g-tip').getBoundingClientRect()
+    return { top: Math.round(r.top), bottom: Math.round(r.bottom), height: innerHeight, note: document.querySelector('.g-tip .g-note')?.textContent ?? '' }
+  })
+  check('コースを選ぶと「Word で書き始めていますか？」が画面の下に出る（あとからはメニューから、と書く）', wordTip.top >= 0 && wordTip.bottom <= wordTip.height && wordTip.bottom > wordTip.height / 2 && wordTip.note.includes('メニュー'), JSON.stringify(wordTip))
+  await page.evaluate(() => document.querySelector('.g-word-opt.no').click())
   await page.waitForSelector('.guide.step-studentId')
   await ready()
   const idAt = await page.evaluate(() => {
@@ -234,6 +255,13 @@ await withEdge(async (browser) => {
   await page.evaluate(() => window.__editor.goToPage(0, 'none'))
   await ready()
 
+  // 今年度だけ：メニューに「Word で書いた分を読み込む」の小さなリンク
+  await page.click('.p-top .icon-btn')
+  await page.waitForSelector('.sheet .sheet-body')
+  check('メニューに「Word で書いた分を読み込む」のリンクがある', !!(await page.$('.sheet .word-link')))
+  await page.click('.sheet-close')
+  await page.waitForFunction(() => !document.querySelector('.sheet'))
+
   // 指で左にはらうと次のページ（はらった直後のタップは、ブラウザが勢いを止める操作として扱うため、最後に確かめる）
   await page.touchscreen.touchStart(300, 400)
   await page.touchscreen.touchMove(200, 405)
@@ -243,7 +271,101 @@ await withEdge(async (browser) => {
   await ready()
   check('指で左にはらうと、次のページへめくれる', (await snap()).page === 1)
   await context.close()
+
+  // 今年度だけ：小さい画面（360×640）で、はじめての案内から見本の Word を読み込む（mockups/v24 ④）
+  await phoneWordCheck(browser)
 })
+
+async function phoneWordCheck(browser) {
+  // 見本の Word の置き場所（WORD_FIXTURES で変えられる）
+  const FIX = process.env.WORD_FIXTURES ?? 'scripts/e2e/fixtures'
+  const bodyDocx = `${FIX}/word-sample-body.docx`
+  const coverDocx = `${FIX}/word-sample-cover.docx`
+  if (!existsSync(bodyDocx) || !existsSync(coverDocx)) {
+    check('見本の Word（scripts/e2e/fixtures/word-sample-body.docx・word-sample-cover.docx）がある', false)
+    return
+  }
+  const context = await browser.createBrowserContext()
+  const page = await context.newPage()
+  await noHotReload(page)
+  await stubConfig(page)
+  page.on('pageerror', (e) => console.log('pageerror(word):', e.message))
+  await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36')
+  await page.setViewport({ width: 360, height: 640, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
+  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  const ready = () =>
+    page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
+  await ready()
+  const inView = (sel) =>
+    page.evaluate((sel) => {
+      const r = document.querySelector(sel).getBoundingClientRect()
+      return { top: Math.round(r.top), bottom: Math.round(r.bottom), left: Math.round(r.left), right: Math.round(r.right), w: innerWidth, h: innerHeight, scrollX: document.documentElement.scrollWidth > innerWidth }
+    }, sel)
+  const fits = (r) => r.top >= 0 && r.left >= 0 && r.bottom <= r.h && r.right <= r.w && !r.scrollX
+  await page.waitForSelector('.guide.step-course .g-word')
+  await wait(300)
+  const courseTip = await inView('.g-tip')
+  check('小さい画面（360×640）でも、コースを選ぶ案内（Word の説明つき）が画面からはみ出さない', fits(courseTip), JSON.stringify(courseTip))
+  await page.evaluate(() => document.querySelector('.g-opts button').click())
+  await page.waitForSelector('.guide.step-word .g-word-opt.yes')
+  await page.evaluate(() => document.querySelector('.g-word-opt.yes').click())
+  await page.waitForSelector('.modal.word-mid')
+  await wait(300)
+  const startBox = await inView('.modal')
+  const fullWidth = await page.evaluate(() => {
+    const row = document.querySelector('.word-file').getBoundingClientRect()
+    const b = document.querySelector('.word-file .acts button').getBoundingClientRect()
+    return b.width > row.width * 0.8
+  })
+  const hint = await page.evaluate(() => document.querySelector('.word-hint')?.textContent ?? '')
+  await page.screenshot({ path: `${OUT}/8-word-start.png` })
+  check('Word を選ぶ窓が画面に収まり、「ファイルを選ぶ」は横いっぱい。Android の選び方（≡ から Google ドライブ）を出す', fits(startBox) && fullWidth && hint.includes('≡') && hint.includes('Google ドライブ'), JSON.stringify({ startBox, fullWidth }))
+  for (const [row, path] of [[0, bodyDocx], [1, coverDocx]]) {
+    const [chooser] = await Promise.all([page.waitForFileChooser(), page.evaluate((row) => document.querySelectorAll('.word-file .acts button:not(.link)')[row].click(), row)])
+    await chooser.accept([path])
+    await wait(200)
+  }
+  await page.evaluate(() => [...document.querySelectorAll('.modal .row-buttons button')].find((b) => b.textContent.includes('中身を確かめる')).click())
+  await page.waitForSelector('.modal.word-modal, .word-error', { timeout: 60000 })
+  const readError = await page.evaluate(() => document.querySelector('.word-error')?.textContent ?? '')
+  if (readError) {
+    check('見本の Word を読み取れる（スマホ）', false, readError)
+    await context.close()
+    return
+  }
+  await wait(300)
+  const confirm = await page.evaluate(() => {
+    const cols = getComputedStyle(document.querySelector('.word-cols')).gridTemplateColumns.split(' ').length
+    const m = document.querySelector('.modal')
+    return { cols, scrolls: m.scrollHeight > m.clientHeight }
+  })
+  await page.screenshot({ path: `${OUT}/9-word-confirm.png` })
+  check('中身を確かめる窓は、縦1列に並べ、窓の中を上下に動かして読む', confirm.cols === 1 && fits(await inView('.modal')), JSON.stringify(confirm))
+  await page.evaluate(() => [...document.querySelectorAll('.modal .row-buttons button')].find((b) => b.textContent.includes('読み込む')).click())
+  await page.waitForFunction(() => !document.querySelector('.modal'), { timeout: 60000 })
+  await ready()
+  const guideNext = await page.evaluate(() => document.querySelector('.guide')?.className ?? null)
+  if (guideNext) {
+    // 表紙の項目が読み取れなかったときは、その項目の案内に進む（チェックの欄は開かない）
+    check('写し終えたら、表紙の読み取れなかった項目の案内に進む', /step-(studentId|name|subtitle)/.test(guideNext), guideNext)
+  } else {
+    await page.waitForSelector('.sheet .word-todo', { timeout: 20000 })
+    await wait(300)
+    const top = await page.evaluate(() => document.querySelector('.sheet-body').firstElementChild?.className ?? '')
+    await page.screenshot({ path: `${OUT}/10-word-after.png` })
+    check('写し終えると、チェックの欄が開き、いちばん上に「つぎにすること」が出る', top === 'word-todo', top)
+    // 「図1へ」：欄を閉じて、図のページへ
+    const hasFigure = await page.$('.sheet .word-todo .go')
+    if (hasFigure) {
+      await page.evaluate(() => document.querySelector('.sheet .word-todo .go').click())
+      await wait(700)
+      await ready()
+      const s = await page.evaluate(() => ({ sheet: !!document.querySelector('.sheet'), sel: window.__editor.getSnapshot().selection?.kind }))
+      check('「図1へ」（表紙へ）を押すと、チェックの欄を閉じて紙面のその場所へ移る', !s.sheet, JSON.stringify(s))
+    }
+  }
+  await context.close()
+}
 
 const failed = results.filter((r) => !r.ok)
 console.log(`\n${results.length - failed.length}/${results.length} 件 合格`)

@@ -80,7 +80,8 @@ function renderBlock(block: BodyBlock, numbers: Map<string, number>, tableIds: S
         .map((node) => {
           if (node.type === 'text') return escapeHtml(node.text)
           const label = `${tableIds.has(node.targetId) ? '表' : '図'}${numbers.get(node.targetId) ?? '?'}`
-          return node.withParens ? `（${label}）` : label
+          // 「（図1）」は行の終わりで「（図」と「1）」に分かれないよう、ひとまとまりにする
+          return `<span class="fig-ref">${node.withParens ? `（${label}）` : label}</span>`
         })
         .join('')
       // 空の段落には、ひな形の「ここに何を書くか」の説明（なければ操作の案内）を薄く出す（画面だけ）

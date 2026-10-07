@@ -7,8 +7,9 @@ import { DriveSync, hasContent, type DriveState, type RemoteCopy, type Resolutio
 import { studentIdFromEmail } from './model/account'
 import { backupFileName, createBackup, readBackup } from './model/backup'
 import { createReport } from './model/newReport'
-import { allImages, clearAll, listSnapshots, loadReport, keepSnapshot, putImage, usedImageIds, type Snapshot } from './model/storage'
+import { allImages, clearAll, listSnapshots, loadReport, keepSnapshot, putImage, saveSnapshot, usedImageIds, type Snapshot } from './model/storage'
 import type { Report } from './model/types'
+import type { WordImportResult } from './import/types'
 import { BackupDialog, CourseChangeDialog, CourseMenu, ExportDialog, ReferencesDialog } from './app/dialogs'
 import { ConflictDialog, IdMismatchDialog, LoginGate, OtherAccountDialog, ReloginDialog, WipeDialog, type DriveControls, type GateState } from './app/DriveUi'
 import { Icon } from './app/icons'
@@ -21,6 +22,8 @@ import { TabLockedOverlay } from './app/TabLock'
 import { useTabLock } from './app/useTabLock'
 import { useAutosave } from './app/useAutosave'
 import { usePanelWidths } from './app/usePanelWidths'
+import { WordImportDialog, WordTodoCard } from './app/WordImport'
+import { useWordTodo, wordImportOffered } from './app/useWordTodo'
 
 const noopSubscribe = () => () => {}
 const nullSnapshot = () => null
@@ -31,7 +34,26 @@ type Dialog =
   | { kind: 'backup'; snapshots: Snapshot[] }
   | { kind: 'course'; rect: DOMRect }
   | { kind: 'courseChange'; courseId: string }
+  /** 今年度だけ：Word から読み込む（mockups/v24） */
+  | { kind: 'word' }
   | null
+
+/** 組み直しが終わるのを待つ */
+const rendered = (ed: ReportEditor) =>
+  new Promise<void>((resolve) => {
+    if (!ed.getSnapshot().rendering) return resolve()
+    const off = ed.subscribe(() => {
+      if (ed.getSnapshot().rendering) return
+      off()
+      resolve()
+    })
+  })
+
+/** 表紙の項目のうち、まだ入っていない最初のもの（はじめての案内で、その項目から案内する） */
+const firstEmptyCoverStep = (report: Report): GuideStep | null => {
+  const b = report.basicInfo
+  return !b.studentId.trim() ? 'studentId' : !b.name.trim() ? 'name' : !b.subtitleInput.trim() ? 'subtitle' : null
+}
 
 /**
  * 原稿を Google ドライブにも保存する（ログイン必須。mockups/v18 案3・v19 案A）。
@@ -94,11 +116,15 @@ export default function App() {
   const [editor, setEditor] = useState<ReportEditor | null>(null)
   const [dialog, setDialog] = useState<Dialog>(null)
   const [loadError, setLoadError] = useState<string | null>(null)
-  // はじめて使う学生への案内（コース → 学籍番号 → 氏名 → サブタイトル）
+  // はじめて使う学生への案内（コース →（今年度だけ）Word で書き始めているか → 学籍番号 → 氏名 → サブタイトル）
   const [guide, setGuide] = useState<GuideStep | null>(null)
   const [configSource, setConfigSource] = useState<ConfigSource>('remote')
   const autosave = useAutosave()
   const snap = useSyncExternalStore(editor?.subscribe ?? noopSubscribe, editor?.getSnapshot ?? nullSnapshot) as EditorSnapshot | null
+  // 今年度だけ：Word から写したあとの「つぎにすること」（閉じるまで、この端末に覚えておく）
+  const { todo: wordTodo, update: setWordTodo } = useWordTodo(snap)
+  /** スマホ：Word から写し終えたら、チェックの欄を開く（増やすと開く） */
+  const [checkRequest, setCheckRequest] = useState(0)
   // ドライブ（ログイン必須）。このタブでログイン済みなら、ボタンを押さずに始める
   const [drive] = useState(() => (DRIVE_ENABLED ? new DriveSync(DRIVE_CLIENT_ID!) : null))
   const driveState = useSyncExternalStore(drive?.subscribe ?? noopSubscribe, drive?.getState ?? nullSnapshot) as DriveState | null
@@ -129,16 +155,17 @@ export default function App() {
   const hasLayout = !!snap?.layout
   useKeyboardInset()
   useSwipe(stageRef, editor, narrow)
-  // ホイールでページを送る（コースを選ぶ案内や、画面の上に出る窓が開いている間は送らない）
-  useWheelPaging(stageRef, scrollerRef, editor, !dialog && !gate && !driveDialog && !tabLock.locked && guide !== 'course')
+  // ホイールでページを送る（コースを選ぶ案内・Word で書き始めているかを聞く案内や、画面の上に出る窓が開いている間は送らない）
+  useWheelPaging(stageRef, scrollerRef, editor, !dialog && !gate && !driveDialog && !tabLock.locked && guide !== 'course' && guide !== 'word')
   useEffect(() => {
     if (editor && hasLayout) editor.setSheetHost(narrow ? sheetHostRef.current : null)
   }, [editor, narrow, hasLayout])
 
-  // はじめて開いたときは、コースを選ぶところから案内する（コースが1つだけなら学籍番号から）。コースを選んでいない原稿も、コースを選ぶ案内を出す
+  // はじめて開いたときは、コースを選ぶところから案内する（コースが1つだけなら学籍番号から）。コースを選んでいない原稿も、コースを選ぶ案内を出す。
+  // 今年度だけ、コースが決まっている新しい原稿は、Word で書き始めているかを聞くところから
   const startGuide = useCallback((cfg: YearConfig, report: Report, isNew: boolean) => {
     if (!findCourse(cfg, report.basicInfo.courseId)) setGuide('course')
-    else if (isNew) setGuide(report.basicInfo.studentId.trim() ? 'name' : 'studentId')
+    else if (isNew) setGuide(wordImportOffered(cfg) ? 'word' : report.basicInfo.studentId.trim() ? 'name' : 'studentId')
   }, [])
 
   /** 学生のアカウントなら、表紙の学籍番号が空のときだけ、メールアドレスの学籍番号を入れる（学生は直せる） */
@@ -434,7 +461,7 @@ export default function App() {
         }
         return
       }
-      if (dialog || driveDialog || guide === 'course' || isTyping(e.target) || e.altKey) return
+      if (dialog || driveDialog || guide === 'course' || guide === 'word' || isTyping(e.target) || e.altKey) return
       // スマホの下から出る欄など、窓の中で押したキーでは、ページを送らない
       if (e.target instanceof Element && e.target.closest('[aria-modal="true"]')) return
       if (e.key === 'ArrowRight' || e.key === 'PageDown') {
@@ -484,7 +511,62 @@ export default function App() {
     [editor],
   )
 
+  /**
+   * 今年度だけ：Word から読み取った中身を写す（mockups/v24）。
+   * 今の原稿を控えに残す → 図の画像をこの端末に保存する → 原稿に写す（年度・コースの設定はそのまま）→ 「つぎにすること」を出す。
+   * 表紙の項目が読み取れず空のままなら、はじめての案内でその項目から案内する。読み取れていれば案内を閉じ、本文の最初のページへ
+   */
+  const importWord = useCallback(
+    async (result: WordImportResult) => {
+      if (!editor) return
+      // 読み取る部品は、Word を読み取ったときに読み込み済み（使うときに初めて読み込む。WordImport.tsx）
+      const { applyWordImport } = await import('./import/wordImport')
+      editor.commitEditing()
+      const before = editor.getSnapshot().report
+      // 「読み込む前の原稿に戻す」で探せるよう、控えの時刻を覚えておく（keepSnapshot と同じ、押し出されない控え）
+      const snapshotAt = new Date().toISOString()
+      await saveSnapshot(before, snapshotAt, true)
+      await Promise.all(result.images.map(putImage))
+      editor.addImages(result.images)
+      editor.replace(applyWordImport(before, result))
+      setWordTodo({ at: new Date().toISOString(), snapshotAt, figuresSeen: 0, coverChecked: false })
+      setDialog(null)
+      const next = firstEmptyCoverStep(editor.getSnapshot().report)
+      setGuide(next)
+      if (next) return
+      await rendered(editor)
+      editor.goToArea('body')
+      // スマホは、チェックの欄を開き、そのいちばん上に「つぎにすること」を出す
+      if (narrow) setCheckRequest((n) => n + 1)
+    },
+    [editor, setWordTodo, narrow],
+  )
+
+  /** 「つぎにすること」の「読み込む前の原稿に戻す」：写す前に残した控えに戻す（今の原稿も控えに残す） */
+  const restoreBeforeWord = useCallback(async () => {
+    const at = wordTodo?.snapshotAt
+    if (!editor || !at) return
+    const kept = (await listSnapshots()).find((s) => s.savedAt === at)
+    if (!kept) {
+      alert('読み込む前の原稿の控えが見つかりませんでした。「バックアップ」の「自動の控え」から、読み込む前の時刻の控えを選んで戻してください。')
+      return
+    }
+    if (!confirm('Word から読み込む前の原稿に戻しますか？\n（今の原稿は自動の控えに残します）')) return
+    editor.commitEditing()
+    await keepSnapshot(editor.getSnapshot().report)
+    editor.replace(kept.report)
+    await matchYear(editor, kept.report)
+    setWordTodo(null)
+  }, [editor, wordTodo, setWordTodo, matchYear])
+
   const ready = editor && snap
+  const wordOffered = wordImportOffered(config)
+  // 右の欄（スマホはメニュー）の小さなリンク。写したあとの「つぎにすること」が出ている間は出さない（読み直すときは「読み込む前の原稿に戻す」から）
+  const openWord = wordOffered && !wordTodo ? () => setDialog({ kind: 'word' }) : undefined
+  const todoCard = (onPick?: () => void) =>
+    editor && snap && wordTodo ? (
+      <WordTodoCard editor={editor} snap={snap} todo={wordTodo} onUpdate={setWordTodo} onClose={() => setWordTodo(null)} onRestore={() => void restoreBeforeWord()} onPick={onPick} />
+    ) : null
 
   return (
     <div className={`app${narrow ? ' phone' : ''}`} style={narrow ? undefined : panels.style}>
@@ -541,6 +623,9 @@ export default function App() {
           onBackup={async () => setDialog({ kind: 'backup', snapshots: await listSnapshots() })}
           exporting={exporting}
           onExport={startExport}
+          onWordImport={openWord}
+          wordTodo={wordTodo ? todoCard : undefined}
+          checkRequest={checkRequest}
         />
       ) : ready ? (
         <SidePanel
@@ -554,6 +639,8 @@ export default function App() {
           onBackup={async () => setDialog({ kind: 'backup', snapshots: await listSnapshots() })}
           exporting={exporting}
           onExport={startExport}
+          onWordImport={openWord}
+          wordTodo={todoCard()}
         />
       ) : (
         <aside className="side" />
@@ -577,7 +664,8 @@ export default function App() {
           }}
         />
       )}
-      {ready && guide && snap.layout && !gate && (
+      {/* Word を選ぶ窓を開いている間は、案内を隠す（「やめる」で窓を閉じると、案内の「Word で書き始めていますか？」に戻る） */}
+      {ready && guide && snap.layout && !gate && dialog?.kind !== 'word' && (
         <StartGuide
           editor={editor}
           snap={snap}
@@ -594,9 +682,15 @@ export default function App() {
               return
             }
             editor.changeCourseWithTemplate(courseId)
-            setGuide(editor.getSnapshot().report.basicInfo.studentId.trim() ? 'name' : 'studentId')
+            // 今年度だけ：コースを選んだら、Word で書き始めているかを聞く
+            setGuide(wordImportOffered(configRef.current) ? 'word' : editor.getSnapshot().report.basicInfo.studentId.trim() ? 'name' : 'studentId')
           }}
+          wordImport={wordOffered}
+          onWordImport={() => setDialog({ kind: 'word' })}
         />
+      )}
+      {dialog?.kind === 'word' && snap && editor && (
+        <WordImportDialog config={config} courseId={snap.report.basicInfo.courseId} onImport={importWord} onClose={() => setDialog(null)} />
       )}
       {dialog?.kind === 'references' && snap && editor && (
         <ReferencesDialog report={snap.report} onSave={(references) => editor.update((r) => ({ ...r, references }))} onClose={() => setDialog(null)} />
@@ -621,6 +715,8 @@ export default function App() {
             // 作り直すときは、公開中の年度で作る（前年度の原稿だった学生も、新年度で書き直せる）
             const fresh = createReport(publishedRef.current)
             editor.replace(fresh)
+            // Word から写したあとの「つぎにすること」も消す（作り直した原稿には当てはまらない）
+            setWordTodo(null)
             await matchYear(editor, fresh)
             prefillStudentId(editor)
             setDialog(null)
@@ -711,6 +807,7 @@ export default function App() {
             }
             autosave.stop()
             await clearAll()
+            setWordTodo(null)
             drive.forget()
             location.reload()
           }}
@@ -743,6 +840,7 @@ export default function App() {
               await keepSnapshot(editor.getSnapshot().report)
               const fresh = createReport(publishedRef.current)
               editor.replace(fresh)
+              setWordTodo(null)
               await matchYear(editor, fresh)
               setDriveDialog(null)
               await applyResolution(editor, await drive.compare(null), true, true)
@@ -766,6 +864,7 @@ export default function App() {
             if (driveDialog.unsynced && !confirm('前の原稿の、ドライブに保存していない変更はなくなります。消して続けますか？')) return
             autosave.stop()
             await clearAll()
+            setWordTodo(null)
             drive.forgetLink()
             location.reload()
           }}

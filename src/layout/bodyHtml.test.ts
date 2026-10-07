@@ -81,7 +81,8 @@ describe('buildBodyDocument', () => {
   })
 
   it('図の参照は番号に置き換わり、句点は括弧の後ろに来る', () => {
-    expect(html).toContain('デザインを考えた（図1）。')
+    expect(html).toContain('デザインを考えた<span class="fig-ref">（図1）</span>。')
+    expect(text(html)).toContain('デザインを考えた（図1）。')
   })
 
   it('図と表のタイトルが入る', () => {

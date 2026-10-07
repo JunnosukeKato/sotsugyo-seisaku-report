@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import { findCourse, type YearConfig } from '../config'
 import { abstractCharCount, type ReportFinding } from '../checker/reportChecks'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
@@ -7,9 +7,11 @@ import { Icon } from './icons'
 import { AREA_LABELS, AREA_ORDER, daysUntil, formatDeadline } from './labels'
 import { DriveChipMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
+import { WordImportLink } from './WordImport'
 
 /**
- * 右の欄。上から：名前・保存のようす・締切・手順書とバックアップ／学科からのお知らせ／ページ一覧／セルフチェック／PDFの書き出し
+ * 右の欄。上から：名前・保存のようす・締切・手順書とバックアップ（今年度だけ「Word で書いた分を読み込む」）／
+ * Word から写したあとの「つぎにすること」（今年度だけ）／学科からのお知らせ／ページ一覧／セルフチェック／PDFの書き出し
  */
 
 interface Props {
@@ -26,6 +28,10 @@ interface Props {
   /** 「PDFを書き出す」を押して、紙面を確かめている途中 */
   exporting?: boolean
   onReferences: () => void
+  /** 今年度だけ：「Word で書いた分を読み込む」の小さなリンク（mockups/v24 ① 案C）。渡したときだけ出す */
+  onWordImport?: () => void
+  /** 今年度だけ：Word から写したあとの「つぎにすること」（mockups/v24 ③ 案B）。右の欄の上に出す */
+  wordTodo?: ReactNode
 }
 
 /** 保存のようす。role="status"：変わったら、読み上げでも（話の切れ目で）知らせる */
@@ -308,7 +314,7 @@ export function Tally({ snap }: { snap: EditorSnapshot }) {
   )
 }
 
-export function SidePanel({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onReferences }: Props) {
+export function SidePanel({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onReferences, onWordImport, wordTodo }: Props) {
   const errors = snap.findings.filter((f) => f.severity === 'error').length
   return (
     <aside className="side">
@@ -336,7 +342,10 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
             {Icon.backup}バックアップ
           </button>
         </div>
+        {onWordImport && <WordImportLink onClick={onWordImport} />}
       </header>
+
+      {wordTodo}
 
       <CourseNotice config={config} courseId={snap.report.basicInfo.courseId} />
 

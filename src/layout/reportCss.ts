@@ -53,6 +53,11 @@ p, li {
   overflow-wrap: anywhere;
 }
 
+/* 本文の「（図1）」「（表1）」は、途中で行を分けない */
+.fig-ref {
+  white-space: nowrap;
+}
+
 h1, h2 {
   font: inherit;
   margin: 0;

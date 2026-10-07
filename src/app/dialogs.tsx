@@ -11,14 +11,15 @@ import { AREA_LABELS } from './labels'
 import { useDialogFocus } from './useDialogFocus'
 
 /**
- * 画面の上に出す窓。keepOpen：窓の外を押しても Esc でも閉じない（書きかけの内容が消えないように。閉じるのは「×」とボタンだけ）
+ * 画面の上に出す窓。keepOpen：窓の外を押しても Esc でも閉じない（書きかけの内容が消えないように。閉じるのは「×」とボタンだけ）。
+ * className：窓の幅などを、窓ごとに変えるとき
  */
-export function Modal({ title, onClose, children, wide, keepOpen }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean; keepOpen?: boolean }) {
+export function Modal({ title, onClose, children, wide, keepOpen, className }: { title: string; onClose: () => void; children: ReactNode; wide?: boolean; keepOpen?: boolean; className?: string }) {
   const ref = useRef<HTMLDivElement>(null)
   useDialogFocus(ref, keepOpen ? undefined : onClose)
   return (
     <div className="modal-backdrop" onMouseDown={(e) => !keepOpen && e.target === e.currentTarget && onClose()}>
-      <div className={`modal${wide ? ' wide' : ''}`} role="dialog" aria-modal="true" aria-label={title} ref={ref}>
+      <div className={`modal${wide ? ' wide' : ''}${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-label={title} ref={ref}>
         <header>
           <h2>{title}</h2>
           <button className="close" onClick={onClose} aria-label="閉じる">
