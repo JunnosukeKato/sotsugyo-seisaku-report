@@ -248,9 +248,17 @@ await withEdge(async (browser) => {
   await pc.page.evaluate(() => sessionStorage.clear())
   await pc.page.reload({ waitUntil: 'networkidle0' })
   await editorReady(pc.page)
-  await pc.page.click('.login-btn')
+  // ログインの窓：後ろの原稿は見せず、前回のアカウントは一部を伏せて出し、「別のアカウントでログイン」も置く（mockups/v23 ② 案A）
+  const gateInfo = await pc.page.evaluate(() => ({
+    account: document.querySelector('.login-acct .who b')?.textContent ?? '',
+    other: !!document.querySelector('.login-other'),
+    background: getComputedStyle(document.querySelector('.login-over')).backgroundColor,
+  }))
+  check('ログインの窓は後ろの原稿を見せず、前回のアカウントを一部伏せて出し、「別のアカウントでログイン」も置く', gateInfo.account === '00zz9**@bunka-wu.ac.jp' && gateInfo.other && !/rgba(.*, 0.d+)/.test(gateInfo.background), JSON.stringify(gateInfo))
+  await pc.page.screenshot({ path: 'poc-output/e2e/drive-gate-previous.png' })
+  await pc.page.click('.login-other')
   await pc.page.waitForFunction(() => [...document.querySelectorAll('.modal h2')].some((h) => h.textContent.includes('別のアカウント')), { timeout: 30000 })
-  check('この端末に別のアカウントの原稿があるときは、知らせる', (await pc.page.$eval('.modal .lead', (e) => e.textContent)).includes('00zz901@bunka-wu.ac.jp'))
+  check('この端末に別のアカウントの原稿があるときは、知らせる（前のアカウントは一部を伏せる）', (await pc.page.$eval('.modal .lead', (e) => e.textContent)).includes('00zz9**@bunka-wu.ac.jp'))
   drive.email = '00zz901@bunka-wu.ac.jp'
   await clickText(pc.page, '.modal button', '前のアカウントでログインし直す')
   await pc.page.waitForNavigation({ waitUntil: 'networkidle0' }).catch(() => {})
@@ -289,10 +297,26 @@ await withEdge(async (browser) => {
   const stoppedInfo = await stopped.page.evaluate(() => ({ gate: !!document.querySelector('.login-over'), guide: !!document.querySelector('.guide .g-opts button'), chip: !!document.querySelector('.drive-chip-wrap') }))
   check('ドライブ保存を止めていると、ログインせずに書け、右の欄に「この端末にだけ保存」と出る', !stoppedInfo.gate && stoppedInfo.guide && !stoppedInfo.chip, JSON.stringify(stoppedInfo))
   await stopped.page.screenshot({ path: 'poc-output/e2e/drive-stopped.png' })
-  await stopped.context.close()
+  // 止めているあいだに、別の学生（00ZZ555）がこの端末で書いた。再開したあと、この端末で 00zz901 の学生がログインする（mockups/v23 ③）
+  await setInfo(stopped.page, { studentId: '00ZZ555', name: '前野　学生', subtitleInput: '前の人の原稿' })
+  await new Promise((r) => setTimeout(r, 1500))
   delete config.driveSave
+  await stopped.page.reload({ waitUntil: 'networkidle0' })
+  await editorReady(stopped.page)
+  await stopped.page.click('.login-btn')
+  await stopped.page.waitForFunction(() => [...document.querySelectorAll('.modal h2')].some((h) => h.textContent.includes('学籍番号')), { timeout: 30000 })
+  const mismatch = await stopped.page.evaluate(() => ({ text: document.querySelector('.modal .id-compare')?.textContent ?? '', gate: !!document.querySelector('.login-over') }))
+  check('表紙の学籍番号がログインしたアカウントと違うと、ドライブに送る前に知らせる（後ろの原稿は見せないまま）', mismatch.text.includes('00ZZ555') && mismatch.gate && drive.report()?.report.basicInfo.name === '文化　次郎', JSON.stringify(mismatch))
+  await stopped.page.screenshot({ path: 'poc-output/e2e/drive-id-mismatch.png' })
+  await clickText(stopped.page, '.modal button', '自分の原稿ではない')
+  await gateClosed(stopped.page)
+  await editorReady(stopped.page)
+  check('「自分の原稿ではない」を選ぶと、その原稿は自分のドライブに送らず（この端末の控えに残す）、自分の原稿で続ける', drive.report()?.report.basicInfo.name === '文化　次郎' && (await nameOn(stopped.page)) === '文化　次郎' && (await snapshotsOf(stopped.page)).includes('前の人の原稿'))
+  await stopped.context.close()
 
   // ---- インターネットにつながっていないとき ----
+  // パソコンのタブに戻る（後ろのタブのままだと、画面の更新が止まることがある）
+  await pc.page.bringToFront()
   await pc.page.setOfflineMode(true)
   await pc.page.waitForFunction(() => document.querySelector('.login-btn')?.disabled && document.querySelector('.login-warn'), { timeout: 10000 })
   check('インターネットにつながっていないと、ログインのボタンが押せない（書けない）', true)

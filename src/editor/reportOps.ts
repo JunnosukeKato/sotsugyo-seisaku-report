@@ -490,8 +490,18 @@ function orderByRefs(figures: Figure[], paragraph: ParagraphBlock): Figure[] {
 
 /** 図を消す。本文のその図への参照「（図n）」も一緒に消す */
 export function removeFigure(report: Report, figureId: string): Report {
-  const removed = removeBlock(report, figureId)
-  return mapBody(removed, (b) => {
+  return withoutRefsTo(removeBlock(report, figureId), figureId)
+}
+
+/** 表を消す。本文のその表への参照「（表n）」も一緒に消す（残すと「（図?）」と出るため） */
+export function removeTable(report: Report, tableId: string): Report {
+  return withoutRefsTo(removeBlock(report, tableId), tableId)
+}
+
+/** 本文から、その図・表への参照を除く */
+function withoutRefsTo(report: Report, targetId: string): Report {
+  const figureId = targetId
+  return mapBody(report, (b) => {
     if (b.type !== 'paragraph' || !b.content.some((n) => n.type === 'ref' && n.targetId === figureId)) return b
     const content = b.content.filter((n) => !(n.type === 'ref' && n.targetId === figureId))
     // 参照を抜いた後に並んだ文字の部分は、1つにまとめる

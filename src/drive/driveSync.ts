@@ -187,6 +187,11 @@ export class DriveSync {
     return !!this.token && this.token.expiresAt - EXPIRY_MARGIN_MS > Date.now()
   }
 
+  /** 前回この端末（このタブ）でログインしたアカウント（ログインの窓に出す） */
+  get previousEmail(): string | null {
+    return this.state.email ?? this.link?.email ?? null
+  }
+
   /** ドライブに送れていない変更があるか（許可切れ・電波なし・別の端末の保存を待っている、送っている途中など） */
   get unsent(): boolean {
     return this.active && !!this.link && (!!this.pending || !!this.running)
@@ -210,8 +215,9 @@ export class DriveSync {
    * ログインする。Google の窓はボタンを押したときにしか開けないので、ボタンを押した処理の中から、待たずに呼ぶ。
    * 前にログインしたアカウントがあれば、そのアカウントで（窓が一瞬出て閉じるだけ）。
    */
-  async login(): Promise<void> {
-    const hint = this.state.email ?? this.link?.email
+  async login(options: { chooseAccount?: boolean } = {}): Promise<void> {
+    // chooseAccount：「別のアカウントでログイン」。前のアカウントを使わず、アカウントを選ぶ画面を出す
+    const hint = options.chooseAccount ? undefined : this.previousEmail
     const token = await signIn(this.clientId, hint ? { prompt: '', hint } : { prompt: 'select_account' })
     const { email } = await account(token)
     if (this.active && this.link && email !== this.link.email) throw new DriveError('account', `最初と同じアカウント（${this.link.email}）でログインしてください`)

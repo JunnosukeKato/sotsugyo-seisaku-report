@@ -63,6 +63,22 @@ describe('checkReport', () => {
     expect(ids(r, layout()).filter((x) => x === 'required-field')).toHaveLength(4)
   })
 
+  it('表紙のサブタイトルが、いちばん小さい文字でも枠からはみ出すときはエラー（組んだ紙面で測った結果から判定する）', () => {
+    const r = cleanReport()
+    const over = layout({ coverSubtitle: { fontPt: 11, ratio: 1.1, chars: 32, fitChars: 29 } })
+    const f = checkReport(r, currentConfig, over).find((x) => x.ruleId === 'cover-subtitle-fit')
+    expect(f).toMatchObject({ severity: 'error', source: 'guide', area: 'cover', blockId: 'basic:subtitleInput', start: 0, end: r.basicInfo.subtitleInput.length })
+    expect(f?.title).toBe('サブタイトルが長く、表紙の1行に入りません')
+    expect(f?.detail).toContain('いちばん小さい文字（11pt）にしても、枠からはみ出します（今 32字・29字くらいまで入ります）')
+    // 題目は申告書と同じにするので、「短くする」とは言わない
+    expect(f?.detail).toContain('申告書')
+    expect(f?.detail).not.toContain('短く')
+    // 入っている（測った誤差くらいのはみ出しは見ない）・組版の結果がない
+    expect(ids(r, layout({ coverSubtitle: { fontPt: 17.5, ratio: 0.98, chars: 16, fitChars: 16 } }))).not.toContain('cover-subtitle-fit')
+    expect(ids(r, layout({ coverSubtitle: { fontPt: 22, ratio: 1.001, chars: 10, fitChars: 10 } }))).not.toContain('cover-subtitle-fit')
+    expect(ids(r)).not.toContain('cover-subtitle-fit')
+  })
+
   it('氏名の姓と名の間が半角の空白なら、全角に直せる', () => {
     const r = { ...cleanReport(), basicInfo: { ...cleanReport().basicInfo, name: '文化 花子' } }
     const f = checkReport(r, currentConfig, layout()).find((x) => x.ruleId === 'name-space')

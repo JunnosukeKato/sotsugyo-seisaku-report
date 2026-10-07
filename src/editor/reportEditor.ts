@@ -11,6 +11,7 @@ import { addColumn, addRow, blankTable, cellPosition, materialTable, removeColum
 import type { BodyBlock, Chapter, PhotoPosition, Report, TableBlock, WorkPhotoLayout } from '../model/types'
 import { OverlayEditor, type OverlayKind, type OverlayPlacement, type OverlayTarget } from './overlayEditor'
 import { PageStage } from './pageStage'
+import { blockPaperKey, markFocusable, PAPER_FOCUSABLE, paperElement, paperKeyOf, paperOrder, rememberTabStop, setTabStop } from './paperFocus'
 import * as ops from './reportOps'
 import { ReportRenderer, type PageEffect } from './reportRenderer'
 
@@ -40,7 +41,8 @@ interface PhotoDrag {
 export type Selection =
   | { kind: 'figure'; id: string }
   | { kind: 'table'; id: string }
-  | { kind: 'photos' }
+  /** 作品写真のページ。index：入っている写真を押して選んだとき、その写真（0 から。道具に「この写真：差し替え／外す」が出る） */
+  | { kind: 'photos'; index?: number }
   | { kind: 'pageBreak'; id: string }
   | null
 
@@ -228,6 +230,10 @@ export class ReportEditor {
       }
     })
     scroller.addEventListener('click', (e) => this.onClick(e))
+    scroller.addEventListener('keydown', (e) => this.onPaperKey(e))
+    // Tab で紙面に入ったときに止まる欄：最後にいた欄（はじめは、ページのいちばん上の欄）
+    scroller.addEventListener('focusin', (e) => rememberTabStop(e.target))
+    document.addEventListener('keydown', (e) => this.prepareTabStop(e), true)
     scroller.addEventListener('pointerdown', (e) => this.onPhotoPointerDown(e))
     scroller.addEventListener('dragstart', (e) => {
       if ((e.target as HTMLElement).closest?.('[data-photo-slot]')) e.preventDefault()
@@ -367,7 +373,11 @@ export class ReportEditor {
       this.renderMs = result.ms
       this.layout = result.layout
       this.page = Math.max(0, Math.min(this.page, result.layout.kinds.length - 1))
+      // 紙面の欄にフォーカスがあれば、組み直した紙面の同じ欄に移し直す（要素が作り直されて、フォーカスが失われないように）
+      const focused = this.paperFocus()
       this.renderer.swap(this.page)
+      markFocusable(this.viewport)
+      if (focused) this.focusPaper(focused.key, focused.visible)
       this.markPrintSkip()
     } finally {
       this.rendering = false
@@ -472,10 +482,13 @@ export class ReportEditor {
     this.selection = null
     this.markSelection()
     const from = this.page
+    // 紙面の欄にフォーカスがあったら、送った先のページの最初の欄に移す（前のページは隠れて、フォーカスが失われるため）
+    const focused = this.paperFocus()
     this.page = to
     this.scroller.scrollTop = 0
     this.turning = this.renderer.turn(from, to, effect).finally(() => {
       this.turning = null
+      if (focused) this.focusPaper(null, focused.visible)
       this.notify()
     })
     this.notify()
@@ -567,6 +580,10 @@ export class ReportEditor {
     if (back && byKey) {
       this.hideStyle.textContent = this.editingStyle(back.id)
       this.pendingOpen = { id: back.id, caret: back.caret }
+    } else if (byKey && !this.overlay.inSheet) {
+      // Esc・Enter で書き終えた（PC）：書いていた紙面の欄にフォーカスを戻す（ページ全体に戻ると、どこにいたか分からなくなる）。
+      // 欄がまだ紙面にない（分けたばかりの段落など）ときは、組み直してから戻す
+      if (!this.focusPaper(blockPaperKey(id), true)) this.refocusKey = blockPaperKey(id)
     }
     this.afterChange({ render: 'now', save: true })
   }
@@ -769,7 +786,11 @@ export class ReportEditor {
 
   // ---- クリック ----
 
-  private onClick(e: MouseEvent): void {
+  /**
+   * 紙面を押した（クリック・タップ）。紙面の欄にキーボードで移って Enter を押したときも、ここで同じことをする（onPaperKey）。
+   * keyHit：キーボードのとき、書き始める欄と位置（押した点から求める代わりに使う。書く欄でなければ null）
+   */
+  private onClick(e: Pick<MouseEvent, 'target' | 'clientX' | 'clientY'>, keyHit?: { blockId: string; offset: number } | null): void {
     // 作品写真をつかんで動かした直後のクリックでは、写真を選び直さない
     if (this.suppressClick) {
       this.suppressClick = false
@@ -783,7 +804,7 @@ export class ReportEditor {
     if (pageBreak) return this.select({ kind: 'pageBreak', id: pageBreak.dataset.blockId! })
     // 空の項目は仮の文字（::before）しかないため、文字の位置からは特定できない。クリックした要素から探す
     const clickedBlock = target.closest<HTMLElement>('[data-block-id]')?.dataset.blockId
-    const hit = this.renderer.pageView.offsetFromPoint(e.clientX, e.clientY) ?? (clickedBlock ? { blockId: clickedBlock, offset: 0 } : null)
+    const hit = keyHit !== undefined ? keyHit : (this.renderer.pageView.offsetFromPoint(e.clientX, e.clientY) ?? (clickedBlock ? { blockId: clickedBlock, offset: 0 } : null))
     if (hit?.blockId === FIELD_IDS.course || target.closest(`[data-block-id="${FIELD_IDS.course}"]`)) {
       this.callbacks.onCourseClick((target.closest('[data-block-id]') ?? target).getBoundingClientRect())
       return
@@ -812,22 +833,93 @@ export class ReportEditor {
     }
     const slot = target.closest<HTMLElement>('[data-photo-slot]')
     if (slot) {
+      const index = Number(slot.dataset.photoSlot)
+      // 写真が入っている枠：その写真を選ぶ（道具の「差し替え」「外す」で操作する）。空の枠：すぐ写真を選ぶ
+      if (this.report.workPhotos.imageIds[index]) return this.select({ kind: 'photos', index })
       this.select({ kind: 'photos' })
-      void this.setPhoto(Number(slot.dataset.photoSlot))
+      void this.setPhoto(index)
       return
     }
     if (target.closest('section.photos')) return this.select({ kind: 'photos' })
     if (target.closest('section.references')) return this.callbacks.onReferencesClick()
     // スマホ：紙面の欄は小さく、少しずれて押すと開かなかった。指の幅ほどの近さにある欄を開く
-    const near = this.overlay.inSheet ? this.nearestEditable(e.clientX, e.clientY, 18) : null
+    const near = this.overlay.inSheet && keyHit === undefined ? this.nearestEditable(e.clientX, e.clientY, 18) : null
     if (near === FIELD_IDS.course) return this.callbacks.onCourseClick(this.renderer.pageView.fragments(near)[0].getBoundingClientRect())
     if (near) return this.openEditor(near, ops.findEditable(this.report, near)?.text.length ?? 0)
     this.select(null)
   }
 
+  // ---- キーボードで紙面の欄に移る（mockups/v23 ④。Tab で止まる印は paperFocus.ts） ----
+
+  /** Esc・Enter で書き終えたあと、組み直した紙面でフォーカスを戻す欄（書いていた欄が、まだ紙面になかったとき） */
+  private refocusKey: string | null = null
+
+  /** 紙面の欄で Enter・スペースを押した：クリックしたときと同じことをする（書く欄は書き始める、図・写真の枠は選ぶ など） */
+  private onPaperKey(e: KeyboardEvent): void {
+    const el = e.target instanceof HTMLElement && e.target.matches(PAPER_FOCUSABLE) ? e.target : null
+    if (!el || e.isComposing || e.ctrlKey || e.metaKey || e.altKey) return
+    if (e.key === 'Tab') {
+      // 紙面の中は、上から順に移る。ページのいちばん上・下の欄からは、ブラウザに任せて紙面の外へ出る（ほかの欄は tabindex -1）
+      const order = paperOrder(this.renderer.pageView.pages()[this.page])
+      const next = order.includes(el) ? order[order.indexOf(el) + (e.shiftKey ? -1 : 1)] : undefined
+      if (next) {
+        e.preventDefault()
+        next.focus()
+      }
+      return
+    }
+    if ((e.key !== 'Enter' && e.key !== ' ') || e.repeat) return
+    // 入力欄が開いたあとに、押した Enter・スペースが字として入らないようにする
+    e.preventDefault()
+    const r = el.getBoundingClientRect()
+    this.onClick({ target: el, clientX: r.left + r.width / 2, clientY: r.top + r.height / 2 }, this.keyboardHit(el))
+  }
+
+  /**
+   * キーボードで書き始める欄と位置：欄の終わりから。
+   * ページをまたぐ段落の、次のページへ続く部分なら、その部分の始めから（書く位置が、見ているページにあるように）
+   */
+  private keyboardHit(el: HTMLElement): { blockId: string; offset: number } | null {
+    const id = el.dataset.blockId
+    const editable = id ? ops.findEditable(this.report, id) : undefined
+    if (!id || !editable) return null
+    const view = this.renderer.pageView
+    return { blockId: id, offset: view.fragments(id).at(-1) === el ? editable.text.length : view.charsBefore(id, el) }
+  }
+
+  /** フォーカスしている紙面の欄（なければ null）。visible：キーボードで移った（目印が出ている）か */
+  private paperFocus(): { key: string; visible: boolean } | null {
+    const active = document.activeElement
+    const key = active && this.viewport.contains(active) ? paperKeyOf(active) : null
+    const pending = this.refocusKey
+    this.refocusKey = null
+    if (key) return { key, visible: active!.matches(':focus-visible') }
+    // 書き終えたあと、ほかの所へ移っていなければ
+    if (pending && (!active || active === document.body)) return { key: pending, visible: true }
+    return null
+  }
+
+  /** 見えているページの key の欄（null なら、ページのいちばん上の欄）にフォーカスを移す。移せたら true */
+  private focusPaper(key: string | null, visible: boolean): boolean {
+    const page = this.renderer.pageView.pages()[this.page]
+    const el = key ? paperElement(page, key) : (paperOrder(page)[0] ?? null)
+    el?.focus({ preventScroll: true, focusVisible: visible })
+    return !!el && document.activeElement === el
+  }
+
+  /** 紙面の外で Tab を押した：見えているページに、Tab で入ったときに止まる欄がなければ、いちばん上の欄にする */
+  private prepareTabStop(e: KeyboardEvent): void {
+    if (e.key !== 'Tab' || paperKeyOf(document.activeElement)) return
+    const page = this.renderer.pageView.pages()[this.page]
+    if (page && !page.querySelector(`${PAPER_FOCUSABLE}[tabindex="0"]`)) setTabStop(page, paperOrder(page)[0] ?? null)
+  }
+
   /** 見えているページで、(x, y) から within 以内（画面の px）にある、いちばん近い書ける欄 */
   private nearestEditable(x: number, y: number, within: number): string | null {
     const page = this.renderer.pageView.pages()[this.page]
+    // 紙の外（まわりの灰色の所）を押したときは開かない
+    const paper = page?.getBoundingClientRect()
+    if (!paper || x < paper.left || x > paper.right || y < paper.top || y > paper.bottom) return null
     let best: { id: string; d: number } | null = null
     for (const el of page?.querySelectorAll<HTMLElement>('[data-block-id]') ?? []) {
       const id = el.dataset.blockId!
@@ -860,6 +952,14 @@ export class ReportEditor {
     if (s?.kind === 'figure') this.viewport.querySelector(`figure[data-figure-id="${CSS.escape(s.id)}"]`)?.classList.add('is-selected')
     if (s?.kind === 'table') this.renderer.pageView.fragments(s.id)[0]?.closest('.data-table')?.classList.add('is-selected')
     if (s?.kind === 'pageBreak') this.renderer.pageView.fragments(s.id)[0]?.classList.add('is-selected')
+    // 選んだ作品写真（写真が入っている枠だけ）
+    if (s?.kind === 'photos' && s.index !== undefined) {
+      const slot = this.viewport.querySelector<HTMLElement>(`[data-photo-slot="${s.index}"]`)
+      if (slot?.querySelector('img')) {
+        slot.dataset.photoLabel = `${s.index + 1}枚目`
+        slot.classList.add('is-selected')
+      }
+    }
   }
 
   // ---- 変更 ----
@@ -1112,8 +1212,8 @@ export class ReportEditor {
     const s = this.selection
     if (!s || s.kind === 'photos') return
     this.selection = null
-    // 図を消すときは、本文のその図への参照「（図n）」も一緒に消す
-    this.update((r) => (s.kind === 'figure' ? ops.removeFigure(r, s.id) : ops.removeBlock(r, s.id)))
+    // 図・表を消すときは、本文のその図・表への参照「（図n）」「（表n）」も一緒に消す
+    this.update((r) => (s.kind === 'figure' ? ops.removeFigure(r, s.id) : s.kind === 'table' ? ops.removeTable(r, s.id) : ops.removeBlock(r, s.id)))
   }
 
   /** 表を書いているセル（書いていなければ最後に触ったセル） */
@@ -1203,6 +1303,8 @@ export class ReportEditor {
 
   /** 並べ方を変える（写真は消さずに先頭へ詰める。枚数を減らすと、1枚目から順に載る） */
   setPhotoLayout(layout: WorkPhotoLayout, columns: number): void {
+    // 写真の順番が変わることがあるので、選んでいた写真は選び直してもらう
+    if (this.selection?.kind === 'photos') this.selection = { kind: 'photos' }
     this.update((r) => ({ ...r, workPhotos: changeArrangement(r.workPhotos, layout, columns) }))
   }
 
@@ -1212,7 +1314,9 @@ export class ReportEditor {
     this.update((r) => ({ ...r, workPhotos: putPhoto(r.workPhotos, index, imageId) }))
   }
 
+  /** index 枚目の写真を外して、枠を空にする（元に戻せる） */
   removePhoto(index: number): void {
+    if (this.selection?.kind === 'photos') this.selection = { kind: 'photos' }
     this.update((r) => ({ ...r, workPhotos: putPhoto(r.workPhotos, index, '') }))
   }
 

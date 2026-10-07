@@ -33,6 +33,11 @@ export interface LayoutInfo {
   figuresPerBodyPage: number[]
   /** 学生が入れた改ページと、そのページの空いている割合（0〜1。本文の領域のうち、改ページより下） */
   pageBreaks: { id: string; page: number; emptyRatio: number }[]
+  /**
+   * 表紙のサブタイトルの1行：組んだ文字の大きさ（pt）と、文字の幅 ÷ 枠の幅（ratio。1 をこえるとはみ出している）。
+   * chars は入力した部分の字数、fitChars はこの大きさで入りそうな字数（はみ出したときの知らせに使う）
+   */
+  coverSubtitle?: { fontPt: number; ratio: number; chars: number; fitChars: number }
 }
 
 /** 本文の領域（A4 の上下の余白 25mm を除く） */
@@ -47,6 +52,42 @@ function lineCount(element: Element): number {
     if (rect.width > 0 && rect.height > 0) tops.add(Math.round(rect.top))
   }
   return tops.size
+}
+
+/**
+ * 1行の欄（折り返さない）の、文字の幅 ÷ 欄の幅。文字のない欄は null。
+ * 入力していない欄の仮の文字（::before）は数えないよう、文字そのものの位置から測る
+ */
+function lineRatio(el: HTMLElement): number | null {
+  const box = el.getBoundingClientRect()
+  const range = document.createRange()
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+  let left = Infinity
+  let right = -Infinity
+  while (walker.nextNode()) {
+    range.selectNodeContents(walker.currentNode)
+    const r = range.getBoundingClientRect()
+    if (!r.width) continue
+    left = Math.min(left, r.left)
+    right = Math.max(right, r.right)
+  }
+  return right > left && box.width > 0 ? (right - left) / box.width : null
+}
+
+/** 表紙のサブタイトルが枠に入っているか（LayoutInfo.coverSubtitle） */
+function measureCoverSubtitle(pages: HTMLElement[], kinds: PageKind[]): LayoutInfo['coverSubtitle'] {
+  const el = pages[kinds.indexOf('cover')]?.querySelector<HTMLElement>('.cover .subtitle')
+  const ratio = el ? lineRatio(el) : null
+  if (!el || ratio === null) return undefined
+  const total = [...(el.textContent ?? '')].length
+  const chars = [...(el.querySelector('[data-block-id]')?.textContent ?? '')].length
+  return {
+    fontPt: Math.round(parseFloat(getComputedStyle(el).fontSize) * 0.75 * 10) / 10,
+    ratio,
+    chars,
+    // 決まり文句（―・の衣装制作― など）の字数は変わらないので、全体で入る字数から引く
+    fitChars: Math.max(0, Math.floor(total / ratio) - (total - chars)),
+  }
 }
 
 export function measureLayout(pages: HTMLElement[], chapters: Chapter[]): LayoutInfo {
@@ -80,6 +121,7 @@ export function measureLayout(pages: HTMLElement[], chapters: Chapter[]): Layout
         return { id: el.dataset.blockId!, page: i, emptyRatio }
       }),
     ),
+    coverSubtitle: measureCoverSubtitle(pages, kinds),
   }
 }
 

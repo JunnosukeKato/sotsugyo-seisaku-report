@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isUniversityAddress, parseAddresses } from './account'
+import { isUniversityAddress, maskEmail, parseAddresses } from './account'
 
 describe('メーリングリストの宛先から、名前とアドレスを読み取る', () => {
   it('「名前 <アドレス>」の形と、区切っただけのアドレスの両方を読む', () => {
@@ -21,5 +21,12 @@ describe('メーリングリストの宛先から、名前とアドレスを読�
   it('大学のアドレスかどうか', () => {
     expect(isUniversityAddress('t-bunka@bunka-wu.ac.jp')).toBe(true)
     expect(isUniversityAddress('someone@gmail.com')).toBe(false)
+  })
+})
+
+describe('アドレスの一部を伏せる（共用のパソコンで、前の人のアカウントを見せるとき）', () => {
+  it('@ より前の終わりの2字を伏せる。短いときは最初の1字だけ見せる', () => {
+    expect(maskEmail('00zz0123@bunka-wu.ac.jp')).toBe('00zz01**@bunka-wu.ac.jp')
+    expect(maskEmail('abc@bunka-wu.ac.jp')).toBe('a**@bunka-wu.ac.jp')
   })
 })

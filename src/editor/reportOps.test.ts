@@ -1,4 +1,19 @@
 import { describe, expect, it } from 'vitest'
+import { blankTable } from '../model/table'
+import { demoReport as demoForTable } from '../model/demoReport'
+
+describe('表を消す', () => {
+  it('本文のその表への参照「（表n）」も一緒に消す（「（図?）」が残らない）', async () => {
+    const ops = await import('./reportOps')
+    let r = ops.setText(demoForTable(), 'p1', '素材をまとめた。')
+    r = ops.insertRef(r, 'p1', 6, 't9')
+    r = ops.addTableBelow(r, 'p1', blankTable('t9', ops.newId))
+    const removed = ops.removeTable(r, 't9')
+    const p1 = removed.body.flatMap((c) => c.blocks).find((b) => b.id === 'p1')
+    expect(p1?.type === 'paragraph' && p1.content.some((n) => n.type === 'ref')).toBe(false)
+    expect(removed.body.flatMap((c) => c.blocks).some((b) => b.id === 't9')).toBe(false)
+  })
+})
 import { demoReport } from '../model/demoReport'
 import type { Report } from '../model/types'
 import * as ops from './reportOps'

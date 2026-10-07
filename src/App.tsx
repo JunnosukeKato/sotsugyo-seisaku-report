@@ -10,7 +10,7 @@ import { createReport } from './model/newReport'
 import { allImages, clearAll, listSnapshots, loadReport, keepSnapshot, putImage, usedImageIds, type Snapshot } from './model/storage'
 import type { Report } from './model/types'
 import { BackupDialog, CourseChangeDialog, CourseMenu, ExportDialog, ReferencesDialog } from './app/dialogs'
-import { ConflictDialog, LoginGate, OtherAccountDialog, ReloginDialog, WipeDialog, type DriveControls, type GateState } from './app/DriveUi'
+import { ConflictDialog, IdMismatchDialog, LoginGate, OtherAccountDialog, ReloginDialog, WipeDialog, type DriveControls, type GateState } from './app/DriveUi'
 import { Icon } from './app/icons'
 import { Palette } from './app/Palette'
 import { PhoneChrome } from './app/Phone'
@@ -44,7 +44,19 @@ type DriveDialog =
   | { kind: 'conflict'; remote: RemoteCopy; atLogin: boolean }
   | { kind: 'wipe' }
   | { kind: 'otherAccount'; previousEmail: string; unsynced: boolean }
+  /** 表紙の学籍番号と、ログインしたアカウントが違う（どの原稿で始めるかは、選んでから続ける） */
+  | { kind: 'idMismatch'; resolution: Resolution; coverId: string; accountId: string }
   | null
+
+/** 学籍番号が違っていても「このまま続ける」を選んだ組み合わせ（次からは聞かない） */
+const ID_OK_KEY = 'sotsugyo-seisaku-report-id-ok'
+const idAccepted = (email: string, coverId: string) => {
+  try {
+    return localStorage.getItem(ID_OK_KEY) === `${email}|${coverId}`
+  } catch {
+    return false
+  }
+}
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
@@ -166,10 +178,35 @@ export default function App() {
     [drive, matchYear],
   )
 
-  /** どの原稿で始めるか（続けるか）が決まったら、そのとおりにする。atLogin：ログインした直後 */
+  /**
+   * 表紙の学籍番号が、ログインしたアカウントの学籍番号と違うか（共用のパソコンで、ほかの人の原稿が残っていた・打ち間違い）。
+   * 教職員のアカウント（学籍番号の形でないアドレス）と、何も書いていない原稿は見ない
+   */
+  const idMismatch = useCallback(
+    (report: Report): { coverId: string; accountId: string } | null => {
+      const email = drive?.getState().email ?? null
+      const accountId = studentIdFromEmail(email, configRef.current.studentIdPattern)
+      const coverId = report.basicInfo.studentId.trim()
+      if (!email || !accountId || !coverId || !hasContent(report)) return null
+      if (coverId.normalize('NFKC').toUpperCase() === accountId || idAccepted(email, coverId)) return null
+      return { coverId, accountId }
+    },
+    [drive],
+  )
+
+  /**
+   * どの原稿で始めるか（続けるか）が決まったら、そのとおりにする。atLogin：ログインした直後。
+   * idChecked：表紙の学籍番号の確かめが済んでいる
+   */
   const applyResolution = useCallback(
-    async (ed: ReportEditor, r: Resolution, atLogin: boolean) => {
+    async (ed: ReportEditor, r: Resolution, atLogin: boolean, idChecked = false): Promise<void> => {
       if (!drive) return
+      // この端末の原稿を使う（ドライブに送る）前に、表紙の学籍番号がこのアカウントのものかを確かめる（ログインの窓は出したまま）
+      const mismatch = atLogin && !idChecked && (r.kind === 'local' || r.kind === 'conflict') ? idMismatch(ed.getSnapshot().report) : null
+      if (mismatch) {
+        setDriveDialog({ kind: 'idMismatch', resolution: r, ...mismatch })
+        return
+      }
       switch (r.kind) {
         case 'new':
         case 'local': {
@@ -202,7 +239,7 @@ export default function App() {
           return
       }
     },
-    [drive, openRemote, startGuide, prefillStudentId],
+    [drive, openRemote, startGuide, prefillStudentId, idMismatch],
   )
 
   /**
@@ -323,10 +360,10 @@ export default function App() {
   }, [drive, driveStatus, driveDialog])
 
   /** ログインのボタン（Google の窓は、押した処理の中ですぐ開く） */
-  const onGateLogin = () => {
+  const onGateLogin = (chooseAccount = false) => {
     if (!drive) return
     setGate({ kind: 'signing' })
-    drive.login().then(
+    drive.login({ chooseAccount }).then(
       () => {
         if (stoppedRef.current) setGate(null)
         else if (editorRef.current) void enter(editorRef.current)
@@ -598,7 +635,16 @@ export default function App() {
       {tabLock.locked && <TabLockedOverlay onTakeOver={tabLock.takeOver} />}
 
       {/* ---- ドライブ（ログイン必須） ---- */}
-      {gate && <LoginGate gate={gate} reportName={config.reportName} fiscalYear={config.fiscalYear} onLogin={onGateLogin} />}
+      {gate && (
+        <LoginGate
+          gate={gate}
+          reportName={config.reportName}
+          fiscalYear={config.fiscalYear}
+          previousEmail={drive?.previousEmail ?? null}
+          onLogin={() => onGateLogin()}
+          onLoginOther={() => onGateLogin(true)}
+        />
+      )}
       {drive && editor && snap && driveDialog?.kind === 'conflict' && (
         <ConflictDialog
           local={snap.report}
@@ -667,6 +713,44 @@ export default function App() {
             await clearAll()
             drive.forget()
             location.reload()
+          }}
+        />
+      )}
+      {drive && editor && driveDialog?.kind === 'idMismatch' && (
+        <IdMismatchDialog
+          coverId={driveDialog.coverId}
+          accountEmail={driveState?.email ?? ''}
+          accountId={driveDialog.accountId}
+          busy={driveBusy}
+          onFix={() => {
+            editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: driveDialog.accountId } }))
+            setDriveDialog(null)
+            void applyResolution(editor, driveDialog.resolution, true, true)
+          }}
+          onKeep={() => {
+            try {
+              localStorage.setItem(ID_OK_KEY, `${driveState?.email}|${driveDialog.coverId}`)
+            } catch {
+              // 覚えておけなければ、次にログインしたときにもう一度聞く
+            }
+            setDriveDialog(null)
+            void applyResolution(editor, driveDialog.resolution, true, true)
+          }}
+          onNotMine={async () => {
+            // ほかの人の原稿：この端末の控えに残し（その人があとで戻せるように）、自分のドライブには送らない。自分の原稿（ドライブ）か、新しい原稿で始める
+            setDriveBusy(true)
+            try {
+              await keepSnapshot(editor.getSnapshot().report)
+              const fresh = createReport(publishedRef.current)
+              editor.replace(fresh)
+              await matchYear(editor, fresh)
+              setDriveDialog(null)
+              await applyResolution(editor, await drive.compare(null), true, true)
+            } catch (e) {
+              alert(errorText(e))
+            } finally {
+              setDriveBusy(false)
+            }
           }}
         />
       )}

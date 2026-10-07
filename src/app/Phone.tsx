@@ -1,7 +1,8 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { YearConfig } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { findEditable, type EditableKind } from '../editor/reportOps'
+import type { Report } from '../model/types'
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
 import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
@@ -70,8 +71,11 @@ function Sheet({ title, extra, onClose, children }: { title: string; extra?: Rea
   )
 }
 
-/** 下から出る書く欄。入力欄そのもの（.overlay-editor）は、編集の中核が host の中に入れる */
-function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: EditorSnapshot; hostRef: React.RefObject<HTMLDivElement | null> }) {
+/**
+ * 下から出る書く欄。入力欄そのもの（.overlay-editor）は、編集の中核が host の中に入れる。
+ * onRemoved：段落・見出しを削除した（書く欄が閉じて、中の「戻す」も見えなくなるので、画面の下に「戻す」の知らせを出す）
+ */
+function EditSheet({ editor, snap, hostRef, onRemoved }: { editor: ReportEditor; snap: EditorSnapshot; hostRef: React.RefObject<HTMLDivElement | null>; onRemoved: (message: string) => void }) {
   const id = snap.editingId
   const editable = id ? findEditable(snap.report, id) : undefined
   const issues = id ? snap.findings.filter((f) => f.blockId === id) : []
@@ -142,7 +146,9 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
             onMouseDown={keepFocus}
             onClick={() => {
               if (snap.editingKind === 'chapter' && !confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（「元に戻す」で戻せます）')) return
+              const before = editor.getSnapshot().report
               editor.removeBlock(id!)
+              if (editor.getSnapshot().report !== before) onRemoved(snap.editingKind === 'chapter' || snap.editingKind === 'subheading' ? '見出しを削除しました' : '段落を削除しました')
             }}
           >
             {Icon.remove}削除
@@ -153,6 +159,51 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
         </button>
       </div>
     </section>
+  )
+}
+
+/** 削除したあとの知らせ。report：削除した直後の原稿 */
+interface UndoNotice {
+  message: string
+  report: Report
+}
+
+/** 知らせを出しておく時間 */
+const UNDO_NOTICE_MS = 6000
+
+/**
+ * 図・表・改ページを削除した（作品写真を外した・書く欄で段落や見出しを削除した）あと、画面の下に「〜しました［戻す］」を出す（mockups/v23 ⑦ 案A）。
+ * スマホは「戻す」が書く欄の中にしかなく、削除したあとに戻す方法が見えなかったため。
+ * 6秒ほどで消え、ほかの所を触っても消える（キーボードで知らせの中に移っている間は消さない）。
+ * 読み上げにも伝わるよう、いつも置いておく枠（role="status"）の中に、知らせを出し入れする
+ */
+function UndoToast({ notice, onUndo, onClose }: { notice: UndoNotice | null; onUndo: () => void; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  const [holding, setHolding] = useState<UndoNotice | null>(null)
+  const held = !!notice && holding === notice
+  useEffect(() => {
+    if (!notice || held) return
+    const timer = window.setTimeout(onClose, UNDO_NOTICE_MS)
+    const onDown = (e: PointerEvent) => {
+      if (!ref.current?.contains(e.target as Node)) onClose()
+    }
+    document.addEventListener('pointerdown', onDown, true)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('pointerdown', onDown, true)
+    }
+  }, [notice, held, onClose])
+  return (
+    <div className="undo-area" role="status" ref={ref}>
+      {notice && (
+        <div className="undo-toast" onFocus={() => setHolding(notice)} onBlur={() => setHolding(null)}>
+          <span>{notice.message}</span>
+          <button onClick={onUndo}>
+            {Icon.undo}戻す
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -221,6 +272,12 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
   const errors = snap.findings.filter((f) => f.severity === 'error').length
   const kind = snap.layout?.kinds[snap.page]
   const showSelection = !snap.editingId && (snap.selection || kind === 'photos')
+  // 削除したあとの「戻す」の知らせ。削除した直後の原稿のまま（ほかを変えていない・書き始めていない）ときだけ出す
+  // （ほかを変えたあとの「戻す」は、削除ではなく、その変更を戻してしまうため）
+  const [undoNotice, setUndoNotice] = useState<UndoNotice | null>(null)
+  const notice = undoNotice && undoNotice.report === snap.report && !snap.editingId ? undoNotice : null
+  const closeNotice = useCallback(() => setUndoNotice(null), [])
+  const showUndo = (message: string) => setUndoNotice({ message, report: editor.getSnapshot().report })
   return (
     <>
       <header className="p-top">
@@ -255,10 +312,19 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
       )}
 
       {showSelection && (
-        <div className="sel-bar">
-          <SelectionTools editor={editor} snap={snap} />
+        // 知らせが出ている間は、知らせに重ならないよう、少し上に出す（作品写真を外したあとの並べ方）
+        <div className={`sel-bar${notice ? ' above-undo' : ''}`}>
+          <SelectionTools editor={editor} snap={snap} phone onRemoved={showUndo} />
         </div>
       )}
+      <UndoToast
+        notice={notice}
+        onClose={closeNotice}
+        onUndo={() => {
+          setUndoNotice(null)
+          editor.undo()
+        }}
+      />
 
       <nav className="p-nav">
         <button onClick={() => setSheet('pages')}>
@@ -276,7 +342,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
         </button>
       </nav>
 
-      <EditSheet editor={editor} snap={snap} hostRef={sheetHostRef} />
+      <EditSheet editor={editor} snap={snap} hostRef={sheetHostRef} onRemoved={showUndo} />
 
       {sheet === 'pages' && (
         <Sheet title="ページ一覧" extra={<span className="pcount"><b>{snap.page + 1}</b> / {snap.pageCount}</span>} onClose={close}>

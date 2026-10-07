@@ -73,36 +73,68 @@ function TableMenu({ editor, disabled }: { editor: ReportEditor; disabled: boole
   )
 }
 
+interface SelectionToolsProps extends Omit<Props, 'onReferences'> {
+  /** スマホの下の道具（横に1列に並べるので、作品写真を選んでいるときは「この写真」の道具だけを出す） */
+  phone?: boolean
+  /** 図・表・改ページを削除した、作品写真を外した（スマホは、画面の下に「戻す」の知らせを出す） */
+  onRemoved?: (message: string) => void
+}
+
 /** 書いている物・選んでいる物の道具 */
-export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
+export function SelectionTools({ editor, snap, phone, onRemoved }: SelectionToolsProps) {
   const { editingKind, editingId, selection, report } = snap
   const kind = snap.layout?.kinds[snap.page]
+  /** 削除する（外す）。原稿が変わったら、onRemoved で知らせる */
+  const removing = (message: string, run: () => void) => {
+    const before = editor.getSnapshot().report
+    run()
+    if (editor.getSnapshot().report !== before) onRemoved?.(message)
+  }
 
   if (kind === 'photos') {
     const current = photoGrid(report.workPhotos)
-    return (
+    // 押して選んだ写真（写真が入っている枠だけ。図と同じく「差し替え」「外す」を出す。mockups/v23 ⑧ 案A）
+    const photo = selection?.kind === 'photos' && selection.index !== undefined && selection.index < report.workPhotos.layout && report.workPhotos.imageIds[selection.index] ? selection.index : null
+    const photoTools = photo !== null && (
       <div className="group ctx">
-        <div className="ctx-label">並べ方</div>
-        <div className="layouts">
-          {PHOTO_ARRANGEMENTS.map((a) => (
-            <button
-              key={a.label}
-              className={`lay${current === a ? ' on' : ''}`}
-              title={`${a.label}（写真をつかんで動かすと、見える位置を変えられます）`}
-              onClick={() => editor.setPhotoLayout(a.layout, a.columns)}
-            >
-              <span className="lay-grid" style={{ gridTemplate: `repeat(${a.rows}, 1fr) / repeat(${a.columns}, 1fr)` }}>
-                {Array.from({ length: a.layout }, (_, i) => (
-                  <i key={i} />
-                ))}
-              </span>
-              <span className="lay-n">{a.layout}枚</span>
-              {a.arrange && <span className="lay-sub">{a.arrange}</span>}
-            </button>
-          ))}
-        </div>
-        <div className="ctx-note">写真をつかんで動かすと、見える位置を変えられます</div>
+        <div className="ctx-label">{phone ? `この写真（${photo + 1}枚目）` : 'この写真'}</div>
+        <Tool label="差し替え" icon={Icon.replace} title={`${photo + 1}枚目の写真を選び直す`} onClick={() => void editor.setPhoto(photo)} />
+        <Tool
+          label="外す"
+          icon={Icon.remove}
+          danger
+          title={`${photo + 1}枚目の写真を外す（枠を空にする）`}
+          onClick={() => removing('写真を外しました', () => editor.removePhoto(photo))}
+        />
       </div>
+    )
+    if (phone && photoTools) return photoTools
+    return (
+      <>
+        {photoTools}
+        <div className="group ctx">
+          <div className="ctx-label">並べ方</div>
+          <div className="layouts">
+            {PHOTO_ARRANGEMENTS.map((a) => (
+              <button
+                key={a.label}
+                className={`lay${current === a ? ' on' : ''}`}
+                title={`${a.label}（写真をつかんで動かすと、見える位置を変えられます）`}
+                onClick={() => editor.setPhotoLayout(a.layout, a.columns)}
+              >
+                <span className="lay-grid" style={{ gridTemplate: `repeat(${a.rows}, 1fr) / repeat(${a.columns}, 1fr)` }}>
+                  {Array.from({ length: a.layout }, (_, i) => (
+                    <i key={i} />
+                  ))}
+                </span>
+                <span className="lay-n">{a.layout}枚</span>
+                {a.arrange && <span className="lay-sub">{a.arrange}</span>}
+              </button>
+            ))}
+          </div>
+          <div className="ctx-note">写真をつかんで動かすと、見える位置を変えられます</div>
+        </div>
+      </>
     )
   }
 
@@ -118,10 +150,12 @@ export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
           icon={Icon.remove}
           danger
           title="この図を削除（本文の「（図n）」も消えます）"
-          onClick={() => {
-            editor.select({ kind: 'figure', id: figureId })
-            editor.removeSelected()
-          }}
+          onClick={() =>
+            removing('図を削除しました', () => {
+              editor.select({ kind: 'figure', id: figureId })
+              editor.removeSelected()
+            })
+          }
         />
       </div>
     )
@@ -131,7 +165,13 @@ export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
     return (
       <div className="group ctx">
         <div className="ctx-label">改ページ</div>
-        <Tool label="削除" icon={Icon.remove} danger title="この改ページを削除" onClick={() => editor.removeSelected()} />
+        <Tool
+          label="削除"
+          icon={Icon.remove}
+          danger
+          title="この改ページを削除"
+          onClick={() => removing('改ページを削除しました', () => editor.removeSelected())}
+        />
       </div>
     )
   }
@@ -165,10 +205,12 @@ export function SelectionTools({ editor, snap }: Omit<Props, 'onReferences'>) {
           icon={Icon.remove}
           danger
           title="この表を削除"
-          onClick={() => {
-            editor.select({ kind: 'table', id: tableId })
-            editor.removeSelected()
-          }}
+          onClick={() =>
+            removing('表を削除しました', () => {
+              editor.select({ kind: 'table', id: tableId })
+              editor.removeSelected()
+            })
+          }
         />
       </div>
     )

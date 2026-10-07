@@ -47,10 +47,15 @@ await withEdge(async (browser) => {
   await wait(300)
   await shot('1a-guide')
   check('案内の欄をタップすると、下の書く欄で入力できる', (await snap()).editingId === 'basic:studentId')
+  // 紙面の欄はキーボード（Tab）でも移れるようにしたが、タップでは今までどおり：下の欄で書き、紙面にキーボードの目印（藍の枠）は出さない（mockups/v23 ④）
+  const tapFocus = () => page.evaluate(() => ({ inSheet: !!document.activeElement?.closest('.edit-sheet'), ring: !!document.querySelector('.page-viewport.front :focus-visible') }))
+  const afterTap = await tapFocus()
   await page.keyboard.type('00ZZ0123')
   await page.click('.edit-sheet .done')
   await page.waitForSelector('.guide.step-name')
   check('学籍番号を書き終えると、氏名の案内に進む', (await snap()).report.basicInfo.studentId === '00ZZ0123')
+  const afterDone = await tapFocus()
+  check('タップで書くとき・書き終えたとき、紙面にキーボードの目印は出ない', afterTap.inSheet && !afterTap.ring && !afterDone.ring, JSON.stringify({ afterTap, afterDone }))
   await page.click('.g-later')
   await ready()
 
@@ -136,6 +141,98 @@ await withEdge(async (browser) => {
   await page.evaluate(() => document.querySelectorAll('.sheet .thumb-list .t')[0].click())
   await ready()
   check('「ページ一覧」から選んだページへ移る', (await snap()).page === 0)
+
+  // 書く欄の道具：1段に入りきらないときは2段に折り返し、全部が画面の中に見える（横にずらさないと見えない道具がない。mockups/v23 ⑥）
+  const toolsFit = () =>
+    page.evaluate(() => {
+      const t = document.querySelector('.edit-sheet .es-tools')
+      const bs = [...t.querySelectorAll('button')]
+      const out = bs.filter((b) => { const r = b.getBoundingClientRect(); return r.left < 0 || r.right > innerWidth + 0.5 || r.bottom > innerHeight + 0.5 }).map((b) => b.textContent.trim())
+      return { n: bs.length, rows: new Set(bs.map((b) => Math.round(b.getBoundingClientRect().top))).size, out, scroll: t.scrollWidth > t.clientWidth + 1 }
+    })
+  await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), pid)
+  await ready()
+  const paraAt = await page.evaluate((id) => {
+    const r = [...document.querySelectorAll(`.page-viewport.front [data-block-id="${id}"]`)].find((e) => e.getBoundingClientRect().width > 0).getBoundingClientRect()
+    return { x: r.left + 20, y: r.top + r.height / 2 }
+  }, pid)
+  await page.touchscreen.tap(paraAt.x, paraAt.y)
+  await page.waitForFunction(() => document.querySelector('.edit-sheet.open'), { timeout: 20000 })
+  let fit = await toolsFit()
+  check('段落を書いているとき、書く欄の道具が全部画面の中に見える', fit.out.length === 0 && !fit.scroll && fit.rows <= 2, JSON.stringify(fit))
+  // 表を入れて、セルを書く（道具が7つになり、2段に折り返す）
+  await page.evaluate(() => [...document.querySelectorAll('.edit-sheet .es-tools button')].find((b) => b.textContent.includes('表を入れる')).click())
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingKind === 'tableCaption', { timeout: 30000 })
+  await ready()
+  await page.keyboard.type('素材')
+  const tableId = await page.evaluate(() => window.__editor.tableIdOf(window.__editor.getSnapshot().editingId))
+  const cellId = await page.evaluate((tid) => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === tid).rows[1].cells[0].id, tableId)
+  await page.click('.edit-sheet .done')
+  await ready()
+  await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), cellId)
+  await ready()
+  const cellAt = await page.evaluate((id) => {
+    const r = document.querySelector(`.page-viewport.front [data-cell-id="${id}"]`).getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  }, cellId)
+  await page.touchscreen.tap(cellAt.x, cellAt.y)
+  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 20000 }, cellId)
+  await wait(300)
+  fit = await toolsFit()
+  await shot('7-cell-tools')
+  check('表のセルを書いているとき、道具（行・列・幅・戻すなど）が2段に折り返して全部見える', fit.n >= 7 && fit.out.length === 0 && !fit.scroll && fit.rows === 2, JSON.stringify(fit))
+  await page.click('.edit-sheet .done')
+  await ready()
+
+  // 選んだ表を削除すると、画面の下に「表を削除しました［戻す］」が出て、「戻す」で元に戻る（mockups/v23 ⑦ 案A）
+  await page.evaluate((id) => window.__editor.select({ kind: 'table', id }), tableId)
+  await page.waitForSelector('.sel-bar .tb')
+  await page.evaluate(() => [...document.querySelectorAll('.sel-bar .tb')].find((b) => b.textContent.includes('削除')).click())
+  await ready()
+  const toast = await page.evaluate(() => {
+    const area = document.querySelector('.undo-area')
+    const b = area?.querySelector('.undo-toast button')
+    const r = b?.getBoundingClientRect()
+    const a = b && getComputedStyle(b, '::after')
+    return { text: area?.textContent ?? '', role: area?.getAttribute('role'), hitH: r ? r.height - parseFloat(a.top) - parseFloat(a.bottom) : 0 }
+  })
+  const tableGone = !(await snap()).report.body.flatMap((c) => c.blocks).some((b) => b.id === tableId)
+  await shot('7b-undo-notice')
+  check('選んだ表を削除すると、画面の下に「表を削除しました［戻す］」が出る（読み上げにも伝わる）', tableGone && toast.text.includes('表を削除しました') && toast.role === 'status', JSON.stringify(toast))
+  check('知らせの「戻す」は、押せる範囲が高さ 44px 以上', toast.hitH >= 44, `${toast.hitH}px`)
+  await page.click('.undo-toast button')
+  await ready()
+  check('知らせの「戻す」で、削除した表が戻り、知らせが消える', (await snap()).report.body.flatMap((c) => c.blocks).some((b) => b.id === tableId) && !(await page.$('.undo-toast')))
+
+  // 作品写真：入っている写真を押すと「この写真（1枚目）：差し替え／外す」が出て、「外す」で枠を空にできる（mockups/v23 ⑧ 案A）
+  await page.evaluate(async () => {
+    const c = new OffscreenCanvas(300, 400)
+    const g = c.getContext('2d')
+    g.fillStyle = '#4a6a8a'
+    g.fillRect(0, 0, 300, 400)
+    window.__editor.addImages([{ id: 'e2e-photo', blob: await c.convertToBlob({ type: 'image/png' }), widthPx: 300, heightPx: 400 }])
+    window.__editor.update((r) => ({ ...r, workPhotos: { layout: 1, columns: 1, imageIds: ['e2e-photo'] } }))
+  })
+  await ready()
+  await page.evaluate(() => window.__editor.goToArea('photos'))
+  await ready()
+  const photoAt = await page.evaluate(() => {
+    const r = document.querySelector('.page-viewport.front [data-photo-slot="0"]').getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })
+  await page.touchscreen.tap(photoAt.x, photoAt.y)
+  await wait(400)
+  const photoBar = await page.evaluate(() => ({ label: document.querySelector('.sel-bar .ctx-label')?.textContent, tools: [...document.querySelectorAll('.sel-bar .tb')].map((b) => b.textContent.trim()) }))
+  check('作品写真を押すと、下の道具に「この写真（1枚目）：差し替え／外す」が出る', photoBar.label === 'この写真（1枚目）' && photoBar.tools.join(',') === '差し替え,外す', JSON.stringify(photoBar))
+  await page.evaluate(() => [...document.querySelectorAll('.sel-bar .tb')].find((b) => b.textContent.includes('外す')).click())
+  await ready()
+  s = await snap()
+  check('「外す」で枠が空になり、「写真を外しました［戻す］」が出る', s.report.workPhotos.imageIds[0] === '' && (await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? '')).includes('写真を外しました'))
+  await page.click('.undo-toast button')
+  await ready()
+  check('知らせの「戻す」で、外した写真が戻る', (await snap()).report.workPhotos.imageIds[0] === 'e2e-photo')
+  await page.evaluate(() => window.__editor.goToPage(0, 'none'))
+  await ready()
 
   // 指で左にはらうと次のページ（はらった直後のタップは、ブラウザが勢いを止める操作として扱うため、最後に確かめる）
   await page.touchscreen.touchStart(300, 400)

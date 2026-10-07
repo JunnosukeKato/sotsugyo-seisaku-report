@@ -1,5 +1,6 @@
 import { findCourse, type YearConfig } from '../config'
 import { contentToText, editables, numbering, type EditableKind } from '../editor/reportOps'
+import { COVER_SUBTITLE, OVERFLOW_RATIO } from '../layout/document'
 import type { LayoutInfo } from '../layout/measure'
 import type { Report } from '../model/types'
 import { swatchColumn } from '../model/table'
@@ -106,6 +107,21 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   }
   if (config.studentIdPattern && basicInfo.studentId.trim() && !new RegExp(config.studentIdPattern).test(basicInfo.studentId.trim())) {
     findings.push(guide('student-id-format', 'warning', '学籍番号の形式を確認する', 'cover', { blockId: 'basic:studentId' }))
+  }
+  // サブタイトルは、枠の1行に入るまで文字を小さくする（document.ts）。いちばん小さくしても入らないとき（組んだ紙面で測る）。
+  // 題目は申告書と同じにする決まりなので、短くするようには言わず、確かめ方と相談先を伝える
+  const subtitleFit = layout?.coverSubtitle
+  if (subtitleFit && subtitleFit.ratio > OVERFLOW_RATIO && basicInfo.subtitleInput.trim()) {
+    findings.push(
+      guide('cover-subtitle-fit', 'error', 'サブタイトルが長く、表紙の1行に入りません', 'cover', {
+        blockId: 'basic:subtitleInput',
+        start: 0,
+        end: basicInfo.subtitleInput.length,
+        detail:
+          `いちばん小さい文字（${COVER_SUBTITLE.minPt}pt）にしても、枠からはみ出します（今 ${subtitleFit.chars}字・${subtitleFit.fitChars}字くらいまで入ります）。` +
+          '題目は申告書と同じにする決まりです。申告書のとおりに入力しているか（よけいな字や空白がないか）を確かめ、申告書のとおりでも入らないときは、指導の先生に相談してください',
+      }),
+    )
   }
 
   // ---- 抄録 ----

@@ -81,6 +81,48 @@ await withEdge(async (browser) => {
   check('案内に沿って、表紙の学籍番号・氏名・サブタイトルを入力できる', s.report.basicInfo.studentId === '00ZZ0123' && s.report.basicInfo.name === '文化　花子' && s.report.basicInfo.subtitleInput === 'シンドバッド' && !(await page.$('.guide')), JSON.stringify(s.report.basicInfo))
   check('表紙の未入力の指摘が消える', !s.findings.some((f) => f.ruleId === 'required-field'))
 
+  // ---- キーボード：紙面の欄に Tab で移り、Enter で書き始め、Esc で戻る（mockups/v23 ④） ----
+  const focused = () =>
+    page.evaluate(() => {
+      const a = document.activeElement
+      return { key: a?.getAttribute('data-paper-key') ?? null, label: a?.getAttribute('aria-label'), inPaper: !!a?.closest('.page-viewport.front'), visible: !!a?.matches(':focus-visible'), outline: a ? getComputedStyle(a).outlineStyle : '' }
+    })
+  await page.evaluate(() => document.querySelector('.page-viewport.front [data-paper-key="b:basic:studentId"]').focus())
+  await page.keyboard.press('Tab')
+  let pf = await focused()
+  check('表紙の欄に Tab で移れ、移った欄に目印（藍の枠）が出る（読み上げの名前「氏名」）', pf.key === 'b:basic:name' && pf.label?.startsWith('氏名：') && pf.visible && pf.outline === 'solid', JSON.stringify(pf))
+  await page.keyboard.press('Enter')
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:name', { timeout: 20000 })
+  await page.keyboard.press('Escape')
+  await ready()
+  pf = await focused()
+  check('Enter で書き始め、Esc で書き終えると、書いていた欄に戻る（組み直したあとも）', pf.key === 'b:basic:name' && pf.inPaper && pf.visible && (await snap()).editingId === null, JSON.stringify(pf))
+
+  // ---- 表紙のサブタイトルが長いときは、枠の1行に入るまで文字を小さくする（mockups/v23 ①） ----
+  const subtitleFit = () =>
+    page.evaluate(() => {
+      const s = window.__editor.getSnapshot()
+      const el = document.querySelector('.page-viewport.front .cover .subtitle')
+      return { pt: Math.round(parseFloat(getComputedStyle(el).fontSize) * 0.75 * 10) / 10, fit: s.layout.coverSubtitle, error: s.findings.some((f) => f.ruleId === 'cover-subtitle-fit') }
+    })
+  const setSubtitle = async (text) => {
+    await page.evaluate((text) => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, subtitleInput: text } })), text)
+    await ready()
+  }
+  await setSubtitle('映画『千夜一夜物語』に登場する砂漠の王子シンドバッド')
+  let sf = await subtitleFit()
+  check('表紙のサブタイトルが長いと、枠の1行に入るまで行全体の文字を小さくする（26字で 12pt ほど）', sf.pt >= 11 && sf.pt <= 12.5 && sf.fit.ratio <= 1.002 && !sf.error, JSON.stringify(sf))
+  await setSubtitle('映画『千夜一夜物語』に登場する砂漠の王子シンドバッドと船乗りたち')
+  sf = await subtitleFit()
+  check('いちばん小さい文字（11pt）でも入らないときは、表紙のサブタイトルのエラーになる', sf.pt === 11 && sf.fit.ratio > 1 && sf.error, JSON.stringify(sf))
+  await page.evaluate(() => {
+    window.__editor.undo()
+    window.__editor.undo()
+  })
+  await ready()
+  sf = await subtitleFit()
+  check('元に戻すと、サブタイトルの文字の大きさも 22pt に戻る', sf.pt === 22 && !sf.error && (await snap()).report.basicInfo.subtitleInput === 'シンドバッド', JSON.stringify(sf))
+
   // ---- 1ページずつの表示とページ送り ----
   check('紙面は1ページだけを表示する', (await page.evaluate(() => [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].filter((p) => p.getBoundingClientRect().width > 0).length)) === 1)
   await page.keyboard.press('ArrowRight')
@@ -463,6 +505,30 @@ await withEdge(async (browser) => {
   await chooseArrangement('2枚（上下')
   s = await snap()
   check('1枚にしてから2枚に戻すと、2枚目の写真も戻る（1枚目から順に載る）', oneShown === 1 && s.report.workPhotos.imageIds.filter(Boolean).length === 2 && !s.findings.some((f) => f.ruleId.startsWith('photos')), String(oneShown))
+  // 入っている写真を押すと、その写真を選び（写真を選ぶ画面は出さない）、道具の「外す」で枠を空にできる（mockups/v23 ⑧ 案A）
+  chooserOpened = false
+  page.on('filechooser', onChooser)
+  const p0 = await slotBox(0)
+  await page.mouse.click(p0.x, p0.y)
+  await pause(300)
+  const photoTools = await page.evaluate(() => ({
+    sel: window.__editor.getSnapshot().selection,
+    label: document.querySelector('.palette .group.ctx .ctx-label')?.textContent,
+    tools: [...document.querySelectorAll('.palette .group.ctx')][0]?.textContent ?? '',
+    marked: !!document.querySelector('.page-viewport.front [data-photo-slot="0"].is-selected'),
+  }))
+  check('入っている作品写真を押すと、その写真を選び、道具に「この写真：差し替え／外す」が出る（写真を選ぶ画面は出ない）', photoTools.sel?.index === 0 && photoTools.label === 'この写真' && photoTools.tools.includes('差し替え') && photoTools.tools.includes('外す') && photoTools.marked && !chooserOpened, JSON.stringify(photoTools))
+  page.off('filechooser', onChooser)
+  await page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('外す')).click())
+  await pause(300)
+  await ready()
+  s = await snap()
+  check('「外す」で枠が空になり、セルフチェックに空いている枠の注意が出る', s.report.workPhotos.imageIds[0] === '' && s.findings.some((f) => f.ruleId === 'photos-empty-slot') && !(await page.$('.page-viewport.front [data-photo-slot="0"] img')), JSON.stringify(s.report.workPhotos.imageIds))
+  await page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('元に戻す')).click())
+  await pause(300)
+  await ready()
+  s = await snap()
+  check('「元に戻す」で、外した写真が戻る', s.report.workPhotos.imageIds.filter(Boolean).length === 2 && !s.findings.some((f) => f.ruleId.startsWith('photos')), JSON.stringify(s.report.workPhotos.imageIds))
 
   // ---- 自動保存：読み込み直しても残っている ----
   await new Promise((r) => setTimeout(r, 1500))

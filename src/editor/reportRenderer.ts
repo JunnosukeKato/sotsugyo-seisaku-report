@@ -1,6 +1,6 @@
 import type { YearConfig } from '../config'
 import type { FigureSize } from '../layout/bodyHtml'
-import { buildReportDocument } from '../layout/document'
+import { buildReportDocument, COVER_SUBTITLE, fitLineFontPt, OVERFLOW_RATIO, refitLineFontPt, subtitleLine } from '../layout/document'
 import { FONT_SIZE_PT } from '../layout/documentCss'
 import { reviseDeferredGroups, sameSet } from '../layout/figureFloat'
 import { measureLayout, samePageNumbers, type LayoutInfo } from '../layout/measure'
@@ -29,6 +29,7 @@ const MOTION_CLASSES = ['is-under', 'is-under-current', 'turn-out', 'turn-in', '
  * 組版の間は、組版エンジンが寸法を測れるよう、裏側のすべてのページを表示しておく（.measuring）。
  * 目次のページ番号は組版した結果から読み取るため、番号が変わったときだけもう一度組み直す。
  * 段落のすぐ下に入りきらない図は次のページの上へ送る（figureFloat.ts）。送る図が変わったときも組み直す。
+ * 表紙のサブタイトルが枠に入らないときも、文字を小さくして組み直す（文字の幅は書体によって違うため、組んだ紙面で測る）。
  */
 export class ReportRenderer {
   private readonly buffers: [{ element: HTMLElement; view: PageView }, { element: HTMLElement; view: PageView }]
@@ -36,6 +37,8 @@ export class ReportRenderer {
   private tocPageNumbers: Record<string, number> = {}
   /** 前に組んだときに次のページへ送った図のまとまり（たいていそのままでよいので、次もここから始める） */
   private deferredGroups = new Set<string>()
+  /** 前に組んだときの表紙のサブタイトル（1行全体）と文字の大きさ。サブタイトルが変わらなければ、次もこの大きさで組む */
+  private coverSubtitle: { line: string; pt: number } | null = null
 
   constructor(container: HTMLElement) {
     const make = () => {
@@ -65,7 +68,12 @@ export class ReportRenderer {
     try {
       const groupIds = new Set(report.body.flatMap((c) => c.blocks).filter((b) => b.type === 'figureRow').map((b) => b.id))
       let deferred = new Set([...this.deferredGroups].filter((id) => groupIds.has(id)))
-      const build = () => buildReportDocument(report, config, { ...sources, tocPageNumbers: this.tocPageNumbers, deferredGroups: deferred })
+      // 表紙のサブタイトルの文字の大きさ：はじめは字数から見積もり、組んだ紙面で枠に入るかを測って直す（入りきる大きさまで小さく）
+      const line = subtitleLine(report, config)
+      let subtitlePt = this.coverSubtitle?.line === line ? this.coverSubtitle.pt : fitLineFontPt(line, COVER_SUBTITLE)
+      let subtitleTooBig = Infinity
+      const build = () =>
+        buildReportDocument(report, config, { ...sources, tocPageNumbers: this.tocPageNumbers, deferredGroups: deferred, coverSubtitlePt: subtitlePt })
       // 文字の範囲ごとに分かれたフォントを、組版の前に読み込んでおく（後から読み込まれると改行位置がずれる）
       const text = build().replace(/<[^>]+>/g, '') + '0123456789'
       await Promise.all([
@@ -87,10 +95,15 @@ export class ReportRenderer {
           fallback = true
           next = new Set()
         }
-        if ((sameSet(next, deferred) && !tocChanged) || pass >= MAX_PASSES + 2) break
+        const ratio = layout.coverSubtitle?.ratio ?? 0
+        if (ratio > OVERFLOW_RATIO) subtitleTooBig = Math.min(subtitleTooBig, subtitlePt)
+        const nextPt = refitLineFontPt(subtitlePt, ratio, COVER_SUBTITLE, subtitleTooBig)
+        if ((sameSet(next, deferred) && !tocChanged && nextPt === subtitlePt) || pass >= MAX_PASSES + 2) break
         deferred = next
+        subtitlePt = nextPt
       }
       this.deferredGroups = deferred
+      this.coverSubtitle = { line, pt: subtitlePt }
       return { ms, layout }
     } finally {
       back.element.classList.remove('measuring')

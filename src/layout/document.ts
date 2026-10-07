@@ -28,6 +28,11 @@ export interface DocumentRenderOptions extends BodyRenderOptions {
    * 組版エンジンのページ参照は本文から振り直した番号に対応しないため、組版した結果から読み取って渡す（measureTocPageNumbers）。
    */
   tocPageNumbers?: Record<string, number>
+  /**
+   * 表紙のサブタイトルの文字の大きさ（pt）。組んだ紙面で枠に入るかを測って決めたもの（reportRenderer.ts）。
+   * なければ字数から見積もる（coverSubtitleFontPt）
+   */
+  coverSubtitlePt?: number
 }
 
 /** 引用・参考文献の見出しの id（目次のページ番号を読み取るのに使う） */
@@ -46,11 +51,26 @@ function field(id: string, value: string, placeholder: string): string {
   return `<span data-block-id="${id}" data-placeholder="${escapeHtml(placeholder)}">${escapeHtml(value)}</span>`
 }
 
-export function coverHtml(report: Report, config: YearConfig): string {
+/** サブタイトルの決まり文句（「―」と「の衣装制作―」など。学生が入力する部分の前と後ろ） */
+function subtitleParts(report: Report, config: YearConfig): [string, string] {
+  const course = findCourse(config, report.basicInfo.courseId)
+  const [before, after] = course ? course.subtitleTemplate.split('{input}') : ['', '']
+  return [before ?? '', after ?? '']
+}
+
+/** サブタイトルの1行全体（決まり文句と入力した部分） */
+export function subtitleLine(report: Report, config: YearConfig): string {
+  const [before, after] = subtitleParts(report, config)
+  return before + report.basicInfo.subtitleInput + after
+}
+
+export function coverHtml(report: Report, config: YearConfig, options: Pick<DocumentRenderOptions, 'coverSubtitlePt'> = {}): string {
   const course = findCourse(config, report.basicInfo.courseId)
   const { basicInfo } = report
   // サブタイトルは「―」「の衣装制作―」などの決まり文句と、学生が入力する部分を分けて出す
-  const [subtitleBefore, subtitleAfter] = course ? course.subtitleTemplate.split('{input}') : ['', '']
+  const [subtitleBefore, subtitleAfter] = subtitleParts(report, config)
+  // 長いときは、枠の1行に入るまで行全体の文字を小さくする（mockups/v23 ① 案A）
+  const subtitlePt = options.coverSubtitlePt ?? fitLineFontPt(subtitleLine(report, config), COVER_SUBTITLE)
   const fullWidthYear = String(config.fiscalYear).replace(/[0-9]/g, (d) => String.fromCharCode(d.charCodeAt(0) + 0xfee0))
   return `<section class="cover">
 <div class="frame"></div>
@@ -59,7 +79,7 @@ export function coverHtml(report: Report, config: YearConfig): string {
 <div class="el label">${escapeHtml(config.cover.titleLabel)}</div>
 <div class="el title">${escapeHtml(config.commonTitle)}</div>
 <div class="rule title-rule"></div>
-<div class="el subtitle">${escapeHtml(subtitleBefore ?? '')}${field(FIELD_IDS.subtitleInput, basicInfo.subtitleInput, '（クリックして入力）')}${escapeHtml(subtitleAfter ?? '')}</div>
+<div class="el subtitle" style="font-size:${subtitlePt}pt">${escapeHtml(subtitleBefore)}${field(FIELD_IDS.subtitleInput, basicInfo.subtitleInput, '（クリックして入力）')}${escapeHtml(subtitleAfter)}</div>
 <div class="rule subtitle-rule"></div>
 <div class="el department">${escapeHtml(config.faculty)}・${escapeHtml(config.department)}</div>
 <div class="el course">${field(FIELD_IDS.course, course?.name ?? '', '（コースを選ぶ）')} コース</div>
@@ -90,10 +110,55 @@ export function abstractRowFontPt(left: string, right: string): number {
   return ABSTRACT_ROW_SIZES_PT.find((pt) => units * pt * PT_TO_MM <= ABSTRACT_ROW_WIDTH_MM) ?? ABSTRACT_ROW_SIZES_PT[ABSTRACT_ROW_SIZES_PT.length - 1]
 }
 
+/** 1行の欄：幅（mm）と、文字の大きさのいちばん大きい値・いちばん小さい値（pt） */
+export interface LineBox {
+  widthMm: number
+  maxPt: number
+  minPt: number
+}
+
+/**
+ * 表紙のサブタイトル（幅135.8mm・22pt）。長いときは、枠の1行に入るまで行全体の文字を小さくする（mockups/v23 ① 案A）。
+ * 本文の文字（10.5pt）より小さくはしない。それでも入らなければ、セルフチェックのエラーにする
+ */
+export const COVER_SUBTITLE: LineBox = { widthMm: 135.8, maxPt: 22, minPt: 11 }
+/** 抄録の見出しのサブタイトル（本文の幅150mm・12pt）。表紙と同じく、1行に入るまで小さくする */
+export const ABSTRACT_SUBTITLE: LineBox = { widthMm: 150, maxPt: 12, minPt: 9 }
+/** 文字を小さくする刻み（pt） */
+const FIT_STEP_PT = 0.5
+
+/** 文字の幅 ÷ 欄の幅（組んだ紙面で測った値）が、この値をこえたら「はみ出している」とする（測り方の細かい誤差は見ない） */
+export const OVERFLOW_RATIO = 1.002
+
+/** 1行に収まる文字の大きさ（pt）を字数から見積もる（全角を1、半角を0.5字として数える）。いちばん小さくしても入らなければ、いちばん小さい値 */
+export function fitLineFontPt(text: string, box: LineBox): number {
+  const units = textUnits(text)
+  for (let pt = box.maxPt; pt >= box.minPt; pt -= FIT_STEP_PT) {
+    if (units * pt * PT_TO_MM <= box.widthMm) return pt
+  }
+  return box.minPt
+}
+
+/**
+ * 組んだ紙面で測った「文字の幅 ÷ 欄の幅」（ratio）から、次に組むときの文字の大きさを決める。
+ * 文字の幅は大きさに比例するので、入る大きさを 0.5pt 刻みで切り捨てて求める（字数からの見積もりより正確。表紙の書体は字によって幅が違うため）。
+ * tooBig：これまでに組んで、はみ出した大きさ（それ以上にはしない。行ったり来たりしないように）
+ */
+export function refitLineFontPt(pt: number, ratio: number, box: LineBox, tooBig = Infinity): number {
+  if (!(ratio > 0)) return pt
+  let next = Math.floor(pt / ratio / FIT_STEP_PT + 1e-6) * FIT_STEP_PT
+  if (ratio > OVERFLOW_RATIO) next = Math.min(next, pt - FIT_STEP_PT)
+  else next = Math.max(next, pt)
+  next = Math.min(next, box.maxPt, tooBig - FIT_STEP_PT)
+  return Math.max(box.minPt, next)
+}
+
 export function abstractHtml(report: Report, config: YearConfig): string {
   const course = findCourse(config, report.basicInfo.courseId)
-  const [subtitleBefore, subtitleAfter] = course ? course.subtitleTemplate.split('{input}') : ['', '']
   const { basicInfo } = report
+  // サブタイトルは、本文の幅の1行に入るまで小さくする（抄録の書体は字の幅がそろっているので、字数から決める）
+  const subtitle = subtitleLine(report, config)
+  const subtitlePt = fitLineFontPt(subtitle, ABSTRACT_SUBTITLE)
   const advisors = course ? course.advisors.join('、') : ''
   // 学籍番号・氏名（左）と指導教員（右）は1行にまとめる。長いときは文字を少し小さくする
   const studentPart = `学籍番号　${basicInfo.studentId}　　氏名　${basicInfo.name}`
@@ -116,7 +181,7 @@ export function abstractHtml(report: Report, config: YearConfig): string {
 <div class="el row row2"><span>${escapeHtml(config.faculty)}　${escapeHtml(config.department)}</span><span class="course-part">${escapeHtml(course?.name ?? '')}　コース</span></div>
 <div class="el row row3" style="font-size:${rowFontPt}pt"><span class="student">${escapeHtml(studentPart)}</span><span class="advisors">${escapeHtml(advisorPart)}</span></div>
 <div class="el title">${escapeHtml(config.commonTitle)}</div>
-<div class="el subtitle">${escapeHtml(subtitleBefore ?? '')}${escapeHtml(basicInfo.subtitleInput)}${escapeHtml(subtitleAfter ?? '')}</div>
+<div class="el subtitle" style="font-size:${subtitlePt}pt">${escapeHtml(subtitle)}</div>
 </div>
 <div class="body">
 ${paragraphs}
@@ -189,7 +254,7 @@ export function buildReportDocument(report: Report, config: YearConfig, options:
 <style>${documentCss}</style>
 </head>
 <body>
-${coverHtml(report, config)}
+${coverHtml(report, config, options)}
 ${abstractHtml(report, config)}
 ${tocHtml(report, options.tocPageNumbers ?? {})}
 <section class="body">

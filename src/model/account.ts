@@ -22,6 +22,17 @@ export function studentIdFromEmail(email: string | null, pattern: string | null)
   return re.test(id) ? id : null
 }
 
+/**
+ * アドレスの一部を伏せる（例：00zz0123@bunka-wu.ac.jp → 00zz01**@bunka-wu.ac.jp）。
+ * 共用のパソコンで、前の人のアカウントを次の人に見せるとき、学籍番号が全部は分からないようにする（本人には見分けがつく）
+ */
+export function maskEmail(email: string): string {
+  const at = email.indexOf('@')
+  const local = at < 0 ? email : email.slice(0, at)
+  const hidden = local.length > 4 ? 2 : Math.max(local.length - 1, 0)
+  return local.slice(0, local.length - hidden) + '*'.repeat(hidden) + (at < 0 ? '' : email.slice(at))
+}
+
 export const isUniversityAddress = (email: string) => email.toLowerCase().endsWith(`@${UNIVERSITY_DOMAIN.toLowerCase()}`)
 
 /**

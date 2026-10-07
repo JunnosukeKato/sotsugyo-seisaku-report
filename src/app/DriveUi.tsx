@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { summarize, type DriveState, type RemoteCopy } from '../drive/driveSync'
-import { UNIVERSITY_DOMAIN } from '../model/account'
+import { maskEmail, UNIVERSITY_DOMAIN } from '../model/account'
 import type { Report } from '../model/types'
 import type { SaveState } from './useAutosave'
 import { useDialogFocus } from './useDialogFocus'
@@ -61,7 +61,25 @@ export type GateState =
   | { kind: 'loading'; done?: number; total?: number }
   | { kind: 'error'; message: string; detail?: string }
 
-export function LoginGate({ gate, reportName, fiscalYear, onLogin }: { gate: GateState; reportName: string; fiscalYear: number; onLogin: () => void }) {
+/**
+ * ログインの窓（mockups/v19 案A・v23 ② 案A）。ログインが済むまで、後ろの紙面は見せない（共用のパソコンで、前の人の原稿が見えないように）。
+ * 前回この端末で使ったアカウントがあれば、一部を伏せて出し、「別のアカウントでログイン」も置く
+ */
+export function LoginGate({
+  gate,
+  reportName,
+  fiscalYear,
+  previousEmail,
+  onLogin,
+  onLoginOther,
+}: {
+  gate: GateState
+  reportName: string
+  fiscalYear: number
+  previousEmail: string | null
+  onLogin: () => void
+  onLoginOther: () => void
+}) {
   const online = useOnline()
   const cardRef = useRef<HTMLDivElement>(null)
   useDialogFocus(cardRef)
@@ -79,14 +97,34 @@ export function LoginGate({ gate, reportName, fiscalYear, onLogin }: { gate: Gat
       @{DOMAIN} のアカウントを選んでください。このツールが見られるのは、このツールで作ったファイルだけです。学科や先生が、あなたのドライブを見ることはありません。
     </p>
   )
+  const busy = !online || gate.kind === 'signing'
   const button = (label: string) => (
-    <button className="login-btn" disabled={!online || gate.kind === 'signing'} onClick={onLogin}>
+    <button className="login-btn" disabled={busy} onClick={onLogin}>
       {googleMark}
       {gate.kind === 'signing' ? 'ログインしています…' : label}
     </button>
   )
+  const masked = previousEmail ? maskEmail(previousEmail) : ''
+  const previous = previousEmail && (
+    <>
+      <button className="login-btn login-acct" disabled={busy} onClick={onLogin} aria-label={`${masked} で続ける`}>
+        {googleMark}
+        <span className="who">
+          <b>{masked}</b>
+          <small>{gate.kind === 'signing' ? 'ログインしています…' : 'このアカウントで続ける'}</small>
+        </span>
+        <span className="go" aria-hidden="true">
+          ›
+        </span>
+      </button>
+      <button className="login-other" disabled={busy} onClick={onLoginOther}>
+        別のアカウントでログイン
+      </button>
+      <p className="login-shared">大学のパソコン室など共用のパソコンでは、前の人のアカウントが出ていることがあります。自分のでなければ「別のアカウントでログイン」を押してください。</p>
+    </>
+  )
   return (
-    <div className="login-over" role="dialog" aria-modal="true" aria-label="ログイン">
+    <div className="login-over login-gate" role="dialog" aria-modal="true" aria-label="ログイン">
       <div className="login-card" ref={cardRef}>
         {brand}
         {gate.kind === 'loading' ? (
@@ -112,11 +150,13 @@ export function LoginGate({ gate, reportName, fiscalYear, onLogin }: { gate: Gat
                 {gate.message}
                 <small>ログインの窓が開かないときは、ブラウザのポップアップを許可してください</small>
               </div>
+            ) : previousEmail ? (
+              <p className="login-lead">前回この端末で使ったアカウントです。自分のアカウントなら、そのまま続けてください。</p>
             ) : (
               <p className="login-lead">大学の Google アカウントでログインしてください。原稿は、あなたの Google ドライブ（「卒業制作報告書」フォルダ）に自動で保存されます。</p>
             )}
-            {button(gate.kind === 'error' ? 'もう一度ログインする' : '大学のアカウントでログイン')}
-            {online ? note : <p className="login-small">原稿はドライブに保存するため、ログインしてから書きます。</p>}
+            {previous || button(gate.kind === 'error' ? 'もう一度ログインする' : '大学のアカウントでログイン')}
+            {previous ? null : online ? note : <p className="login-small">原稿はドライブに保存するため、ログインしてから書きます。</p>}
           </>
         )}
       </div>
@@ -412,13 +452,13 @@ export function OtherAccountDialog({ previousEmail, unsynced, onRelogin, onDisca
   const ref = useRef<HTMLDivElement>(null)
   useDialogFocus(ref)
   return (
-    <div className="modal-backdrop">
+    <div className="modal-backdrop over-gate">
       <div className="modal" role="dialog" aria-modal="true" aria-label="別のアカウントの原稿があります" ref={ref}>
         <header>
           <h2>この端末には、別のアカウントの原稿があります</h2>
         </header>
         <p className="lead">
-          {previousEmail} の原稿が、この端末に残っています。
+          {maskEmail(previousEmail)} の原稿が、この端末に残っています。
           {unsynced ? 'その原稿には、まだドライブに保存していない変更があります。' : 'その原稿は、そのアカウントのドライブに保存済みです。'}
         </p>
         <p className="drive-small">
@@ -431,6 +471,60 @@ export function OtherAccountDialog({ previousEmail, unsynced, onRelogin, onDisca
           <button onClick={onRelogin}>前のアカウントでログインし直す</button>
           <button className={unsynced ? 'danger' : 'primary'} onClick={onDiscard}>
             前の原稿を消して続ける
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/**
+ * 表紙の学籍番号と、ログインしたアカウントの学籍番号が違う（mockups/v23 ③ 案A）。
+ * 共用のパソコンで、ほかの人の原稿がこの端末に残っていた（そのまま自分のドライブに送らないように）、または学籍番号の打ち間違い
+ */
+export function IdMismatchDialog({
+  coverId,
+  accountEmail,
+  accountId,
+  busy,
+  onFix,
+  onNotMine,
+  onKeep,
+}: {
+  coverId: string
+  accountEmail: string
+  accountId: string
+  busy: boolean
+  onFix: () => void
+  onNotMine: () => void
+  onKeep: () => void
+}) {
+  // 必ずどれかを選んでもらうので、Esc では閉じない
+  const ref = useRef<HTMLDivElement>(null)
+  useDialogFocus(ref)
+  return (
+    <div className="modal-backdrop over-gate">
+      <div className="modal" role="dialog" aria-modal="true" aria-label="表紙の学籍番号と、ログインしたアカウントが違います" ref={ref}>
+        <header>
+          <h2>表紙の学籍番号と、ログインしたアカウントが違います</h2>
+        </header>
+        <div className="id-compare">
+          <span>表紙の学籍番号</span>
+          <b className="ng">{coverId}</b>
+          <span>ログインしたアカウント</span>
+          <b>{accountEmail}</b>
+        </div>
+        <p className="lead">共用のパソコンで、ほかの人の原稿を開いているかもしれません。どれに当たるかを選んでください。</p>
+        <p className="drive-small">学籍番号は、提出された PDF がだれのものかを確かめるのに使います。</p>
+        <div className="id-choices">
+          <button className="primary" disabled={busy} onClick={onFix}>
+            学籍番号を {accountId} に直す<small>自分の原稿で、学籍番号を打ち間違えていたとき</small>
+          </button>
+          <button disabled={busy} onClick={onNotMine}>
+            自分の原稿ではない<small>この端末の原稿は使わずに（この端末の控えに残します）、自分の原稿で続けるとき</small>
+          </button>
+          <button disabled={busy} onClick={onKeep}>
+            このまま続ける<small>学籍番号が合っているとき</small>
           </button>
         </div>
       </div>
