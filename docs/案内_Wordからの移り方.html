@@ -1,0 +1,183 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Word からの移り方</title>
+<!--
+  学生に配る案内「Word で書き始めた人へ：報告書作成ツールへの移り方（今年度だけ）」。A4 縦 1枚。
+  ・PDF（案内_Wordからの移り方.pdf）は node scripts/make-guide-word.mjs で作る（画面の画像 guide-images/ も撮り直す）。
+  ・文や日付だけを直したときは node scripts/make-guide-word.mjs --pdf-only で PDF だけ作り直せる（1ページに収まっているかも確かめる）。
+  ・日付：「いつまでに」の「11月＿日（＿）」は空欄（class="blank"）。空欄のまま印刷して手で書き入れるか、
+    <span class="date"> の中を「11月12日（木）」のように書き換える。
+  ・公開のリポジトリに入るので、先生の名前・連絡先などは書かない。
+-->
+<link rel="stylesheet" href="../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/biz-udpgothic/700.css">
+<link rel="stylesheet" href="../node_modules/@fontsource/biz-udmincho/400.css">
+<style>
+  /* ツールの「紙と墨」（藍）に合わせる */
+  :root {
+    --ink: #23262b;
+    --muted: #5b5e65;
+    --accent: #2f3e75;
+    --accent-soft: #e8ebf5;
+    --line: #e2ddd5;
+    --stage: #ebe8e3;
+    --chip: #f1efeb;
+    --warn: #8a5e0f;
+    --warn-soft: #f6f0e3;
+    --mark: #e0782a;
+  }
+  @page { size: A4; margin: 0; }
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { margin: 0; background: var(--stage); color: var(--ink); font-family: 'BIZ UDPGothic', 'BIZ UDPゴシック', sans-serif; font-size: 9.5pt; line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  .sheet { width: 210mm; height: 297mm; margin: 0 auto; padding: 10mm 12mm 9mm; background: #fff; overflow: hidden; display: flex; flex-direction: column; gap: 3.6mm; }
+  @media screen { body { padding: 24px 0; } .sheet { box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08), 0 20px 60px rgba(30, 25, 20, 0.16); } }
+  @media print { body { background: none; } }
+  h1, h2, p, ol, ul, figure { margin: 0; }
+  ol, ul { padding: 0; list-style: none; }
+  b, strong { font-weight: 700; }
+  /* ファイル名・URL（BIZ UDPゴシックは小さい字で「_」が見えにくいため、英数字の書体で出す。ツールと同じ） */
+  .fn { font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif; letter-spacing: 0.01em; }
+
+  /* ---- 見出し ---- */
+  .hd { display: grid; grid-template-columns: 1fr auto; gap: 6mm; align-items: end; padding-bottom: 3.2mm; border-bottom: 1.2pt solid var(--accent); }
+  .kicker { display: flex; align-items: center; gap: 2.2mm; color: var(--accent); font-size: 9pt; letter-spacing: 0.06em; }
+  .mark { width: 7mm; height: 7mm; flex: none; display: grid; place-items: center; border: 1pt solid var(--accent); border-radius: 1.8mm; font-family: 'BIZ UDMincho', serif; font-size: 11pt; letter-spacing: 0; }
+  h1 { margin: 2.4mm 0 2mm; font-family: 'BIZ UDMincho', serif; font-weight: 400; font-size: 21pt; line-height: 1.3; letter-spacing: 0.04em; }
+  /* 明朝の中の英字（BIZ UD明朝の英字は等幅でタイプライターのように見えるため） */
+  h1 .lat { font-family: Georgia, 'Times New Roman', serif; letter-spacing: 0.01em; }
+  h1 .sub { display: block; margin-top: 0.6mm; font-size: 14pt; color: var(--accent); letter-spacing: 0.06em; }
+  .lead { font-size: 10pt; line-height: 1.65; }
+  .url { display: flex; align-items: baseline; gap: 2mm; margin-top: 1.6mm; font-size: 9.5pt; }
+  .url b { flex: none; color: var(--accent); }
+  .url .fn { font-size: 10.5pt; font-weight: 600; }
+  .qr { width: 35mm; display: flex; flex-direction: column; align-items: center; gap: 1.2mm; padding: 2.6mm 2.4mm 2mm; border: 1pt solid var(--line); border-radius: 3mm; text-align: center; }
+  .qr img { width: 27mm; height: 27mm; display: block; }
+  .qr b { font-size: 9.5pt; color: var(--accent); }
+
+  /* ---- いつまでに ---- */
+  .due { display: flex; align-items: center; gap: 4mm; padding: 2.4mm 4mm; border-radius: 2.4mm; background: var(--accent-soft); }
+  .due-h { flex: none; padding: 0.8mm 2.6mm; border-radius: 1.6mm; background: var(--accent); color: #fff; font-size: 10pt; letter-spacing: 0.08em; }
+  .due p { font-size: 10pt; line-height: 1.6; }
+  .due strong { color: var(--accent); font-size: 11pt; }
+  .blank { display: inline-block; width: 9mm; height: 1em; margin: 0 0.6mm; border-bottom: 0.9pt solid var(--ink); vertical-align: -0.15em; }
+  .blank.s { width: 6mm; }
+
+  /* ---- 手順 ---- */
+  .sec-h { display: flex; align-items: baseline; gap: 3mm; margin-bottom: 1.8mm; font-size: 12pt; color: var(--accent); letter-spacing: 0.06em; }
+  .sec-h small { font-size: 9pt; color: var(--muted); letter-spacing: 0; font-weight: 400; }
+  .sec-h small i { display: inline-block; width: 6mm; height: 3mm; margin: 0 1mm; border: 1.6pt solid var(--mark); border-radius: 1mm; vertical-align: -0.1em; }
+  .steps ol { display: grid; grid-template-columns: repeat(3, 1fr); gap: 3mm 4mm; }
+  .steps li { display: flex; flex-direction: column; gap: 1.4mm; min-width: 0; }
+  .st-h { display: flex; align-items: center; gap: 1.8mm; font-size: 10.5pt; line-height: 1.3; white-space: nowrap; }
+  .no { width: 6.2mm; height: 6.2mm; flex: none; display: grid; place-items: center; border-radius: 50%; background: var(--accent); color: #fff; font-size: 10.5pt; font-weight: 700; }
+  .shot { height: 38mm; display: flex; align-items: center; justify-content: center; padding: 2mm; border-radius: 2.4mm; background: var(--stage); }
+  .shot img { display: block; max-width: 100%; max-height: 34mm; width: auto; height: auto; border-radius: 1.4mm; box-shadow: 0 0.3mm 1.2mm rgba(30, 25, 20, 0.18); }
+  .steps p { font-size: 9pt; line-height: 1.55; }
+  .steps p .fn { white-space: nowrap; }
+
+  /* ---- 気をつけること・知っておくと安心 ---- */
+  .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 4mm; }
+  .box { padding: 2.8mm 3.6mm 3mm; border-radius: 2.6mm; }
+  .care { background: var(--warn-soft); }
+  .care .sec-h { color: var(--warn); }
+  .know { border: 1pt solid var(--line); }
+  .box li { position: relative; padding-left: 4.4mm; font-size: 9pt; line-height: 1.5; }
+  .box li + li { margin-top: 1.2mm; }
+  .box li b { font-size: 9.5pt; }
+  .care li::before { content: '!'; position: absolute; left: 0; top: 0.5mm; width: 3.3mm; height: 3.3mm; display: grid; place-items: center; border-radius: 50%; background: var(--warn); color: #fff; font-size: 7pt; font-weight: 700; line-height: 1; }
+  .know li::before { content: ''; position: absolute; left: 0.6mm; top: 1.45mm; width: 1.7mm; height: 1.7mm; border-radius: 50%; background: var(--accent); }
+
+  /* ---- 困ったとき ---- */
+  .help { display: flex; align-items: center; gap: 3.6mm; margin-top: auto; padding: 2.4mm 4mm; border-radius: 2.4mm; background: var(--chip); font-size: 9.5pt; line-height: 1.55; }
+  .help b { flex: none; color: var(--accent); font-size: 10.5pt; }
+</style>
+</head>
+<body>
+<main class="sheet">
+  <header class="hd">
+    <div>
+      <p class="kicker"><span class="mark">卒</span>卒業制作報告書　国際ファッション文化学科　今年度だけのお知らせ</p>
+      <h1><span class="lat">Word</span> で書き始めた人へ<span class="sub">報告書作成ツールへの移り方（今年度だけ）</span></h1>
+      <p class="lead">学科の Word のひな形に書いた分をツールに写して、そこから先はツールで書き進めます。</p>
+      <p class="url"><b>ツールの URL</b><span class="fn">https://junnosukekato.github.io/sotsugyo-seisaku-report/</span></p>
+    </div>
+    <div class="qr">
+      <img src="guide-images/qr.svg" alt="報告書作成ツールの QR コード">
+      <b>スマホで開く</b>
+    </div>
+  </header>
+
+  <section class="due" aria-label="いつまでに">
+    <b class="due-h">いつまでに</b>
+    <p><strong>11月2週目ごろの途中点検の前まで</strong>（<span class="date">11月<span class="blank"></span>日（<span class="blank s"></span>）</span>まで）に、ツールに移してください。</p>
+  </section>
+
+  <section class="steps">
+    <h2 class="sec-h">移り方<small>画像の<i></i>のところを押します</small></h2>
+    <ol>
+      <li>
+        <div class="st-h"><span class="no">1</span><b>ツールを開いてログイン</b></div>
+        <figure class="shot"><img src="guide-images/step1-login.png" alt="ログインの画面"></figure>
+        <p>大学の Google アカウント（<span class="fn">@bunka-wu.ac.jp</span>）でログインします。</p>
+      </li>
+      <li>
+        <div class="st-h"><span class="no">2</span><b>コースを選ぶ</b></div>
+        <figure class="shot"><img src="guide-images/step2-course.png" alt="コースを選ぶ案内"></figure>
+        <p>はじめて開くと、表紙の上に案内が出ます。自分のコースを選びます。</p>
+      </li>
+      <li>
+        <div class="st-h"><span class="no">3</span><b>「はい、Word から読み込む」</b></div>
+        <figure class="shot"><img src="guide-images/step3-word.png" alt="「Word で書き始めていますか？」の案内"></figure>
+        <p>「Word で書き始めていますか？」と聞かれたら、「はい」を押します。</p>
+      </li>
+      <li>
+        <div class="st-h"><span class="no">4</span><b>Word を選んで確かめる</b></div>
+        <figure class="shot"><img src="guide-images/step4-files.png" alt="Word のファイルを選ぶ画面"></figure>
+        <p>本文（<span class="fn">04_本文.docx</span>）は必ず、表紙（<span class="fn">01_表紙.docx</span>）は書いていれば選びます。</p>
+      </li>
+      <li>
+        <div class="st-h"><span class="no">5</span><b>確かめて「読み込む」</b></div>
+        <figure class="shot"><img src="guide-images/step5-confirm.png" alt="Word の中身を確かめる画面"></figure>
+        <p>章立て・図・表の数と表紙の項目が出ます。読み取れなかった所は上に出ます。</p>
+      </li>
+      <li>
+        <div class="st-h"><span class="no">6</span><b>「つぎにすること」を済ませる</b></div>
+        <figure class="shot"><img src="guide-images/step6-todo.png" alt="読み込んだあとの「つぎにすること」"></figure>
+        <p>右の欄（スマホはチェックの欄の上）に出る3つを済ませたら、終わりです。</p>
+      </li>
+    </ol>
+  </section>
+
+  <div class="cols">
+    <section class="box care">
+      <h2 class="sec-h">気をつけること</h2>
+      <ul>
+        <li><b>.doc（Word 97-2003）は読めません。</b>Word の「名前を付けて保存」で「Word 文書（*.docx）」にします。</li>
+        <li><b>Google ドキュメントに変えないで。</b>図のタイトルや位置が崩れることがあります。.docx のまま選びます。</li>
+        <li><b>スマホでも選べます。</b>OneDrive・Google ドライブ・iCloud Drive の中からも選べます（iPhone は「ファイル」アプリの「ブラウズ」）。読み込んだあとの見直し（図の位置など）は、パソコンで。</li>
+        <li><b>読み込んだあとは、ツールで書く。</b>ツールの原稿を Word に戻すことはできません。</li>
+      </ul>
+    </section>
+    <section class="box know">
+      <h2 class="sec-h">知っておくと安心</h2>
+      <ul>
+        <li><b>写すのは中身だけ。</b>見出し・段落・図（写真とタイトル）・表と、表紙の項目。見た目はツールの形に組み直します。</li>
+        <li><b>書いていない章は写しません。</b>〇〇〇〇・～～～のままの章は、ツールのひな形で続けます。</li>
+        <li><b>元に戻せます。</b>読み込む前の原稿は控えに残り、「読み込む前の原稿に戻す」で戻せます。</li>
+        <li><b>自動で保存。</b>原稿はブラウザと自分の Google ドライブに保存。Word のファイルはどこにも送りません。</li>
+        <li><b>あとから読み込むとき</b>は、右の欄（スマホはメニュー）の「Word で書いた分を読み込む（今年度だけ）」から。</li>
+      </ul>
+    </section>
+  </div>
+
+  <footer class="help">
+    <b>困ったとき</b>
+    <span>うまく読み込めないときは、担当の先生に相談してください。Word のファイルは消さずに残しておきます。</span>
+  </footer>
+</main>
+</body>
+</html>
