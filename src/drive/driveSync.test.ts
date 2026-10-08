@@ -1,11 +1,11 @@
 // @vitest-environment node
 import 'fake-indexeddb/auto'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { demoReport } from '../model/demoReport'
 import { createReport } from '../model/newReport'
 import { currentConfig } from '../config'
 import type { Report } from '../model/types'
-import type { DriveFile } from './driveApi'
+import type { DriveFile, SignInOptions, Token } from './driveApi'
 
 /**
  * ログインしたあと、どの原稿で始めるかの決め方（ドライブの API は偽物に差し替える）。
@@ -30,11 +30,23 @@ const saved: { name: string; fileId?: string }[] = []
 let clock = 0
 /** 次の保存は、ドライブには保存されるが、返事が届かない（電波が切れた） */
 let loseNextResponse = false
+/** ログイン（Google の窓）を開いた回数と、そのときの指定 */
+const signIns: SignInOptions[] = []
+/** 次のログインの結果（null なら、すぐ1時間の許可が出る） */
+let nextSignIn: (() => Promise<Token>) | null = null
+/** 出した許可の番号（fake-1, fake-2, …） */
+let tokenSeq = 0
 vi.mock('./driveApi', async (importOriginal) => {
   const original = await importOriginal<typeof import('./driveApi')>()
   return {
     ...original,
-    signIn: async () => ({ accessToken: 'fake', expiresAt: Date.now() + 3600_000 }),
+    signIn: (_clientId: string, options: SignInOptions = {}) => {
+      signIns.push(options)
+      const result = nextSignIn
+      nextSignIn = null
+      return result ? result() : Promise.resolve({ accessToken: `fake-${++tokenSeq}`, expiresAt: Date.now() + 3600_000 })
+    },
+    signInReady: () => true,
     account: async () => ({ email, usage: 0 }),
     ensureFolder: async (_t: unknown, name = 'root') => `folder-${name}`,
     listChildren: async () => photoFiles,
@@ -79,6 +91,9 @@ beforeEach(() => {
   saved.length = 0
   loseNextResponse = false
   email = 'test@bunka-wu.ac.jp'
+  signIns.length = 0
+  nextSignIn = null
+  tokenSeq = 0
 })
 
 describe('ログインしたあと、どの原稿で始めるか', () => {
@@ -216,6 +231,105 @@ describe('ドライブに送るとき（原稿を消さない・混ぜない）'
     const b = { ...Object.fromEntries(Object.entries(rest).reverse()), basicInfo: Object.fromEntries(Object.entries(basicInfo).reverse()), updatedAt: 'x' } as Report
     expect(sameContent(a, b)).toBe(true)
     expect(sameContent(a, written('次郎'))).toBe(false)
+  })
+})
+
+describe('パソコンで、許可が切れる少し前にクリックしたら、許可を延ばす', () => {
+  const MIN = 60_000
+  const nav = navigator as { userAgent: string; onLine: boolean }
+  /** ログインして書き始めたところ（許可は1時間） */
+  async function writing() {
+    const drive = await loggedIn()
+    await drive.resolve(written('花子'))
+    drive.activate()
+    signIns.length = 0
+    return drive
+  }
+  const sessionToken = () => JSON.parse(sessionStorage.getItem('sotsugyo-seisaku-report-drive-token') ?? 'null')
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-08T10:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    nav.userAgent = 'test'
+    nav.onLine = true
+  })
+
+  it('残りが10分を切ったらクリックで延ばす（同じアカウントで、窓が一瞬出て閉じるだけの指定）。送っていない変更もすぐ送る', async () => {
+    const drive = await writing()
+    vi.setSystemTime(Date.now() + 52 * MIN)
+    // 送るのを待っている変更（ふだんは書くのをやめて数秒後に送る）
+    drive.schedule(written('花子さん'), 60 * MIN)
+    saved.length = 0
+    const renewing = drive.renewOnClick()
+    expect(renewing).not.toBeNull()
+    expect(signIns).toEqual([{ prompt: '', hint: 'test@bunka-wu.ac.jp' }])
+    expect(await renewing).toBe(true)
+    await vi.waitFor(() => expect(saved.map((x) => x.name)).toContain('原稿.json'))
+    // 前の許可が切れる時刻を過ぎても、使える（タブに覚えておく許可も新しくなる）
+    vi.setSystemTime(Date.now() + 20 * MIN)
+    expect(drive.tokenValid).toBe(true)
+    expect(sessionToken()).toMatchObject({ accessToken: 'fake-2', email: 'test@bunka-wu.ac.jp' })
+    expect(drive.getState().status.kind).toBe('saved')
+  })
+
+  it('残りが十分あるときは延ばさない', async () => {
+    const drive = await writing()
+    vi.setSystemTime(Date.now() + 30 * MIN)
+    expect(drive.renewOnClick()).toBeNull()
+    expect(signIns).toEqual([])
+  })
+
+  it('延ばそうとするのは2分に1回まで', async () => {
+    const drive = await writing()
+    vi.setSystemTime(Date.now() + 51 * MIN)
+    nextSignIn = () => Promise.reject(new Error('popup_closed'))
+    expect(await drive.renewOnClick()).toBe(false)
+    vi.setSystemTime(Date.now() + 1 * MIN)
+    expect(drive.renewOnClick()).toBeNull()
+    vi.setSystemTime(Date.now() + 1 * MIN + 1000)
+    expect(await drive.renewOnClick()).toBe(true)
+    expect(signIns).toHaveLength(2)
+  })
+
+  it('うまくいかなかったら（窓が止められた・閉じた）何も出さず、切れたら今まで通り「もう一度ログイン」になる', async () => {
+    const drive = await writing()
+    vi.setSystemTime(Date.now() + 55 * MIN)
+    nextSignIn = () => Promise.reject(new Error('popup_failed_to_open'))
+    expect(await drive.renewOnClick()).toBe(false)
+    expect(drive.getState().status.kind).not.toBe('error')
+    expect(sessionToken()).toMatchObject({ accessToken: 'fake-1' })
+    // 1時間たって許可が切れたあとに書くと、もう一度ログインしてもらう
+    vi.setSystemTime(Date.now() + 10 * MIN)
+    drive.schedule(written('花子さん'), 0)
+    await drive.flush()
+    expect(drive.getState().status.kind).toBe('expired')
+    // 切れたあとは、クリックでは延ばさない（「もう一度ログイン」の窓から）
+    expect(drive.renewOnClick()).toBeNull()
+  })
+
+  it('別のアカウントの許可が返ってきたら使わない（知らないうちにアカウントを切り替えない）', async () => {
+    const drive = await writing()
+    vi.setSystemTime(Date.now() + 55 * MIN)
+    email = 'other@bunka-wu.ac.jp'
+    expect(await drive.renewOnClick()).toBe(false)
+    expect(drive.getState().email).toBe('test@bunka-wu.ac.jp')
+    expect(sessionToken()).toMatchObject({ accessToken: 'fake-1', email: 'test@bunka-wu.ac.jp' })
+  })
+
+  it('スマホ・タブレット（iPhone・iPad・Android）と、電波がないときは延ばさない', async () => {
+    const drive = await writing()
+    vi.setSystemTime(Date.now() + 55 * MIN)
+    for (const ua of ['Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)', 'Mozilla/5.0 (Linux; Android 14; Pixel 8)', 'Mozilla/5.0 (iPad; CPU OS 18_0 like Mac OS X)']) {
+      nav.userAgent = ua
+      expect(drive.renewOnClick()).toBeNull()
+    }
+    nav.userAgent = 'test'
+    nav.onLine = false
+    expect(drive.renewOnClick()).toBeNull()
+    expect(signIns).toEqual([])
   })
 })
 

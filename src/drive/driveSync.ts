@@ -2,7 +2,7 @@ import { migrateReport } from '../model/migrate'
 import { getImage, putImage, usedImageIds, type StoredImage } from '../model/storage'
 import type { Report } from '../model/types'
 import { deviceId, deviceName } from './device'
-import { account, DriveError, ensureFolder, findFile, getFileState, listChildren, readFile, saveFile, signIn, type DriveFile, type Token } from './driveApi'
+import { account, DriveError, ensureFolder, findFile, getFileState, listChildren, readFile, saveFile, signIn, signInReady, type DriveFile, type Token } from './driveApi'
 
 /**
  * 原稿を Google ドライブにも保存する（mockups/v18 案3・v19 案A）。
@@ -10,6 +10,8 @@ import { account, DriveError, ensureFolder, findFile, getFileState, listChildren
  * - ログインしたら、ドライブの最新の原稿を開く。この端末の原稿と食い違うときは、どちらで続けるかを学生に選んでもらう
  * - 書いているあいだは、今まで通りこの端末（ブラウザ）に保存し、書くのをやめて数秒後にドライブにも送る。写真は1枚ずつ、1回だけ送る
  * - Google の許可は約1時間で切れる。切れたら、もう一度ログインしてもらう（押すまでも、この端末には保存し続ける）
+ * - パソコンでは、許可が切れる少し前に紙面などをクリックすると、そのときに許可を延ばす（Google の窓が一瞬出て閉じる。renewOnClick）。
+ *   書き続けていれば「もう一度ログイン」はほとんど出ず、切れる前の10分ほどクリックしなかったときだけ出る
  *
  * ドライブには「卒業制作報告書」フォルダを作り、原稿（原稿.json）と「写真」フォルダ（写真1枚ずつ）を置く。
  */
@@ -25,6 +27,18 @@ const SYNC_DELAY_MS = 5000
 const RETRY_MS = 30000
 /** 許可が切れる少し前から、切れたものとして扱う */
 const EXPIRY_MARGIN_MS = 60000
+/** パソコンで、許可の残りがこれより短くなったら、クリックしたときに延ばす */
+export const RENEW_BEFORE_MS = 10 * 60_000
+/** クリックで許可を延ばすのは、この間に1回まで（うまくいかなくても、何度も Google の窓を出さない） */
+export const RENEW_INTERVAL_MS = 2 * 60_000
+
+/**
+ * クリックで許可を延ばせる端末か（パソコン）。
+ * スマホ・タブレットでは Google の窓がタブの切り替えになり、書いている途中で画面が変わってしまうので、延ばさない（切れたら、今まで通り「もう一度ログイン」）
+ */
+export function canRenewOnClick(): boolean {
+  return !/^(iPhone|iPad|Android)/.test(deviceName())
+}
 
 /** この端末とドライブのつながり（この端末のブラウザに覚えておく） */
 interface Link {
@@ -159,6 +173,8 @@ export class DriveSync {
   private running: Promise<void> | null = null
   /** ドライブにある写真（写真の ID → ファイル） */
   private photos = new Map<string, DriveFile>()
+  /** 最後にクリックで許可を延ばそうとした時刻 */
+  private lastRenew = -Infinity
 
   constructor(clientId: string) {
     this.clientId = clientId
@@ -228,6 +244,33 @@ export class DriveSync {
       this.setStatus({ kind: 'idle' })
       void this.flush()
     }
+  }
+
+  /**
+   * パソコンで、許可が切れる少し前（残り10分）にクリックしたとき：前と同じアカウントで、許可を延ばす（Google の窓が一瞬出て閉じる）。
+   * Google の窓はクリックした処理の中でしか開けないので、クリックの処理の中から、待たずに呼ぶ。
+   * 延ばさないときは null。延ばしたら true、うまくいかなかったら false になる Promise を返す。
+   * うまくいかなくても（窓が止められた・閉じられた・電波がないなど）、何も出さない（切れたら、今まで通り「もう一度ログイン」の窓が出る）。
+   * 別のアカウントの許可が返ってきたら、使わずに捨てる（知らないうちにアカウントを切り替えない）
+   */
+  renewOnClick(): Promise<boolean> | null {
+    const email = this.state.email
+    const token = this.token
+    if (!this.active || !email || !token || !this.tokenValid || !navigator.onLine || !canRenewOnClick() || !signInReady()) return null
+    const now = Date.now()
+    if (token.expiresAt - now > RENEW_BEFORE_MS || now - this.lastRenew < RENEW_INTERVAL_MS) return null
+    this.lastRenew = now
+    return signIn(this.clientId, { prompt: '', hint: email })
+      .then(async (renewed) => {
+        if ((await account(renewed)).email !== email || this.state.email !== email || !this.active) return false
+        this.token = renewed
+        writeSession({ ...renewed, email })
+        // 待っている間に切れて「もう一度ログイン」になっていたら、閉じる。送っていない変更があれば、すぐ送る
+        if (this.state.status.kind === 'expired') this.setStatus({ kind: 'idle' })
+        if (this.pending) void this.flush()
+        return true
+      })
+      .catch(() => false)
   }
 
   private need(): Token {

@@ -44,6 +44,35 @@ const skipTour = async (page) => {
   await page.click('.tour-acts .skip')
   await page.waitForFunction(() => !document.querySelector('.tour'), { timeout: 10000 })
 }
+const TOKEN_KEY = 'sotsugyo-seisaku-report-drive-token'
+/** このタブの許可を、あと5分で切れることにして、読み込み直す（ログインし直さずに、その許可で続ける） */
+const nearExpiry = async (page) => {
+  await page.evaluate((key) => {
+    const token = JSON.parse(sessionStorage.getItem(key))
+    sessionStorage.setItem(key, JSON.stringify({ ...token, expiresAt: Date.now() + 5 * 60_000 }))
+  }, TOKEN_KEY)
+  await page.reload({ waitUntil: 'networkidle0' })
+  await editorReady(page)
+  await gateClosed(page)
+}
+/** 本文の最初の段落を、マウスでクリックする（そのページを出してから） */
+const clickParagraph = async (page) => {
+  const id = await page.evaluate(() => {
+    const ed = window.__editor
+    const block = ed.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.type === 'paragraph')
+    ed.goToPage(ed.pageOfBlock(block.id), 'none')
+    return block.id
+  })
+  await editorReady(page)
+  await sleep(300)
+  const box = await page.evaluate((id) => {
+    const r = [...document.querySelectorAll(`.page-viewport.front [data-block-id="${id}"]`)].find((e) => e.getBoundingClientRect().width > 0).getBoundingClientRect()
+    return { x: r.left + Math.min(r.width / 2, 40), y: r.top + r.height / 2 }
+  }, id)
+  await page.mouse.click(box.x, box.y)
+  return id
+}
+const reloginOpen = (page) => page.evaluate(() => [...document.querySelectorAll('.modal h2')].some((h) => h.textContent.includes('もう一度ログイン')))
 const snapshotsOf = (page) =>
   page.evaluate(
     () =>
@@ -234,6 +263,69 @@ await withEdge(async (browser) => {
   check('インターネットにつながっていないと、ログインのボタンが押せない（書けない）', true)
   await pc.page.screenshot({ path: 'poc-output/e2e/drive-offline.png' })
   await pc.page.setOfflineMode(false)
+
+  // ---- パソコン：許可が切れる少し前にクリックすると、そのときに許可を延ばす（「もう一度ログイン」を出さない） ----
+  const renew = await device(browser, drive)
+  await renew.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+  await editorReady(renew.page)
+  await renew.page.click('.login-btn')
+  await gateClosed(renew.page)
+  await editorReady(renew.page)
+  if (await tourAppears(renew.page)) await skipTour(renew.page)
+  await nearExpiry(renew.page)
+  // キーで押したときは延ばさない（書いている途中に Google の窓が出ないように）
+  await renew.page.focus('.side .help-btn')
+  await renew.page.keyboard.press('Enter')
+  await renew.page.waitForSelector('.help-top', { timeout: 10000 }).catch(() => {})
+  await sleep(500)
+  const byKey = await renew.page.evaluate(() => ({ opened: (window.__loginOptions ?? []).length, help: !!document.querySelector('.help-top') }))
+  await renew.page.evaluate(() => document.querySelector('.help-close').click())
+  await renew.page.waitForFunction(() => !document.querySelector('.help-top'), { timeout: 10000 })
+  check('キー（Enter）でボタンを押したときは、残りが少なくても延ばさない', byKey.opened === 0 && byKey.help, JSON.stringify(byKey))
+  const blockId = await clickParagraph(renew.page)
+  await until(() => renew.page.evaluate(() => (window.__loginOptions ?? []).length > 0), 5000)
+  await sleep(500)
+  const renewed = await renew.page.evaluate(
+    (key) => {
+      const a = document.activeElement
+      return {
+        options: window.__loginOptions ?? [],
+        left: Math.round((JSON.parse(sessionStorage.getItem(key)).expiresAt - Date.now()) / 60_000),
+        editing: window.__editor.getSnapshot().editingId,
+        typing: !!a && (a.isContentEditable || a.tagName === 'TEXTAREA' || a.tagName === 'INPUT'),
+      }
+    },
+    TOKEN_KEY,
+  )
+  check(
+    'パソコン：許可の残りが10分を切ってから紙面をクリックすると、同じアカウントで許可を延ばす（窓が一瞬出て閉じるだけの指定）。クリックした段落はそのまま書ける',
+    renewed.options.length === 1 && renewed.options[0].prompt === '' && renewed.options[0].hint === '00zz901@bunka-wu.ac.jp' && renewed.left >= 55 && renewed.editing === blockId && renewed.typing,
+    JSON.stringify(renewed),
+  )
+  await renew.page.keyboard.type('延ばしたあと')
+  await renew.page.evaluate(() => window.__editor.commitEditing())
+  check('延ばしたあとも「もう一度ログイン」の窓は出ず、ドライブへの保存が続く', await until(() => JSON.stringify(drive.report()?.report.body ?? '').includes('延ばしたあと')) && !(await reloginOpen(renew.page)))
+  // 残りが十分あれば、クリックしても延ばさない
+  await clickParagraph(renew.page)
+  await sleep(800)
+  check('残りが十分あるときは、クリックしても Google の窓を開かない', (await renew.page.evaluate(() => (window.__loginOptions ?? []).length)) === 1)
+  await renew.context.close()
+
+  // ---- スマホでは、クリックで許可を延ばさない（Google の窓がタブの切り替えになるため。切れたら、今まで通り「もう一度ログイン」） ----
+  const android = await device(browser, drive, { phone: true })
+  await android.page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36')
+  await android.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+  await editorReady(android.page)
+  await android.page.click('.login-btn')
+  await gateClosed(android.page)
+  await editorReady(android.page)
+  if (await tourAppears(android.page)) await skipTour(android.page)
+  await nearExpiry(android.page)
+  await clickParagraph(android.page)
+  await sleep(1000)
+  const phoneRenew = await android.page.evaluate((key) => ({ opened: (window.__loginOptions ?? []).length, left: Math.round((JSON.parse(sessionStorage.getItem(key)).expiresAt - Date.now()) / 60_000) }), TOKEN_KEY)
+  check('スマホ（Android）では、許可の残りが少なくても、クリックで Google の窓を開かない', phoneRenew.opened === 0 && phoneRenew.left <= 5 && !(await reloginOpen(android.page)), JSON.stringify(phoneRenew))
+  await android.context.close()
 
   await phone.context.close()
   await pc.context.close()

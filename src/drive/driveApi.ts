@@ -35,7 +35,7 @@ interface TokenResponse {
   error_description?: string
 }
 interface TokenClient {
-  requestAccessToken(options?: { prompt?: string; hint?: string }): void
+  requestAccessToken(options?: { prompt?: string; hint?: string; login_hint?: string }): void
 }
 interface Oauth2 {
   initTokenClient(config: {
@@ -78,9 +78,19 @@ function loadGis(): Promise<Oauth2> {
   return gisLoading
 }
 
-/** ログインの部品を先に読み込んでおく（ボタンを押したときに、すぐ Google の窓を開けるように） */
-export function preloadGis(): Promise<void> {
-  return loadGis().then(() => undefined)
+/**
+ * ログインの部品を先に読み込んでおく（ボタンを押したときに、すぐ Google の窓を開けるように）。
+ * clientId を渡すと、Google の窓を開く準備（トークンのクライアント）も先に作っておく
+ */
+export function preloadGis(clientId?: string): Promise<void> {
+  return loadGis().then((oauth2) => {
+    if (clientId) tokenClient(oauth2, clientId)
+  })
+}
+
+/** ログインの部品を読み込み終えているか（読み込み終えていれば、押した処理の中で、待たずに Google の窓を開ける） */
+export function signInReady(): boolean {
+  return !!gis()
 }
 
 export interface SignInOptions {
@@ -99,21 +109,47 @@ export function signIn(clientId: string, options: SignInOptions = {}): Promise<T
   return ready ? requestToken(ready, clientId, options) : loadGis().then((oauth2) => requestToken(oauth2, clientId, options))
 }
 
+/** Google の窓の返事を待っているもの（窓を続けて開いたときは、どれにも同じ返事を渡す） */
+const waiting: { resolve: (token: Token) => void; reject: (e: DriveError) => void }[] = []
+/** Google の窓を開く準備（トークンのクライアント）。一度作ったら使い回す（押したときは requestAccessToken を呼ぶだけ） */
+let client: { clientId: string; tokenClient: TokenClient } | null = null
+
+function tokenClient(oauth2: Oauth2, clientId: string): TokenClient {
+  if (client?.clientId === clientId) return client.tokenClient
+  const settle = (result: Token | DriveError) => {
+    for (const w of waiting.splice(0)) {
+      if (result instanceof DriveError) w.reject(result)
+      else w.resolve(result)
+    }
+  }
+  const tokenClient = oauth2.initTokenClient({
+    client_id: clientId,
+    scope: `openid email ${DRIVE_SCOPE}`,
+    callback: (r) => {
+      if (r.error || !r.access_token) return settle(explainAuthError(r.error ?? 'unknown', r.error_description))
+      if (!oauth2.hasGrantedAllScopes(r, DRIVE_SCOPE)) {
+        return settle(new DriveError('scope', 'ドライブへの保存が許可されませんでした（Google の確認の画面で、ドライブの項目にチェックを入れてください）', r.scope ?? ''))
+      }
+      settle({ accessToken: r.access_token, expiresAt: Date.now() + (r.expires_in ?? 3600) * 1000 })
+    },
+    error_callback: (e) => settle(explainPopupError(e.type, e.message)),
+  })
+  client = { clientId, tokenClient }
+  return tokenClient
+}
+
+/** Google の窓を開く（待たずに、この場で開く。押した処理の中から呼ばれる） */
 function requestToken(oauth2: Oauth2, clientId: string, options: SignInOptions): Promise<Token> {
   return new Promise((resolve, reject) => {
-    const client = oauth2.initTokenClient({
-      client_id: clientId,
-      scope: `openid email ${DRIVE_SCOPE}`,
-      callback: (r) => {
-        if (r.error || !r.access_token) return reject(explainAuthError(r.error ?? 'unknown', r.error_description))
-        if (!oauth2.hasGrantedAllScopes(r, DRIVE_SCOPE)) {
-          return reject(new DriveError('scope', 'ドライブへの保存が許可されませんでした（Google の確認の画面で、ドライブの項目にチェックを入れてください）', r.scope ?? ''))
-        }
-        resolve({ accessToken: r.access_token, expiresAt: Date.now() + (r.expires_in ?? 3600) * 1000 })
-      },
-      error_callback: (e) => reject(explainPopupError(e.type, e.message)),
-    })
-    client.requestAccessToken({ prompt: options.prompt ?? 'select_account', ...(options.hint ? { hint: options.hint } : {}) })
+    const w = { resolve, reject }
+    waiting.push(w)
+    try {
+      // アカウントの指定は、今の説明書の名前（login_hint）と前の名前（hint）の両方で渡す
+      tokenClient(oauth2, clientId).requestAccessToken({ prompt: options.prompt ?? 'select_account', ...(options.hint ? { login_hint: options.hint, hint: options.hint } : {}) })
+    } catch (e) {
+      waiting.splice(waiting.indexOf(w), 1)
+      throw e
+    }
   })
 }
 

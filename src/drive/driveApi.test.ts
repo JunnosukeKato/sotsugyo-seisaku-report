@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
-import { explainApiError, explainAuthError, explainPopupError, multipartBody, quote } from './driveApi'
+import { describe, expect, it, vi } from 'vitest'
+import { explainApiError, explainAuthError, explainPopupError, multipartBody, quote, signIn, signInReady } from './driveApi'
 
 describe('ドライブのエラーの説明', () => {
   it('大学の設定で止められているときは、そうと分かる言葉にする', () => {
@@ -26,5 +26,31 @@ describe('ドライブへの送り方', () => {
 
   it('検索の条件に入れる名前の \' と \\ をエスケープする', () => {
     expect(quote("学生's 報告書\\")).toBe("'学生\\'s 報告書\\\\'")
+  })
+})
+
+describe('ログイン（Google の窓）', () => {
+  it('窓を開く準備は一度だけ作り、押したら待たずにその場で窓を開く（続けて開いたときは、どちらにも同じ返事を渡す）', async () => {
+    const opened: unknown[] = []
+    let answer: ((r: { access_token: string; expires_in: number; scope: string }) => void) | null = null
+    const initTokenClient = vi.fn((cfg: { callback: typeof answer }) => {
+      answer = cfg.callback
+      return { requestAccessToken: (options: unknown) => opened.push(options) }
+    })
+    vi.stubGlobal('window', { google: { accounts: { oauth2: { initTokenClient, hasGrantedAllScopes: () => true, revoke: () => {} } } } })
+    try {
+      expect(signInReady()).toBe(true)
+      const first = signIn('client', { prompt: '', hint: 'a@example.ac.jp' })
+      // 待たずに、この場で窓を開いている（間に待ちが入ると、ブラウザが窓を止める）
+      expect(opened).toEqual([{ prompt: '', login_hint: 'a@example.ac.jp', hint: 'a@example.ac.jp' }])
+      const second = signIn('client')
+      expect(opened).toEqual([{ prompt: '', login_hint: 'a@example.ac.jp', hint: 'a@example.ac.jp' }, { prompt: 'select_account' }])
+      expect(initTokenClient).toHaveBeenCalledTimes(1)
+      answer!({ access_token: 'tok', expires_in: 3600, scope: 'x' })
+      expect((await first).accessToken).toBe('tok')
+      expect((await second).accessToken).toBe('tok')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })

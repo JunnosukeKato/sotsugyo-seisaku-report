@@ -79,10 +79,14 @@ export function fakeDrive(email = '00zz901@bunka-wu.ac.jp') {
   return drive
 }
 
-/** Google のログインの部品（偽物）：押すとすぐ許可が出る */
+/**
+ * Google のログインの部品（偽物）：押すとすぐ許可が出る。
+ * 窓を開いた回数（__logins）と、そのときの指定（__loginOptions：prompt・hint）を覚えておく。
+ * __fakeExpiresIn（秒）を入れておくと、その長さの許可を出す（ふだんは1時間）
+ */
 export const FAKE_GIS = `window.google = window.google || {};
 window.google.accounts = { oauth2: {
-  initTokenClient: (cfg) => ({ requestAccessToken: () => { window.__logins = (window.__logins || 0) + 1; setTimeout(() => cfg.callback({ access_token: 'fake-' + Date.now(), expires_in: 3600, scope: 'openid email https://www.googleapis.com/auth/drive.file' }), 30) } }),
+  initTokenClient: (cfg) => ({ requestAccessToken: (options) => { window.__logins = (window.__logins || 0) + 1; (window.__loginOptions = window.__loginOptions || []).push(options || {}); setTimeout(() => cfg.callback({ access_token: 'fake-' + Date.now(), expires_in: window.__fakeExpiresIn || 3600, scope: 'openid email https://www.googleapis.com/auth/drive.file' }), 30) } }),
   hasGrantedAllScopes: () => true,
   revoke: (t, done) => done && done(),
 } };`

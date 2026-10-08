@@ -23,6 +23,7 @@ import { TabLockedOverlay } from './app/TabLock'
 import { Tour } from './app/Tour'
 import { markTourSeen, tourSeen } from './app/tourMemory'
 import { useTabLock } from './app/useTabLock'
+import { useTokenRenewal } from './app/useTokenRenewal'
 import { useAutosave } from './app/useAutosave'
 import { usePanelWidths } from './app/usePanelWidths'
 import { WordImportDialog, WordTodoCard } from './app/WordImport'
@@ -306,8 +307,8 @@ export default function App() {
   useEffect(() => {
     if (started.current) return
     started.current = true
-    // ログインのボタンを押したときに、すぐ Google の窓を開けるよう、部品を先に読み込んでおく
-    if (drive) void preloadGis().catch(() => {})
+    // ログインのボタンを押したとき（パソコンで許可を延ばすときも）に、すぐ Google の窓を開けるよう、部品と窓の準備を先にしておく
+    if (drive) void preloadGis(DRIVE_CLIENT_ID).catch(() => {})
     void (async () => {
       try {
         const { config: published, source } = await loadConfig()
@@ -585,6 +586,8 @@ export default function App() {
     setTourOn(false)
   }, [])
   const reloginShown = !!drive && !gate && !driveDialog && !reloginLater && driveState?.status.kind === 'expired'
+  // パソコン：許可が切れる少し前にクリックしたら、許可を延ばす（ログインにかかわる窓が開いているとき・別のタブで開いているときは延ばさない）
+  useTokenRenewal(drive, !!gate || !!driveDialog || reloginShown || tabLock.locked || driveStopped)
   // 指差し確認を出さないとき：ログインの窓・どの原稿で続けるか・学籍番号の確かめ・Word の読み込みなどの窓・別のタブで開いている・
   // はじめての案内・使い方を開いている
   const tourBlocked = !snap?.layout || !!loadError || !!guide || !!gate || !!dialog || !!driveDialog || tabLock.locked || help || reloginShown
