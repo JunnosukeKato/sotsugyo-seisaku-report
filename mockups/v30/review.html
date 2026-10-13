@@ -1,0 +1,168 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v30 提出前チェック</title>
+<!-- node scripts/mockup-shots-v30.mjs review で作る（手で直さない） -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: 0.04em; }
+  h2 { font-size: 18px; margin: 36px 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 13.5px; color: var(--muted); line-height: 1.8; max-width: 1180px; }
+  .ask { margin: 0 0 8px; padding: 14px 18px 12px; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 1180px; }
+  .ask h2 { margin: 0 0 6px; font-size: 15px; }
+  .ask ol { margin: 0; padding-left: 22px; font-size: 13.5px; line-height: 2; }
+  .ask em { font-style: normal; color: var(--accent); font-weight: 700; }
+  .flow { margin: 0 0 8px; padding: 10px 18px; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 1180px; font-size: 13px; line-height: 1.9; }
+  .flow b { color: var(--accent); }
+  .fn { font-family: 'Segoe UI', 'BIZ UDPGothic', sans-serif; }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 15.5px; margin-bottom: 3px; }
+  figcaption span { font-size: 13px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11.5px; font-style: normal; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  img { display: block; width: 100%; }
+  .strip { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .strip > div { background: #fff; align-self: stretch; }
+  .strip small { display: block; padding: 6px 12px 9px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
+  .strip small b { color: var(--ink); }
+  .pc3 { grid-template-columns: repeat(3, 1fr); }
+  .pc2 { grid-template-columns: repeat(2, 1fr); }
+  .pc12 { grid-template-columns: 1fr 2fr; }
+  .ph4 { grid-template-columns: repeat(4, 1fr); }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 12px; border: 1px solid #ddd; }
+  .mg { padding: 14px 14px 4px; background: #ebe8e3 !important; }
+  .mg img { border-radius: 10px; }
+  .mg small { padding: 10px 2px 10px; color: #3f4249; }
+  .mg small b { display: block; font-size: 13.5px; }
+  .mg.is-rec { box-shadow: inset 0 0 0 2.5px var(--accent); }
+  .note-cell { padding: 14px 16px; font-size: 13px; line-height: 1.8; color: #3f4249; }
+  .note-cell p { margin: 0 0 8px; }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 10px 16px 12px; font-size: 13px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: #3f7a55; }
+  .pw .weak b { color: #b5443b; }
+  .pw ul { margin: 4px 0 0; padding-left: 18px; }
+  .pw3 { grid-template-columns: repeat(3, 1fr); }
+  .pw3 > div b.g { color: #3f7a55; }
+  .pw3 > div b.w { color: #b5443b; }
+  .why { margin: 2px 0 10px; padding: 11px 15px; border-left: 3px solid var(--accent); background: #f6f5f2; border-radius: 0 10px 10px 0; font-size: 13.5px; line-height: 1.85; max-width: 1180px; }
+  .why b { color: var(--accent); }
+  .care { margin: 2px 0 10px; padding: 11px 15px; border-left: 3px solid #8a5e0f; background: #f6f0e3; border-radius: 0 10px 10px 0; font-size: 13.5px; line-height: 1.85; max-width: 1180px; }
+  .care b { color: #8a5e0f; }
+  .test { background: #fff; border-radius: 14px; padding: 12px 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 1180px; font-size: 13.5px; line-height: 1.9; }
+  .test ul { margin: 0; padding-left: 20px; }
+</style>
+</head>
+<body>
+  <h1>新しいページ「提出前チェック」：画面の案（v30）</h1>
+  <p class="lead">Word のひな形（<span class="fn">01_表紙</span>〜<span class="fn">04_本文</span>）で書いている学生のためのページです。Word を確かめ（作成ツールと同じセルフチェック）、Word から保存した PDF と作品写真を、1つの PDF にまとめます。ファイルは学生の端末の中だけで読み、外には送りません。ログインも要りません。どの画面も、見た目だけの試作です（まだ作っていません）。例は、文化花子（00ZZ0123。架空）の原稿です。<b>おすすめ</b>の案には印を付けています。</p>
+  <div class="ask">
+    <h2>この v30 で決めていただきたいこと</h2>
+    <ol>
+      <li>画面の作り：案A／B／C　<em>おすすめ：案A「一覧」</em></li>
+      <li>エラーが残っているとき：まとめられない／「下書き」の透かし／確かめの窓　<em>おすすめ：「下書き」の透かし（作成ツールと同じ）</em></li>
+      <li>Word を必ず入れてもらうか　<em>おすすめ：入れなくても、まとめられる（知らせを出す）</em></li>
+      <li>スマホは、案A を縦に並べた形でよいか</li>
+    </ol>
+  </div>
+  <div class="flow"><b>流れ</b>：ファイルを入れる（Word・PDF・作品写真を、まとめて）→ 名前を見て、5つの場所（表紙・抄録・目次・本文・作品写真）に自動で分ける → Word を読んで、直すところを出す → 学生が Word で直し、PDF にして、もう一度入れる →「1つの PDF にまとめる」→「<span class="fn">2026_卒業制作報告書_学籍番号_氏名.pdf</span>」を保存。</div>
+  <div class="flow"><b>できないこと</b>：書式を直すこと（直すのは Word で）／ Word を PDF にすること（Word の「名前を付けて保存」で）／ パスワードの付いた PDF をまとめること。</div>
+
+  <h2>① 画面の作り</h2>
+  <p class="lead">3つの案を、「開いたところ」「ファイルを入れたところ（5 エラー・1 警告。作品写真はまだ。本文は Word のほうが新しい）」「保存したところ」で並べます。ファイルを入れる所は、どの案も1つです。</p>
+  <figure class="is-rec">
+    <figcaption><b>案A　一覧<em class="rec">おすすめ</em></b><span>左に5つの置き場所（Word はチェック用、PDF はまとめる用）、右にチェックの結果、下に「まとめる」。1つの画面で全部が見える</span></figcaption>
+    <div class="strip pc3">
+      <div class=""><a href="shots/a-empty-pc.png" target="_blank"><img src="shots/a-empty-pc.png" alt="" loading="lazy"></a><small><b>開いたところ</b>：入れる所と、空の置き場所</small></div>
+      <div class=""><a href="shots/a-loaded-pc.png" target="_blank"><img src="shots/a-loaded-pc.png" alt="" loading="lazy"></a><small><b>入れたところ</b>：置き場所の知らせ（本文・作品写真）と、指摘の一覧</small></div>
+      <div class=""><a href="shots/a-done-pc.png" target="_blank"><img src="shots/a-done-pc.png" alt="" loading="lazy"></a><small><b>保存した</b>：窓に、ページが順に並ぶ（作成ツールと同じ形）</small></div>
+    </div>
+    <div class="strip pc12" style="border-top:1px solid var(--line)">
+      <div class=""><a href="shots/a-word-pc.png" target="_blank"><img src="shots/a-word-pc.png" alt="" loading="lazy"></a><small><b>はじめに Word だけ入れたとき</b>（PDF はまだ）</small></div>
+      <div class="note-cell"><p>多くの学生は、まず Word だけを入れて確かめるはずです。</p><p>PDF の所には「PDF がまだありません」と出し、下に PDF の作り方を1行で出します。</p><p>外す：ファイルの右の ×。入れ替える：同じ場所にもう一度入れる。</p></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>置き場所と指摘が同時に見える。直して入れ直しても、画面が変わらない</li><li>作成ツールと同じ並び（右がチェック、下が書き出し）</li><li>Word だけの段階でも、画面が空かない</li></ul></div><div class="weak"><b>弱い点</b><ul><li>1つの画面にのる物が多い</li><li>ページの見た目は、小さな絵（1ページ目）と、保存したあとの窓だけ</li></ul></div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　手順</b><span>① ファイルを入れる → ② チェックを直す → ③ 1つにまとめる。今の段だけを開く</span></figcaption>
+    <div class="strip pc3">
+      <div class=""><a href="shots/b-empty-pc.png" target="_blank"><img src="shots/b-empty-pc.png" alt="" loading="lazy"></a><small><b>開いたところ</b>：① だけが開いている</small></div>
+      <div class=""><a href="shots/b-loaded-pc.png" target="_blank"><img src="shots/b-loaded-pc.png" alt="" loading="lazy"></a><small><b>入れたところ</b>：② が開き、① は1行にたたむ</small></div>
+      <div class=""><a href="shots/b-done-pc.png" target="_blank"><img src="shots/b-done-pc.png" alt="" loading="lazy"></a><small><b>保存した</b>：③ の中に結果</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>今することが1つだけ見える。初めてでも迷いにくい</li><li>字が少なく見える</li></ul></div><div class="weak"><b>弱い点</b><ul><li>直したあと ① に戻って入れ直す、の行き来が増える</li><li>たたんだ段の中（どのファイルが入っているか）が見えない</li><li>縦に長い（スマホでは、さらに長い）</li></ul></div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C　ページを見せる</b><span>まとめた PDF のページを、順に並べる。5つの見出しが置き場所。足りない所は空の枠、指摘はそのパートの下に付ける</span></figcaption>
+    <div class="strip pc3">
+      <div class=""><a href="shots/c-empty-pc.png" target="_blank"><img src="shots/c-empty-pc.png" alt="" loading="lazy"></a><small><b>開いたところ</b>：空の枠が、できあがりの順に並ぶ</small></div>
+      <div class=""><a href="shots/c-loaded-pc.png" target="_blank"><img src="shots/c-loaded-pc.png" alt="" loading="lazy"></a><small><b>入れたところ</b>：ページの絵と、パートごとの指摘（赤い丸は、そのページの指摘の数）</small></div>
+      <div class=""><a href="shots/c-done-pc.png" target="_blank"><img src="shots/c-done-pc.png" alt="" loading="lazy"></a><small><b>保存した</b>：上に結果、下に全ページ</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>できあがりの順とページの数が、ひと目で分かる</li><li>足りない所が、空の枠で分かる</li><li>指摘が、どのパート・どのページかと結び付く</li></ul></div><div class="weak"><b>弱い点</b><ul><li>Word だけ入れた段階では、枠が空のまま（PDF がないと絵を出せない）</li><li>指摘の札が狭く、文が折れて読みにくい。ファイル名も見えない</li><li>スマホでは横に並べられない</li><li>「どのページか」を出すには、PDF の中の文と突き合わせる仕組みが要る</li></ul></div></div>
+  </figure>
+  <p class="why"><b>おすすめは案A</b>：このページは「直す → PDF にする → 入れ直す」を何度もくり返して使います。置き場所と指摘が同じ画面にある案A が、行き来がいちばん少なくて済みます。最初は Word だけを入れる学生が多く、そのとき案C はページの枠が空のままになります。案C の良さ（ページを順に見せる）は、案A の「保存しました」の窓に入れてあります。</p>
+
+  <h2>② エラーが残っているとき</h2>
+  <p class="lead">「まとめる」所だけを、3つの決まりで並べます（例：エラーが5件）。</p>
+  <figure>
+    <figcaption><b>エラーが残っているときの「まとめる」</b><span>(a) まとめられない ／ (b)「下書き」の透かしを入れてまとめる ／ (c) 確かめの窓を出して、そのまままとめる</span></figcaption>
+    <div class="strip pc3">
+      <div class="mg"><a href="shots/err-a.png" target="_blank"><img src="shots/err-a.png" alt="" loading="lazy"></a><small><b>(a) まとめられない</b>エラーを0件にしてから</small></div>
+      <div class="mg is-rec"><a href="shots/err-b.png" target="_blank"><img src="shots/err-b.png" alt="" loading="lazy"></a><small><b>(b)「下書き」の透かしを入れてまとめる<em class="rec">おすすめ</em></b>ファイル名に「<span class="fn">_下書き</span>」。今の作成ツールと同じ決まり</small></div>
+      <div class="mg"><a href="shots/err-c.png" target="_blank"><img src="shots/err-c.png" alt="" loading="lazy"></a><small><b>(c) 確かめの窓を出して、そのまままとめる</b>透かしは入らない</small></div>
+    </div>
+    <div class="pw pw3">
+      <div><b class="g">良い点</b><ul><li>提出される PDF は、必ずエラー0件</li></ul><b class="w">弱い点</b><ul><li>先生に途中を見せる PDF が作れない</li><li>チェックの読みまちがいがあると、提出できなくなる</li></ul></div>
+      <div><b class="g">良い点</b><ul><li>作成ツールと同じ決まりで、学生が迷わない</li><li>途中の PDF を先生に見せられる</li></ul><b class="w">弱い点</b><ul><li>透かしを消すには、エラーを0件にする必要がある</li></ul></div>
+      <div><b class="g">良い点</b><ul><li>いつでも、まとめられる</li></ul><b class="w">弱い点</b><ul><li>エラーが残った PDF と、直した PDF の見分けが付かない</li><li>作成ツールと決まりが違ってしまう</li></ul></div>
+    </div>
+  </figure>
+  <p class="why"><b>おすすめは (b)</b>：作成ツールと同じ決まりにそろえられます。エラーが残っていても、途中経過を先生に見せられます。</p>
+
+  <h2>③ Word を必ず入れてもらうか</h2>
+  <p class="lead">PDF と作品写真だけを入れたときの画面です（Word は入れていない）。</p>
+  <figure>
+    <figcaption><b>Word を入れなかったとき</b><span>どちらも、PDF から分かること（ページの数・A4）は確かめる</span></figcaption>
+    <div class="strip pc2">
+      <div class=""><a href="shots/a-pdfonly-pc.png" target="_blank"><img src="shots/a-pdfonly-pc.png" alt="" loading="lazy"></a><small><b>入れなくてもよい<em class="rec">おすすめ</em></b>：「Word を入れていないので、チェックしていません」と知らせて、まとめられる</small></div>
+      <div class=""><a href="shots/a-pdfonly-req-pc.png" target="_blank"><img src="shots/a-pdfonly-req-pc.png" alt="" loading="lazy"></a><small><b>必ず入れる</b>：Word を入れるまで、まとめられない</small></div>
+    </div>
+  </figure>
+  <p class="why"><b>おすすめは「入れなくてもよい」</b>：Word を読む仕組みは、まだ実際の学生のファイルで試していません。読めないファイルがあっても、その学生が提出できるようにしておきます。</p>
+  <p class="care"><b>ご注意</b>：② を「下書きの透かし」、③ を「入れなくてもよい」にすると、Word を外せば、透かしなしでまとめられます。このページは「通らないと出せない関所」ではなく、学生が自分で確かめる道具になります。</p>
+
+  <h2>④ スマホ（案A）</h2>
+  <figure>
+    <figcaption><b>スマホ：案A を縦に並べる</b><span>上から、入れる所 → 5つの置き場所 → チェックの結果。「まとめる」は下に固定。そろった所は1行にたたみ、気を付ける所（本文・作品写真）だけ開く</span></figcaption>
+    <div class="strip ph4">
+      <div class="ph"><a href="shots/a-empty-ph.png" target="_blank"><img src="shots/a-empty-ph.png" alt="" loading="lazy"></a><small><b>開いたところ</b></small></div>
+      <div class="ph"><a href="shots/a-loaded-ph.png" target="_blank"><img src="shots/a-loaded-ph.png" alt="" loading="lazy"></a><small><b>入れたところ</b>（5 エラー・1 警告）</small></div>
+      <div class="ph"><a href="shots/a-done-ph.png" target="_blank"><img src="shots/a-done-ph.png" alt="" loading="lazy"></a><small><b>できた</b>：iPhone は「保存する」をもう一度押す（作成ツールと同じ）</small></div>
+      <div class="ph"><a href="shots/a-pdfonly-ph.png" target="_blank"><img src="shots/a-pdfonly-ph.png" alt="" loading="lazy"></a><small><b>PDF だけ入れたとき</b>（③ のおすすめ）</small></div>
+    </div>
+  </figure>
+
+  <h2>⑤ 作る前に、知っておいていただきたいこと</h2>
+  <div class="test">
+    <ul>
+      <li>チェックの決まり（エラーと警告の分け方、言い回し）は、作成ツールと同じにします。画面の指摘は、例です。</li>
+      <li>ファイルは、名前（<span class="fn">01_表紙</span> など）で分けます。名前を変えている学生のために、違う場所に入ったファイルを、手で移せるようにします。</li>
+      <li>学籍番号と氏名は、表紙から読み取ります。読めないときは、手で入れる欄を出します。</li>
+      <li>作品写真が2枚以上のときの置き方（1枚ずつ1ページ／1ページに並べる）は、作るときに決めます。</li>
+      <li>Word の読み取りは、これから実際の学生のファイルで試します（③ のおすすめの理由）。</li>
+    </ul>
+  </div>
+</body>
+</html>
