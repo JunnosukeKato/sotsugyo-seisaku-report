@@ -8,16 +8,20 @@
 <link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
 <link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
 <style>
-  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; }
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; }
   * { box-sizing: border-box; }
   body { margin: 0; padding: 28px 32px 48px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
   h1 { font-size: 21px; margin: 0 0 4px; letter-spacing: 0.04em; }
   h2 { font-size: 18px; margin: 36px 0 6px; letter-spacing: 0.04em; }
+  h2 small { margin-left: 8px; font-size: 13px; font-weight: 400; color: var(--muted); letter-spacing: 0; }
   .lead { margin: 0 0 16px; font-size: 13.5px; color: var(--muted); line-height: 1.8; max-width: 1180px; }
   .ask { margin: 0 0 8px; padding: 14px 18px 12px; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 1180px; }
   .ask h2 { margin: 0 0 6px; font-size: 15px; }
-  .ask ol { margin: 0; padding-left: 22px; font-size: 13.5px; line-height: 2; }
+  .ask ol, .ask ul { margin: 0; padding-left: 22px; font-size: 13.5px; line-height: 2; }
   .ask em { font-style: normal; color: var(--accent); font-weight: 700; }
+  .ask.decided { box-shadow: inset 4px 0 0 var(--ok), 0 2px 10px rgba(0,0,0,0.08); }
+  .ask.decided h2 { color: var(--ok); }
+  .ask.decided em { color: var(--ink); }
   .flow { margin: 0 0 8px; padding: 10px 18px; background: #fff; border-radius: 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 1180px; font-size: 13px; line-height: 1.9; }
   .flow b { color: var(--accent); }
   .fn { font-family: 'Segoe UI', 'BIZ UDPGothic', sans-serif; }
@@ -27,8 +31,10 @@
   figcaption b { display: block; font-size: 15.5px; margin-bottom: 3px; }
   figcaption span { font-size: 13px; color: var(--muted); line-height: 1.7; }
   .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11.5px; font-style: normal; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .rec.fixed { background: var(--ok); }
   img { display: block; width: 100%; }
   .strip { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .strip + .strip { border-top: 1px solid var(--line); }
   .strip > div { background: #fff; align-self: stretch; }
   .strip small { display: block; padding: 6px 12px 9px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
   .strip small b { color: var(--ink); }
@@ -42,18 +48,20 @@
   .mg img { border-radius: 10px; }
   .mg small { padding: 10px 2px 10px; color: #3f4249; }
   .mg small b { display: block; font-size: 13.5px; }
-  .mg.is-rec { box-shadow: inset 0 0 0 2.5px var(--accent); }
+  .mg.is-fixed { box-shadow: inset 0 0 0 2.5px var(--ok); }
+  .cell-rec { box-shadow: inset 0 0 0 2.5px var(--accent); }
   .note-cell { padding: 14px 16px; font-size: 13px; line-height: 1.8; color: #3f4249; }
   .note-cell p { margin: 0 0 8px; }
+  .note-cell ul { margin: 0; padding-left: 18px; }
   .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
   .pw > div { background: #fff; padding: 10px 16px 12px; font-size: 13px; line-height: 1.75; }
   .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
   .pw .good b { color: #3f7a55; }
   .pw .weak b { color: #b5443b; }
   .pw ul { margin: 4px 0 0; padding-left: 18px; }
-  .pw3 { grid-template-columns: repeat(3, 1fr); }
-  .pw3 > div b.g { color: #3f7a55; }
-  .pw3 > div b.w { color: #b5443b; }
+  .diff { background: #fff; border-radius: 14px; padding: 12px 18px; box-shadow: 0 2px 10px rgba(0,0,0,0.08); max-width: 1180px; margin: 0 0 10px; font-size: 13.5px; line-height: 1.9; }
+  .diff ul { margin: 0; padding-left: 20px; }
+  .diff b { color: var(--accent); }
   .why { margin: 2px 0 10px; padding: 11px 15px; border-left: 3px solid var(--accent); background: #f6f5f2; border-radius: 0 10px 10px 0; font-size: 13.5px; line-height: 1.85; max-width: 1180px; }
   .why b { color: var(--accent); }
   .care { margin: 2px 0 10px; padding: 11px 15px; border-left: 3px solid #8a5e0f; background: #f6f0e3; border-radius: 0 10px 10px 0; font-size: 13.5px; line-height: 1.85; max-width: 1180px; }
@@ -64,33 +72,88 @@
 </head>
 <body>
   <h1>新しいページ「提出前チェック」：画面の案（v30）</h1>
-  <p class="lead">Word のひな形（<span class="fn">01_表紙</span>〜<span class="fn">04_本文</span>）で書いている学生のためのページです。Word を確かめ（作成ツールと同じセルフチェック）、Word から保存した PDF と作品写真を、1つの PDF にまとめます。ファイルは学生の端末の中だけで読み、外には送りません。ログインも要りません。どの画面も、見た目だけの試作です（まだ作っていません）。例は、文化花子（00ZZ0123。架空）の原稿です。<b>おすすめ</b>の案には印を付けています。</p>
+  <p class="lead">Word のひな形（<span class="fn">01_表紙</span>〜<span class="fn">04_本文</span>）で書いている学生のためのページです。Word を確かめ（作成ツールと同じセルフチェック）、Word から保存した PDF と作品写真を、1つの PDF にまとめます。ファイルは学生の端末の中だけで読み、外には送りません。ログインも要りません。どの画面も、見た目だけの試作です（まだ作っていません）。例は、文化花子（00ZZ0123。架空）の原稿です。</p>
+  <div class="ask decided">
+    <h2>決まったこと</h2>
+    <ul>
+      <li>エラーが残っているとき：<em>確かめの窓を出して、そのまままとめる</em>（透かしなし。ファイル名もそのまま）</li>
+      <li>Word：<em>入れなくても、まとめられる</em>（「Word を入れていないので、チェックしていません」と知らせる）</li>
+    </ul>
+  </div>
   <div class="ask">
     <h2>この v30 で決めていただきたいこと</h2>
     <ol>
-      <li>画面の作り：案A／B／C　<em>おすすめ：案A「一覧」</em></li>
-      <li>エラーが残っているとき：まとめられない／「下書き」の透かし／確かめの窓　<em>おすすめ：「下書き」の透かし（作成ツールと同じ）</em></li>
-      <li>Word を必ず入れてもらうか　<em>おすすめ：入れなくても、まとめられる（知らせを出す）</em></li>
-      <li>スマホは、案A を縦に並べた形でよいか</li>
+      <li>画面の作り：案A／B／C／C2　<em>おすすめ：案C を選ぶなら、案C2「ページを見せる＋指摘は右に」</em></li>
+      <li>スマホの形（案C2 は、パートを縦に並べる形。下の「案C2 のスマホ」）でよいか</li>
+      <li>確かめの窓の言葉（「エラーが5件残っています。このまままとめますか？」）でよいか</li>
     </ol>
   </div>
   <div class="flow"><b>流れ</b>：ファイルを入れる（Word・PDF・作品写真を、まとめて）→ 名前を見て、5つの場所（表紙・抄録・目次・本文・作品写真）に自動で分ける → Word を読んで、直すところを出す → 学生が Word で直し、PDF にして、もう一度入れる →「1つの PDF にまとめる」→「<span class="fn">2026_卒業制作報告書_学籍番号_氏名.pdf</span>」を保存。</div>
   <div class="flow"><b>できないこと</b>：書式を直すこと（直すのは Word で）／ Word を PDF にすること（Word の「名前を付けて保存」で）／ パスワードの付いた PDF をまとめること。</div>
 
-  <h2>① 画面の作り</h2>
-  <p class="lead">3つの案を、「開いたところ」「ファイルを入れたところ（5 エラー・1 警告。作品写真はまだ。本文は Word のほうが新しい）」「保存したところ」で並べます。ファイルを入れる所は、どの案も1つです。</p>
+  <h2>案C を選ぶ場合：C と C2 の比べ</h2>
+  <p class="lead">案C は、指摘が増えると弱点が出ます。そこで、指摘を右の一覧に移した「案C2」を足しました。下は、長い原稿（本文 12ページ、18 エラー・6 警告）を入れたときの、パソコンの最初の1画面です。</p>
+  <figure>
+    <figcaption><b>長い原稿を入れたとき（最初の1画面）</b><span>左：案C（指摘はページの下）　右：案C2（指摘は右の一覧）</span></figcaption>
+    <div class="strip pc2">
+      <div class=""><a href="shots/c-long-pc.png" target="_blank"><img src="shots/c-long-pc.png" alt="" loading="lazy"></a><small><b>案C</b>：見えるのは、9ページ目までと、指摘 24件のうち14件。続きは、画面を下に動かす</small></div>
+      <div class="cell-rec"><a href="shots/c2-long-pc.png" target="_blank"><img src="shots/c2-long-pc.png" alt="" loading="lazy"></a><small><b>案C2<em class="rec">おすすめ</em></b>：15ページと作品写真の枠が、全部見える。指摘は 24件のうち6件。続きは、右の欄の中だけを動かす</small></div>
+    </div>
+    <div class="strip pc12">
+      <div class=""><a href="shots/c-long-full-pc.png" target="_blank"><img src="shots/c-long-full-pc.png" alt="" loading="lazy"></a><small><b>案C を下まで動かした全体</b>（縦に約1.8画面）</small></div>
+      <div class="note-cell"><p><b>案C で起きること</b></p><ul><li>指摘の札が、ページとページの間に入るので、原稿の続き（10ページ目から先と、作品写真の空の枠）が画面の外に出ます。</li><li>札は3列に並びます。一度に多く見えますが、どの順に読むかが分かりにくくなります。</li><li>直して入れ直すたびに、札の数が変わり、ページの位置も上下に動きます。</li></ul></div>
+    </div>
+  </figure>
+  <div class="diff">
+    <ul>
+      <li><b>1画面に入る量</b>：案C は、9ページ目までと、指摘 24件のうち14件。案C2 は、全部のページと、指摘 6件。案C2 の残りの指摘は、右の欄を動かして読みます（欄3つ分ほどの長さ。ページは動きません）。</li>
+      <li><b>ページの絵の大きさ</b>：案C2 は、右に一覧を置く分、案C より2割ほど小さくなります（幅 136 → 108。短い原稿のときは、案C と同じくらい）。どちらも字は読めず、図・写真の位置とページの数を見るための絵です。</li>
+      <li><b>指摘の読みやすさ</b>：案C2 は案A と同じ1列の一覧で、文が折れにくく、押すとそのページに枠が付きます。案C は、一度に見える件数が多い代わりに、札が狭くて文が折れ、3列をどの順に読むかが分かりにくくなります。</li>
+      <li><b>どちらにも残る弱点</b>：「どのページか」は、Word の文を PDF の中から探して出すので、分からない指摘が残ります（案C2 は札が「本文」だけになります）。Word だけを入れた段階では、ページの枠は空のままです。</li>
+    </ul>
+  </div>
+  <p class="why"><b>おすすめ：案C を選ぶなら案C2</b>。案C の良さ（まとめた PDF をページで見せる・足りない所が空の枠で分かる）はそのままで、指摘が増えても画面がくずれません。Word だけを入れた段階でも、右の一覧は使えます。</p>
+
   <figure class="is-rec">
-    <figcaption><b>案A　一覧<em class="rec">おすすめ</em></b><span>左に5つの置き場所（Word はチェック用、PDF はまとめる用）、右にチェックの結果、下に「まとめる」。1つの画面で全部が見える</span></figcaption>
+    <figcaption><b>案C2　ページを見せる＋指摘は右に<em class="rec">おすすめ</em></b><span>左に、まとめた PDF のページ（5つのパートの見出しの下に、入っているファイルの名前）。右に、チェックの結果（どこの指摘かの札つき）。下に「まとめる」</span></figcaption>
+    <div class="strip pc3">
+      <div class=""><a href="shots/c2-empty-pc.png" target="_blank"><img src="shots/c2-empty-pc.png" alt="" loading="lazy"></a><small><b>開いたところ</b>：空の枠が、できあがりの順に並ぶ</small></div>
+      <div class=""><a href="shots/c2-word-pc.png" target="_blank"><img src="shots/c2-word-pc.png" alt="" loading="lazy"></a><small><b>Word だけ入れたとき</b>：枠は空のまま。指摘は右に出る（札はパートだけ）</small></div>
+      <div class=""><a href="shots/c2-loaded-pc.png" target="_blank"><img src="shots/c2-loaded-pc.png" alt="" loading="lazy"></a><small><b>入れたところ</b>（5 エラー・1 警告）：選んだ指摘のページに枠。赤い丸は、そのページの指摘の数</small></div>
+    </div>
+    <div class="strip pc3">
+      <div class=""><a href="shots/c2-confirm-pc.png" target="_blank"><img src="shots/c2-confirm-pc.png" alt="" loading="lazy"></a><small><b>エラーが残ったまま「まとめる」を押したとき</b>：確かめの窓（はじめは「戻って直す」）</small></div>
+      <div class=""><a href="shots/c2-done-pc.png" target="_blank"><img src="shots/c2-done-pc.png" alt="" loading="lazy"></a><small><b>保存した</b>：上に結果、下に全ページ</small></div>
+      <div class="note-cell"><ul><li>札は、ページが分かれば「本文 3ページ目」、分からなければ「本文」だけ。</li><li>外す：ファイルの名前の右の ×。入れ替える：同じ場所にもう一度入れる。</li><li>ページの絵は、画面に収まる範囲で、できるだけ大きくします（ページが少ないほど大きい）。</li><li>「Word のほうが新しい」の知らせと、作品写真の空の枠は、案C と同じです。</li></ul></div>
+    </div>
+    <div class="strip ph4">
+      <div class="ph"><a href="shots/c2-loaded-ph.png" target="_blank"><img src="shots/c2-loaded-ph.png" alt="" loading="lazy"></a><small><b>案C2 のスマホ：入れたところ</b></small></div>
+      <div class="ph"><a href="shots/c2-done-ph.png" target="_blank"><img src="shots/c2-done-ph.png" alt="" loading="lazy"></a><small><b>案C2 のスマホ：できた</b>（iPhone は「保存する」をもう一度押す）</small></div>
+      <div class="note-cell" style="grid-column: span 2"><p><b>スマホ</b></p><ul><li>パートを縦に並べます。ページの絵は、その行の中だけで横に動かします（画面全体は横に動きません）。</li><li>チェックの結果は、その下に続けます。札（「本文 3ページ目」）と、ページの赤い丸で、場所が分かります。</li><li>「まとめる」は、下に固定します。</li></ul></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>まとめた PDF の順とページの数が、ひと目で分かる。足りない所は空の枠</li><li>指摘は案A と同じ読みやすい一覧。数が増えても、ページの並びは動かない</li><li>指摘とページが結び付く（押すと枠・ページに数の丸）</li></ul></div><div class="weak"><b>弱い点</b><ul><li>案A より作る物が多い（全ページの絵を作る・Word の文を PDF から探す）</li><li>ページの絵は、案C より少し小さい</li><li>ファイルの名前は小さな字になる（長い名前は「…」で省く）</li></ul></div></div>
+  </figure>
+
+  <h2>これまでの案：A・B・C<small>（エラーが残っているときの決まりを、決定に合わせて直してあります）</small></h2>
+  <p class="lead">3つの案を、「開いたところ」「ファイルを入れたところ（5 エラー・1 警告。作品写真はまだ。本文は Word のほうが新しい）」「保存したところ」で並べます。ファイルを入れる所は、どの案も1つです。</p>
+  <figure>
+    <figcaption><b>案A　一覧</b><span>左に5つの置き場所（Word はチェック用、PDF はまとめる用）、右にチェックの結果、下に「まとめる」。1つの画面で全部が見える</span></figcaption>
     <div class="strip pc3">
       <div class=""><a href="shots/a-empty-pc.png" target="_blank"><img src="shots/a-empty-pc.png" alt="" loading="lazy"></a><small><b>開いたところ</b>：入れる所と、空の置き場所</small></div>
       <div class=""><a href="shots/a-loaded-pc.png" target="_blank"><img src="shots/a-loaded-pc.png" alt="" loading="lazy"></a><small><b>入れたところ</b>：置き場所の知らせ（本文・作品写真）と、指摘の一覧</small></div>
       <div class=""><a href="shots/a-done-pc.png" target="_blank"><img src="shots/a-done-pc.png" alt="" loading="lazy"></a><small><b>保存した</b>：窓に、ページが順に並ぶ（作成ツールと同じ形）</small></div>
     </div>
-    <div class="strip pc12" style="border-top:1px solid var(--line)">
+    <div class="strip pc12">
       <div class=""><a href="shots/a-word-pc.png" target="_blank"><img src="shots/a-word-pc.png" alt="" loading="lazy"></a><small><b>はじめに Word だけ入れたとき</b>（PDF はまだ）</small></div>
       <div class="note-cell"><p>多くの学生は、まず Word だけを入れて確かめるはずです。</p><p>PDF の所には「PDF がまだありません」と出し、下に PDF の作り方を1行で出します。</p><p>外す：ファイルの右の ×。入れ替える：同じ場所にもう一度入れる。</p></div>
     </div>
-    <div class="pw"><div class="good"><b>良い点</b><ul><li>置き場所と指摘が同時に見える。直して入れ直しても、画面が変わらない</li><li>作成ツールと同じ並び（右がチェック、下が書き出し）</li><li>Word だけの段階でも、画面が空かない</li></ul></div><div class="weak"><b>弱い点</b><ul><li>1つの画面にのる物が多い</li><li>ページの見た目は、小さな絵（1ページ目）と、保存したあとの窓だけ</li></ul></div></div>
+    <div class="strip ph4">
+      <div class="ph"><a href="shots/a-empty-ph.png" target="_blank"><img src="shots/a-empty-ph.png" alt="" loading="lazy"></a><small><b>案A のスマホ：開いたところ</b></small></div>
+      <div class="ph"><a href="shots/a-loaded-ph.png" target="_blank"><img src="shots/a-loaded-ph.png" alt="" loading="lazy"></a><small><b>入れたところ</b></small></div>
+      <div class="ph"><a href="shots/a-done-ph.png" target="_blank"><img src="shots/a-done-ph.png" alt="" loading="lazy"></a><small><b>できた</b>（iPhone）</small></div>
+      <div class="ph"><a href="shots/a-pdfonly-ph.png" target="_blank"><img src="shots/a-pdfonly-ph.png" alt="" loading="lazy"></a><small><b>PDF だけ入れたとき</b></small></div>
+    </div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>置き場所と指摘が同時に見える。直して入れ直しても、画面が変わらない</li><li>作成ツールと同じ並び（右がチェック、下が書き出し）</li><li>いちばん少ない手間で作れる</li></ul></div><div class="weak"><b>弱い点</b><ul><li>1つの画面にのる物が多い</li><li>ページの見た目は、小さな絵（1ページ目）と、保存したあとの窓だけ</li></ul></div></div>
   </figure>
 
   <figure>
@@ -110,58 +173,36 @@
       <div class=""><a href="shots/c-loaded-pc.png" target="_blank"><img src="shots/c-loaded-pc.png" alt="" loading="lazy"></a><small><b>入れたところ</b>：ページの絵と、パートごとの指摘（赤い丸は、そのページの指摘の数）</small></div>
       <div class=""><a href="shots/c-done-pc.png" target="_blank"><img src="shots/c-done-pc.png" alt="" loading="lazy"></a><small><b>保存した</b>：上に結果、下に全ページ</small></div>
     </div>
-    <div class="pw"><div class="good"><b>良い点</b><ul><li>できあがりの順とページの数が、ひと目で分かる</li><li>足りない所が、空の枠で分かる</li><li>指摘が、どのパート・どのページかと結び付く</li></ul></div><div class="weak"><b>弱い点</b><ul><li>Word だけ入れた段階では、枠が空のまま（PDF がないと絵を出せない）</li><li>指摘の札が狭く、文が折れて読みにくい。ファイル名も見えない</li><li>スマホでは横に並べられない</li><li>「どのページか」を出すには、PDF の中の文と突き合わせる仕組みが要る</li></ul></div></div>
+    <div class="pw"><div class="good"><b>良い点</b><ul><li>できあがりの順とページの数が、ひと目で分かる</li><li>足りない所が、空の枠で分かる</li><li>ページの絵が、いちばん大きい</li></ul></div><div class="weak"><b>弱い点</b><ul><li>指摘が増えると、縦に長くなり、原稿の続きが画面の外に出る（上の比べ）</li><li>指摘の札が狭く、文が折れて読みにくい。ファイル名も見えない</li><li>Word だけ入れた段階では、枠が空のまま。スマホでは横に並べられない</li></ul></div></div>
   </figure>
-  <p class="why"><b>おすすめは案A</b>：このページは「直す → PDF にする → 入れ直す」を何度もくり返して使います。置き場所と指摘が同じ画面にある案A が、行き来がいちばん少なくて済みます。最初は Word だけを入れる学生が多く、そのとき案C はページの枠が空のままになります。案C の良さ（ページを順に見せる）は、案A の「保存しました」の窓に入れてあります。</p>
+  <p class="why">はじめのおすすめは<b>案A</b> でした（「直す → PDF にする → 入れ直す」をくり返す画面なので、置き場所と指摘が同じ画面にある形がよい、という理由です）。案C2 は、この案A の良さ（右の一覧・下の「まとめる」）を引き継いで、左をページの並びに替えたものです。</p>
 
-  <h2>② エラーが残っているとき</h2>
-  <p class="lead">「まとめる」所だけを、3つの決まりで並べます（例：エラーが5件）。</p>
+  <h2>決まったこと（控え）</h2>
   <figure>
-    <figcaption><b>エラーが残っているときの「まとめる」</b><span>(a) まとめられない ／ (b)「下書き」の透かしを入れてまとめる ／ (c) 確かめの窓を出して、そのまままとめる</span></figcaption>
+    <figcaption><b>エラーが残っているときの「まとめる」</b><span>3つの決まりを比べた図です。決まったのは (c)</span></figcaption>
     <div class="strip pc3">
       <div class="mg"><a href="shots/err-a.png" target="_blank"><img src="shots/err-a.png" alt="" loading="lazy"></a><small><b>(a) まとめられない</b>エラーを0件にしてから</small></div>
-      <div class="mg is-rec"><a href="shots/err-b.png" target="_blank"><img src="shots/err-b.png" alt="" loading="lazy"></a><small><b>(b)「下書き」の透かしを入れてまとめる<em class="rec">おすすめ</em></b>ファイル名に「<span class="fn">_下書き</span>」。今の作成ツールと同じ決まり</small></div>
-      <div class="mg"><a href="shots/err-c.png" target="_blank"><img src="shots/err-c.png" alt="" loading="lazy"></a><small><b>(c) 確かめの窓を出して、そのまままとめる</b>透かしは入らない</small></div>
-    </div>
-    <div class="pw pw3">
-      <div><b class="g">良い点</b><ul><li>提出される PDF は、必ずエラー0件</li></ul><b class="w">弱い点</b><ul><li>先生に途中を見せる PDF が作れない</li><li>チェックの読みまちがいがあると、提出できなくなる</li></ul></div>
-      <div><b class="g">良い点</b><ul><li>作成ツールと同じ決まりで、学生が迷わない</li><li>途中の PDF を先生に見せられる</li></ul><b class="w">弱い点</b><ul><li>透かしを消すには、エラーを0件にする必要がある</li></ul></div>
-      <div><b class="g">良い点</b><ul><li>いつでも、まとめられる</li></ul><b class="w">弱い点</b><ul><li>エラーが残った PDF と、直した PDF の見分けが付かない</li><li>作成ツールと決まりが違ってしまう</li></ul></div>
+      <div class="mg"><a href="shots/err-b.png" target="_blank"><img src="shots/err-b.png" alt="" loading="lazy"></a><small><b>(b)「下書き」の透かしを入れてまとめる</b>ファイル名に「<span class="fn">_下書き</span>」。今の作成ツールと同じ決まり</small></div>
+      <div class="mg is-fixed"><a href="shots/err-c.png" target="_blank"><img src="shots/err-c.png" alt="" loading="lazy"></a><small><b>(c) 確かめの窓を出して、そのまままとめる<em class="rec fixed">決定</em></b>透かしは入らない。ファイル名もそのまま</small></div>
     </div>
   </figure>
-  <p class="why"><b>おすすめは (b)</b>：作成ツールと同じ決まりにそろえられます。エラーが残っていても、途中経過を先生に見せられます。</p>
-
-  <h2>③ Word を必ず入れてもらうか</h2>
-  <p class="lead">PDF と作品写真だけを入れたときの画面です（Word は入れていない）。</p>
+  <p class="care"><b>ご承知おきください</b>：(c) では、まとめた PDF に、エラーが残っていたかどうかの印は付きません（受け取った先生の側では、見分けられません）。作成ツールの「下書き」の決まりとは、違う決まりになります。</p>
   <figure>
-    <figcaption><b>Word を入れなかったとき</b><span>どちらも、PDF から分かること（ページの数・A4）は確かめる</span></figcaption>
+    <figcaption><b>Word を入れなかったとき</b><span>PDF と作品写真だけを入れた画面（案A の形で撮っています）。PDF から分かること（ページの数・A4）は確かめる</span></figcaption>
     <div class="strip pc2">
-      <div class=""><a href="shots/a-pdfonly-pc.png" target="_blank"><img src="shots/a-pdfonly-pc.png" alt="" loading="lazy"></a><small><b>入れなくてもよい<em class="rec">おすすめ</em></b>：「Word を入れていないので、チェックしていません」と知らせて、まとめられる</small></div>
-      <div class=""><a href="shots/a-pdfonly-req-pc.png" target="_blank"><img src="shots/a-pdfonly-req-pc.png" alt="" loading="lazy"></a><small><b>必ず入れる</b>：Word を入れるまで、まとめられない</small></div>
-    </div>
-  </figure>
-  <p class="why"><b>おすすめは「入れなくてもよい」</b>：Word を読む仕組みは、まだ実際の学生のファイルで試していません。読めないファイルがあっても、その学生が提出できるようにしておきます。</p>
-  <p class="care"><b>ご注意</b>：② を「下書きの透かし」、③ を「入れなくてもよい」にすると、Word を外せば、透かしなしでまとめられます。このページは「通らないと出せない関所」ではなく、学生が自分で確かめる道具になります。</p>
-
-  <h2>④ スマホ（案A）</h2>
-  <figure>
-    <figcaption><b>スマホ：案A を縦に並べる</b><span>上から、入れる所 → 5つの置き場所 → チェックの結果。「まとめる」は下に固定。そろった所は1行にたたみ、気を付ける所（本文・作品写真）だけ開く</span></figcaption>
-    <div class="strip ph4">
-      <div class="ph"><a href="shots/a-empty-ph.png" target="_blank"><img src="shots/a-empty-ph.png" alt="" loading="lazy"></a><small><b>開いたところ</b></small></div>
-      <div class="ph"><a href="shots/a-loaded-ph.png" target="_blank"><img src="shots/a-loaded-ph.png" alt="" loading="lazy"></a><small><b>入れたところ</b>（5 エラー・1 警告）</small></div>
-      <div class="ph"><a href="shots/a-done-ph.png" target="_blank"><img src="shots/a-done-ph.png" alt="" loading="lazy"></a><small><b>できた</b>：iPhone は「保存する」をもう一度押す（作成ツールと同じ）</small></div>
-      <div class="ph"><a href="shots/a-pdfonly-ph.png" target="_blank"><img src="shots/a-pdfonly-ph.png" alt="" loading="lazy"></a><small><b>PDF だけ入れたとき</b>（③ のおすすめ）</small></div>
+      <div class=""><a href="shots/a-pdfonly-pc.png" target="_blank"><img src="shots/a-pdfonly-pc.png" alt="" loading="lazy"></a><small><b>入れなくてもよい<em class="rec fixed">決定</em></b>：「Word を入れていないので、チェックしていません」と知らせて、まとめられる</small></div>
+      <div class=""><a href="shots/a-pdfonly-req-pc.png" target="_blank"><img src="shots/a-pdfonly-req-pc.png" alt="" loading="lazy"></a><small><b>必ず入れる</b>（選ばなかった案）：Word を入れるまで、まとめられない</small></div>
     </div>
   </figure>
 
-  <h2>⑤ 作る前に、知っておいていただきたいこと</h2>
+  <h2>作る前に、知っておいていただきたいこと</h2>
   <div class="test">
     <ul>
       <li>チェックの決まり（エラーと警告の分け方、言い回し）は、作成ツールと同じにします。画面の指摘は、例です。</li>
       <li>ファイルは、名前（<span class="fn">01_表紙</span> など）で分けます。名前を変えている学生のために、違う場所に入ったファイルを、手で移せるようにします。</li>
       <li>学籍番号と氏名は、表紙から読み取ります。読めないときは、手で入れる欄を出します。</li>
       <li>作品写真が2枚以上のときの置き方（1枚ずつ1ページ／1ページに並べる）は、作るときに決めます。</li>
-      <li>Word の読み取りは、これから実際の学生のファイルで試します（③ のおすすめの理由）。</li>
+      <li>Word の読み取りと、「どのページの指摘か」を探す仕組みは、これから実際の学生のファイルで試します。</li>
     </ul>
   </div>
 </body>

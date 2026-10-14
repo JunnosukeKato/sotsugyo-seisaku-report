@@ -247,8 +247,12 @@ svg { flex: none; }
 .c-saved { flex: 1; display: flex; align-items: center; gap: 16px; padding: 14px 20px; box-shadow: 0 0 0 2px var(--ok), var(--float-shadow); }
 .c-saved .r-title { flex: none; white-space: nowrap; }
 .c-saved .pdf-file { flex: 1; margin: 0; }
-.c-doc { display: flex; justify-content: center; align-items: flex-start; gap: 26px; margin-top: 20px; --tw: 136px; }
-.grp { flex: none; width: calc(var(--n) * var(--tw) + (var(--n) - 1) * 10px); }
+/* ページは、まとめる順に左から並べる。入りきらなければ次の段へ（v30.js の packRows） */
+.c-doc { display: grid; gap: 22px; max-width: 1376px; margin: 20px auto 0; --tw: 136px; --g: 10px; }
+.c-row { display: flex; align-items: flex-start; gap: var(--gg, 26px); }
+.c-doc.one .c-row { justify-content: center; }
+.grp { flex: none; width: calc(var(--n) * var(--tw) + (var(--n) - 1) * var(--g)); }
+.g-h.cont > b small, .p-h.cont > b small { margin-left: 2px; font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
 /* 見出しの高さをそろえる（ページの絵の上の端が、横一列に並ぶように） */
 .g-h { position: relative; height: 106px; padding: 8px 0 0; border-top: 3px solid var(--accent); }
 .g-more { position: absolute; right: -4px; top: 6px; width: 26px; height: 26px; border: 0; border-radius: 6px; background: none; color: #8d8f95; font-size: 17px; line-height: 1; letter-spacing: 0.05em; }
@@ -260,7 +264,7 @@ svg { flex: none; }
 .g-f .st.ok svg { width: 10.5px; height: 10.5px; }
 .g-f .off { color: #94969c; }
 .g-note { display: flex; align-items: center; gap: 7px; margin-top: 6px; padding: 5px 9px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 12.5px; line-height: 1.5; }
-.g-pages { display: flex; gap: 10px; }
+.g-pages { display: flex; gap: var(--g); }
 .g-pages figure { width: var(--tw); margin: 0; text-align: center; font-size: 11.5px; color: var(--muted); }
 .pg { position: relative; display: block; aspect-ratio: 210 / 297; margin-bottom: 5px; background: #fff; box-shadow: 0 1px 2px rgba(30, 25, 20, 0.1), 0 8px 20px rgba(30, 25, 20, 0.09); }
 .pg img { display: block; width: 100%; height: 100%; }
@@ -270,6 +274,8 @@ svg { flex: none; }
 .pg .pin { position: absolute; top: -7px; right: -7px; width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; background: var(--error); color: #fff; font-size: 12px; font-weight: 700; font-style: normal; line-height: 1; box-shadow: 0 0 0 2px var(--stage-bg); }
 .g-issues { margin-top: 8px; display: grid; gap: 7px; }
 .g-issues.two { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.g-issues.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pg .pin.w { background: var(--warn); }
 .g-issues .issue { position: relative; grid-template-columns: 15px minmax(0, 1fr); gap: 7px; padding: 8px 9px 9px; border: 0; border-radius: 9px; background: #fff; box-shadow: 0 1px 2px rgba(30, 25, 20, 0.06), inset 0 2.5px 0 var(--error); }
 .g-issues .issue.warning { box-shadow: 0 1px 2px rgba(30, 25, 20, 0.06), inset 0 2.5px 0 #b98a2a; }
 .g-issues .issue .dot { width: 15px; height: 15px; font-size: 10.5px; }
@@ -280,6 +286,57 @@ svg { flex: none; }
 .g-ok { display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 8px; font-size: 12.5px; color: var(--ok); }
 .c-cap { margin-top: 18px; text-align: center; font-size: 13.5px; color: var(--muted); }
 .c .merge-in { max-width: 1440px; padding: 14px 32px; }
+
+/* =====================================================================
+   案C2　ページを見せる＋指摘は右に（左：まとめた PDF のページ、右：チェックの結果。右の欄は、欄の中だけで縦に動く）
+   ===================================================================== */
+.c2 { display: grid; grid-template-columns: minmax(0, 1fr) 400px; gap: 22px; align-items: start; max-width: 1440px; margin: 0 auto; padding: 18px 28px 110px; }
+.c2.nobar { padding-bottom: 28px; }
+.c2-main { min-width: 0; }
+.c2-doc { display: grid; gap: 12px; margin-top: 16px; --tw: 96px; --g: 8px; --gg: 20px; }
+/* パートの見出し：名前、入っているファイル（外す ×）、ファイルの知らせ。高さをそろえる */
+.p-h { height: 88px; padding: 6px 0 0; border-top: 3px solid var(--accent); }
+.grp.todo .p-h { border-top-color: var(--dash); }
+.p-h > b { display: block; font-size: 15px; line-height: 1.5; letter-spacing: 0.08em; white-space: nowrap; }
+.p-f { display: flex; flex-direction: column; min-width: 0; }
+.p-seg.wide .p-f { flex-direction: row; gap: 16px; }
+.pf { display: flex; align-items: center; gap: 2px; min-width: 0; font-size: 11.5px; line-height: 19px; color: #3f4249; }
+.pf .fn { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pf .x { width: 17px; height: 17px; flex: none; display: grid; place-items: center; border: 0; padding: 0; border-radius: 4px; background: none; color: #a2a4a9; }
+.pf .x svg { width: 11px; height: 11px; }
+.pf .st { width: 13px; height: 13px; margin-right: 3px; font-size: 9.5px; }
+.pf.stale .fn { color: var(--warn); }
+.pf.none { color: #94969c; }
+.pf.none .fn { color: #94969c; }
+.p-note { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; margin-top: 3px; padding: 3px 9px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 12px; line-height: 1.5; }
+.p-note .st { width: 14px; height: 14px; font-size: 10px; }
+.p-note .link { margin-left: 6px; color: var(--warn); font-size: 12px; white-space: nowrap; }
+/* 選んだ指摘のページ */
+.pg.sel { outline: 3px solid var(--accent); outline-offset: 3px; }
+.c2 .pg .pin { top: -6px; right: -6px; width: 19px; height: 19px; font-size: 11.5px; }
+/* 右の欄 */
+.c2-side { position: sticky; top: 18px; max-height: calc(100vh - 192px); overflow-y: auto; scrollbar-width: thin; scrollbar-color: #cfcac1 transparent; }
+.c2-side.more::after { content: ''; position: sticky; bottom: 0; display: block; height: 40px; margin: -40px -22px -20px; background: linear-gradient(rgba(255, 255, 255, 0), #fff 85%); pointer-events: none; }
+.c2-legend { margin: 6px 2px 0; font-size: 12px; color: var(--muted); }
+/* どこの指摘か（ページが分かれば「本文 3ページ目」、分からなければパートだけ） */
+.loc { display: inline-block; margin-right: 6px; padding: 0 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; line-height: 18px; white-space: nowrap; vertical-align: 1px; }
+.loc.part { background: var(--chip-bg); color: var(--muted); }
+.issue.sel { margin: 0 -10px; padding: 9px 10px; border-radius: 8px; border-bottom-color: transparent; background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+.issue.sel .loc { background: var(--accent); color: #fff; }
+.c2 .c-saved { box-shadow: 0 0 0 2px var(--ok), var(--float-shadow); }
+.c2-saved { flex: 1; padding: 16px 16px 16px; box-shadow: 0 0 0 2px var(--ok), var(--float-shadow); }
+.c2-saved .pdf-file { margin: 10px 0 8px; }
+.c2-saved .r-lead { margin-bottom: 10px; font-size: 14px; }
+.c2 ~ .merge .merge-in { max-width: 1440px; }
+.pp-list { display: none; }
+
+/* ---- エラーが残ったまま「まとめる」を押したときの、確かめの窓 ---- */
+.modal.confirm { width: min(440px, calc(100vw - 32px)); padding: 22px 24px 20px; }
+.pdf-ng { width: 26px; height: 26px; flex: none; display: grid; place-items: center; color: var(--error); }
+.pdf-ng svg { width: 24px; height: 24px; }
+.modal.confirm .r-lead { margin-top: 2px; font-size: 14.5px; }
+.cf-sub { margin-top: 2px; font-size: 13px; color: var(--muted); }
+.btn.focus { box-shadow: 0 0 0 2px #fff, 0 0 0 4px #8f9ac4; }
 
 /* =====================================================================
    エラーが残っているとき（errors.html：まとめる所だけを、3つの決まりで並べる）
@@ -372,6 +429,42 @@ svg { flex: none; }
   .merge-in .spacer { display: none; }
   .m-note { max-width: none; font-size: 13px; text-align: left; }
   .merge .btn.big { width: 100%; padding: 13px 0; }
+
+  /* 案C2：パートを縦に並べる。ページの絵は、その行の中だけで横に動かす。チェックの結果は、その下 */
+  .c2 { display: block; padding: 12px 12px 210px; }
+  .c2.nobar { padding-bottom: 20px; }
+  .c2-main { margin-bottom: 12px; }
+  .c2 .c-top { display: block; }
+  .c2 .c-top .drop.big { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; padding: 20px 14px 16px; }
+  .c2 .c-top .drop.big > * { grid-column: auto; grid-row: auto; }
+  .c2 .c-top .drop.big .btn { margin: 8px 0 0; }
+  .c2-doc { display: block; margin-top: 12px; }
+  .pp-list { display: block; }
+  .pp { display: grid; grid-template-columns: 112px minmax(0, 1fr); column-gap: 8px; row-gap: 8px; align-items: start; padding: 12px 0 12px 14px; border-top: 1px solid var(--line); }
+  .pp:first-child { border-top: 0; }
+  .pp-info { min-width: 0; padding-top: 6px; }
+  .pp-info b { display: block; font-size: 15.5px; line-height: 1.5; letter-spacing: 0.06em; white-space: nowrap; }
+  .pp .p-f { margin-top: 2px; }
+  .pp .pf { font-size: 13px; line-height: 23px; }
+  .pp .pf .x { width: 20px; height: 20px; }
+  .pp .pf .x svg { width: 12px; height: 12px; }
+  .pp-strip { display: flex; gap: 8px; min-width: 0; overflow-x: auto; padding: 8px 22px 2px 6px; scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent); --tw: 62px; }
+  .pp-strip::-webkit-scrollbar { display: none; }
+  .pp-strip figure { flex: none; width: var(--tw); margin: 0; text-align: center; font-size: 11.5px; color: var(--muted); }
+  .pp-strip .pg { box-shadow: 0 0 0 1px var(--line), 0 2px 6px rgba(30, 25, 20, 0.08); }
+  .pp-strip .pg.none { box-shadow: none; font-size: 11px; }
+  .pp-strip .pg.none svg { width: 18px; height: 18px; }
+  .pp-strip .pg .pin { box-shadow: 0 0 0 2px #fff; }
+  .pp .p-note { grid-column: 1 / -1; display: flex; flex-wrap: wrap; margin: 0 14px 0 0; padding: 7px 10px; font-size: 13px; }
+  .pp .p-note > span { flex: 1; min-width: 0; }
+  .pp .p-note .link { flex-basis: 100%; margin-left: 21px; text-align: left; font-size: 13px; }
+  .c2-side { position: static; max-height: none; overflow: visible; }
+  .c2-side.more::after { display: none; }
+  .c2-legend { font-size: 13px; }
+  .loc { font-size: 13px; line-height: 20px; }
+  .issue.sel { margin: 0 -8px; padding: 9px 8px; }
+  .modal.confirm { padding: 20px 18px 18px; }
+  .cf-sub { font-size: 13px; }
 
   .modal { width: calc(100vw - 20px); max-height: calc(100vh - 24px); padding: 18px 16px 18px; }
   .pdf-file { padding: 10px 12px; }
