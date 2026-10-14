@@ -1,0 +1,27 @@
+/*
+ * 色・角の丸み・影の決まり（デザイン1「紙と墨」）。学生用ツール（index.css）と提出前チェック（check/check.css）で同じものを使う
+ */
+:root {
+  --stage-bg: #ebe8e3;
+  --panel-bg: #fbfaf8;
+  --line: #e6e2dc;
+  --ink: #23262b;
+  /* 説明の文字（背景との差が、見やすさの基準 4.5:1 に届く濃さ。mockups/v22 ⑨） */
+  --muted: #686b72;
+  --accent: #2f3e75;
+  --accent-ink: #fff;
+  --accent-soft: #e8ebf5;
+  --error: #b5443b;
+  --error-soft: #f7ebe9;
+  /* 茶・緑も、白や薄茶の上で見やすさの基準（4.5:1）に届く濃さにする（mockups/v23 ⑤ 案B） */
+  --warn: #8a5e0f;
+  --warn-soft: #f6f0e3;
+  --ok: #3f7a55;
+  --chip-bg: #f1efeb;
+  --palette-line: #ece9e4;
+  --palette-ink: #4a4d54;
+  --palette-hover: #f2f0ec;
+  --r-lg: 14px;
+  --r-md: 8px;
+  --float-shadow: 0 1px 2px rgba(30, 25, 20, 0.04), 0 10px 28px rgba(30, 25, 20, 0.08);
+}

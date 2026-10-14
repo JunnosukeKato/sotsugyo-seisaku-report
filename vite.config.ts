@@ -28,7 +28,28 @@ function contentSecurityPolicy(dev: boolean): string {
   ].join('; ')
 }
 
-/** 学生用のページ（ツール・ドライブの接続テスト・PDF の試し）に、上の決まりを書き込む。管理ページ（vite.admin.config.ts）は別 */
+/**
+ * 提出前チェック（check.html）の決まり。学生のファイル（Word・PDF・作品写真）はブラウザの中だけで読み、どこにも送らない。
+ * ログインもドライブも使わないので、Google のログインの部品は読み込まず、送り先は学科の Apps Script（年度の設定を読むだけ）に限る。
+ * ページの小さな絵は blob:、PDF を読む部品（pdf.js）の手伝い（worker）は、このページと同じ場所から読む
+ */
+function checkPagePolicy(dev: boolean): string {
+  return [
+    "default-src 'self'",
+    `script-src 'self'${dev ? " 'unsafe-inline'" : ''}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' blob: data:",
+    "font-src 'self' data:",
+    `connect-src 'self' blob: data: https://script.google.com https://script.googleusercontent.com${dev ? ' ws: wss:' : ''}`,
+    "frame-src 'none'",
+    "worker-src 'self' blob:",
+    "object-src 'none'",
+    "base-uri 'self'",
+    "form-action 'none'",
+  ].join('; ')
+}
+
+/** 学生用のページ（ツール・提出前チェック・ドライブの接続テスト・PDF の試し）に、上の決まりを書き込む。管理ページ（vite.admin.config.ts）は別 */
 function cspPlugin(): Plugin {
   let dev = false
   return {
@@ -39,7 +60,8 @@ function cspPlugin(): Plugin {
     transformIndexHtml(html, ctx) {
       // 開発中に見るデザイン案・試しのページ、管理ページの試験版には入れない
       if (/(^|[\\/])(mockups|poc)[\\/]/.test(ctx.path) || /admin\.html$/.test(ctx.path)) return html
-      return html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${contentSecurityPolicy(dev)}" />`)
+      const policy = /check\.html$/.test(ctx.path) ? checkPagePolicy(dev) : contentSecurityPolicy(dev)
+      return html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${policy}" />`)
     },
   }
 }
@@ -51,8 +73,9 @@ export default defineConfig({
   plugins: [react(), cspPlugin()],
   build: {
     rollupOptions: {
-      // 学生用ツールと、Google ドライブの接続テストのページと、PDF を手元で作る試しのページ
-      input: { main: 'index.html', driveTest: 'drive-test.html', pdfTest: 'pdf-test.html' },
+      // 学生用ツールと、提出前チェック（Word のひな形で書いている学生が、確かめて1つの PDF にまとめる）と、
+      // Google ドライブの接続テストのページと、PDF を手元で作る試しのページ
+      input: { main: 'index.html', check: 'check.html', driveTest: 'drive-test.html', pdfTest: 'pdf-test.html' },
     },
   },
   test: {

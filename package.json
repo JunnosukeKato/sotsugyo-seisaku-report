@@ -11,7 +11,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
-    "e2e": "node scripts/e2e/smoke.mjs && node scripts/e2e/phone.mjs && node scripts/e2e/drive.mjs",
+    "e2e": "node scripts/e2e/smoke.mjs && node scripts/e2e/phone.mjs && node scripts/e2e/drive.mjs && node scripts/e2e/check.mjs",
     "build:gas": "node scripts/build-gas.mjs",
     "deploy:gas": "node scripts/deploy-gas.mjs"
   },
@@ -25,6 +25,7 @@
     "fflate": "^0.8.3",
     "jspdf": "^4.2.1",
     "modern-screenshot": "^4.7.0",
+    "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.4.299",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"

@@ -25,7 +25,9 @@ export declare function textBox(lines: string | string[], options?: { x?: number
 export type CellSpec = string | { text?: string; images?: string[]; span?: number; vMerge?: 'restart' | 'continue' }
 export declare function table(rows: CellSpec[][]): string
 
-export declare function makeDocx(options: { body: string; media?: Record<string, Uint8Array>; styles?: string; numbering?: string; strict?: boolean }): Uint8Array
+export declare function makeDocx(options: { body: string; media?: Record<string, Uint8Array>; styles?: string; numbering?: string; strict?: boolean; sectPr?: string }): Uint8Array
+export declare function sectPr(options?: { margins?: [number, number, number, number]; grid?: [number, number] | null }): string
+export declare function normalStyle(halfPoints: number): string
 
 export declare function png(width: number, height: number, options?: { background?: number[]; figure?: number[]; draw?: (x: number, y: number) => number[] }): Uint8Array
 export declare function emfHeader(): Uint8Array

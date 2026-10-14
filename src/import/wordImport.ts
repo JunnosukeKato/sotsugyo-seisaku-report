@@ -719,9 +719,10 @@ function checkBodyFile(blocks: WordBlock[], events: Event[], fileName: string) {
 
 /**
  * 学生が選んだ Word（本文は必ず、表紙は書いていれば）を読み取り、ツールの原稿の形にする。
- * 読めないファイルは WordImportError（message は学生に分かる言葉）
+ * 読めないファイルは WordImportError（message は学生に分かる言葉）。
+ * images: false：画像を縮めて取り出さない（図に画像があることだけを残す。提出前チェックで、確かめるだけのとき）
  */
-export async function readWordFiles(files: WordFiles, context: { config: YearConfig; courseId: string }): Promise<WordImportResult> {
+export async function readWordFiles(files: WordFiles, context: { config: YearConfig; courseId: string; images?: boolean }): Promise<WordImportResult> {
   const { config, courseId } = context
   const problems: ImportProblem[] = []
   const bodyPkg = await openWordFile(files.body, '本文')
@@ -777,6 +778,12 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
     const known = byKey.get(key)
     if (known) {
       imageIds.set(ref, known)
+      continue
+    }
+    // 画像を使わないとき（提出前チェック：src/check）：縮めずに、画像があることだけを残す（result.images は空）
+    if (context.images === false) {
+      byKey.set(key, key)
+      imageIds.set(ref, key)
       continue
     }
     try {
@@ -1035,6 +1042,16 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
     skippedPlaceholders,
     problems,
   }
+}
+
+/**
+ * 表紙の Word だけを読む（提出前チェック：src/check。本文の Word を入れずに、表紙だけを入れたとき）。
+ * 読めないファイル・表紙でないファイルは WordImportError（message は学生に分かる言葉）
+ */
+export async function readCoverFile(file: File, context: { config: YearConfig; courseId: string }): Promise<{ cover: WordImportResult['cover']; problems: ImportProblem[] }> {
+  const problems: ImportProblem[] = []
+  const pkg = await openWordFile(file, '表紙')
+  return { cover: readCover(pkg, context.config, context.courseId, problems), problems }
 }
 
 /**

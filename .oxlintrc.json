@@ -1,16 +1,37 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
-  "plugins": ["react", "typescript", "oxc"],
+  "plugins": [
+    "react",
+    "typescript",
+    "oxc"
+  ],
   "rules": {
     "react/rules-of-hooks": "error",
-    "react/only-export-components": ["warn", { "allowConstantExport": true }]
+    "react/only-export-components": [
+      "warn",
+      {
+        "allowConstantExport": true
+      }
+    ]
   },
-  "ignorePatterns": ["gas-dist/**"],
+  "ignorePatterns": [
+    "gas-dist/**"
+  ],
   "overrides": [
     {
-      "files": ["gas/**/Code.js"],
+      "files": [
+        "gas/**/Code.js"
+      ],
       "rules": {
         "no-unused-vars": "off"
+      }
+    },
+    {
+      "files": [
+        "mockups/**"
+      ],
+      "rules": {
+        "no-irregular-whitespace": "off"
       }
     }
   ]

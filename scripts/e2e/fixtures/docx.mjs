@@ -131,14 +131,15 @@ const wrapXml = (root, inner, wNs) =>
  * - media: word/media に入れる画像（名前 → 中身）。document.xml からは rid(名前) で指す
  * - styles・numbering: w:styles・w:numbering の中の XML（なければ入れない）
  * - strict: Word の新しい保存形式（Strict Open XML）の名前空間にする
+ * - sectPr: ページ設定（w:sectPr の中の XML。用紙・余白・文字数と行数）。なければ A4 の用紙だけ
  */
-export function makeDocx({ body, media = {}, styles, numbering, strict = false }) {
+export function makeDocx({ body, media = {}, styles, numbering, strict = false, sectPr = '<w:pgSz w:w="11906" w:h="16838"/>' }) {
   const wNs = strict ? NS.wStrict : NS.w
   const ns = Object.entries({ ...NS, w: wNs })
     .filter(([k]) => k !== 'wStrict')
     .map(([k, v]) => `xmlns:${k}="${v}"`)
     .join(' ')
-  const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${ns} mc:Ignorable="w14 wp14"><w:body>${body}<w:sectPr><w:pgSz w:w="11906" w:h="16838"/></w:sectPr></w:body></w:document>`
+  const document = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?><w:document ${ns} mc:Ignorable="w14 wp14"><w:body>${body}<w:sectPr>${sectPr}</w:sectPr></w:body></w:document>`
   const rels = [
     ...Object.keys(media).map((name) => `<Relationship Id="${rid(name)}" Type="${REL}/image" Target="media/${name}"/>`),
     ...(styles !== undefined ? [`<Relationship Id="rIdStyles" Type="${REL}/styles" Target="styles.xml"/>`] : []),
@@ -157,6 +158,25 @@ export function makeDocx({ body, media = {}, styles, numbering, strict = false }
   for (const [name, data] of Object.entries(media)) files[`word/media/${name}`] = data
   return zipSync(files)
 }
+
+// ---- ページ設定とスタイル（提出前チェックの見本・単体テストで使う） ----
+
+/**
+ * 学科のひな形と同じページ設定（w:sectPr の中）。margins は 上・右・下・左（twip）、grid は文字数と行数（行送り・字送り。null なら付けない）。
+ * 本文・目次：余白 上下右 25mm・左 35mm、38字×38行（368・770）。抄録：同じ余白、40字（460・527）。表紙：上下左右 25mm、文字数と行数なし
+ */
+export function sectPr({ margins = [1418, 1418, 1418, 1985], grid = [368, 770] } = {}) {
+  const [top, right, bottom, left] = margins
+  return (
+    `<w:pgSz w:w="11906" w:h="16838" w:code="9"/><w:pgMar w:top="${top}" w:right="${right}" w:bottom="${bottom}" w:left="${left}" w:header="851" w:footer="624" w:gutter="0"/>` +
+    `<w:cols w:space="425"/>${grid ? `<w:docGrid w:type="linesAndChars" w:linePitch="${grid[0]}" w:charSpace="${grid[1]}"/>` : ''}`
+  )
+}
+
+/** 「標準」のスタイルの文字の大きさ（halfPoints は半ポイント：22＝11pt）。makeDocx の styles に渡す */
+export const normalStyle = (halfPoints) =>
+  `<w:docDefaults><w:rPrDefault><w:rPr><w:sz w:val="21"/></w:rPr></w:rPrDefault></w:docDefaults>` +
+  `<w:style w:type="paragraph" w:default="1" w:styleId="a"><w:name w:val="Normal"/><w:rPr><w:sz w:val="${halfPoints}"/></w:rPr></w:style>`
 
 // ---- 小さな PNG ----
 
