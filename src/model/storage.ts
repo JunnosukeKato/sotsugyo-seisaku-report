@@ -27,6 +27,8 @@ export interface Snapshot {
   report: Report
   /** 入れ替える前の原稿の控え（押し出されない） */
   keep?: boolean
+  /** 控えの一覧に、時刻と並べて出す名前（例：Word を読み込む前）。どの控えに戻せばよいか分かるように */
+  label?: string
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null
@@ -77,9 +79,52 @@ async function store(name: string, mode: IDBTransactionMode): Promise<IDBObjectS
   }
 }
 
+/**
+ * 閉じる直前の原稿の写し（localStorage）。書いてすぐ読み込み直す・閉じると、IndexedDB への保存は途中で止まることがあるため、
+ * 閉じる直前に、すぐ書き終わる localStorage にも写しておく（useAutosave）。次に開いたとき、保存した原稿より新しければこちらを使う
+ */
+const LEAVING_KEY = 'sotsugyo-seisaku-report-leaving'
+
+/** 閉じる直前の原稿を写しておく（すぐ書き終わる。写せなければ何もしない） */
+export function keepLeavingCopy(report: Report): void {
+  try {
+    localStorage.setItem(LEAVING_KEY, JSON.stringify(report))
+  } catch {
+    // 空きがない・使えないブラウザ：IndexedDB への保存に任せる
+  }
+}
+
+/** 閉じる直前の写しを消す（IndexedDB に保存できたとき・この端末から原稿を消すとき） */
+export function clearLeavingCopy(): void {
+  try {
+    localStorage.removeItem(LEAVING_KEY)
+  } catch {
+    // 使えないブラウザ
+  }
+}
+
+/** 閉じる直前の写し（なければ・読めなければ null） */
+function readLeavingCopy(): Report | null {
+  try {
+    const raw = localStorage.getItem(LEAVING_KEY)
+    return raw ? migrateReport(JSON.parse(raw)) : null
+  } catch {
+    return null
+  }
+}
+
 export async function loadReport(): Promise<Report | null> {
   const raw = await promisify((await store('report', 'readonly')).get(REPORT_KEY))
-  return raw ? migrateReport(raw) : null
+  const saved = raw ? migrateReport(raw) : null
+  // 閉じる直前の写しが、保存した原稿より新しい（保存が間に合わなかった）：写しを保存して使う
+  const leaving = readLeavingCopy()
+  if (leaving && (!saved || leaving.updatedAt > saved.updatedAt)) {
+    await saveReport(leaving)
+    clearLeavingCopy()
+    return leaving
+  }
+  if (leaving) clearLeavingCopy()
+  return saved
 }
 
 export async function saveReport(report: Report): Promise<void> {
@@ -104,10 +149,11 @@ export async function deleteImage(id: string): Promise<void> {
 
 /**
  * 控えを保存し、古いものは消す。
- * keep：選ばなかった原稿・作り直す前の原稿など、入れ替える前の原稿の控え。10分ごとの控えに押し出されて消えないよう、別に数える
+ * keep：選ばなかった原稿・作り直す前の原稿など、入れ替える前の原稿の控え。10分ごとの控えに押し出されて消えないよう、別に数える。
+ * label：控えの一覧に出す名前（例：Word を読み込む前）
  */
-export async function saveSnapshot(report: Report, savedAt = new Date().toISOString(), keep = false): Promise<void> {
-  await promisify((await store('snapshots', 'readwrite')).put({ savedAt, report, ...(keep ? { keep } : {}) }))
+export async function saveSnapshot(report: Report, savedAt = new Date().toISOString(), keep = false, label?: string): Promise<void> {
+  await promisify((await store('snapshots', 'readwrite')).put({ savedAt, report, ...(keep ? { keep } : {}), ...(label ? { label } : {}) }))
   const all = (await promisify((await store('snapshots', 'readonly')).getAll())) as Snapshot[]
   const oldest = (list: Snapshot[], max: number) => list.sort((a, b) => a.savedAt.localeCompare(b.savedAt)).slice(0, Math.max(0, list.length - max))
   const old = [...oldest(all.filter((x) => !x.keep), MAX_SNAPSHOTS), ...oldest(all.filter((x) => x.keep), MAX_KEPT_SNAPSHOTS)]
@@ -126,6 +172,7 @@ export async function listSnapshots(): Promise<Snapshot[]> {
 /** この端末（ブラウザ）から、原稿・写真・控えをすべて消す（共用のパソコンで書き終えたとき） */
 export async function clearAll(): Promise<void> {
   for (const name of ['report', 'images', 'snapshots']) await promisify((await store(name, 'readwrite')).clear())
+  clearLeavingCopy()
 }
 
 /** 報告書で使われていない写真を消す（容量の節約） */

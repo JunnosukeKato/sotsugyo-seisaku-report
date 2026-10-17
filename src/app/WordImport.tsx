@@ -3,7 +3,9 @@ import { findCourse, renderSubtitle, type YearConfig } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { deviceName } from '../drive/device'
 import type { OutlineItem, WordImportResult } from '../import/types'
+import type { LostChapter } from '../import/wordImport'
 import { chapterLabel, subheadingLabel } from '../layout/bodyHtml'
+import type { Report } from '../model/types'
 import { Modal } from './dialogs'
 import { Icon } from './icons'
 import type { WordTodo } from './useWordTodo'
@@ -192,17 +194,21 @@ function FileRow({ slot, file, error, disabled, onPick, onClear }: { slot: Slot;
 
 interface DialogProps {
   config: YearConfig
-  courseId: string
+  /** 今の原稿（コースと、読み込むと消える、ツールで書いた本文を知るため） */
+  report: Report
   /** 「読み込む」：控えを残して原稿に写す（終わったら呼んだ側が窓を閉じる。失敗したら投げる） */
   onImport: (result: WordImportResult) => Promise<void>
   onClose: () => void
 }
 
 /** 「Wordから読み込む」の窓。ファイルを選ぶ → 読み取る → 中身を確かめる → 読み込む */
-export function WordImportDialog({ config, courseId, onImport, onClose }: DialogProps) {
+export function WordImportDialog({ config, report, onImport, onClose }: DialogProps) {
+  const courseId = report.basicInfo.courseId
   const [files, setFiles] = useState<Partial<Record<Slot, File>>>({})
   const [rowErrors, setRowErrors] = useState<Partial<Record<Slot, string>>>({})
   const [result, setResult] = useState<WordImportResult | null>(null)
+  /** 読み込むと消える、ツールで書いた本文（確認の窓で知らせる） */
+  const [lost, setLost] = useState<LostChapter[]>([])
   const [busy, setBusy] = useState<'reading' | 'importing' | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** 読み取りの途中で「やめる」（Esc・×）を押したら、その読み取りの結果は使わない */
@@ -221,9 +227,12 @@ export function WordImportDialog({ config, courseId, onImport, onClose }: Dialog
     setBusy('reading')
     setError(null)
     try {
-      const { readWordFiles } = await loadWordReader()
+      const { readWordFiles, lostByImport } = await loadWordReader()
       const r = await readWordFiles({ body: files.body, cover: files.cover }, { config, courseId })
-      if (id === run.current) setResult(r)
+      if (id === run.current) {
+        setLost(lostByImport(report, r.body))
+        setResult(r)
+      }
     } catch (e) {
       if (id === run.current) setError(readErrorText(e))
     } finally {
@@ -246,6 +255,7 @@ export function WordImportDialog({ config, courseId, onImport, onClose }: Dialog
           courseId={courseId}
           files={files}
           result={result}
+          lost={lost}
           busy={busy === 'importing'}
           error={error}
           onBack={() => {
@@ -317,8 +327,16 @@ function countText(item: OutlineItem, untitled: Set<string>): string {
   return parts.filter(Boolean).join('・')
 }
 
-/** 本文の組み立ての一覧（大見出し・小見出しと、それぞれの段落・図・表の数） */
-function Outline({ outline, untitled }: { outline: OutlineItem[]; untitled: Set<string> }) {
+/** 読み込むと消える、ツールで書いた分（例「3段落・図1枚」） */
+function lostCounts(l: LostChapter): string {
+  return [l.paragraphs > 0 ? `${l.paragraphs}段落` : '', l.figures > 0 ? `図${l.figures}枚` : '', l.tables > 0 ? `表${l.tables}つ` : ''].filter(Boolean).join('・')
+}
+
+/**
+ * 本文の組み立ての一覧（大見出し・小見出しと、それぞれの段落・図・表の数）。
+ * lost：読み込むと消える、ツールで書いた本文。Word でまだ書いていない章でも、ツールで書いていれば、ひな形に戻って消えることを出す
+ */
+function Outline({ outline, untitled, lost }: { outline: OutlineItem[]; untitled: Set<string>; lost: LostChapter[] }) {
   // 番号（Ⅰ．ⅰ．）は、ツールで組んだときと同じに振る（小見出しは章ごとに振り直す）
   const labels: string[] = []
   let chapter = -1
@@ -339,14 +357,15 @@ function Outline({ outline, untitled }: { outline: OutlineItem[]; untitled: Set<
         const counts = countText(item, untitled)
         // Word で見出しの名前を書いていない（「Ⅰ．」だけ）ときは、名前がないことが分かるように出す
         const title = item.title.trim()
+        const gone = item.fromTemplate ? lost.find((l) => l.title.trim() === title) : undefined
         return (
-          <li key={i} className={`${item.level === 1 ? 'ch' : 'sh'}${item.fromTemplate ? ' tpl' : ''}${item.problem ? ' problem' : ''}`}>
+          <li key={i} className={`${item.level === 1 ? 'ch' : 'sh'}${item.fromTemplate ? ' tpl' : ''}${gone ? ' lost' : ''}${item.problem ? ' problem' : ''}`}>
             <span className="ttl">
               {labels[i]}
               {title || <span className="noname">{item.level === 1 ? '（名前のない大見出し）' : '（名前のない小見出し）'}</span>}
             </span>
             {item.fromTemplate ? (
-              <span className="cnt">ツールのひな形で続ける</span>
+              <span className="cnt">{gone ? `ツールで書いた${lostCounts(gone)}は消えます` : 'ツールのひな形で続ける'}</span>
             ) : (
               (counts || item.problem) && (
                 <span className="cnt">
@@ -368,6 +387,7 @@ function WordConfirm({
   courseId,
   files,
   result,
+  lost,
   busy,
   error,
   onBack,
@@ -378,6 +398,8 @@ function WordConfirm({
   courseId: string
   files: Partial<Record<Slot, File>>
   result: WordImportResult
+  /** 読み込むと消える、ツールで書いた本文 */
+  lost: LostChapter[]
   busy: boolean
   error: string | null
   onBack: () => void
@@ -462,7 +484,7 @@ function WordConfirm({
       <div className="word-cols">
         <section>
           <h3>本文の組み立て</h3>
-          <Outline outline={result.outline} untitled={untitled} />
+          <Outline outline={result.outline} untitled={untitled} lost={lost} />
           {fromTemplate && <p className="word-skip">「ツールのひな形で続ける」の章は、Word でまだ書いていない章です。ツールのひな形（書くことの説明）が入るので、続きはツールで書きます。</p>}
           {result.skippedPlaceholders > 0 && <p className="word-skip">ひな形のままの行（「〇〇〇〇」「～～～～」だけの行）{result.skippedPlaceholders}行は写しません。</p>}
         </section>
@@ -511,6 +533,12 @@ function WordConfirm({
         {keepIcon}
         <div>
           <b>いまのツールの原稿は「自動の控え」に残します</b>
+          {/* ツールで書いた本文が消えるときは、どの章の何段落かを先に知らせる（同じ Word を読み込み直したときなど） */}
+          {lost.length > 0 && (
+            <strong className="word-lost">
+              {lost.map((l) => `${l.heading}（ツールで書いた${lostCounts(l)}）`).join('、')}は消えます。ツールで書いた分を続けるなら、読み込まずに「やめる」を押します。
+            </strong>
+          )}
           {files.cover
             ? '本文は Word の中身に入れ替わり、表紙の学籍番号・氏名・サブタイトルも Word のものになります（抄録・作品写真・引用・参考文献はそのまま）。'
             : '本文は Word の中身に入れ替わります（表紙・抄録・作品写真・引用・参考文献はそのまま）。'}

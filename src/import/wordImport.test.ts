@@ -8,7 +8,7 @@ import { createReport } from '../model/newReport'
 import type { Chapter, FigureRowBlock, ParagraphBlock, TableBlock } from '../model/types'
 import type { WordImportResult } from './types'
 import { headingFromText, isPlaceholderOnly, isWriting, parseCaptionLine } from './wordImport'
-import { applyWordImport, readWordFiles, WordImportError } from './wordImport'
+import { applyWordImport, lostByImport, readWordFiles, WordImportError } from './wordImport'
 import { imageInfo, prepareImage } from './wordImages'
 
 // 単体テストはブラウザの外で動くので、XML を読む道具（ブラウザの DOMParser）の代わりを置く
@@ -196,6 +196,23 @@ describe('ひな形と同じつくりの Word', () => {
     expect(applied.abstract).toBe(report.abstract)
     expect(applied.workPhotos).toBe(report.workPhotos)
     expect(applied.references).toBe(report.references)
+  })
+
+  it('読み込むと消える、ツールで書いた本文を、章の名前と段落の数で知らせる（Word から写したままの段落は数えない）', async () => {
+    const fresh = createReport(currentConfig, COURSE)
+    const result = await read(templateLikeBody())
+    // はじめて写すとき（ひな形のまま）は、消えるものはない
+    expect(lostByImport(fresh, result.body)).toEqual([])
+    // 写したあと、Word でまだ書いていない「Ⅱ．制作過程」を、ツールで3段落書いた
+    const imported = applyWordImport(fresh, result)
+    const written = (text: string): ParagraphBlock => ({ type: 'paragraph', id: text, content: [{ type: 'text', text }] })
+    const report = {
+      ...imported,
+      body: imported.body.map((c) => (c.title === '制作過程' ? { ...c, blocks: [written('型紙を引いた。'), written('仮縫いをした。'), written('本縫いをした。')] } : c)),
+    }
+    // 同じ Word を読み込み直す：Ⅰ は Word のままなので数えず、ツールで書いた Ⅱ の3段落が消える
+    const again = await read(templateLikeBody())
+    expect(lostByImport(report, again.body)).toEqual([{ heading: 'Ⅱ．制作過程', title: '制作過程', paragraphs: 3, figures: 0, tables: 0 }])
   })
 })
 

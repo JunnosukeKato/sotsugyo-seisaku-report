@@ -5,6 +5,7 @@ import type { LayoutInfo } from '../layout/measure'
 import { demoReport } from '../model/demoReport'
 import type { Report } from '../model/types'
 import { abstractCharCount, checkReport, checkReportDetailed } from './reportChecks'
+import { applyFix } from './textRules'
 
 const layout = (over: Partial<LayoutInfo> = {}): LayoutInfo => ({
   kinds: [],
@@ -178,5 +179,61 @@ describe('書き間違えやすい語', () => {
     expect(words({ ...currentConfig, wordChecks: undefined })).toEqual(['word-見頃'])
     expect(words({ ...currentConfig, wordChecks: [{ wrong: '芯地', right: '接着芯', severity: 'warning' }] })).toEqual(['word-芯地'])
     expect(words({ ...currentConfig, wordChecks: [] })).toEqual([])
+  })
+})
+
+describe('図・表を消したあとの本文（文が崩れたまま0件にしない）', () => {
+  it('文の中の参照は「図?」として残り、エラーになる（提出用の PDF を書き出せない）', () => {
+    // 「直す」で手で書いた「図1」を図につなげてから、図を消した
+    const linked = ops.setText(cleanReport(), 'p2', 'デザイン画を図1に示す。')
+    const removed = ops.removeFigure(linked, 'f1')
+    expect(ops.findEditable(removed, 'p2')?.text).toBe('デザイン画を図?に示す。')
+    const missing = checkReport(removed, currentConfig, layout()).find((f) => f.ruleId === 'reference-missing')
+    expect(missing).toMatchObject({ severity: 'error', blockId: 'p2', start: 6, end: 8 })
+    expect(missing?.detail).toContain('消した図を指していた所')
+  })
+})
+
+describe('図表の番号の二重（ツールで書いているときだけの指摘）', () => {
+  it('「直す」は、手で書いた形のままつなげる（「表1に示す」を「（表1）に示す」にしない）', () => {
+    let r = cleanReport()
+    r = { ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 'p3' ? { ...b, content: [{ type: 'text' as const, text: '表１に使用した素材をまとめる。' }] } : b)) })) }
+    expect(checkReport(r, currentConfig).find((x) => x.ruleId === 'manual-ref')?.replacement).toBe('表1')
+  })
+
+  it('同じ段落に同じ表への参照が2つあると、エラーにする。「直す」で添えてあるだけの（表1）を取る', () => {
+    const r = ops.setText(cleanReport(), 'p3', '使用した素材を（表1）に示す（表1）。')
+    const f = checkReportDetailed(r, currentConfig, layout()).findings.find((x) => x.ruleId === 'duplicate-ref')
+    expect(f).toMatchObject({ severity: 'error', blockId: 'p3', start: 14, end: 18, replacement: '', key: 'duplicate-ref|p3|t1' })
+    expect(f?.title).toBe('同じ段落に「表1」が2つある')
+    const fixed = ops.setText(r, 'p3', applyFix(ops.findEditable(r, 'p3')!.text, { ...f!, start: f!.start!, end: f!.end! }))
+    expect(ops.findEditable(fixed, 'p3')?.text).toBe('使用した素材を（表1）に示す。')
+    expect(checkReportDetailed(fixed, currentConfig, layout()).findings.some((x) => x.ruleId === 'duplicate-ref')).toBe(false)
+  })
+
+  it('文の中の「図1」を2回書くのは、書き手が2回指しているので指摘しない。確認済みにもできる', () => {
+    const twice = ops.setText(cleanReport(), 'p2', '図1の左は袖である。図1の右は帯である（図1）。')
+    const f = checkReportDetailed(twice, currentConfig, layout()).findings.find((x) => x.ruleId === 'duplicate-ref')
+    expect(f).toBeDefined()
+    const acked = { ...twice, acknowledged: [f!.key!] }
+    expect(checkReportDetailed(acked, currentConfig, layout()).findings.some((x) => x.ruleId === 'duplicate-ref')).toBe(false)
+    const plain = ops.setText(cleanReport(), 'p2', '図1の左は袖である。図1の右は帯である。')
+    expect(checkReportDetailed(plain, currentConfig, layout()).findings.some((x) => x.ruleId === 'duplicate-ref')).toBe(false)
+  })
+
+  it('サブタイトルに決まり文句まで入力していたら、エラーにして「直す」で取る', () => {
+    const r = { ...cleanReport(), basicInfo: { ...cleanReport().basicInfo, subtitleInput: '―海の王女の衣装制作―' } }
+    const f = checkReportDetailed(r, currentConfig, layout()).findings.find((x) => x.ruleId === 'subtitle-fixed-text')
+    expect(f).toMatchObject({ severity: 'error', area: 'cover', blockId: 'basic:subtitleInput', start: 0, end: 11, replacement: '海の王女' })
+    expect(f?.detail).toContain('「―〇〇の衣装制作―」')
+    const ok = { ...r, basicInfo: { ...r.basicInfo, subtitleInput: '海の王女' } }
+    expect(checkReportDetailed(ok, currentConfig, layout()).findings).toEqual([])
+  })
+
+  it('提出前チェック（checkReport を直接使う）には、ツールだけの指摘を出さない', () => {
+    const r = { ...ops.setText(cleanReport(), 'p3', '素材を（表1）に示す（表1）。'), basicInfo: { ...cleanReport().basicInfo, subtitleInput: '―海の王女の衣装制作―' } }
+    const ruleIds = checkReport(r, currentConfig, layout()).map((x) => x.ruleId)
+    expect(ruleIds).not.toContain('duplicate-ref')
+    expect(ruleIds).not.toContain('subtitle-fixed-text')
   })
 })

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currentConfig, findCourse, renderSubtitle } from '.'
+import { currentConfig, findCourse, renderSubtitle, subtitleInputOnly } from '.'
 
 describe('2026年度の設定', () => {
   it('手順書の基準値と一致している', () => {
@@ -26,5 +26,37 @@ describe('renderSubtitle', () => {
   it('コースの指定形式に入力を当てはめる', () => {
     const course = findCourse(currentConfig, 'film-stage-costume')!
     expect(renderSubtitle(course, ' パリス ')).toBe('―パリスの衣装制作―')
+  })
+})
+
+describe('subtitleInputOnly（サブタイトルの決まり文句まで入力したとき）', () => {
+  const course = findCourse(currentConfig, 'film-stage-costume')!
+  const plain = { ...course, subtitleTemplate: '―{input}―' }
+
+  it('前後の決まり文句（「―」「の衣装制作―」）を取り、入力する部分だけにする（表紙で二重にならない）', () => {
+    expect(subtitleInputOnly(course, '―海の王女の衣装制作―')).toBe('海の王女')
+    expect(renderSubtitle(course, subtitleInputOnly(course, '―海の王女の衣装制作―'))).toBe('―海の王女の衣装制作―')
+    expect(subtitleInputOnly(course, '海の王女の衣装制作')).toBe('海の王女')
+    expect(subtitleInputOnly(course, '―海の王女―')).toBe('海の王女')
+    expect(subtitleInputOnly(plain, '―パリス―')).toBe('パリス')
+  })
+
+  it('線を「ー」「－」「—」で打っていても取る', () => {
+    expect(subtitleInputOnly(course, 'ー海の王女の衣装制作ー')).toBe('海の王女')
+    expect(subtitleInputOnly(course, '－海の王女の衣装制作－')).toBe('海の王女')
+    expect(subtitleInputOnly(course, '—海の王女の衣装制作—')).toBe('海の王女')
+    expect(subtitleInputOnly(course, '海の王女の衣装制作ー')).toBe('海の王女')
+  })
+
+  it('入力する部分だけなら、そのまま。語の終わりの「ー」は取らない', () => {
+    expect(subtitleInputOnly(course, ' 海の王女 ')).toBe('海の王女')
+    expect(subtitleInputOnly(course, 'シンデレラ・ストーリー')).toBe('シンデレラ・ストーリー')
+    expect(subtitleInputOnly(course, '―シンデレラ・ストーリー―')).toBe('シンデレラ・ストーリー')
+    expect(subtitleInputOnly(course, '映画『千夜一夜物語』の王子')).toBe('映画『千夜一夜物語』の王子')
+  })
+
+  it('決まり文句だけを入力したとき（取ると何も残らない）は、そのまま', () => {
+    expect(subtitleInputOnly(course, 'の衣装制作')).toBe('の衣装制作')
+    expect(subtitleInputOnly(course, '')).toBe('')
   })
 })

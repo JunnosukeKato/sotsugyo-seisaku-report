@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { currentConfig } from '../config'
 import { createReport } from '../model/newReport'
-import { ABSTRACT_SUBTITLE, abstractHtml, abstractRowFontPt, COVER_SUBTITLE, coverHtml, fitLineFontPt, refitLineFontPt, subtitleLine, textUnits } from './document'
+import { ABSTRACT_SUBTITLE, abstractHtml, abstractRowFontPt, COVER_SUBTITLE, coverHtml, fitLineFontPt, formatReference, refitLineFontPt, subtitleLine, textUnits, yearDigits } from './document'
 
 describe('抄録の見出し（学籍番号・氏名と指導教員を1行に）', () => {
   it('文字の幅は全角を1、半角を0.5として数える', () => {
@@ -79,5 +79,23 @@ describe('サブタイトルが長いとき、1行に入るまで文字を小さ
     // 30字：37字分は 12pt（150mm に 35字ほど）では入らない
     expect(subtitleHtml('あ'.repeat(30))).toContain('style="font-size:11pt"')
     expect(fitLineFontPt('あ'.repeat(60), ABSTRACT_SUBTITLE)).toBe(9)
+  })
+})
+
+describe('引用・参考文献の書き方', () => {
+  const book = { type: 'book' as const, id: 'b', author: '浜松隆志', title: 'ファッションの歴史', publisher: '文化出版局', year: '2019', pages: '' }
+
+  it('書名を『』で囲んで入力していても、『『』』と二重にしない（「」で囲んでいても）', () => {
+    expect(formatReference(book)).toBe('浜松隆志、『ファッションの歴史』、文化出版局、2019年')
+    expect(formatReference({ ...book, title: '『ファッションの歴史』' })).toBe('浜松隆志、『ファッションの歴史』、文化出版局、2019年')
+    expect(formatReference({ ...book, title: '「ファッションの歴史」' })).toBe('浜松隆志、『ファッションの歴史』、文化出版局、2019年')
+    // 書名の途中の『』は残す
+    expect(formatReference({ ...book, title: '『源氏物語』の衣装' })).toBe('浜松隆志、『『源氏物語』の衣装』、文化出版局、2019年')
+  })
+
+  it('出版年は、全角の数字（２０１９）を消さずに半角にする。数字のほか（年）は除く', () => {
+    expect(yearDigits('２０１９')).toBe('2019')
+    expect(yearDigits('2019年')).toBe('2019')
+    expect(formatReference({ ...book, year: '２０１９' })).toBe('浜松隆志、『ファッションの歴史』、文化出版局、2019年')
   })
 })

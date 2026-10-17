@@ -526,6 +526,17 @@ await withEdge(async (browser) => {
   s = await snap()
   const refsNow = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
   check('（図1）と書くと、確定したときに図とつながる（番号が変わっても自動でそろう）', refsNow === 2 && !s.findings.some((x) => x.ruleId === 'figure-unreferenced' || x.ruleId === 'manual-ref'))
+  // 同じ段落に（図1）が2つ並んだ：二重になっているとエラーで知らせ、「直す」で1つにする
+  const dupFixed = await page.evaluate((id) => {
+    const f = window.__editor.getSnapshot().findings.find((x) => x.ruleId === 'duplicate-ref' && x.blockId === id)
+    if (!f) return null
+    window.__editor.applyFinding(f)
+    return f.severity
+  }, firstParagraph)
+  await ready()
+  s = await snap()
+  const refsFixed = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
+  check('同じ段落に（図1）が2つあるとエラーになり、「直す」で1つにできる', dupFixed === 'error' && refsFixed === 1 && !s.findings.some((x) => x.ruleId === 'duplicate-ref'), `${dupFixed} ${refsFixed}`)
   await page.screenshot({ path: `${OUT}/2-figure.png` })
 
   // ---- 図・表は、文中の入れたい位置で入れる（書いていないときは押せない） ----
@@ -680,6 +691,50 @@ await withEdge(async (browser) => {
   check('読み込み直しても原稿が残っている（自動保存）', s.report.basicInfo.name === '文化　花子' && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'figureRow'))
   const imgLoaded = await page.evaluate(() => { const img = document.querySelector('.page-viewport.front figure img'); return img?.src.startsWith('blob:') && img.naturalWidth > 0 })
   check('読み込み直しても写真が残っている', imgLoaded)
+
+  // ---- 書いてすぐ（0.1秒後に）読み込み直しても、最後に書いた文が残る（保存が間に合わなくても、閉じる直前の写しから戻す） ----
+  const paraIds = s.report.body.flatMap((c) => c.blocks).filter((b) => b.type === 'paragraph').map((b) => b.id)
+  const lastPara = paraIds[paraIds.length - 1]
+  await clickBlock(lastPara)
+  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 20000 }, lastPara)
+  await page.keyboard.type('読み込み直す直前に書いた文である。')
+  await pause0(100)
+  await page.reload({ waitUntil: 'networkidle0' })
+  await ready()
+  s = await snap()
+  const keptText = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === lastPara)?.content.map((n) => n.text ?? '').join('') ?? ''
+  check('書いて0.1秒後に読み込み直しても、最後に書いた文が残っている', keptText.includes('読み込み直す直前に書いた文である。'), keptText.slice(-40))
+
+  // ---- 段落の「削除」：押したらすぐ紙面から消え、組み直す前にもう一度押しても、隣のブロックは消えない ----
+  const bodyIds = () => snap().then((x) => x.report.body.flatMap((c) => c.blocks.map((b) => b.id)))
+  const idsBefore = await bodyIds()
+  // すぐ後ろに別のブロックがある段落
+  const doomed = s.report.body.flatMap((c) => c.blocks.filter((b, i) => b.type === 'paragraph' && c.blocks[i + 1]).map((b) => b.id))[0]
+  await clickBlock(doomed)
+  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 20000 }, doomed)
+  await pause0(300)
+  const spot = await page.evaluate((id) => { const r = document.querySelector(`.page-viewport.front [data-block-id="${id}"]`).getBoundingClientRect(); return { x: r.left + 40, y: r.top + 6 } }, doomed)
+  const delAt = await page.evaluate(() => { const r = [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('削除')).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  await page.mouse.click(delAt.x, delAt.y)
+  const gone = await page.evaluate((id) => [...document.querySelectorAll(`.page-viewport.front [data-block-id="${id}"]`)].every((e) => e.getBoundingClientRect().height === 0), doomed)
+  // 組み直す前に、もう一度同じ所（道具）を押し、紙面の消えた段落の所も押す
+  const stillRendering = await page.evaluate(() => window.__editor.getSnapshot().rendering)
+  await page.mouse.click(delAt.x, delAt.y)
+  await page.mouse.click(spot.x, spot.y)
+  const openedDuring = await page.evaluate(() => window.__editor.getSnapshot().editingId)
+  await ready()
+  const idsAfter = await bodyIds()
+  check('段落の「削除」を押すと、組み直すのを待たずに、すぐ紙面から消える', gone)
+  check(
+    '組み直す前にもう一度押しても、ほかのブロックは消えない（組み直す前の紙面を押しても、隣のブロックを開かない）',
+    JSON.stringify(idsAfter) === JSON.stringify(idsBefore.filter((id) => id !== doomed)) && (!stillRendering || openedDuring === null),
+    JSON.stringify({ stillRendering, openedDuring, removed: idsBefore.filter((id) => !idsAfter.includes(id)) }),
+  )
+  await page.evaluate(() => window.__editor.finishEditing())
+  await page.evaluate(() => window.__editor.undo())
+  await ready()
+  check('「元に戻す」で、削除した段落が戻る', JSON.stringify(await bodyIds()) === JSON.stringify(idsBefore))
+  s = await snap()
 
   // ---- PDF に書き出す（学生が「PDFに保存」を選んだときと同じ印刷処理） ----
   await page.pdf({ path: `${OUT}/report.pdf`, preferCSSPageSize: true, printBackground: true })

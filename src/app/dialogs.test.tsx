@@ -26,3 +26,24 @@ describe('バックアップと復元の窓', () => {
     expect(html).not.toContain('<label class="file-button"')
   })
 })
+
+describe('自動の控えの一覧', () => {
+  it('名前のある控え（Word を読み込む前）は、時刻と並べて名前を出す', () => {
+    const report = {} as never
+    const html = renderToStaticMarkup(
+      <BackupDialog
+        snapshots={[
+          { savedAt: '2026-10-17T03:00:00.000Z', report, keep: true, label: 'Word を読み込む前' },
+          { savedAt: '2026-10-17T02:00:00.000Z', report },
+        ]}
+        onSaveBackup={noop}
+        onRestoreFile={noop}
+        onRestoreSnapshot={noop}
+        onStartOver={noop}
+        onClose={noop}
+      />,
+    )
+    expect(html).toContain('（Word を読み込む前）')
+    expect(html.match(/（Word を読み込む前）/g)).toHaveLength(1)
+  })
+})

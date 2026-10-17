@@ -1,5 +1,5 @@
-import { findCourse, type YearConfig } from '../config'
-import { contentToText, editables, numbering, type EditableKind } from '../editor/reportOps'
+import { findCourse, subtitleInputOnly, type YearConfig } from '../config'
+import { contentToText, editables, numbering, parenthetical, type EditableKind } from '../editor/reportOps'
 import { COVER_SUBTITLE, OVERFLOW_RATIO } from '../layout/document'
 import type { LayoutInfo } from '../layout/measure'
 import type { Report } from '../model/types'
@@ -59,11 +59,76 @@ export function abstractCharCount(report: Report): number {
   return report.abstract.paragraphs.reduce((n, p) => n + contentToText(p.content, num).replace(/[\s　]/g, '').length, 0)
 }
 
-/** 指摘（findings）と、学生が「確認済み」にした指摘（acknowledged。エラーに数えない） */
+/**
+ * ツール（学生が書く画面）の指摘（findings）と、学生が「確認済み」にした指摘（acknowledged。エラーに数えない）。
+ * checkReport の指摘に、ツールで書いているときだけの指摘（toolFindings）を加える
+ */
 export function checkReportDetailed(report: Report, config: YearConfig, layout?: LayoutInfo | null): { findings: ReportFinding[]; acknowledged: ReportFinding[] } {
-  const all = checkReport(report, config, layout, true)
+  const all = [...checkReport(report, config, layout, true), ...toolFindings(report, config)]
   const keys = new Set(report.acknowledged ?? [])
   return { findings: all.filter((f) => !f.key || !keys.has(f.key)), acknowledged: all.filter((f) => f.key && keys.has(f.key)) }
+}
+
+/**
+ * ツールで書いているときだけの指摘（ツールの入力欄や、ツールが自動で入れる（図n）から起きること。提出前チェックの Word の確かめには出さない）。
+ * - サブタイトルに、自動で付く前後の決まり文句まで入力している（表紙で「――海の王女の衣装制作―の衣装制作―」と二重になる）
+ * - 同じ段落に、同じ図表への参照が2つある（「図を入れる」で自動で入った（表1）と、手で書いた「表1」など）
+ */
+export function toolFindings(report: Report, config: YearConfig): ReportFinding[] {
+  const findings: ReportFinding[] = []
+  const course = findCourse(config, report.basicInfo.courseId)
+  const input = report.basicInfo.subtitleInput
+  const only = course && input.trim() ? subtitleInputOnly(course, input) : null
+  if (course && only !== null && only !== input.trim()) {
+    const [before, after] = course.subtitleTemplate.split('{input}')
+    findings.push(
+      guide('subtitle-fixed-text', 'error', 'サブタイトルの前後が二重になっている', 'cover', {
+        blockId: 'basic:subtitleInput',
+        start: 0,
+        end: input.length,
+        replacement: only,
+        detail: `表紙には「${before}〇〇${after ?? ''}」の前後が自動で付きます。〇〇の部分だけにします（「直す」で前後を取ります）`,
+      }),
+    )
+  }
+
+  const num = numbering(report)
+  for (const block of report.body.flatMap((c) => c.blocks)) {
+    if (block.type !== 'paragraph') continue
+    // 図表ごとの、段落の中の参照（文字位置）
+    const refs = new Map<string, { start: number; end: number; trailing: boolean; withParens: boolean }[]>()
+    let offset = 0
+    block.content.forEach((node, i) => {
+      const length = contentToText([node], num).length
+      if (node.type === 'ref' && num.numbers.has(node.targetId)) {
+        refs.set(node.targetId, [...(refs.get(node.targetId) ?? []), { start: offset, end: offset + length, trailing: parenthetical(block.content, i), withParens: node.withParens }])
+      }
+      offset += length
+    })
+    for (const [targetId, list] of refs) {
+      // 文の中の「図1」どうし（「図1の左は…。図1の右は…」）は、書き手が2回指している。（図1）が重なったときだけ指摘する
+      if (list.length < 2 || !list.some((r) => r.withParens)) continue
+      const kind = num.tableIds.has(targetId) ? '表' : '図'
+      const label = `${kind}${num.numbers.get(targetId)}`
+      // 「直す」では、文末などに添えてあるだけの（図1）を1つ取る（文の中の（図1）を取ると文が崩れるので、そのときは直さない）
+      const extra = [...list].reverse().find((r) => r.trailing)
+      const at = extra ?? list[list.length - 1]
+      findings.push({
+        ruleId: 'duplicate-ref',
+        severity: 'error',
+        source: 'supplementary',
+        title: `同じ段落に「${label}」が2つある`,
+        detail: `${extra ? `「直す」で（${label}）を1つ取ります。` : 'どちらかを消して1つにします。'}同じ${kind}をわざと2回指しているなら「このままにする」を押します`,
+        area: 'body',
+        blockId: block.id,
+        start: at.start,
+        end: at.end,
+        ...(extra ? { replacement: '' } : {}),
+        key: `duplicate-ref|${block.id}|${targetId}`,
+      })
+    }
+  }
+  return findings
 }
 
 /** セルフチェック。includeAcknowledged を付けないと、学生が「確認済み」にした指摘は除く */
@@ -230,7 +295,8 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
             blockId: block.id,
             start: offset + m.index,
             end: offset + m.index + m[0].length,
-            replacement: `（${kind}${n}）`,
+            // 書いた形のままつなげる（「表1に示す」を「（表1）に示す」にしない）
+            replacement: m[1] ? `（${kind}${n}）` : `${kind}${n}`,
           })
         }
       }
@@ -294,7 +360,11 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
             blockId: e.id,
             start: m.index,
             end: m.index + m[0].length,
-            detail: '図は「図を入れる」、表は「表を入れる」で入れます。前に入れた図表を指すときは、その番号を（図1）のように書くと自動でつながります',
+            // 「図?」：消した図表を、文の中で指していた所（消すと文が崩れるので、文字にして残している）
+            detail:
+              m[2] === '?'
+                ? `消した${m[1]}を指していた所です。文を書き直すか、「${m[1]}を入れる」で${m[1]}を入れ直します`
+                : '図は「図を入れる」、表は「表を入れる」で入れます。前に入れた図表を指すときは、その番号を（図1）のように書くと自動でつながります',
           }),
         )
     }

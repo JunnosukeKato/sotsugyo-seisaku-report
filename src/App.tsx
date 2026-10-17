@@ -89,6 +89,9 @@ const idAccepted = (email: string, coverId: string) => {
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
+/** Word から読み込む直前の原稿の控えの名前（「バックアップ」の控えの一覧に出す） */
+const WORD_SNAPSHOT_LABEL = 'Word を読み込む前'
+
 /** 写真を選ぶ画面を開き、選ばれたファイルを返す（やめたら null） */
 function pickImageFile(): Promise<File | null> {
   return new Promise((resolve) => {
@@ -131,7 +134,8 @@ export default function App() {
   const [tourWanted, setTourWanted] = useState(false)
   const [tourOn, setTourOn] = useState(false)
   const [configSource, setConfigSource] = useState<ConfigSource>('remote')
-  const autosave = useAutosave()
+  // 閉じる・読み込み直す直前に、書いている欄のまだ原稿に入っていない文字（変換中など）を原稿に入れてから保存する
+  const autosave = useAutosave(() => editorRef.current?.saveEditing())
   const snap = useSyncExternalStore(editor?.subscribe ?? noopSubscribe, editor?.getSnapshot ?? nullSnapshot) as EditorSnapshot | null
   // 今年度だけ：Word から写したあとの「つぎにすること」（閉じるまで、この端末に覚えておく）
   const { todo: wordTodo, update: setWordTodo } = useWordTodo(snap)
@@ -538,9 +542,10 @@ export default function App() {
       const { applyWordImport } = await import('./import/wordImport')
       editor.commitEditing()
       const before = editor.getSnapshot().report
-      // 「読み込む前の原稿に戻す」で探せるよう、控えの時刻を覚えておく（keepSnapshot と同じ、押し出されない控え）
+      // 「読み込む前の原稿に戻す」で探せるよう、控えの時刻を覚えておく（keepSnapshot と同じ、押し出されない控え）。
+      // 「つぎにすること」を閉じたあとも「バックアップ」の控えの一覧から探せるよう、名前を付ける
       const snapshotAt = new Date().toISOString()
-      await saveSnapshot(before, snapshotAt, true)
+      await saveSnapshot(before, snapshotAt, true, WORD_SNAPSHOT_LABEL)
       await Promise.all(result.images.map(putImage))
       editor.addImages(result.images)
       editor.replace(applyWordImport(before, result))
@@ -563,7 +568,7 @@ export default function App() {
     if (!editor || !at) return
     const kept = (await listSnapshots()).find((s) => s.savedAt === at)
     if (!kept) {
-      alert('読み込む前の原稿の控えが見つかりませんでした。「バックアップ」の「自動の控え」から、読み込む前の時刻の控えを選んで戻してください。')
+      alert(`読み込む前の原稿の控えが見つかりませんでした。「バックアップ」の「自動の控え」から、「${WORD_SNAPSHOT_LABEL}」の控えを選んで戻してください。`)
       return
     }
     if (!confirm('Word から読み込む前の原稿に戻しますか？\n（今の原稿は自動の控えに残します）')) return
@@ -757,7 +762,7 @@ export default function App() {
       {/* 指差し確認（ほかの窓や案内が出ている間は出さない） */}
       {ready && tourOn && !tourBlocked && <Tour narrow={narrow} drive={!!drive && !driveStopped} onDone={endTour} />}
       {dialog?.kind === 'word' && snap && editor && (
-        <WordImportDialog config={config} courseId={snap.report.basicInfo.courseId} onImport={importWord} onClose={() => setDialog(null)} />
+        <WordImportDialog config={config} report={snap.report} onImport={importWord} onClose={() => setDialog(null)} />
       )}
       {dialog?.kind === 'references' && snap && editor && (
         <ReferencesDialog report={snap.report} onSave={(references) => editor.update((r) => ({ ...r, references }))} onClose={() => setDialog(null)} />
@@ -770,7 +775,7 @@ export default function App() {
           onSaveBackup={() => void saveBackup()}
           onRestoreFile={(file) => void restoreFile(file)}
           onRestoreSnapshot={async (s) => {
-            if (!confirm(`${new Date(s.savedAt).toLocaleString('ja-JP')} の控えに戻しますか？`)) return
+            if (!confirm(`${new Date(s.savedAt).toLocaleString('ja-JP')}${s.label ? `（${s.label}）` : ''} の控えに戻しますか？`)) return
             await keepSnapshot(snap.report)
             editor.replace(s.report)
             await matchYear(editor, s.report)

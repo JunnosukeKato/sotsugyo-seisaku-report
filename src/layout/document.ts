@@ -211,11 +211,22 @@ ${references}
 </section>`
 }
 
+/** 出版年：全角の数字（「２０１９」）は半角にし、数字のほかは除く（「2019年」→「2019」。引用・参考文献の入力欄） */
+export function yearDigits(text: string): string {
+  return text.replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0)).replace(/[^0-9]/g, '')
+}
+
+/** 書名：『』は自動で付けるので、学生が『』（「」）で囲んで入力していたら外す（『『書名』』と二重にならないように） */
+function bareTitle(title: string): string {
+  const t = title.trim()
+  return /^『[^『』]*』$|^「[^「」]*」$/.test(t) ? t.slice(1, -1).trim() : t
+}
+
 /** 引用・参考文献の1項目を手順書の書式にする */
 export function formatReference(ref: Reference): string {
   if (ref.type === 'book') {
     const pages = ref.pages.trim() ? `、p.${ref.pages.trim()}` : ''
-    return `${ref.author}、『${ref.title}』、${ref.publisher}、${ref.year}年${pages}`
+    return `${ref.author}、『${bareTitle(ref.title)}』、${ref.publisher}、${yearDigits(ref.year)}年${pages}`
   }
   const date = ref.accessedOn ? ref.accessedOn.replace(/^(\d{4})-0?(\d{1,2})-0?(\d{1,2})$/, '$1/$2/$3') : ''
   return `${ref.siteTitle}（${ref.url}）${date}参照`

@@ -488,29 +488,113 @@ function orderByRefs(figures: Figure[], paragraph: ParagraphBlock): Figure[] {
   return result
 }
 
-/** 図を消す。本文のその図への参照「（図n）」も一緒に消す */
+/**
+ * 図を消す。本文のその図への参照は、文末などの「（図n）」なら一緒に消す。
+ * 文の中で使っている参照（「図1に示す」など）は「図?」の文字にして残す（消すと「〜をに示す」と文が崩れるため。チェックで指摘される）
+ */
 export function removeFigure(report: Report, figureId: string): Report {
-  return withoutRefsTo(removeBlock(report, figureId), figureId)
+  return withoutRefsTo(removeBlock(report, figureId), figureId, '図')
 }
 
-/** 表を消す。本文のその表への参照「（表n）」も一緒に消す（残すと「（図?）」と出るため） */
+/** 表を消す。本文のその表への参照は、図と同じく「（表n）」なら消し、文の中の参照は「表?」の文字にして残す */
 export function removeTable(report: Report, tableId: string): Report {
-  return withoutRefsTo(removeBlock(report, tableId), tableId)
+  return withoutRefsTo(removeBlock(report, tableId), tableId, '表')
 }
 
-/** 本文から、その図・表への参照を除く */
-function withoutRefsTo(report: Report, targetId: string): Report {
-  const figureId = targetId
+/** 並んだ文字の部分を1つにまとめる（参照を抜いたあとなど）。空になったら空の文字を1つ置く */
+function mergeTexts(content: InlineNode[]): InlineNode[] {
+  const merged: InlineNode[] = []
+  for (const n of content) {
+    const last = merged[merged.length - 1]
+    if (n.type === 'text' && last?.type === 'text') merged[merged.length - 1] = { type: 'text', text: last.text + n.text }
+    else if (n.type !== 'text' || n.text) merged.push(n)
+  }
+  return merged.length ? merged : [{ type: 'text', text: '' }]
+}
+
+/**
+ * 括弧付きの参照「（図1）」が、文の中ではなく、文末などに添えてあるだけか（消しても文が崩れないか）。
+ * すぐ後ろが段落の終わり・句読点・閉じ括弧・別の参照なら添えてあるだけ。「（図1）に示す」のように後ろに言葉が続けば、文の中で使っている
+ */
+export function parenthetical(content: InlineNode[], index: number): boolean {
+  const node = content[index]
+  if (node?.type !== 'ref' || !node.withParens) return false
+  const next = content.slice(index + 1).find((n) => n.type === 'ref' || n.text !== '')
+  return !next || next.type === 'ref' || /^[。、，．,.！？!?」』）)\s　]/.test(next.text)
+}
+
+/**
+ * 本文から、消した図・表への参照を除く。添えてあるだけの「（図n）」は括弧ごと消し、
+ * 文の中で使っている参照は「図?」（「（図?）」）の文字にして残す（kind：図か表か。消したあとは番号から分からないため）
+ */
+function withoutRefsTo(report: Report, targetId: string, kind: '図' | '表'): Report {
   return mapBody(report, (b) => {
-    if (b.type !== 'paragraph' || !b.content.some((n) => n.type === 'ref' && n.targetId === figureId)) return b
-    const content = b.content.filter((n) => !(n.type === 'ref' && n.targetId === figureId))
-    // 参照を抜いた後に並んだ文字の部分は、1つにまとめる
-    const merged: InlineNode[] = []
-    for (const n of content) {
-      const last = merged[merged.length - 1]
-      if (n.type === 'text' && last?.type === 'text') merged[merged.length - 1] = { type: 'text', text: last.text + n.text }
-      else merged.push(n)
-    }
-    return { ...b, content: merged.length ? merged : [{ type: 'text', text: '' }] }
+    if (b.type !== 'paragraph' || !b.content.some((n) => n.type === 'ref' && n.targetId === targetId)) return b
+    const content = b.content.flatMap((n, i): InlineNode[] => {
+      if (n.type !== 'ref' || n.targetId !== targetId) return [n]
+      if (parenthetical(b.content, i)) return []
+      return [{ type: 'text', text: n.withParens ? `（${kind}?）` : `${kind}?` }]
+    })
+    return { ...b, content: mergeTexts(content) }
   })
+}
+
+/** 手で書いた図表の番号（「図1」「（表１）」など。数字は全角でもよい） */
+const WRITTEN_REF = /[（(]\s*([図表])\s*([0-9０-９]+)\s*[）)]|(?<![㐀-鿿々])([図表])([0-9０-９]+)/g
+
+/**
+ * 段落の中に、その図表の番号を手で書いていれば（「図1に示す」）、その番号を図表へのリンクにし、
+ * 「図を入れる」「表を入れる」で自動で入れた（図n）は除く（「図1に示す（図1）。」と二重にならないように）。
+ * 手で書いた番号がなければ null（自動で入れた（図n）のまま）
+ */
+export function linkWrittenRef(report: Report, paragraphId: string, targetId: string): Report | null {
+  const paragraph = findParagraph(report, paragraphId)
+  const num = numbering(report)
+  const n = num.numbers.get(targetId)
+  if (!paragraph || n === undefined) return null
+  const kind = num.tableIds.has(targetId) ? '表' : '図'
+  const content: InlineNode[] = []
+  let linked = false
+  for (const node of paragraph.content) {
+    if (linked || node.type !== 'text') {
+      content.push(node)
+      continue
+    }
+    const m = [...node.text.matchAll(WRITTEN_REF)].find((x) => (x[1] ?? x[3]) === kind && Number((x[2] ?? x[4]).normalize('NFKC')) === n)
+    if (!m) {
+      content.push(node)
+      continue
+    }
+    content.push({ type: 'text', text: node.text.slice(0, m.index) }, { type: 'ref', targetId, withParens: m[1] !== undefined }, { type: 'text', text: node.text.slice(m.index + m[0].length) })
+    linked = true
+  }
+  if (!linked) return null
+  // 自動で入れた（図n）を除く（手で書いた番号の方を残す）
+  const kept = content.filter((x, i) => !(x.type === 'ref' && x.targetId === targetId && x.withParens && paragraph.content.includes(x) && parenthetical(content, i)))
+  return mapBody(report, (b) => (b.id === paragraphId ? { ...paragraph, content: mergeTexts(kept) } : b))
+}
+
+/**
+ * 「直す」で、手で書いた図表の番号（段落の文字位置 start から end）を、replacement（「表1」「（表1）」）にして図表へつなげる。
+ * 同じ段落に、その図表への（図n）（自動で入れたもの）がほかにもあれば、二重になるので除く（「表1に示す（表1）。」→「表1に示す。」）
+ */
+export function linkManualRef(report: Report, paragraphId: string, start: number, end: number, replacement: string): Report {
+  const text = findEditable(report, paragraphId)?.text
+  if (text === undefined) return report
+  const next = setText(report, paragraphId, text.slice(0, start) + replacement + text.slice(end))
+  const paragraph = findParagraph(next, paragraphId)
+  if (!paragraph) return next
+  const num = numbering(next)
+  // つなげた参照（start の位置にある参照）
+  let pos = 0
+  let linked: InlineNode | undefined
+  for (const node of paragraph.content) {
+    if (node.type === 'ref' && pos === start) linked = node
+    pos += contentToText([node], num).length
+  }
+  if (linked?.type !== 'ref') return next
+  const targetId = linked.targetId
+  const content = paragraph.content.filter((x, i) => x === linked || !(x.type === 'ref' && x.targetId === targetId && parenthetical(paragraph.content, i)))
+  if (content.length === paragraph.content.length) return next
+  return mapBody(next, (b) => (b.id === paragraphId ? { ...paragraph, content: mergeTexts(content) } : b))
 }

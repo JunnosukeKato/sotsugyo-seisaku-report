@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { YearConfig } from '../config'
 import { newId } from '../editor/reportOps'
-import { formatReference } from '../layout/document'
+import { formatReference, yearDigits } from '../layout/document'
 import type { Snapshot } from '../model/storage'
 import type { Reference, Report } from '../model/types'
 import { useDialogFocus } from './useDialogFocus'
@@ -98,11 +98,36 @@ function emptyReference(type: Reference['type']): Reference {
     : { type, id: newId('ref'), siteTitle: '', url: '', accessedOn: new Date().toISOString().slice(0, 10) }
 }
 
-function Field({ label, value, onChange, placeholder, type = 'text' }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
+/**
+ * 入力欄。normalize：入力を整える（出版年の数字など）。日本語の変換中に整えると、変換中の文字が消えたり二重になったりするので、
+ * 変換を終えてから整える
+ */
+function Field({
+  label,
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+  normalize,
+}: {
+  label: string
+  value: string
+  onChange: (v: string) => void
+  placeholder?: string
+  type?: string
+  normalize?: (v: string) => string
+}) {
+  const tidy = (v: string) => (normalize ? normalize(v) : v)
   return (
     <label className="field">
       <span>{label}</span>
-      <input type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+      <input
+        type={type}
+        value={value}
+        placeholder={placeholder}
+        onChange={(e) => onChange((e.nativeEvent as InputEvent).isComposing ? e.target.value : tidy(e.target.value))}
+        onCompositionEnd={(e) => onChange(tidy(e.currentTarget.value))}
+      />
     </label>
   )
 }
@@ -144,7 +169,7 @@ export function ReferencesDialog({ report, onSave, onClose }: { report: Report; 
                 <Field label="著者名" value={ref.author} onChange={(v) => update(ref.id, { author: v })} placeholder="例：浜松隆志" />
                 <Field label="書名" value={ref.title} onChange={(v) => update(ref.id, { title: v })} placeholder="『』は自動で付きます" />
                 <Field label="出版社" value={ref.publisher} onChange={(v) => update(ref.id, { publisher: v })} />
-                <Field label="出版年" value={ref.year} onChange={(v) => update(ref.id, { year: v.replace(/[^0-9]/g, '') })} placeholder="例：1998" />
+                <Field label="出版年" value={ref.year} onChange={(v) => update(ref.id, { year: v })} normalize={yearDigits} placeholder="例：1998" />
                 <Field label="ページ（任意）" value={ref.pages} onChange={(v) => update(ref.id, { pages: v })} placeholder="例：17-24" />
               </div>
             ) : (
@@ -166,7 +191,8 @@ export function ReferencesDialog({ report, onSave, onClose }: { report: Report; 
         <button
           className="primary"
           onClick={() => {
-            onSave(refs)
+            // 出版年は、変換の途中で押されても半角の数字にそろえる
+            onSave(refs.map((r) => (r.type === 'book' ? { ...r, year: yearDigits(r.year) } : r)))
             onClose()
           }}
         >
@@ -233,7 +259,11 @@ export function BackupDialog({
         <ul className="snapshots">
           {snapshots.map((s) => (
             <li key={s.savedAt}>
-              <span>{new Date(s.savedAt).toLocaleString('ja-JP')}</span>
+              {/* 名前のある控え（「Word を読み込む前」など）は、時刻と並べて名前を出す */}
+              <span>
+                {new Date(s.savedAt).toLocaleString('ja-JP')}
+                {s.label && `（${s.label}）`}
+              </span>
               <button onClick={() => onRestoreSnapshot(s)}>この時点に戻す</button>
             </li>
           ))}

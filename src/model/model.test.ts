@@ -1,5 +1,5 @@
 import 'fake-indexeddb/auto'
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { currentConfig, type YearConfig } from '../config'
 import { validateConfig } from '../config/validate'
 import { checkReport } from '../checker/reportChecks'
@@ -10,7 +10,7 @@ import { fitFigureSize, printDpi } from './images'
 import { migrateReport, UnsupportedDataError } from './migrate'
 import { bodyContentHtml } from '../layout/bodyHtml'
 import { createReport } from './newReport'
-import { listSnapshots, loadReport, putImage, getImage, saveReport, saveSnapshot, usedImageIds } from './storage'
+import { clearAll, keepLeavingCopy, listSnapshots, loadReport, putImage, getImage, saveReport, saveSnapshot, usedImageIds } from './storage'
 import { DATA_FORMAT_VERSION } from './types'
 
 describe('createReport', () => {
@@ -176,6 +176,37 @@ describe('自動保存（IndexedDB）', () => {
   it('報告書で使っている写真の ID を集める', () => {
     const report = { ...demoReport(), workPhotos: { layout: 2 as const, imageIds: ['ph1'] } }
     expect(usedImageIds(report)).toEqual(['ph1'])
+  })
+
+  it('控えに名前を付けられる（「Word を読み込む前」。バックアップの控えの一覧に出す）', async () => {
+    await saveSnapshot(demoReport(), '2026-10-07T00:00:00Z', true, 'Word を読み込む前')
+    expect((await listSnapshots()).find((s) => s.savedAt === '2026-10-07T00:00:00Z')).toMatchObject({ keep: true, label: 'Word を読み込む前' })
+  })
+
+  it('閉じる直前の写し（localStorage）が、保存した原稿より新しければ、それを保存して使う（書いてすぐ読み込み直したとき）', async () => {
+    const memory = new Map<string, string>()
+    vi.stubGlobal('localStorage', { getItem: (k: string) => memory.get(k) ?? null, setItem: (k: string, v: string) => void memory.set(k, v), removeItem: (k: string) => void memory.delete(k) })
+    try {
+      const saved = { ...demoReport(), updatedAt: '2026-10-17T00:00:00.000Z' }
+      await saveReport(saved)
+      const typed = { ...saved, basicInfo: { ...saved.basicInfo, name: '最後に書いた名前' }, updatedAt: '2026-10-17T00:00:01.000Z' }
+      keepLeavingCopy(typed)
+      expect((await loadReport())?.basicInfo.name).toBe('最後に書いた名前')
+      // 写しは IndexedDB に保存して消す（次からは保存した原稿を読む）
+      expect(memory.size).toBe(0)
+      expect((await loadReport())?.basicInfo.name).toBe('最後に書いた名前')
+      // 保存した原稿の方が新しいときは、古い写しを使わずに消す
+      keepLeavingCopy(saved)
+      expect((await loadReport())?.basicInfo.name).toBe('最後に書いた名前')
+      expect(memory.size).toBe(0)
+      // この端末から原稿を消すと、写しも消える
+      keepLeavingCopy(typed)
+      await clearAll()
+      expect(memory.size).toBe(0)
+      expect(await loadReport()).toBeNull()
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 })
 

@@ -814,6 +814,8 @@ body.resizing .page-viewport { pointer-events: none; }
 /* Word でまだ書いていない章（ツールのひな形で続ける） */
 .word-outline li.tpl .ttl { font-weight: 400; color: var(--muted); }
 .word-outline li.tpl .cnt { padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
+/* Word でまだ書いていない章でも、ツールで書いていた章（読み込むと、書いた分が消える） */
+.word-outline li.tpl.lost .cnt { background: var(--error-soft); color: var(--error); font-weight: 700; }
 /* 読み取れなかった所の印（セルフチェックの注意と同じ、! のひし形） */
 .word-dia { display: inline-grid; place-items: center; width: 13px; height: 13px; margin: 0 4px 0 0; vertical-align: -1px; border-radius: 3px; background: var(--warn); color: #fff; font-size: 9px; font-style: normal; font-weight: 700; line-height: 1; transform: rotate(45deg) scale(0.82); }
 .word-dia::before { content: '!'; transform: rotate(-45deg); }
@@ -845,6 +847,8 @@ body.resizing .page-viewport { pointer-events: none; }
 .word-keep { display: flex; gap: 10px; margin: 16px 0 0; padding: 10px 14px; border-radius: 10px; background: var(--accent-soft); font-size: 12.5px; line-height: 1.7; }
 .word-keep svg { width: 20px; height: 20px; flex: none; margin-top: 2px; color: var(--accent); }
 .word-keep b { display: block; font-size: 13px; color: var(--accent); }
+/* 読み込むと消える、ツールで書いた本文（どの章の何段落か） */
+.word-keep .word-lost { display: block; color: var(--error); }
 /* スマホ（窓の中を1列に。ファイルを選ぶボタンは横いっぱい） */
 @media (max-width: 600px) {
   .modal.word-mid, .modal.word-modal { max-height: calc(100vh - 24px); max-height: calc(100dvh - 24px); padding: 18px 18px 20px; }

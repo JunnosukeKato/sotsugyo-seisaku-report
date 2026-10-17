@@ -247,3 +247,76 @@ describe('表を入れる・Enter で段落を分ける（段落の下の図・�
     expect(ops.findEditable(r, 'f1')?.text).toBe('デザイン画')
   })
 })
+
+describe('図・表を消したときの本文の参照（文を崩さない）', () => {
+  const base = (text: string): Report => ({
+    ...demoReport(),
+    body: [{ id: 'c1', title: '企画', blocks: [{ type: 'paragraph', id: 'pa', content: [{ type: 'text', text }] }] }],
+  })
+  const fig = (id: string) => ({ id, imageId: `img-${id}`, caption: 'デザイン画' })
+  const paraText = (r: Report, id: string) => ops.findEditable(r, id)?.text
+
+  it('文の中で使っている「図1」は、消さずに「図?」の文字にして残す（「デザイン画をに示す。」にしない）', () => {
+    // 「直す」で手で書いた「図1」を図につなげたあと、図を消した
+    let r = ops.addFigureBelow(base('デザイン画を図1に示す。'), 'pa', fig('f1'))
+    r = ops.setText(r, 'pa', 'デザイン画を図1に示す。')
+    expect(r.body[0].blocks[0].type === 'paragraph' && r.body[0].blocks[0].content.some((n) => n.type === 'ref')).toBe(true)
+    const removed = ops.removeFigure(r, 'f1')
+    expect(paraText(removed, 'pa')).toBe('デザイン画を図?に示す。')
+    // 元の原稿はそのまま（元に戻すと、図も文も戻る）
+    expect(paraText(r, 'pa')).toBe('デザイン画を図1に示す。')
+  })
+
+  it('文末に添えた「（図1）」は括弧ごと消す。「（図1）に示す」のように文の中の括弧付きは「（図?）」にする', () => {
+    let r = ops.insertRef(base('袖を大きくした。'), 'pa', 8, 'f1')
+    r = ops.addFigureBelow(r, 'pa', fig('f1'))
+    expect(paraText(ops.removeFigure(r, 'f1'), 'pa')).toBe('袖を大きくした。')
+    const inside = ops.setText(ops.addFigureBelow(base('x'), 'pa', fig('f1')), 'pa', '（図1）に示すように、袖を大きくした。')
+    expect(paraText(ops.removeFigure(inside, 'f1'), 'pa')).toBe('（図?）に示すように、袖を大きくした。')
+  })
+
+  it('表を消したときも同じ。文の中の「表1」は「表?」になる（「図?」にはしない）', () => {
+    let r = ops.addTableBelow(base('x'), 'pa', blankTable('t1', ops.newId))
+    r = ops.setText(r, 'pa', '使用した素材を表1に示す。')
+    expect(paraText(ops.removeTable(r, 't1'), 'pa')).toBe('使用した素材を表?に示す。')
+  })
+})
+
+describe('図表の番号を手で書いていたとき（二重にしない）', () => {
+  const base = (text: string): Report => ({
+    ...demoReport(),
+    body: [{ id: 'c1', title: '企画', blocks: [{ type: 'paragraph', id: 'pa', content: [{ type: 'text', text }] }] }],
+  })
+  const paraText = (r: Report, id: string) => ops.findEditable(r, id)?.text
+  const refs = (r: Report, id: string) => {
+    const b = r.body.flatMap((c) => c.blocks).find((x) => x.id === id)
+    return b?.type === 'paragraph' ? b.content.filter((n) => n.type === 'ref') : []
+  }
+
+  it('図を入れたとき、段落にその番号を手で書いていれば（図1）は足さず、書いた「図1」を図につなげる', () => {
+    let r = ops.insertRef(base('デザイン画を図1に示す。'), 'pa', 12, 'f1')
+    r = ops.addFigureBelow(r, 'pa', { id: 'f1', imageId: 'i', caption: '' })
+    expect(paraText(r, 'pa')).toBe('デザイン画を図1に示す（図1）。')
+    const linked = ops.linkWrittenRef(r, 'pa', 'f1')!
+    expect(paraText(linked, 'pa')).toBe('デザイン画を図1に示す。')
+    expect(refs(linked, 'pa')).toEqual([{ type: 'ref', targetId: 'f1', withParens: false }])
+  })
+
+  it('表も同じ（全角の数字で書いていても）。番号を書いていなければ null（自動の（表1）のまま）', () => {
+    let r = ops.insertRef(base('使用した素材を表１に示す。'), 'pa', 13, 't1')
+    r = ops.addTableBelow(r, 'pa', blankTable('t1', ops.newId))
+    expect(paraText(ops.linkWrittenRef(r, 'pa', 't1')!, 'pa')).toBe('使用した素材を表1に示す。')
+    let plain = ops.insertRef(base('素材をまとめた。'), 'pa', 8, 't1')
+    plain = ops.addTableBelow(plain, 'pa', blankTable('t1', ops.newId))
+    expect(ops.linkWrittenRef(plain, 'pa', 't1')).toBeNull()
+  })
+
+  it('「直す」で手で書いた番号をつなげると、同じ段落の自動の（表1）は除く（「（表1）に示す（表1）。」にしない）', () => {
+    // 前の版で、表を入れたときに（表1）が足されていた段落
+    let r = ops.insertRef(base('使用した素材を表1に示す。'), 'pa', 13, 't1')
+    r = ops.addTableBelow(r, 'pa', blankTable('t1', ops.newId))
+    const fixed = ops.linkManualRef(r, 'pa', 7, 9, '表1')
+    expect(paraText(fixed, 'pa')).toBe('使用した素材を表1に示す。')
+    expect(refs(fixed, 'pa')).toEqual([{ type: 'ref', targetId: 't1', withParens: false }])
+  })
+})

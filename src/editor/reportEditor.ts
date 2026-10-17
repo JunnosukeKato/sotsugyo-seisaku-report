@@ -1,4 +1,4 @@
-import type { YearConfig } from '../config'
+import { findCourse, subtitleInputOnly, type YearConfig } from '../config'
 import { checkReportDetailed, type ReportFinding } from '../checker/reportChecks'
 import { applyFix } from '../checker/textRules'
 import { FIELD_IDS } from '../layout/document'
@@ -95,6 +95,19 @@ interface ImageEntry {
 const RENDER_DELAY_MS = 600
 const FIGURE_MAX_MM = 80
 
+/** 原稿の抄録・本文にある ID（段落・章・ブロック・図）。削除して消えたものを見つけるため */
+function bodyIds(report: Report): Set<string> {
+  const ids = new Set(report.abstract.paragraphs.map((p) => p.id))
+  for (const c of report.body) {
+    ids.add(c.id)
+    for (const b of c.blocks) {
+      ids.add(b.id)
+      if (b.type === 'figureRow') for (const f of b.figures) ids.add(f.id)
+    }
+  }
+  return ids
+}
+
 export class ReportEditor {
   private report: Report
   private config: YearConfig
@@ -106,6 +119,8 @@ export class ReportEditor {
   private readonly layer: HTMLElement
   private readonly marker: HTMLDivElement
   private readonly hideStyle: HTMLStyleElement
+  /** 削除したものを、組み直すまで紙面で隠す（removed） */
+  private readonly removedStyle: HTMLStyleElement
   private caretPos = 0
   /** Enter で段落を分けたときに、前の段落へ自動で付けた「。」（直後の Backspace で元に戻すため） */
   private autoPeriod: { prevId: string; newId: string; original: string } | null = null
@@ -146,7 +161,8 @@ export class ReportEditor {
     this.layer = layer
     this.renderer = new ReportRenderer(scroller)
     this.hideStyle = document.createElement('style')
-    document.head.append(this.hideStyle)
+    this.removedStyle = document.createElement('style')
+    document.head.append(this.hideStyle, this.removedStyle)
     CSS.highlights.set('issue-error', this.highlights.error)
     CSS.highlights.set('issue-warning', this.highlights.warning)
     CSS.highlights.set('issue-focus', this.highlights.focus)
@@ -359,8 +375,11 @@ export class ReportEditor {
     this.rendering = true
     this.notify()
     const image = (id: string) => this.images.get(id)
+    // 組む原稿（組んでいる間に原稿が変わっても、紙面に出るのはこの原稿）
+    const rendered = this.report
+    let swapped = false
     try {
-      const result = await this.renderer.renderBack(this.report, this.config, {
+      const result = await this.renderer.renderBack(rendered, this.config, {
         imageSrc: (id) => image(id)?.url ?? this.placeholderImage,
         photoSrc: (id) => image(id)?.url ?? this.placeholderImage,
         figureSize: (f) => {
@@ -376,11 +395,22 @@ export class ReportEditor {
       // 紙面の欄にフォーカスがあれば、組み直した紙面の同じ欄に移し直す（要素が作り直されて、フォーカスが失われないように）
       const focused = this.paperFocus()
       this.renderer.swap(this.page)
+      swapped = true
+      // 削除したものが出てこない紙面になったら、隠すのをやめる（組み始めたあとに削除したものは、まだ隠しておく。元に戻したものは隠さない）
+      const shown = bodyIds(rendered)
+      const now = bodyIds(this.report)
+      for (const id of this.removed) if (!shown.has(id) || now.has(id)) this.removed.delete(id)
+      this.hideRemoved()
       markFocusable(this.viewport)
       if (focused) this.focusPaper(focused.key, focused.visible)
       this.markPrintSkip()
     } finally {
       this.rendering = false
+      // 組めなかったときは、削除したものを隠し続けない（紙面を押せなくならないように）
+      if (!swapped && this.removed.size > 0) {
+        this.removed.clear()
+        this.hideRemoved()
+      }
     }
     this.markSelection()
     this.runChecks()
@@ -570,7 +600,9 @@ export class ReportEditor {
   private onCommitEdit(id: string, text: string, byKey: boolean): void {
     this.clearShift()
     if (this.continuing?.id === id) this.continuing = null
-    this.report = ops.setText(this.report, id, text)
+    // サブタイトル：自動で付く前後の決まり文句（「―」「の衣装制作―」など）まで入力していたら取る（表紙で二重にならないように）
+    const course = id === FIELD_IDS.subtitleInput ? findCourse(this.config, this.report.basicInfo.courseId) : undefined
+    this.report = ops.setText(this.report, id, course ? subtitleInputOnly(course, text) : text)
     if (this.reportBeforeEdit && JSON.stringify(this.reportBeforeEdit) !== JSON.stringify(this.report)) this.pushHistory(this.reportBeforeEdit)
     this.reportBeforeEdit = null
     this.hideStyle.textContent = ''
@@ -643,9 +675,11 @@ export class ReportEditor {
 
   applyFinding(finding: ReportFinding): void {
     if (!finding.blockId || finding.replacement === undefined) return
-    if (this.overlay.blockId) this.overlay.commit()
+    this.commitForChange()
     const editable = ops.findEditable(this.report, finding.blockId)
     if (!editable) return
+    // 手で書いた図表の番号をつなげるときは、同じ段落に自動で入れた（図n）があれば除く（二重にしない）
+    if (finding.ruleId === 'manual-ref') return this.update((r) => ops.linkManualRef(r, finding.blockId!, finding.start!, finding.end!, finding.replacement!))
     this.update((r) => ops.setText(r, finding.blockId!, applyFix(editable.text, { ...finding, start: finding.start!, end: finding.end! })))
   }
 
@@ -784,6 +818,19 @@ export class ReportEditor {
     this.overlay.commit()
   }
 
+  /**
+   * 書いている欄の文字を、欄を開いたまま原稿に入れる（ページを閉じる・読み込み直す・ほかのアプリへ切り替える直前に、保存に間に合わせるため）。
+   * ふだんも打つたびに原稿へ入れているが、日本語の変換中の文字は、変換を終えるまで入らないため
+   */
+  saveEditing(): void {
+    const id = this.overlay.blockId
+    if (!id) return
+    const next = ops.setText(this.report, id, this.overlay.text)
+    if (ops.findEditable(next, id)?.text === ops.findEditable(this.report, id)?.text) return
+    this.report = next
+    this.afterChange({ render: 'debounce', save: true })
+  }
+
   // ---- クリック ----
 
   /**
@@ -796,6 +843,8 @@ export class ReportEditor {
       this.suppressClick = false
       return
     }
+    // 削除して、組み直した紙面がまだ出ていない間は、紙面を押しても何もしない（古い紙面で、消したブロックの隣を開いてしまわないように）
+    if (this.removed.size > 0) return
     const target = e.target as HTMLElement
     // 抄録の「先生の許可が出た」
     if (target.closest('[data-abstract-start]')) return this.startAbstract()
@@ -972,6 +1021,12 @@ export class ReportEditor {
   private afterChange({ render, save }: { render: 'now' | 'debounce'; save: boolean }): void {
     this.report = { ...this.report, updatedAt: new Date().toISOString() }
     if (save) this.callbacks.onChange(this.report)
+    // 書いている欄を確定して、続けて原稿を変えるところ（commitForChange）：変えたあとの原稿で1回だけ組み直す
+    if (this.holdingRender) {
+      this.renderOwed = true
+      return
+    }
+    this.renderOwed = false
     if (render === 'now') void this.render()
     else {
       // 入力中も、文字の指摘はすぐに更新する（組版を待たない）
@@ -981,30 +1036,88 @@ export class ReportEditor {
     this.notify()
   }
 
+  /** 書いている欄を確定している途中か（commitForChange）。確定のための組み直しを待たせ、待たせたら renderOwed */
+  private holdingRender = false
+  private renderOwed = false
+
+  /**
+   * 書いている欄を確定してから、続けて原稿を変えるとき（削除・元に戻すなど）。確定した原稿では組み直さず、変えたあとの原稿で1回だけ組み直す。
+   * 確定の組み直しが先に始まると、変える前の原稿を組み終えるのを待ってからもう一度組むため、段落の削除などが紙面に出るまで倍の時間がかかっていた。
+   * 続けて原稿を変えなかったとき（元に戻すものがなかったなど）は、確定した原稿で組み直す
+   */
+  private commitForChange(): void {
+    if (!this.overlay.blockId) return
+    this.holdingRender = true
+    try {
+      this.overlay.commit()
+    } finally {
+      this.holdingRender = false
+    }
+    queueMicrotask(() => {
+      if (!this.renderOwed) return
+      this.renderOwed = false
+      void this.render()
+      this.notify()
+    })
+  }
+
   /** 報告書を変更する（元に戻せる） */
   update(fn: (report: Report) => Report): void {
-    if (this.overlay.blockId) this.overlay.commit()
+    this.commitForChange()
     this.pushHistory(this.report)
     this.report = fn(this.report)
     this.afterChange({ render: 'now', save: true })
   }
 
   undo(): void {
-    if (this.overlay.blockId) this.overlay.commit()
+    this.commitForChange()
     const previous = this.history.pop()
     if (!previous) return
     this.report = previous
     this.afterChange({ render: 'now', save: true })
+    // 削除して、まだ組み直していない間に戻したもの：すぐまた見せる
+    this.hideRemoved()
   }
 
   /** 報告書を丸ごと入れ替える（復元・新規作成）。履歴は消す */
   replace(report: Report): void {
-    if (this.overlay.blockId) this.overlay.commit()
+    this.commitForChange()
     this.history = []
     this.report = report
     this.selection = null
     this.currentId = null
+    this.removed.clear()
+    this.hideRemoved()
     this.afterChange({ render: 'now', save: true })
+  }
+
+  /**
+   * 削除したブロック・図・表の ID。組み直した紙面に出なくなるまで、今の紙面ですぐ隠す。
+   * 組み直しは長い原稿では1秒ほどかかり、その間は削除したものが紙面に残って見えたため（押しても消えないと思い、もう一度押してしまう）。
+   * 隠している間（組み直した紙面がまだ出ていない間）は、紙面を押しても開かず、続けて削除もしない（古い紙面の隣のブロックを開いて消さないように）
+   */
+  private readonly removed = new Set<string>()
+
+  /** 原稿を削除で変える（元に戻せる）。消えたものは、組み直すのを待たずに紙面から隠す */
+  private removeNow(fn: (report: Report) => Report): void {
+    const before = bodyIds(this.report)
+    this.update(fn)
+    const after = bodyIds(this.report)
+    for (const id of before) if (!after.has(id)) this.removed.add(id)
+    this.hideRemoved()
+  }
+
+  /** 削除したものを紙面で隠す（元に戻して、原稿にまたあるものは隠さない） */
+  private hideRemoved(): void {
+    const present = bodyIds(this.report)
+    const selectors = [...this.removed]
+      .filter((id) => !present.has(id))
+      .flatMap((id) => {
+        const e = CSS.escape(id)
+        // 段落・見出しの文字、図、表、図のまとまり、見出しの番号（Ⅰ．ⅰ．）ごと
+        return [`[data-block-id="${e}"]`, `[data-figure-id="${e}"]`, `[data-table-id="${e}"]`, `[data-group-id="${e}"]`, `:is(h1, h2):has(> [data-block-id="${e}"])`].map((s) => `.page-viewport ${s}`)
+      })
+    this.removedStyle.textContent = selectors.length ? `${selectors.join(',\n')} { display: none !important; }` : ''
   }
 
   setCourse(courseId: string): void {
@@ -1066,7 +1179,7 @@ export class ReportEditor {
 
   private insertAndEdit(block: BodyBlock, editId: string, after = this.insertionAnchor()): void {
     this.marker.hidden = true
-    if (this.overlay.blockId) this.overlay.commit()
+    this.commitForChange()
     this.pushHistory(this.report)
     this.report = ops.insertAfter(this.report, after, block)
     this.reopenAfterRender(editId, 0)
@@ -1081,7 +1194,7 @@ export class ReportEditor {
   /** 抄録を書き始める（先生の許可が出た）。抄録の最初の段落を開く */
   startAbstract(): void {
     if (this.report.abstract.started !== false) return
-    if (this.overlay.blockId) this.overlay.commit()
+    this.commitForChange()
     this.pushHistory(this.report)
     this.report = { ...this.report, abstract: { ...this.report.abstract, started: true } }
     const first = this.report.abstract.paragraphs[0]
@@ -1111,7 +1224,7 @@ export class ReportEditor {
   addChapter(): void {
     const after = this.insertionAnchor()
     this.marker.hidden = true
-    if (this.overlay.blockId) this.overlay.commit()
+    this.commitForChange()
     const chapter: Chapter = { id: ops.newId('c'), title: '', blocks: [{ type: 'paragraph', id: ops.newId('p'), content: [{ type: 'text', text: '' }] }] }
     this.pushHistory(this.report)
     this.report = ops.insertChapterAfter(this.report, after, chapter)
@@ -1147,8 +1260,10 @@ export class ReportEditor {
     this.pushHistory(this.report)
     let next = ops.insertRef(this.report, paragraphId, caret, figureId)
     next = ops.addFigureBelow(next, paragraphId, { id: figureId, imageId, caption: '' })
-    this.report = next
-    this.returnTo = { from: figureId, id: paragraphId, caret: ops.refEnd(next, paragraphId, figureId) }
+    // 段落にその図の番号を手で書いていたら（「図1に示す」）、（図1）は足さずに、書いた番号を図につなげる（書いていた位置に戻る）
+    const linked = ops.linkWrittenRef(next, paragraphId, figureId)
+    this.report = linked ?? next
+    this.returnTo = { from: figureId, id: paragraphId, caret: linked ? caret : ops.refEnd(next, paragraphId, figureId) }
     this.reopenAfterRender(figureId, 0)
   }
 
@@ -1160,13 +1275,15 @@ export class ReportEditor {
     const paragraphId = this.editingParagraph()
     if (!paragraphId) return
     const caret = this.overlay.caret
-    this.overlay.commit()
+    this.commitForChange()
     const tableId = ops.newId('t')
     this.pushHistory(this.report)
     let next = ops.insertRef(this.report, paragraphId, caret, tableId)
     next = ops.addTableBelow(next, paragraphId, kind === 'material' ? materialTable(tableId, ops.newId) : blankTable(tableId, ops.newId))
-    this.report = next
-    this.returnTo = { from: tableId, id: paragraphId, caret: ops.refEnd(next, paragraphId, tableId) }
+    // 段落にその表の番号を手で書いていたら（「表1に示す」）、（表1）は足さずに、書いた番号を表につなげる
+    const linked = ops.linkWrittenRef(next, paragraphId, tableId)
+    this.report = linked ?? next
+    this.returnTo = { from: tableId, id: paragraphId, caret: linked ? caret : ops.refEnd(next, paragraphId, tableId) }
     // 仮のタイトル（素材表の「使用素材表」）があれば、その後ろから書く（前に付け足してしまわないように）
     this.reopenAfterRender(tableId, ops.findEditable(next, tableId)?.text.length ?? 0)
   }
@@ -1195,25 +1312,29 @@ export class ReportEditor {
     this.report = ops.insertRefAfterRef(ops.addFigureAfter(this.report, figureId, newFigure), figureId, newFigure.id)
     // タイトルを書いて Enter を押したら、1枚目と同じく、その図を参照している段落の続きに戻る
     const paragraph = this.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'paragraph' && b.content.some((n) => n.type === 'ref' && n.targetId === newFigure.id))
-    if (paragraph) this.returnTo = { from: newFigure.id, id: paragraph.id, caret: ops.refEnd(this.report, paragraph.id, newFigure.id) }
+    if (paragraph) {
+      // 段落にその図の番号を手で書いていたら（「図2に示す」）、（図2）は足さずに、書いた番号を図につなげる
+      this.report = ops.linkWrittenRef(this.report, paragraph.id, newFigure.id) ?? this.report
+      this.returnTo = { from: newFigure.id, id: paragraph.id, caret: ops.refEnd(this.report, paragraph.id, newFigure.id) }
+    }
     this.reopenAfterRender(newFigure.id, 0)
   }
 
-  /** 段落・小見出し・大見出し（章ごと）を削除する */
+  /** 段落・小見出し・大見出し（章ごと）を削除する。削除したばかりで、まだ組み直していなければ何もしない（removed） */
   removeBlock(id: string): void {
     const editable = ops.findEditable(this.report, id)
-    if (!editable) return
+    if (!editable || this.removed.size > 0) return
     this.hideStyle.textContent = ''
     this.currentId = null
-    this.update((r) => (editable.kind === 'chapter' ? ops.removeChapter(r, id) : ops.removeBlock(r, id)))
+    this.removeNow((r) => (editable.kind === 'chapter' ? ops.removeChapter(r, id) : ops.removeBlock(r, id)))
   }
 
   removeSelected(): void {
     const s = this.selection
-    if (!s || s.kind === 'photos') return
+    if (!s || s.kind === 'photos' || this.removed.size > 0) return
     this.selection = null
-    // 図・表を消すときは、本文のその図・表への参照「（図n）」「（表n）」も一緒に消す
-    this.update((r) => (s.kind === 'figure' ? ops.removeFigure(r, s.id) : s.kind === 'table' ? ops.removeTable(r, s.id) : ops.removeBlock(r, s.id)))
+    // 図・表を消すときは、本文のその図・表への参照も一緒に消す（文の中の参照は「図?」になり、チェックで指摘される）
+    this.removeNow((r) => (s.kind === 'figure' ? ops.removeFigure(r, s.id) : s.kind === 'table' ? ops.removeTable(r, s.id) : ops.removeBlock(r, s.id)))
   }
 
   /** 表を書いているセル（書いていなければ最後に触ったセル） */
@@ -1231,7 +1352,7 @@ export class ReportEditor {
   addTableRow(tableId: string): void {
     const at = this.currentCell(tableId)
     if (!at) return
-    if (this.overlay.blockId) this.overlay.commit()
+    this.commitForChange()
     this.pushHistory(this.report)
     const { table, firstCellId } = addRow(at.table, at.row, ops.newId)
     this.report = ops.updateTable(this.report, tableId, () => table)
@@ -1281,7 +1402,7 @@ export class ReportEditor {
   private changeTable(tableId: string, fn: (table: TableBlock) => TableBlock, keep?: string): void {
     const editing = this.overlay.blockId
     const caret = editing ? this.overlay.caret : 0
-    if (this.overlay.blockId) this.overlay.commit()
+    this.commitForChange()
     this.pushHistory(this.report)
     this.report = ops.updateTable(this.report, tableId, fn)
     const cellId = keep ?? editing

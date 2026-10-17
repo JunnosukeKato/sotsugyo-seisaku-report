@@ -3,7 +3,7 @@ import { newId, normalizeParagraph, numbering, textToContent, type Numbering } f
 import { chapterLabel, subheadingLabel } from '../layout/bodyHtml'
 import type { StoredImage } from '../model/storage'
 import { bodyFromTemplate, courseTemplate, emptyParagraph } from '../model/template'
-import type { BodyBlock, Chapter, Report, TableBlock, TableRow } from '../model/types'
+import type { BodyBlock, Chapter, ParagraphBlock, Report, TableBlock, TableRow } from '../model/types'
 import type { FigurePreview, ImportProblem, OutlineItem, TablePreview, WordFiles, WordImportResult } from './types'
 import { documentContext, readDocument, type ImageRef, type TextBox, type WordBlock, type WordTable } from './wordDocument'
 import { browserReadable, imageFingerprint, imageInfo, KIND_NAMES, prepareImage, TEMPLATE_IMAGE_FINGERPRINTS } from './wordImages'
@@ -1061,4 +1061,49 @@ export async function readCoverFile(file: File, context: { config: YearConfig; c
 export function applyWordImport(report: Report, result: WordImportResult): Report {
   const cover = Object.fromEntries(Object.entries(result.cover).filter(([, v]) => typeof v === 'string' && v.trim() !== ''))
   return { ...report, body: result.body, basicInfo: { ...report.basicInfo, ...cover } }
+}
+
+/** Word を読み込むと消える、ツールで書いた本文（大見出しごと） */
+export interface LostChapter {
+  /** 番号（Ⅰ．）と見出し（例「Ⅱ．制作過程」） */
+  heading: string
+  /** 大見出しの名前だけ（確認の窓の一覧で、同じ名前の章に印を付けるため） */
+  title: string
+  paragraphs: number
+  figures: number
+  tables: number
+}
+
+/** 比べるための文字（図表の参照・空白・句読点の違いは見ない） */
+const comparableText = (content: ParagraphBlock['content']) => comparable(content.map((n) => (n.type === 'text' ? n.text : '')).join('')).replace(IGNORABLE, '')
+
+/**
+ * Word を読み込むと消える、ツールで書いた本文。今の原稿の段落・図・表のうち、読み込む本文（body）にないものを大見出しごとに数える。
+ * 本文は Word の中身に入れ替わるため、ツールで書き足した章や、ツールで直した段落は消える（同じ Word を読み込み直したときなど）。
+ * 何も書いていない段落（ひな形のまま）と、Word から読み込んだままの段落は数えない。図は写真が入っていてタイトルのあるもの、表は中身で比べる
+ */
+export function lostByImport(report: Report, body: Chapter[]): LostChapter[] {
+  const blocks = body.flatMap((c) => c.blocks)
+  const texts = new Set(blocks.flatMap((b) => (b.type === 'paragraph' ? [comparableText(b.content)] : [])))
+  const captions = new Set(blocks.flatMap((b) => (b.type === 'figureRow' ? b.figures.map((f) => comparable(f.caption)) : [])))
+  const tableText = (t: TableBlock) => comparable([t.caption, ...t.rows.flatMap((r) => r.cells.map((c) => c.text))].join('|'))
+  const tables = new Set(blocks.flatMap((b) => (b.type === 'table' ? [tableText(b)] : [])))
+  return report.body.flatMap((chapter, i): LostChapter[] => {
+    let paragraphs = 0
+    let figures = 0
+    let lostTables = 0
+    for (const b of chapter.blocks) {
+      if (b.type === 'paragraph') {
+        const text = comparableText(b.content)
+        if (text && !texts.has(text)) paragraphs++
+      } else if (b.type === 'figureRow') {
+        figures += b.figures.filter((f) => f.imageId && f.caption.trim() && !captions.has(comparable(f.caption))).length
+      } else if (b.type === 'table') {
+        const written = b.rows.slice(1).some((r) => r.cells.some((c) => c.text.trim() || c.imageId))
+        if (written && !tables.has(tableText(b))) lostTables++
+      }
+    }
+    if (paragraphs + figures + lostTables === 0) return []
+    return [{ heading: `${chapterLabel(i)}${chapter.title}`, title: chapter.title, paragraphs, figures, tables: lostTables }]
+  })
 }
