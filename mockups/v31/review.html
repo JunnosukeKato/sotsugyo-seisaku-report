@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v31 提出前チェック：作品写真・札・見本の名前</title>
+<!-- 画面の絵は node scripts/mockup-shots-v31.mjs で作る。このページの写しは同じスクリプトの review で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  section { max-width: 1240px; margin: 0 0 40px; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  h2 { font-size: 19px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 3px; }
+  figcaption span { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .now { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: #8d8f95; color: #fff; font-size: 11.5px; font-weight: 700; vertical-align: 2px; }
+  img { display: block; width: 100%; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row > div { background: #fff; align-self: stretch; }
+  .pc-ph { grid-template-columns: 3fr 1fr; }
+  .pc2 { grid-template-columns: 1fr 1fr; }
+  .c4 { grid-template-columns: repeat(4, 1fr); }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 12px; border: 1px solid #ddd; }
+  .strip { padding: 4px 0 0; background: #ebe8e3 !important; }
+  .strip small, .row small { display: block; padding: 6px 12px 9px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 10px 16px 12px; font-size: 13.5px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: var(--ok); }
+  .pw .weak b { color: #b5443b; }
+</style>
+</head>
+<body>
+
+<section id="photo">
+  <h1>作品写真を6枚まで入れる</h1>
+  <p class="lead">手順書は「自分で撮った写真6枚以内を、A4 の1ページに並べる」です。ページの数は変わらず、作品写真は1ページです。</p>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　枚数で並べ方が決まる（写真は切らない）<span class="rec">おすすめ</span></b><span>写真を入れるだけで並びます。順番を変えるときと外すときは「並べ替え・外す」を押します。</span></figcaption>
+    <div class="row pc-ph"><div><img src="shots/a-pc.png"></div><div class="ph"><img src="shots/a-ph.png"></div></div>
+    <div class="row pc2"><div><img src="shots/a-pc-menu.png"><small>「並べ替え・外す」を押したところ</small></div><div class="strip"><img src="shots/layouts-auto.png"><small>枚数ごとの並び方。2枚は写真の向きで、左右か上下になります</small></div></div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>選ぶことがなく、迷いません。写真は切れません。</div><div class="weak"><b>弱いところ</b><br>並べ方は選べません（写真のまわりに白い余白が出ます）。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　並べ方を選ぶ（写真は切らない）</b><span>作成ツールと同じ6通りの並べ方を、欄の小さな印から選びます。</span></figcaption>
+    <div class="row pc-ph"><div><img src="shots/b-pc.png"></div><div class="ph"><img src="shots/b-ph.png"></div></div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>2枚を左右・上下など、自分で選べます。写真は切れません。</div><div class="weak"><b>弱いところ</b><br>印が小さく、意味が分かりにくいです。順番を変える所は案Aと同じ窓が要ります。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C　作品写真の窓で並べる（作成ツールと同じ。枠いっぱいに切り抜く）</b><span>「並べる・切り抜く位置」を押すと、大きな窓で並べ方・順番・見える所を決めます。</span></figcaption>
+    <div class="row pc-ph"><div><img src="shots/c-pc.png"></div><div class="ph"><img src="shots/c-ph.png"></div></div>
+    <div class="row pc2"><div><img src="shots/c-pc-dialog.png"><small>窓を開いたところ（写真をつかんで動かすと、見える所が変わる）</small></div><div class="strip"><img src="shots/layouts-cover.png"><small>並べ方（作成ツールと同じ6通り）</small></div></div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>作成ツールと同じ見た目になり、写真が大きく見えます。</div><div class="weak"><b>弱いところ</b><br>手間が増えます。写真の端（頭や裾）が切れることがあります。</div></div>
+  </figure>
+</section>
+
+<section id="chips">
+  <h1>指摘の「手順書」「補助」の札</h1>
+  <p class="lead">学生役から「押しても何も起きない」「エラーと警告のどちらを直すのか分からない」と出ました。</p>
+  <div class="row c4">
+    <div><img src="shots/chips-now.png"><small><b>いま</b>：札「手順書」「補助」</small></div>
+    <div style="box-shadow: inset 0 0 0 2.5px var(--accent)"><img src="shots/chips-1.png"><small><b>案1　札をなくし、意味を上に書く</b><span class="rec">おすすめ</span></small></div>
+    <div><img src="shots/chips-2.png"><small><b>案2　札の言葉を変え、押せない形に</b></small></div>
+    <div><img src="shots/chips-3.png"><small><b>案3　「直してから出す」と「できれば直す」に分ける</b></small></div>
+  </div>
+</section>
+
+<section id="empty">
+  <h1>最初の画面の、ファイル名の見本</h1>
+  <p class="lead">「01_表紙.docx」の見本を見て、名前を付け直すものと思った学生役がいました（実際はどんな名前でも分かれます）。</p>
+  <div class="row pc2">
+    <div><img src="shots/empty-now-pc.png"><small><b>いま</b>：見本の名前</small></div>
+    <div style="box-shadow: inset 0 0 0 2.5px var(--accent)"><img src="shots/empty-1-pc.png"><small><b>案1　「Word」「PDF」だけにする</b><span class="rec">おすすめ</span></small></div>
+  </div>
+  <div class="row pc2">
+    <div><img src="shots/empty-2-pc.png"><small><b>案2　見本に「例」を付け、名前は変えなくてよいと書く</b></small></div>
+    <div class="row c4" style="background:#fff"><div class="ph"><img src="shots/empty-now-ph.png"><small>いま</small></div><div class="ph"><img src="shots/empty-1-ph.png"><small>案1</small></div><div class="ph"><img src="shots/empty-2-ph.png"><small>案2</small></div><div></div></div>
+  </div>
+</section>
+
+</body>
+</html>
