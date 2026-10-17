@@ -1,7 +1,7 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { YearConfig } from '../config'
 import { newId } from '../editor/reportOps'
-import { formatReference, yearDigits } from '../layout/document'
+import { formatReference, halfDigits, yearDigits } from '../layout/document'
 import type { Snapshot } from '../model/storage'
 import type { Reference, Report } from '../model/types'
 import { useDialogFocus } from './useDialogFocus'
@@ -92,10 +92,15 @@ export function CourseChangeDialog({ courseName, onReplace, onNameOnly, onClose 
 
 // ---- 引用・参考文献 ----
 
+/** その日の日付（「2026-10-18」。この端末の時刻で。toISOString は世界標準時なので、日本の朝9時までは前の日になる） */
+function localDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
 function emptyReference(type: Reference['type']): Reference {
   return type === 'book'
     ? { type, id: newId('ref'), author: '', title: '', publisher: '', year: '', pages: '' }
-    : { type, id: newId('ref'), siteTitle: '', url: '', accessedOn: new Date().toISOString().slice(0, 10) }
+    : { type, id: newId('ref'), siteTitle: '', url: '', accessedOn: localDate(new Date()) }
 }
 
 /**
@@ -169,7 +174,7 @@ export function ReferencesDialog({ report, onSave, onClose }: { report: Report; 
                 <Field label="著者名" value={ref.author} onChange={(v) => update(ref.id, { author: v })} placeholder="例：浜松隆志" />
                 <Field label="書名" value={ref.title} onChange={(v) => update(ref.id, { title: v })} placeholder="『』は自動で付きます" />
                 <Field label="出版社" value={ref.publisher} onChange={(v) => update(ref.id, { publisher: v })} />
-                <Field label="出版年" value={ref.year} onChange={(v) => update(ref.id, { year: v })} normalize={yearDigits} placeholder="例：1998" />
+                <Field label="出版年" value={ref.year} onChange={(v) => update(ref.id, { year: v })} normalize={halfDigits} placeholder="例：1998" />
                 <Field label="ページ（任意）" value={ref.pages} onChange={(v) => update(ref.id, { pages: v })} placeholder="例：17-24" />
               </div>
             ) : (

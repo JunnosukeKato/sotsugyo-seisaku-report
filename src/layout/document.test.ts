@@ -98,4 +98,18 @@ describe('引用・参考文献の書き方', () => {
     expect(yearDigits('2019年')).toBe('2019')
     expect(formatReference({ ...book, year: '２０１９' })).toBe('浜松隆志、『ファッションの歴史』、文化出版局、2019年')
   })
+
+  it('和暦の出版年は西暦にする（「令和3年」を「3年」にしない。元年も）', () => {
+    expect(yearDigits('令和3年')).toBe('2021')
+    expect(yearDigits('令和元年')).toBe('2019')
+    expect(yearDigits('平成３０年')).toBe('2018')
+    expect(yearDigits('昭和 63')).toBe('1988')
+    expect(formatReference({ ...book, year: '令和元年' })).toBe('浜松隆志、『ファッションの歴史』、文化出版局、2019年')
+  })
+
+  it('書名の『』を片方だけ打ったときも二重にしない。ページの全角の数字とつなぎの線は半角にする', () => {
+    expect(formatReference({ ...book, title: '『ファッションの歴史' })).toBe('浜松隆志、『ファッションの歴史』、文化出版局、2019年')
+    expect(formatReference({ ...book, title: 'ファッションの歴史』' })).toBe('浜松隆志、『ファッションの歴史』、文化出版局、2019年')
+    expect(formatReference({ ...book, pages: '１２－３０' })).toBe('浜松隆志、『ファッションの歴史』、文化出版局、2019年、p.12-30')
+  })
 })

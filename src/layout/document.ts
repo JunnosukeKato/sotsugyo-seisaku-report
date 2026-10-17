@@ -213,19 +213,40 @@ ${references}
 
 /** 出版年：全角の数字（「２０１９」）は半角にし、数字のほかは除く（「2019年」→「2019」。引用・参考文献の入力欄） */
 export function yearDigits(text: string): string {
-  return text.replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0)).replace(/[^0-9]/g, '')
+  const t = halfDigits(text)
+  // 和暦（「令和3年」「平成元年」）は西暦にする（数字だけ残すと「3年」になってしまうため）
+  const era = /(令和|平成|昭和|大正)\s*(元|\d+)/.exec(t)
+  if (era) return String(ERA_START[era[1]] + (era[2] === '元' ? 1 : Number(era[2])))
+  return t.replace(/[^0-9]/g, '')
 }
 
-/** 書名：『』は自動で付けるので、学生が『』（「」）で囲んで入力していたら外す（『『書名』』と二重にならないように） */
+/** 和暦の元年の前の年（令和元年＝2019年） */
+const ERA_START: Record<string, number> = { 令和: 2018, 平成: 1988, 昭和: 1925, 大正: 1911 }
+
+/** 全角の数字を半角にする（ほかの文字はそのまま。出版年を書いている途中に使う。「令和」などを途中で消さないように） */
+export function halfDigits(text: string): string {
+  return text.replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0))
+}
+
+/** ページ（「12-30」）：全角の数字とつなぎの線を半角にする */
+export function pageRange(text: string): string {
+  return halfDigits(text.trim()).replace(/[－‐−―ー〜～]/g, '-')
+}
+
+/**
+ * 書名：『』は自動で付けるので、学生が『』（「」）で囲んで入力していたら外す（『『書名』』と二重にならないように）。
+ * 片方だけ打ったとき（『書名 ・ 書名』）も外す。書名の途中の『』はそのまま
+ */
 function bareTitle(title: string): string {
   const t = title.trim()
-  return /^『[^『』]*』$|^「[^「」]*」$/.test(t) ? t.slice(1, -1).trim() : t
+  if (/^『[^『』]*』$|^「[^「」]*」$/.test(t)) return t.slice(1, -1).trim()
+  return t.replace(/^[『「](?=[^『』「」]*$)/, '').replace(/(?<=^[^『』「」]*)[』」]$/, '').trim()
 }
 
 /** 引用・参考文献の1項目を手順書の書式にする */
 export function formatReference(ref: Reference): string {
   if (ref.type === 'book') {
-    const pages = ref.pages.trim() ? `、p.${ref.pages.trim()}` : ''
+    const pages = ref.pages.trim() ? `、p.${pageRange(ref.pages)}` : ''
     return `${ref.author}、『${bareTitle(ref.title)}』、${ref.publisher}、${yearDigits(ref.year)}年${pages}`
   }
   const date = ref.accessedOn ? ref.accessedOn.replace(/^(\d{4})-0?(\d{1,2})-0?(\d{1,2})$/, '$1/$2/$3') : ''

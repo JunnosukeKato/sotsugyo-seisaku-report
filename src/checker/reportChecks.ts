@@ -1,6 +1,6 @@
 import { findCourse, subtitleInputOnly, type YearConfig } from '../config'
 import { contentToText, editables, numbering, parenthetical, type EditableKind } from '../editor/reportOps'
-import { COVER_SUBTITLE, OVERFLOW_RATIO } from '../layout/document'
+import { COVER_SUBTITLE, OVERFLOW_RATIO, yearDigits } from '../layout/document'
 import type { LayoutInfo } from '../layout/measure'
 import type { Report } from '../model/types'
 import { swatchColumn } from '../model/table'
@@ -379,6 +379,9 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     for (const [label, value] of missing) {
       if (!value.trim()) findings.push(guide('reference-field', 'error', `引用・参考文献の${label}が入力されていない`, 'references'))
     }
+    // 出版年は西暦の4桁（和暦は西暦に直して載せる。それでも4桁にならなければ、そのまま載ると間違うので指摘する）
+    if (ref.type === 'book' && ref.year.trim() && !/^\d{4}$/.test(yearDigits(ref.year)))
+      findings.push(guide('reference-year', 'error', '引用・参考文献の出版年は、西暦の4桁で入れる', 'references', { detail: `今は「${ref.year.trim()}」（例：2019）` }))
   }
 
   // ---- 作品写真 ----

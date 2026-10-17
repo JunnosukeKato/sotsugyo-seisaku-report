@@ -119,6 +119,14 @@ describe('checkReport', () => {
     expect(ids(r, layout()).filter((x) => x === 'reference-field')).toHaveLength(2)
   })
 
+  it('出版年が西暦の4桁にならないときは指摘する（和暦は西暦に直せるので指摘しない）', () => {
+    const book = (year: string) => ({ ...cleanReport(), references: [{ type: 'book' as const, id: 'b', author: '著者', title: '書名', publisher: '出版社', year, pages: '' }] })
+    expect(ids(book('2019'), layout())).not.toContain('reference-year')
+    expect(ids(book('令和3年'), layout())).not.toContain('reference-year')
+    expect(ids(book('19'), layout())).toContain('reference-year')
+    expect(ids(book('R3'), layout())).toContain('reference-year')
+  })
+
   it('画像が1ページあたりの目安より多いと警告する', () => {
     expect(ids(cleanReport(), layout({ bodyPages: 0 }))).toContain('figures-per-page')
   })

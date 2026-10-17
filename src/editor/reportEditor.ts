@@ -1202,8 +1202,17 @@ export class ReportEditor {
     else this.afterChange({ render: 'now', save: true })
   }
 
+  /**
+   * 削除したばかりで、まだ組み直した紙面が出ていない（removed）。この間は、道具で足す・入れるも何もしない
+   * （図の「削除」をすばやく2回押すと、2回目が、入れ替わった道具の「改ページ」などに当たってしまうため）
+   */
+  private get settlingRemoval(): boolean {
+    return this.removed.size > 0
+  }
+
   /** 改ページを入れる（足す位置の後ろ。この後ろは次のページから始まる） */
   addPageBreak(): void {
+    if (this.settlingRemoval) return
     const after = this.insertionAnchor()
     const id = ops.newId('pb')
     this.marker.hidden = true
@@ -1212,16 +1221,19 @@ export class ReportEditor {
   }
 
   addParagraph(): void {
+    if (this.settlingRemoval) return
     const id = ops.newId('p')
     this.insertAndEdit({ type: 'paragraph', id, content: [{ type: 'text', text: '' }] }, id)
   }
 
   addSubheading(): void {
+    if (this.settlingRemoval) return
     const id = ops.newId('s')
     this.insertAndEdit({ type: 'subheading', id, title: '' }, id)
   }
 
   addChapter(): void {
+    if (this.settlingRemoval) return
     const after = this.insertionAnchor()
     this.marker.hidden = true
     this.commitForChange()
@@ -1236,6 +1248,7 @@ export class ReportEditor {
    * （同じ段落の図はひとまとまり）。写真を選んだら図のタイトルの入力欄を開き、Enter で段落の続きに戻る
    */
   async addFigure(): Promise<void> {
+    if (this.settlingRemoval) return
     const paragraphId = this.editingParagraph()
     if (paragraphId) return this.insertFigureAtCaret(paragraphId)
   }
@@ -1273,7 +1286,7 @@ export class ReportEditor {
    */
   addTable(kind: 'blank' | 'material'): void {
     const paragraphId = this.editingParagraph()
-    if (!paragraphId) return
+    if (!paragraphId || this.settlingRemoval) return
     const caret = this.overlay.caret
     this.commitForChange()
     const tableId = ops.newId('t')

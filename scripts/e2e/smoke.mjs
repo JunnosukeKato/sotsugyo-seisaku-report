@@ -510,9 +510,17 @@ await withEdge(async (browser) => {
 
   // 2枚目を消すと、本文の（図2）も消える
   await page.evaluate((id) => window.__editor.select({ kind: 'figure', id }), two.figures[1].id)
-  await page.evaluate(() => window.__editor.removeSelected())
+  // 削除のすぐあと（組み直す前）に、道具の「改ページ」などを押しても、何も入らない（すばやく2回押したとき、2回目が入れ替わった道具に当たる）
+  const pressedDuring = await page.evaluate(() => {
+    window.__editor.removeSelected()
+    const before = window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).length
+    window.__editor.addPageBreak()
+    window.__editor.addParagraph()
+    return before
+  })
   await ready()
   s = await snap()
+  check('図を削除してすぐ（組み直す前）に「改ページ」「段落」を押しても、何も入らない', !s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'pageBreak') && s.report.body.flatMap((c) => c.blocks).length === pressedDuring, String(pressedDuring))
   const refsLeft = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
   check('図を消すと、本文のその図への（図n）も消える', s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow').figures.length === 1 && refsLeft === 1)
 
