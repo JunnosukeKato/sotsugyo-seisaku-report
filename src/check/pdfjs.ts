@@ -9,8 +9,14 @@ import { readPdf } from './pdfFacts'
  */
 pdfjs.GlobalWorkerOptions.workerSrc = workerUrl
 
+/**
+ * 読む手伝いをする部品（worker）は、1つを使い回す（PDF を入れるたびに作ると、そのたびに部品を読み込み直して遅くなる）。
+ * PDF を外しても（loadingTask.destroy）、使い回す部品は止まらない
+ */
+let worker: pdfjs.PDFWorker | null = null
+
 /** PDF を読む（pdfFacts.ts の readPdf に、ブラウザの pdf.js を渡す） */
-export const readPdfInBrowser = (bytes: Uint8Array) => readPdf(bytes, pdfjs)
+export const readPdfInBrowser = (bytes: Uint8Array) => readPdf(bytes, pdfjs, (worker ??= new pdfjs.PDFWorker()))
 
 /**
  * ページの小さな絵（幅 width 点の JPEG の URL。使い終えたら URL.revokeObjectURL で解放する）。

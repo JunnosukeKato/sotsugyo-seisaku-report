@@ -164,7 +164,7 @@ button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2
 /* エラーが残ったまま「まとめる」を押したときの、確かめの窓（はじめは「戻って直す」） */
 .modal.confirm { width: min(440px, calc(100vw - 32px)); padding: 22px 24px 20px; }
 .modal.confirm .r-lead { margin-top: 2px; font-size: 14.5px; }
-.cf-sub { margin-top: 2px; font-size: 13px; color: var(--muted); }
+.cf-sub { margin-top: 2px; font-size: 13.5px; color: #3f4249; }
 .modal.confirm .btn.primary:focus { outline: none; box-shadow: 0 0 0 2px #fff, 0 0 0 4px #8f9ac4; }
 /* 使い方 */
 .help-steps { margin: 4px 0 0; padding: 0; list-style: none; counter-reset: step; display: grid; gap: 12px; }
@@ -212,7 +212,7 @@ button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2
 /* パートの見出し：名前、入っているファイル（押すと移す・外す、×で外す）、ファイルの知らせ。高さをそろえる（ページの絵の上の端が、横一列に並ぶように） */
 .p-h { height: 88px; padding: 6px 0 0; border-top: 3px solid var(--accent); }
 /* 「Word のほうが新しい」の知らせ（2行になることがある）がある段は、見出しを高くする（pageGrid.ts の NOTE_PX） */
-.c-row.noted .p-h { height: 122px; }
+.c-row.noted .p-h { height: 130px; }
 .grp.todo .p-h { border-top-color: var(--dash, #c4bdb1); }
 .p-h > b { display: block; font-size: 15px; line-height: 1.5; letter-spacing: 0.08em; white-space: nowrap; }
 .p-h.cont > b small { margin-left: 2px; font-size: 12px; font-weight: 400; letter-spacing: 0; color: var(--muted); }
@@ -234,6 +234,10 @@ button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2
 .p-note { display: inline-flex; align-items: center; gap: 7px; max-width: 100%; margin-top: 3px; padding: 3px 9px; border-radius: 8px; background: var(--warn-soft); color: var(--warn); font-size: 12px; line-height: 1.5; position: relative; z-index: 1; }
 .p-note .st { width: 14px; height: 14px; font-size: 10px; }
 .p-note .link { margin-left: 6px; color: var(--warn); font-size: 12px; white-space: nowrap; }
+/* ページ1〜2枚分の細い段：「PDF が古い？」と「入れ替える」の2行（くわしくはチェックの結果の一覧。ファイルの名前にも印がある） */
+.p-note.short { display: flex; flex-wrap: wrap; padding: 3px 7px; }
+.p-note.short .st { display: none; }
+.p-note.short .link { flex-basis: 100%; margin-left: 0; text-align: left; }
 .g-pages { display: flex; gap: var(--g); }
 .g-pages figure { width: var(--tw); margin: 0; text-align: center; font-size: 11.5px; color: var(--muted); }
 .pg { position: relative; display: block; width: 100%; aspect-ratio: 210 / 297; margin: 0 0 5px; padding: 0; border: 0; background: #fff; box-shadow: 0 1px 2px rgba(30, 25, 20, 0.1), 0 8px 20px rgba(30, 25, 20, 0.09); }
@@ -326,7 +330,8 @@ button.pg { cursor: pointer; }
   .c2-main { margin-bottom: 12px; }
   .c-top { display: block; }
   .c-top .drop.big { grid-template-columns: minmax(0, 1fr); justify-items: center; text-align: center; padding: 20px 14px 16px; }
-  .c-top .drop.big > * { grid-column: auto; grid-row: auto; }
+  /* パソコンの並べ方（.c-top .drop.big .d-ic など）より強く、縦に1列にする（弱いと、矢印の丸が枠からはみ出す） */
+  .c-top .drop.big > *, .c-top .drop.big .d-ic, .c-top .drop.big .d-s, .c-top .drop.big .btn { grid-column: auto; grid-row: auto; }
   .c-top .drop.big .btn { margin: 8px 0 0; }
   .c-saved { display: block; padding: 16px; }
   .c-saved .pdf-file { margin: 10px 0 12px; }
@@ -338,8 +343,10 @@ button.pg { cursor: pointer; }
   .pp-info { min-width: 0; padding-top: 6px; }
   .pp-info b { display: block; font-size: 15.5px; line-height: 1.5; letter-spacing: 0.06em; white-space: nowrap; }
   .pp .p-f { margin-top: 2px; }
-  .pp .pf { font-size: 13px; line-height: 23px; }
-  .pp .pf .x { width: 20px; height: 20px; }
+  /* 指で押しやすく：ファイルの名前の行を高くし、× の押せる所を広げる（見た目の × は小さいまま） */
+  .pp .pf { font-size: 13px; line-height: 30px; }
+  .pp .pf .x { width: 20px; height: 20px; margin-left: 4px; }
+  .pp .pf .x::after { inset: -5px -12px; }
   .pp .pf .x svg { width: 12px; height: 12px; }
   .pp-strip { display: flex; gap: 8px; min-width: 0; overflow-x: auto; padding: 8px 22px 2px 6px; scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent); --tw: 62px; }
   .pp-strip::-webkit-scrollbar { display: none; }
@@ -364,6 +371,7 @@ button.pg { cursor: pointer; }
   .pdf-file { padding: 10px 12px; }
   .pdf-file b, .pdf-file small, .pdf-file .again { font-size: 13px; }
   .r-lead { font-size: 14px; }
+  .c2-saved .row-buttons .link { padding: 12px 4px; font-size: 14px; }
   .popover { left: 8px !important; right: 8px !important; top: auto !important; bottom: calc(8px + env(safe-area-inset-bottom)) !important; min-width: 0; padding: 8px; border-radius: 16px; }
   .popover-backdrop { background: rgba(20, 20, 25, 0.28); }
   .popover-title { font-size: 13px; }

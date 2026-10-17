@@ -9,7 +9,7 @@ import { createReport } from '../model/newReport'
 import type { Report } from '../model/types'
 import { templateFindings } from './docxSettings'
 import { idAndName, type CheckFinding, type PartId } from './parts'
-import { abstractParagraphs, blockLines, bodyHeadings, findCourseId, headingDifference, sniffWordBlocks, tocHeadings } from './wordParts'
+import { abstractParagraphs, blockLines, bodyHeadings, findCourseId, headingDifference, sniffWordBlocks, sniffWordStrict, tocHeadings } from './wordParts'
 
 /**
  * 提出前チェック：Word（学科のひな形で書いたもの）を確かめる。学生用ツールのセルフチェック（checker/reportChecks.ts）と同じ決まり・同じ言い回し。
@@ -66,6 +66,20 @@ export async function sniffWord(file: File): Promise<Exclude<PartId, 'photo'> | 
   try {
     const pkg = await openWordFile(file, 'Word')
     return sniffWordBlocks(readDocument(pkg.document, documentContext(pkg.styles, pkg.numbering)))
+  } catch {
+    return null
+  }
+}
+
+/**
+ * どのパートの Word か。guess：いちばん近いパート（名前で分からないときに使う）、sure：はっきり分かるパート（入れた場所と違えば知らせる。言えなければ null）。
+ * 読めなければ null
+ */
+export async function wordLooksLike(file: File): Promise<{ guess: Exclude<PartId, 'photo'>; sure: Exclude<PartId, 'photo'> | null } | null> {
+  try {
+    const pkg = await openWordFile(file, 'Word')
+    const blocks = readDocument(pkg.document, documentContext(pkg.styles, pkg.numbering))
+    return { guess: sniffWordBlocks(blocks), sure: sniffWordStrict(blocks) }
   } catch {
     return null
   }
@@ -215,20 +229,32 @@ export function wordFindings(reading: WordReading, config: YearConfig, pdf: PdfL
   const list = editables(report)
   const textOf = new Map(list.map((e) => [e.id, e.text]))
   const num = numbering(report)
-  /** 表のセルの ID → その表と、行の最初の文字（場所を探すのに使う） */
-  const cells = new Map<string, { table: string; rowText: string }>()
+  /** 表のセルの ID → その表と、行の文字（場所を探すのに使う）と、Word のどこか（「表1：「綿ブロード」の行、「生地見本」の列」） */
+  const cells = new Map<string, { table: string; rowText: string; where: string }>()
   for (const b of report.body.flatMap((c) => c.blocks))
-    if (b.type === 'table')
-      for (const row of b.rows) {
+    if (b.type === 'table') {
+      const header = b.rows[0]?.cells ?? []
+      b.rows.forEach((row, r) => {
         // 行の文字をつないだもの（PDF では、表の1行は1行の文字になる。「麻」のような短いセルだけでは探せない）
         const rowText = row.cells.map((x) => x.text).join('') || b.caption
-        for (const c of row.cells) cells.set(c.id, { table: b.id, rowText })
-      }
+        const first = row.cells.map((x) => x.text.trim()).find(Boolean)
+        const rowName = r === 0 ? '見出しの行' : first ? `「${first.length > 12 ? `${first.slice(0, 12)}…` : first}」の行` : `見出しの下から${r}行目`
+        row.cells.forEach((c, i) => {
+          const head = header[i]?.text.trim()
+          const colName = r > 0 && head ? `「${head}」の列` : `左から${i + 1}つ目`
+          cells.set(c.id, { table: b.id, rowText, where: `表${num.numbers.get(b.id) ?? ''}：${rowName}、${colName}` })
+        })
+      })
+    }
 
   const findings: CheckFinding[] = []
   const seen = new Map<string, number>()
   for (const f of checkReport(report, config, layout)) {
     if (DROPPED.has(f.ruleId) || needsPdf(f)) continue
+    // Word を入れていないパートの指摘は出さない（確かめる原稿では、空のままのため。本文のページの数は、PDF の指摘で出す）
+    if ((f.area === 'body' || f.area === 'references') && !has.body) continue
+    if (f.area === 'abstract' && !has.abstract) continue
+    if (f.area === 'cover' && !has.cover) continue
     // 表紙の項目は、表紙の Word を入れたときだけ。コースは、このページでは選ばない
     if (f.ruleId === 'required-field' && (f.blockId === 'basic:course' || !has.cover)) continue
     let detail = f.detail
@@ -256,7 +282,10 @@ export function wordFindings(reading: WordReading, config: YearConfig, pdf: PdfL
     } else if (text?.trim()) {
       snippets.push(text.slice(0, 40))
     } else if (f.blockId && cells.has(f.blockId)) {
-      snippets.push(cells.get(f.blockId)!.rowText)
+      const cell = cells.get(f.blockId)!
+      snippets.push(cell.rowText)
+      // 同じ表の指摘が並んでも、どのセルか分かるように
+      detail = detail ? `${cell.where}。${detail}` : cell.where
     }
     // 選んだ指摘の目印（同じ箇所の同じ指摘が2つあれば、2つ目から番号を付ける）
     const key = `word:${f.ruleId}:${f.blockId ?? ''}:${f.start ?? ''}`

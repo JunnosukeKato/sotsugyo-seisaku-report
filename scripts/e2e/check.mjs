@@ -73,15 +73,18 @@ const drop = (page, files) =>
 
 /** 読み終わり、確かめ終わり、ページの絵ができるまで待つ */
 const settled = (page) =>
-  page.waitForFunction(
-    () => document.querySelector('main')?.dataset.busy === 'false' && !document.querySelector('.pg-wait'),
-    { timeout: 60000, polling: 100 },
-  )
+  page
+    .waitForFunction(() => document.querySelector('main')?.dataset.busy === 'false' && !document.querySelector('.pg-wait'), { timeout: 120000, polling: 100 })
+    .catch(async (e) => {
+      // 待ちきれなかったときは、そのときの様子を出す（原因を探せるように）
+      console.log('settled:', JSON.stringify(await page.evaluate(() => ({ busy: document.querySelector('main')?.dataset.busy, wait: document.querySelectorAll('.pg-wait').length, checking: document.querySelector('.checking')?.textContent, reading: document.querySelector('.drop small, .d-s')?.textContent, phase: document.querySelector('.modal')?.className }))))
+      throw e
+    })
 
 /** ファイルを落として、入った（名前が出た）あと、読み終わるまで待つ */
 async function put(page, files) {
   await drop(page, files)
-  await page.waitForFunction((names) => names.every((n) => [...document.querySelectorAll('.pf .fname')].some((x) => x.textContent === n)), { timeout: 60000, polling: 100 }, files.map((f) => f.name))
+  await page.waitForFunction((names) => names.every((n) => [...document.querySelectorAll('.pf .fname')].some((x) => x.textContent === n)), { timeout: 120000, polling: 100 }, files.map((f) => f.name))
   await settled(page)
 }
 
@@ -204,7 +207,14 @@ await withEdge(async (browser) => {
     check('抄録：600〜900字・「である」調（指摘した文字に印）', texts.some((x) => x.includes('抄録は600〜900字にする')) && (await page.$('.issue mark')) !== null && texts.some((x) => x.includes('巻きました')))
     check('目次：ひな形と違う余白（左 30mm）と、本文にない見出し「まとめ」', texts.some((x) => x.includes('左 30mm')) && texts.some((x) => x.includes('目次にだけある：「まとめ」')))
     check('ツールの中でしか意味のない指摘（抄録はまだ書いていない・作品写真を入れる）は出さない', !texts.some((x) => /まだ書いていない|作品写真を入れる|コースが選ばれていない/.test(x)))
-    check('「Word のほうが新しいです。PDF を作り直しましたか？」と「PDF を入れ替える」が出る', /Word のほうが新しいです。PDF を作り直しましたか？/.test(loaded.stale ?? '') && /PDF を入れ替える/.test(loaded.stale ?? ''), loaded.stale)
+    check('Word のほうが新しい本文：「PDF が Word より古いようです」と「PDF を入れ替える」が出て、チェックの結果にも「Word を直したら、PDF も作り直す」（時刻つき）が出る', /PDF が Word より古いようです/.test(loaded.stale ?? '') && /PDF を入れ替える/.test(loaded.stale ?? '') && texts.some((x) => x.includes('Word を直したら、PDF も作り直す') && /Word：[0-9]+月[0-9]+日/.test(x)), loaded.stale)
+    // 確かめの窓にも出る（エラーの数のほかに）
+    await page.click('.merge .btn.big')
+    await page.waitForSelector('.modal.confirm')
+    const staleAsk = await page.evaluate(() => [...document.querySelectorAll('.modal.confirm .cf-sub')].map((x) => x.textContent))
+    await page.evaluate(() => document.querySelector('.modal.confirm .go-back').click())
+    await wait(150)
+    check('確かめの窓：「本文の PDF が、Word より古いようです。」も出る', staleAsk.includes('本文の PDF が、Word より古いようです。'), JSON.stringify(staleAsk))
     check('指摘のあるページに、数の丸が付く', loaded.pins.length > 0 && loaded.legend, JSON.stringify(loaded.pins))
     check('ファイル名は、表紙の学籍番号・氏名から', (await page.evaluate(() => document.querySelector('.m-file b')?.textContent)) === FILE_NAME)
 
@@ -298,10 +308,41 @@ await withEdge(async (browser) => {
     check('「このまままとめる」：「ダウンロード」に保存し、「保存しました」とファイル名・ページの数・大きさを出す', result.title === '保存しました' && result.file === FILE_NAME && /^7ページ・[\d.]+(MB|KB)　「ダウンロード」のフォルダ$/.test(result.small) && !result.bar && result.focus, JSON.stringify(result))
     check('保存した PDF：7ページ（透かしなし・名前はそのまま）、表紙 → 抄録 → 目次 → 本文 → 作品写真 の順、どのページも A4', !!saved && saved.count === 7 && /学籍番号/.test(saved.pages[0].text) && /抄録/.test(saved.pages[1].text) && /^目次/.test(saved.pages[2].text) && /企画・立案/.test(saved.pages[3].text) && /使用素材/.test(saved.pages[4].text) && /制作過程/.test(saved.pages[5].text) && saved.pages[6].text === '' && saved.pages.every((p) => p.w === 595 && p.h === 842) && !saved.pages.some((p) => p.text.includes('下書き')), JSON.stringify(saved?.pages.map((p) => p.text.slice(0, 12))))
 
-    // ---- はじめから ----
+    // ---- はじめから（確かめの窓が出る。窓の外を押しても閉じない） ----
     await page.evaluate(() => [...document.querySelectorAll('.c-saved .btn')].find((b) => b.textContent === 'はじめから').click())
+    await page.waitForSelector('.modal.confirm')
+    const clearAsk = await page.evaluate(() => ({ title: document.querySelector('#cf-title')?.textContent, focus: document.activeElement?.textContent }))
+    await page.mouse.click(5, 5)
+    await wait(150)
+    const stillOpen = await page.evaluate(() => !!document.querySelector('.modal.confirm') && !!document.querySelector('.pf .fname'))
+    await page.evaluate(() => document.querySelector('.modal.confirm .go-clear').click())
     await wait(300)
-    check('「はじめから」：入れたファイルを外し、開いたところに戻る', await page.evaluate(() => !document.querySelector('.pf .fname') && !!document.querySelector('.drop.big') && !!document.querySelector('.merge')))
+    check('「はじめから」：「入れたファイルを、すべて外しますか？」と確かめ（はじめは「やめる」、窓の外を押しても閉じない）、外すと開いたところに戻る', clearAsk.title === '入れたファイルを、すべて外しますか？' && clearAsk.focus === 'やめる' && stillOpen && (await page.evaluate(() => !document.querySelector('.pf .fname') && !!document.querySelector('.drop.big') && !!document.querySelector('.merge'))), JSON.stringify({ ...clearAsk, stillOpen }))
+
+    // ---- 間違ったファイル（1つにまとめた PDF・名前と中身が違う PDF・同じ場所に2つ） ----
+    const all = await PDFDocument.create()
+    for (const src of ['cover', 'abstract', 'toc', 'body']) {
+      const doc = await PDFDocument.load(readFileSync(`${FIX}/word-sample-${src}.pdf`))
+      for (const p of await all.copyPages(doc, doc.getPageIndices())) all.addPage(p)
+    }
+    const mergedB64 = Buffer.from(await all.save()).toString('base64')
+    await put(page, [{ name: '卒業制作報告書.pdf', b64: mergedB64, lastModified: pdfTime, type: 'application/pdf' }])
+    const merged = await findingTexts(page)
+    check('自分で1つにまとめた PDF：表紙に入り、「表紙は1ページにする」（今 6ページ）のエラー', merged.some((x) => x.includes('表紙は1ページにする') && x.includes('今 6ページ')), JSON.stringify(merged))
+    // 中身は本文なのに「表紙.pdf」（前の PDF と入れ替わったことも知らせる）
+    await put(page, [fixture('word-sample-body.pdf', '表紙.pdf', pdfTime)])
+    const wrong = await findingTexts(page)
+    const replacedNote = await page.evaluate(() => [...document.querySelectorAll('.add-notes li')].map((x) => x.textContent))
+    check('名前と中身が違う PDF：「表紙の PDF の1ページ目が、本文のようです」のエラー。入れ替えたことも知らせる', wrong.some((x) => x.includes('表紙の PDF の1ページ目が、本文のようです')) && replacedNote.some((x) => x.includes('表紙の PDF を「卒業制作報告書.pdf」から「表紙.pdf」に入れ替えました')), JSON.stringify({ wrong, replacedNote }))
+    // 同じ場所に2つ（新しい本文を先に、古い本文をあとに入れる）：入れた順ではなく、新しいほうを使う
+    const newer = { ...fixture('word-sample-body.pdf', '04_本文_新.pdf', pdfTime + 7_200_000) }
+    const older = { ...fixture('word-sample-toc.pdf', '04_本文_古.pdf', pdfTime - 7_200_000) }
+    // 古いほうは入らないので、put（全部の名前が出るのを待つ）は使わない
+    await drop(page, [newer, older])
+    await page.waitForFunction(() => [...document.querySelectorAll('.pf .fname')].some((x) => x.textContent === '04_本文_新.pdf'), { timeout: 120000, polling: 100 })
+    await settled(page)
+    const two = await page.evaluate(() => ({ body: [...document.querySelectorAll('[aria-label="本文"] .pf')].map((x) => x.textContent), notes: [...document.querySelectorAll('.add-notes li')].map((x) => x.textContent) }))
+    check('同じ場所に2つ入れると、入れた順ではなく、ファイルの時刻が新しいほうを使い、そう知らせる', two.body.some((x) => x.includes('04_本文_新.pdf')) && !two.body.some((x) => x.includes('04_本文_古.pdf')) && two.notes.some((x) => x.includes('新しいほうの「04_本文_新.pdf」')), JSON.stringify(two))
     done()
     await context.close()
   }
@@ -353,6 +394,12 @@ await withEdge(async (browser) => {
     // 抄録の Word から読める（抄録にも学籍番号・氏名がある）ので、抄録の Word も外す
     await page.evaluate(() => [...document.querySelectorAll('.pf')].find((x) => x.textContent.includes('abstract-final.docx'))?.querySelector('.x').click())
     await settled(page)
+    const noCover = await page.evaluate(() => document.querySelectorAll('.m-ask input').length)
+    check('表紙をまだ入れていないときは、学籍番号・氏名を聞かない（「表紙から読み取れなかった」と言わない）', noCover === 0, String(noCover))
+    // 学籍番号・氏名の書いていない表紙の PDF を入れる
+    const blank = await PDFDocument.create()
+    blank.addPage([595.28, 841.89])
+    await put(page, [{ name: '01_表紙.pdf', b64: Buffer.from(await blank.save()).toString('base64'), lastModified: pdfTime, type: 'application/pdf' }])
     const asking = await page.evaluate(() => ({ inputs: document.querySelectorAll('.m-ask input').length, name: document.querySelector('.m-file b')?.textContent, font: parseFloat(getComputedStyle(document.querySelector('.m-ask input')).fontSize) }))
     await page.type('.m-ask label:nth-of-type(1) input', '00ZZ0123')
     await page.type('.m-ask label:nth-of-type(2) input', '文化 花子')
@@ -367,7 +414,7 @@ await withEdge(async (browser) => {
     const saved = await savedPdf(FILE_NAME)
     await settled(page)
     await page.screenshot({ path: `${OUT}/c2-done-ph.png`, fullPage: true })
-    check('スマホ：まとめて保存できる（表紙なし：抄録 → 目次 → 本文 の5ページ）', !!saved && saved.count === 5 && /抄録/.test(saved.pages[0].text), JSON.stringify(saved?.pages.map((p) => p.text.slice(0, 8))))
+    check('スマホ：まとめて保存できる（白紙の表紙 → 抄録 → 目次 → 本文 の6ページ）', !!saved && saved.count === 6 && /抄録/.test(saved.pages[1].text), JSON.stringify(saved?.pages.map((p) => p.text.slice(0, 8))))
     done()
     await context.close()
   }

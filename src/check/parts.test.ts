@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { findPage, locateFindings, pagePins } from './locate'
 import { chooseThumbWidth, packRows, pageSlots } from './pageGrid'
 import { fitInPage, photoPixels } from './pageFit'
-import { confirmText, fileKind, groupByPart, idAndName, isStale, mergedFileName, partFromName, placeFor, type CheckFinding } from './parts'
+import { confirmText, fileKind, groupByPart, idAndName, isStale, mergedFileName, partFromName, placeFor, staleFinding, timeText, wrongPartFinding, type CheckFinding } from './parts'
 import type { PdfFacts, PdfPageFacts } from './pdfFacts'
 
 const config = { fiscalYear: 2026, reportName: '卒業制作報告書' }
@@ -77,12 +77,39 @@ describe('まとめた PDF のファイル名', () => {
 
 describe('確かめの窓（エラーが残っているとき・まだ入れていないものがあるとき）', () => {
   it('エラーが残っていれば、件数を出す。作品写真もなければ、それも言う', () => {
-    expect(confirmText(5, ['作品写真'])).toEqual({ title: 'エラーが5件残っています', sub: '作品写真も、まだありません。' })
-    expect(confirmText(1, [])).toEqual({ title: 'エラーが1件残っています', sub: null })
+    expect(confirmText(5, ['作品写真'])).toEqual({ title: 'エラーが5件残っています', sub: ['作品写真も、まだありません。'] })
+    expect(confirmText(1, [])).toEqual({ title: 'エラーが1件残っています', sub: [] })
   })
   it('エラーがなくても、作品写真などがまだなければ確かめる。そろっていれば出さない', () => {
-    expect(confirmText(0, ['目次', '作品写真'])).toEqual({ title: '目次・作品写真が、まだありません', sub: null })
+    expect(confirmText(0, ['目次', '作品写真'])).toEqual({ title: '目次・作品写真が、まだありません', sub: [] })
     expect(confirmText(0, [])).toBeNull()
+  })
+  it('PDF が Word より古いパートがあれば、エラーがなくても確かめる。Word を入れていなければ、そうも言う', () => {
+    expect(confirmText(0, [], ['抄録'])).toEqual({ title: '抄録の PDF が、Word より古いようです', sub: [] })
+    expect(confirmText(2, ['作品写真'], ['表紙', '抄録'])).toEqual({
+      title: 'エラーが2件残っています',
+      sub: ['表紙・抄録の PDF が、Word より古いようです。', '作品写真も、まだありません。'],
+    })
+    expect(confirmText(1, [], [], true)).toEqual({ title: 'エラーが1件残っています', sub: ['Word を入れていないので、書式や文はチェックしていません。'] })
+    // Word がなくても、ほかに確かめることがなければ、窓は出さない（下の帯に「チェックなしで、まとめます」）
+    expect(confirmText(0, [], [], true)).toBeNull()
+  })
+})
+
+describe('入れた場所と中身・Word より古い PDF の指摘', () => {
+  it('PDF の1ページ目が、ほかのパートのようなら、エラー（そのページに枠）', () => {
+    expect(wrongPartFinding('cover', 'pdf', 'body')).toMatchObject({ severity: 'error', title: '表紙の PDF の1ページ目が、本文のようです', page: 1 })
+    expect(wrongPartFinding('photo', 'pdf', 'body').title).toBe('作品写真の1ページ目が、本文のようです')
+    expect(wrongPartFinding('abstract', 'word', 'toc')).toMatchObject({ title: '抄録の Word の中身が、目次のようです' })
+    expect(wrongPartFinding('abstract', 'word', 'toc').page).toBeUndefined()
+  })
+  it('Word より古い PDF は警告。両方の時刻を出す', () => {
+    const f = staleFinding('abstract', { lastModified: new Date(2026, 9, 14, 16, 5).getTime() }, { lastModified: new Date(2026, 9, 14, 15, 20).getTime() })
+    expect(f).toMatchObject({ severity: 'warning', part: 'abstract', title: 'Word を直したら、PDF も作り直す' })
+    expect(f.detail).toContain('Word：10月14日 16:05、PDF：10月14日 15:20')
+  })
+  it('ファイルの時刻は「10月14日 9:05」の形', () => {
+    expect(timeText(new Date(2026, 9, 14, 9, 5).getTime())).toBe('10月14日 9:05')
   })
 })
 

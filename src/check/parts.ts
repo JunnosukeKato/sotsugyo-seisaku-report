@@ -145,13 +145,58 @@ export function idAndName(lines: string[]): { studentId?: string; name?: string 
   return result
 }
 
+/** ファイルの時刻（例「10月14日 15:20」） */
+export function timeText(ms: number): string {
+  const d = new Date(ms)
+  return `${d.getMonth() + 1}月${d.getDate()}日 ${d.getHours()}:${String(d.getMinutes()).padStart(2, '0')}`
+}
+
+/** 「Word のほうが新しい」パートの指摘（Word を直したあと、PDF を作り直していないかもしれない。まとめるのは PDF なので、直す前の PDF がまとまる） */
+export function staleFinding(part: Exclude<PartId, 'photo'>, word: { lastModified: number }, pdf: { lastModified: number }): CheckFinding {
+  return {
+    id: `slot:${part}:stale`,
+    ruleId: 'pdf-older',
+    part,
+    severity: 'warning',
+    source: 'supplementary',
+    title: 'Word を直したら、PDF も作り直す',
+    detail: `PDF が Word より古いようです（Word：${timeText(word.lastModified)}、PDF：${timeText(pdf.lastModified)}）。まとめるのは PDF です`,
+  }
+}
+
+/**
+ * 入れた場所と中身が違うときの指摘（中身は本文なのに「表紙.pdf」という名前、1つにまとめた PDF を本文に入れた、など）。
+ * looksLike：中身から分かったパート（pdfFacts.ts の pdfLooksLike・wordParts.ts の sniffWordStrict）
+ */
+export function wrongPartFinding(part: PartId, slot: SlotKind, looksLike: PartId): CheckFinding {
+  return {
+    id: `slot:${part}:${slot}:wrong-part`,
+    ruleId: 'wrong-part',
+    part,
+    severity: 'error',
+    source: 'supplementary',
+    title:
+      slot === 'pdf'
+        ? `${part === 'photo' ? '作品写真' : `${PART_NAMES[part]}の PDF `}の1ページ目が、${PART_NAMES[looksLike]}のようです`
+        : `${PART_NAMES[part]}の Word の中身が、${PART_NAMES[looksLike]}のようです`,
+    detail: '入れたファイルを確かめる。違う場所に入ったときは、ファイルの名前を押して移す',
+    ...(slot === 'pdf' ? { page: 1 } : {}),
+  }
+}
+
 /**
  * 「1つの PDF にまとめる」を押したときの、確かめの窓（決まり：エラーが残っていても、確かめてから、そのまままとめる。透かしは入れない）。
- * エラーが残っているか、まだ入れていないパート（missing。作品写真など）があれば出す。なければ null（すぐまとめる）
+ * エラーが残っているか、PDF が Word より古いパート（stale）か、まだ入れていないパート（missing。作品写真など）があれば出す。
+ * なければ null（すぐまとめる）。unchecked：Word を入れていない（チェックしていない）
  */
-export function confirmText(errors: number, missing: string[]): { title: string; sub: string | null } | null {
-  if (errors > 0) return { title: `エラーが${errors}件残っています`, sub: missing.length ? `${missing.join('・')}も、まだありません。` : null }
-  if (missing.length > 0) return { title: `${missing.join('・')}が、まだありません`, sub: null }
+export function confirmText(errors: number, missing: string[], stale: string[] = [], unchecked = false): { title: string; sub: string[] } | null {
+  const staleLine = stale.length ? `${stale.join('・')}の PDF が、Word より古いようです。` : null
+  const missingLine = missing.length ? `${missing.join('・')}も、まだありません。` : null
+  const uncheckedLine = unchecked ? 'Word を入れていないので、書式や文はチェックしていません。' : null
+  const lines = (...xs: (string | null)[]) => xs.filter((x): x is string => !!x)
+  if (errors > 0) return { title: `エラーが${errors}件残っています`, sub: lines(staleLine, missingLine, uncheckedLine) }
+  if (stale.length > 0) return { title: `${stale.join('・')}の PDF が、Word より古いようです`, sub: lines(missingLine, uncheckedLine) }
+  if (missing.length > 0) return { title: `${missing.join('・')}が、まだありません`, sub: lines(uncheckedLine) }
   return null
 }
 

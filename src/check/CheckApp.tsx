@@ -8,7 +8,7 @@ import type { BuiltPdf, SaveMode } from '../pdf/exportPdf'
 import { CheckIcon as I } from './icons'
 import { locateFindings, pagePins } from './locate'
 import { chooseThumbWidth, isNotedRow, pageSlots, type PageSlot, type Segment } from './pageGrid'
-import { abstractLines, bodyPages, classifyPdf, pdfFindings, pdfOks, type PdfFacts } from './pdfFacts'
+import { abstractLines, bodyPages, classifyPdf, pdfFindings, pdfLooksLike, pdfOks, type PdfFacts } from './pdfFacts'
 import {
   PART_NAMES,
   PARTS,
@@ -21,6 +21,9 @@ import {
   partFromName,
   placeFor,
   slotLabel,
+  staleFinding,
+  timeText,
+  wrongPartFinding,
   type CheckFinding,
   type FileKind,
   type PartId,
@@ -62,6 +65,8 @@ interface Entry {
   photo?: PreparedPhoto
   /** ページの小さな絵（URL。作れなかったページは空） */
   thumbs: string[]
+  /** 中身からはっきり分かるパート（入れた場所と違えば知らせる。言えなければ null） */
+  looksLike?: PartId | null
 }
 
 type SlotKey = `${PartId}:${SlotKind}`
@@ -93,7 +98,7 @@ interface CheckState {
 
 type Phase =
   | { kind: 'idle' }
-  | { kind: 'confirm'; title: string; sub: string | null }
+  | { kind: 'confirm'; title: string; sub: string[] }
   | { kind: 'merging' }
   | { kind: 'done'; pdf: BuiltPdf; mode: SaveMode; size: string; saved: '' | 'shared' | 'fallback' }
   | { kind: 'error'; message: string }
@@ -114,8 +119,9 @@ function useNarrow(): boolean {
 /** 「動きを減らす」設定のときは、すっと動かさず、すぐに移す */
 const scrollBehavior = (): ScrollBehavior => (matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth')
 
-/** ファイル名（行を分けるときは「_」のあとで分ける） */
-function FileName({ name }: { name: string }) {
+/** ファイル名（行を分けるときは「_」のあとで分ける。oneLine：1行に収め、入りきらなければ「…」にする（パートの見出しの下。高さがそろわなくなるため）） */
+function FileName({ name, oneLine = false }: { name: string; oneLine?: boolean }) {
+  if (oneLine) return <span className="fn">{name}</span>
   const parts = name.split('_')
   return (
     <span className="fn">
@@ -133,14 +139,17 @@ function FileName({ name }: { name: string }) {
   )
 }
 
+/** 英字で終わる言葉（「本文の PDF」）のあとに言葉を続けるときは、空けて読みやすくする */
+const spaced = (label: string) => (/[A-Za-z]$/.test(label) ? `${label} ` : label)
+
 const Ok = () => <span className="st ok">{I.check}</span>
 const Wn = () => <i className="st wn" aria-hidden="true" />
 
-/** 2つの文を並べた知らせ（行を分けるときは、文の切れ目で分ける） */
+/** 「Word のほうが新しい」の知らせ（行を分けるときは、言葉の切れ目で分ける） */
 const STALE = (
   <>
-    <span className="nb">Word のほうが新しいです。</span>
-    <span className="nb">PDF を作り直しましたか？</span>
+    <span className="nb">PDF が Word より</span>
+    <span className="nb">古いようです</span>
   </>
 )
 
@@ -157,6 +166,8 @@ export function CheckApp() {
   const [selected, setSelected] = useState<string | null>(null)
   const [phase, setPhase] = useState<Phase>({ kind: 'idle' })
   const [help, setHelp] = useState(false)
+  /** 「はじめから」を押した（確かめの窓） */
+  const [askStartOver, setAskStartOver] = useState(false)
   const [menu, setMenu] = useState<{ key: SlotKey; rect: DOMRect } | null>(null)
   const [manual, setManual] = useState({ studentId: '', name: '' })
   const [dragging, setDragging] = useState(false)
@@ -210,14 +221,16 @@ export function CheckApp() {
     if (list.length === 0) return
     const out: string[] = []
     let placed = 0
-    /** この回に入れた場所（同じ場所に2つ入ったら知らせる） */
-    const used = new Map<SlotKey, string>()
+    let refused = 0
+    /** この回に入れた場所（同じ場所に2つ入ったら、新しいほうを使って知らせる） */
+    const used = new Map<SlotKey, File>()
     setNotes([])
     setReading({ done: 0, total: list.length })
     for (const [i, file] of list.entries()) {
       const kind = fileKind(file)
       if (typeof kind !== 'string') {
         out.push(`「${file.name}」：${kind.problem}`)
+        refused++
         setReading({ done: i + 1, total: list.length })
         continue
       }
@@ -232,13 +245,17 @@ export function CheckApp() {
             docs.current.set(entry.id, doc)
             entry.facts = facts
             sniffed = classifyPdf(facts)
+            entry.looksLike = pdfLooksLike(facts)
             const problem = await mergeProblem(bytes)
             if (problem) Object.assign(entry, { state: 'error', message: problem })
           } catch (e) {
             Object.assign(entry, { state: 'error', message: e instanceof Error && e.name === 'PdfReadError' ? e.message : 'PDF を読めませんでした。Word から PDF に保存し直してください。' })
           }
         } else if (kind === 'word') {
-          if (!forced && !partFromName(file.name)) sniffed = await (await loadWord()).sniffWord(file)
+          // 名前で分かるときも、中身を見る（名前と中身が違えば知らせる）
+          const looks = await (await loadWord()).wordLooksLike(file)
+          if (!forced && !partFromName(file.name)) sniffed = looks?.guess ?? null
+          entry.looksLike = looks?.sure ?? null
         } else {
           const { preparePhoto } = await loadPhoto()
           try {
@@ -249,15 +266,37 @@ export function CheckApp() {
         }
       } catch {
         out.push(`「${file.name}」：${LOAD_ERROR}`)
+        refused++
         setReading({ done: i + 1, total: list.length })
         continue
       }
       const place = forced && (forced.slot === 'word') === (kind === 'word') && !(kind === 'image' && forced.part !== 'photo') ? forced : placeFor(kind, file.name, sniffed)
       const key = keyOf(place.part, place.slot)
-      const before = used.get(key)
-      if (before) out.push(`「${before}」と「${file.name}」が、同じ場所（${slotLabel(place.part, place.slot)}）に入りました。あとのほうを使います。違うときは、ファイルの名前を押して、場所を移してください。`)
-      used.set(key, file.name)
+      const label = slotLabel(place.part, place.slot)
+      /** 「本文の PDF を」のように、後ろに言葉を続けるとき（英字のあとは空ける） */
+      const labelThen = spaced(label)
       const prev = slotsRef.current
+      const before = used.get(key)
+      if (before) {
+        // 同じ回に、同じ場所へ2つ：ファイルの時刻が新しいほうを使う（入れた順ではなく。時刻が同じなら、あとのほう）
+        const older = file.lastModified + 2000 < before.lastModified
+        const [kept, dropped] = older ? [before, file] : [file, before]
+        out.push(`「${before.name}」と「${file.name}」が、同じ場所（${label}）に入りました。新しいほうの「${kept.name}」（${timeText(kept.lastModified)}）を使います。「${dropped.name}」を使うときは、そのファイルだけをもう一度入れてください。`)
+        if (older) {
+          release(entry)
+          setReading({ done: i + 1, total: list.length })
+          continue
+        }
+      } else if (prev[key]) {
+        // 前に入れたファイルと入れ替える（黙って入れ替えない。古いファイルで入れ替えたときは、そう言う）
+        const old = prev[key]!.file
+        out.push(
+          file.lastModified + 2000 < old.lastModified
+            ? `${labelThen}を「${file.name}」に入れ替えました。前の「${old.name}」（${timeText(old.lastModified)}）より古いファイルです（${timeText(file.lastModified)}）。`
+            : `${labelThen}を「${old.name}」から「${file.name}」に入れ替えました。`,
+        )
+      }
+      used.set(key, file)
       release(prev[key])
       commit({ ...prev, [key]: entry })
       placed++
@@ -267,8 +306,8 @@ export function CheckApp() {
     setNotes(out)
     if (placed) {
       filesChanged()
-      setAnnounce(`${placed}つのファイルを入れました。${out.length ? '入れられなかったファイルがあります。' : ''}`)
-    } else if (out.length) setAnnounce('入れられなかったファイルがあります。')
+      setAnnounce(`${placed}個のファイルを入れました。${refused ? '入れられなかったファイルがあります。' : ''}`)
+    } else if (refused) setAnnounce('入れられなかったファイルがあります。')
   }
 
   const removeEntry = (key: SlotKey) => {
@@ -280,6 +319,7 @@ export function CheckApp() {
     delete next[key]
     commit(next)
     filesChanged()
+    setNotes([])
     setAnnounce(`「${e.file.name}」を外しました`)
   }
 
@@ -295,7 +335,12 @@ export function CheckApp() {
     else delete next[from]
     commit(next)
     filesChanged()
-    setAnnounce(`「${e.file.name}」を${slotLabel(toPart, to.endsWith(':word') ? 'word' : 'pdf')}に移しました`)
+    const [fromPart, slot] = from.split(':') as [PartId, SlotKind]
+    const moved = `「${e.file.name}」を${spaced(slotLabel(toPart, slot))}に移しました。`
+    // 移す先にあったファイルは、もとの場所へ入れ替わる（黙って入れ替えない）
+    const swapped = prev[to] ? `もとの「${prev[to]!.file.name}」は、${spaced(slotLabel(fromPart, slot))}に移しました。` : ''
+    setNotes(swapped ? [moved + swapped] : [])
+    setAnnounce(moved + swapped)
   }
 
   /** ファイルを選ぶ画面を開く。target：入れる場所を決めて選ぶとき。accept：選べる形 */
@@ -397,8 +442,19 @@ export function CheckApp() {
           wordErrors = Object.fromEntries(Object.keys(words).map((p) => [p, LOAD_ERROR]))
         }
       }
+      // 入れた場所と中身が違うファイル・Word より古い PDF（間違った PDF のまま、まとめないように）
+      const slotFindings: CheckFinding[] = []
+      for (const p of PARTS) {
+        for (const s of ['word', 'pdf'] as const) {
+          const e = current[keyOf(p.id, s)]
+          if (e?.state === 'ready' && e.looksLike && e.looksLike !== p.id) slotFindings.push(wrongPartFinding(p.id, s, e.looksLike))
+        }
+        const word = current[keyOf(p.id, 'word')]
+        const pdf = current[keyOf(p.id, 'pdf')]
+        if (p.id !== 'photo' && word && pdf?.kind === 'pdf' && isStale(word.file, pdf.file)) slotFindings.push(staleFinding(p.id, word.file, pdf.file))
+      }
       // 1ページだけのパート（表紙・抄録など）の指摘は、そのページの指摘
-      const located = locateFindings([...findings, ...pdfFindings(pdfs, config, covered)], pdfs).map((f) => (!f.page && pdfs[f.part]?.pages.length === 1 ? { ...f, page: 1 } : f))
+      const located = locateFindings([...slotFindings, ...findings, ...pdfFindings(pdfs, config, covered)], pdfs).map((f) => (!f.page && pdfs[f.part]?.pages.length === 1 ? { ...f, page: 1 } : f))
       if (run !== checkRun.current) return
       setCheck({ findings: located, hasWord, forKey: checkKey, forConfig: config, wordErrors, oks: hasWord ? [] : pdfOks(pdfs, config), ...info })
     })()
@@ -449,8 +505,13 @@ export function CheckApp() {
   const anyPdf = PARTS.some((p) => mergeEntry(slots, p.id))
   const totalPages = PARTS.reduce((n, p) => n + pagesOf(mergeEntry(slots, p.id)), 0)
   const missing = PARTS.filter((p) => !mergeEntry(slots, p.id)).map((p) => p.name)
-  const errors = check.findings.filter((f) => f.severity === 'error').length
-  const warnings = check.findings.length - errors
+  // 読めなかったファイル（まとめられない・チェックできない）も、エラーに数える
+  const fileErrors = PARTS.flatMap((p) => (['word', 'pdf'] as const).filter((s) => slots[keyOf(p.id, s)] && (slots[keyOf(p.id, s)]!.state === 'error' || (s === 'word' && !!check.wordErrors[p.id])))).length
+  const findingErrors = check.findings.filter((f) => f.severity === 'error').length
+  const errors = findingErrors + fileErrors
+  const warnings = check.findings.length - findingErrors
+  /** PDF が Word より古いパート（確かめの窓で言う） */
+  const stale = PARTS.filter((p) => p.id !== 'photo' && slots[keyOf(p.id, 'pdf')]?.kind === 'pdf' && isStale(slots[keyOf(p.id, 'word')]?.file, slots[keyOf(p.id, 'pdf')]?.file)).map((p) => p.name)
   // ファイル名の学籍番号・氏名：Word（表紙・抄録）、なければ表紙の PDF、なければ学生が入れたもの
   const fromCoverPdf = useMemo(() => idAndName(pdfs.cover?.pages[0]?.lines.map((l) => l.text) ?? []), [pdfs])
   const known = { studentId: check.studentId || fromCoverPdf.studentId || '', name: check.name || fromCoverPdf.name || '' }
@@ -459,7 +520,7 @@ export function CheckApp() {
   const fileName = mergedFileName(config, studentId, studentName)
 
   const startMerge = () => {
-    const ask = confirmText(errors, missing)
+    const ask = confirmText(errors, missing, stale, !check.hasWord)
     if (ask) setPhase({ kind: 'confirm', ...ask })
     else void merge()
   }
@@ -495,6 +556,19 @@ export function CheckApp() {
       setPhase({ kind: 'error', message: 'まとめられませんでした。入れた PDF を、Word から保存し直してから、もう一度試してください。' })
     }
   }
+
+  // 入れたファイルがあるうちに、ページを閉じる・読み込み直すときは、ブラウザに確かめてもらう（入れたファイルは、このページの中にしかないため）。
+  // 保存したあとは、閉じて終わりなので聞かない
+  const guardLeave = anyFile && phase.kind !== 'done'
+  useEffect(() => {
+    if (!guardLeave) return
+    const ask = (e: BeforeUnloadEvent) => {
+      e.preventDefault()
+      e.returnValue = ''
+    }
+    window.addEventListener('beforeunload', ask)
+    return () => window.removeEventListener('beforeunload', ask)
+  }, [guardLeave])
 
   // 保存したら、結果に移る（読み上げでも分かるように）
   useEffect(() => {
@@ -538,7 +612,8 @@ export function CheckApp() {
     const f = check.findings.find((x) => x.part === part && x.page === k)
     if (!f) return
     setSelected(f.id)
-    requestAnimationFrame(() => sideRef.current?.querySelector(`[data-finding="${CSS.escape(f.id)}"]`)?.scrollIntoView({ block: 'nearest', behavior: scrollBehavior() }))
+    // スマホは下に帯があるので、指摘を画面の真ん中に出す（「nearest」だと、帯の裏に隠れる）
+    requestAnimationFrame(() => sideRef.current?.querySelector(`[data-finding="${CSS.escape(f.id)}"]`)?.scrollIntoView({ block: narrow ? 'center' : 'nearest', behavior: scrollBehavior() }))
   }
 
   // ---- 画面 ----
@@ -556,7 +631,7 @@ export function CheckApp() {
     const one = (slot: SlotKind, e: Entry | undefined) => {
       const key = keyOf(p.id, slot)
       if (!e) {
-        const none = p.id === 'photo' ? (empty ? '写真' : 'まだありません') : empty ? <FileName name={`${p.base}.${slot === 'word' ? 'docx' : 'pdf'}`} /> : `${slot === 'word' ? 'Word' : 'PDF'} なし`
+        const none = p.id === 'photo' ? (empty ? '写真' : 'まだありません') : empty ? <FileName name={`${p.base}.${slot === 'word' ? 'docx' : 'pdf'}`} oneLine /> : `${slot === 'word' ? 'Word' : 'PDF'} なし`
         return (
           <span key={slot} className="pf none">
             {none}
@@ -569,7 +644,7 @@ export function CheckApp() {
           {slot === 'pdf' && stale && <Wn />}
           {ng && <i className="st no-ng" aria-hidden="true" />}
           <button type="button" className="fname" aria-haspopup="dialog" aria-label={`${e.file.name}（${slotLabel(p.id, slot)}）：移す・外す`} onClick={(ev) => setMenu({ key, rect: ev.currentTarget.getBoundingClientRect() })}>
-            <FileName name={e.file.name} />
+            <FileName name={e.file.name} oneLine />
           </button>
           <button type="button" className="x" aria-label={`「${e.file.name}」を外す`} onClick={() => removeEntry(key)}>
             {I.x}
@@ -579,13 +654,14 @@ export function CheckApp() {
     }
     return p.id === 'photo' ? [one('pdf', pdf)] : [one('word', word), one('pdf', pdf)]
   }
-  const staleNote = (p: PartInfo) =>
+  /** 「Word のほうが新しい」の知らせ。short：ページ1〜2枚分の細い段（短い言葉にする。くわしくはチェックの結果の一覧に出す） */
+  const staleNote = (p: PartInfo, short = false) =>
     partState(p).stale && (
-      <p className="p-note">
+      <p className={`p-note${short ? ' short' : ''}`} title="PDF が Word より古いようです。Word を直したら、PDF も作り直してください">
         <Wn />
-        <span>{STALE}</span>
-        <button type="button" className="link" onClick={() => pick({ part: p.id, slot: 'pdf' }, '.pdf,application/pdf')}>
-          PDF を入れ替える
+        <span>{short ? 'PDF が古い？' : STALE}</span>
+        <button type="button" className="link" aria-label={`${p.name}の PDF を入れ替える`} onClick={() => pick({ part: p.id, slot: 'pdf' }, '.pdf,application/pdf')}>
+          {short ? '入れ替える' : 'PDF を入れ替える'}
         </button>
       </p>
     )
@@ -689,7 +765,7 @@ export function CheckApp() {
       <header className="p-h">
         <b>{p.name}</b>
         <div className="p-f">{files(p)}</div>
-        {staleNote(p)}
+        {staleNote(p, n < 3)}
       </header>
     ) : (
       <header className="p-h cont">
@@ -742,7 +818,7 @@ export function CheckApp() {
         <div className="c2-main">
           <div className="c-top">
             {phase.kind === 'done' ? (
-              <Saved phase={phase} ref={savedRef} onOpen={() => window.open(phase.pdf.url, '_blank')} onAgain={() => saver.current?.downloadPdf(phase.pdf)} onShare={() => void share(phase.pdf)} onStartOver={startOver} />
+              <Saved phase={phase} ref={savedRef} onOpen={() => window.open(phase.pdf.url, '_blank')} onAgain={() => saver.current?.downloadPdf(phase.pdf)} onShare={() => void share(phase.pdf)} onStartOver={() => setAskStartOver(true)} />
             ) : (
               <DropArea big={empty} dragging={dragging} reading={reading} onPick={() => pick()} />
             )}
@@ -814,7 +890,8 @@ export function CheckApp() {
           hasWord={check.hasWord}
           merging={phase.kind === 'merging'}
           failure={phase.kind === 'error' ? phase.message : null}
-          ask={anyPdf ? { studentId: !known.studentId, name: !known.name } : null}
+          // 表紙を入れてから聞く（まだ入れていないのに「読み取れなかった」とは言わない）
+          ask={anyPdf && (slots['cover:pdf'] || slots['cover:word']) ? { studentId: !known.studentId, name: !known.name } : null}
           manual={manual}
           onManual={setManual}
           onMerge={startMerge}
@@ -843,6 +920,21 @@ export function CheckApp() {
           sub={phase.sub}
           onBack={() => setPhase({ kind: 'idle' })}
           onGo={() => void merge()}
+        />
+      )}
+      {askStartOver && (
+        <ConfirmDialog
+          title="入れたファイルを、すべて外しますか？"
+          lead="このページから外すだけです。パソコンやスマホの中のファイルと、保存した PDF は、そのまま残ります。"
+          sub={[]}
+          goLabel="すべて外す"
+          goClass="go-clear"
+          backLabel="やめる"
+          onBack={() => setAskStartOver(false)}
+          onGo={() => {
+            setAskStartOver(false)
+            startOver()
+          }}
         />
       )}
       {help && <HelpDialog onClose={() => setHelp(false)} />}
@@ -957,7 +1049,8 @@ function CheckPanel({ check, checking, empty, anyPdf, pdfCount, slots, errors, w
   useLayoutEffect(() => {
     const el = sideRef.current
     if (!el) return
-    const measure = () => setMore(el.scrollHeight > el.clientHeight + 4 && el.scrollTop + el.clientHeight < el.scrollHeight - 4)
+    // ぼかしの飾り（check.css の .c2-side.more::after）は、欄の高さを 20px 縮める。その分を見込まないと、一覧が短くなっても（「はじめから」のあと）ぼかしが残る
+    const measure = () => setMore(el.scrollHeight > el.clientHeight + 24 && el.scrollTop + el.clientHeight < el.scrollHeight - 24)
     measure()
     el.addEventListener('scroll', measure)
     window.addEventListener('resize', measure)
@@ -1046,7 +1139,10 @@ function CheckPanel({ check, checking, empty, anyPdf, pdfCount, slots, errors, w
               <Wn />
               <div>
                 <b>Word を入れていないので、チェックしていません</b>
-                <small>文の書き方などは確かめていません。{anyPdf ? 'PDF から分かることだけ、確かめました。' : ''}</small>
+                <small>
+                  文の書き方などは確かめていません。{anyPdf ? 'PDF から分かることだけ、確かめました。' : ''}
+                  <span className="nb">PDF だけでも、まとめて保存できます。</span>
+                </small>
               </div>
               <button type="button" className="btn quiet" onClick={onAddWord}>
                 {I.word}Word を入れて、チェックする
@@ -1068,7 +1164,7 @@ function CheckPanel({ check, checking, empty, anyPdf, pdfCount, slots, errors, w
         ) : check.findings.length === 0 ? (
           checking ? (
             <p className="checking">確かめています…</p>
-          ) : (
+          ) : readErrors.length > 0 ? null : (
             <p className="empty-ok">
               <Ok />
               指摘はありません。{anyPdf ? '1つの PDF にまとめられます。' : ''}
@@ -1268,12 +1364,33 @@ function Saved({
 
 // ---- 窓 ----
 
-/** エラーが残ったまま（作品写真などがないまま）「1つの PDF にまとめる」を押したとき。はじめは「戻って直す」 */
-function ConfirmDialog({ title, sub, onBack, onGo }: { title: string; sub: string | null; onBack: () => void; onGo: () => void }) {
+/**
+ * 確かめの窓。エラーが残ったまま（作品写真などがないまま）「1つの PDF にまとめる」を押したとき（はじめは「戻って直す」）と、「はじめから」を押したとき。
+ * 窓の外を押しても閉じない（「まとめる」をダブルクリックすると、2回目が窓の外に当たって、すぐ閉じてしまうため）。Esc では閉じる
+ */
+function ConfirmDialog({
+  title,
+  lead = 'このまままとめますか？',
+  sub,
+  goLabel = 'このまままとめる',
+  goClass = 'go-merge',
+  backLabel = '戻って直す',
+  onBack,
+  onGo,
+}: {
+  title: string
+  lead?: string
+  sub: string[]
+  goLabel?: string
+  goClass?: string
+  backLabel?: string
+  onBack: () => void
+  onGo: () => void
+}) {
   const ref = useRef<HTMLDivElement>(null)
   useDialogFocus(ref, onBack)
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onBack()}>
+    <div className="modal-backdrop">
       <div className="modal confirm" role="alertdialog" aria-modal="true" aria-labelledby="cf-title" aria-describedby="cf-lead" ref={ref}>
         <header>
           <h2 id="cf-title">
@@ -1282,16 +1399,20 @@ function ConfirmDialog({ title, sub, onBack, onGo }: { title: string; sub: strin
           </h2>
         </header>
         <p className="r-lead" id="cf-lead">
-          このまままとめますか？
+          {lead}
         </p>
-        {sub && <p className="cf-sub">{sub}</p>}
+        {sub.map((line) => (
+          <p key={line} className="cf-sub">
+            {line}
+          </p>
+        ))}
         <div className="row-buttons">
           <span className="spacer" />
-          <button type="button" className="btn go-merge" onClick={onGo}>
-            このまままとめる
+          <button type="button" className={`btn ${goClass}`} onClick={onGo}>
+            {goLabel}
           </button>
           <button type="button" className="btn primary go-back" data-autofocus onClick={onBack}>
-            戻って直す
+            {backLabel}
           </button>
         </div>
       </div>
@@ -1313,7 +1434,7 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
         </li>
         <li>
           <b>ここに全部入れる</b>
-          <span>Word（4つ）・PDF（4つ）・作品写真を、まとめて入れます。</span>
+          <span>PDF（4つ）と作品写真を入れます。Word（4つ）も入れると、文や書式もチェックします。名前はそのままで大丈夫です。</span>
         </li>
         <li>
           <b>直して、入れ直す</b>

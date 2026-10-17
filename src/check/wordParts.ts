@@ -40,6 +40,13 @@ export function sniffWordBlocks(blocks: WordBlock[]): Exclude<PartId, 'photo'> {
   return 'body'
 }
 
+/** 中身から、はっきり分かるパート（入れた場所と中身が違うのを見つけるのに使う）。本文は、大見出し（「Ⅰ．」など）があるときだけ。どれとも言えなければ null */
+export function sniffWordStrict(blocks: WordBlock[]): Exclude<PartId, 'photo'> | null {
+  const part = sniffWordBlocks(blocks)
+  if (part !== 'body') return part
+  return blocks.some((b) => b.type === 'paragraph' && headingFromText(b.text)?.level === 1) ? 'body' : null
+}
+
 /** コース：Word に書いたコースの名前から探す（長い名前から。見つからなければ null） */
 export function findCourseId(lines: string[], config: YearConfig): string | null {
   const all = comparable(lines.join(''))

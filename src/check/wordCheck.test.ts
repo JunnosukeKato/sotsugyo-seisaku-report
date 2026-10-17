@@ -7,7 +7,7 @@ import { readWordFiles } from '../import/wordImport'
 import { openWordFile } from '../import/wordPackage'
 import { bodyFontSizes, mainFontSize, templateFindings } from './docxSettings'
 import type { CheckFinding } from './parts'
-import { readWord, sniffWord, wordFindings } from './wordCheck'
+import { readWord, sniffWord, wordFindings, wordLooksLike } from './wordCheck'
 import { abstractParagraphs, bodyHeadings, headingDifference, sniffWordBlocks, tocHeadings } from './wordParts'
 
 // 単体テストはブラウザの外で動くので、XML を読む道具（ブラウザの DOMParser）の代わりを置く
@@ -38,6 +38,11 @@ describe('どのパートの Word か（名前で分からないとき、中身�
   })
   it('Word でないファイルは null（読み取りのときに、理由を知らせる）', async () => {
     expect(await sniffWord(file(new TextEncoder().encode('%PDF-1.7'), 'x.docx'))).toBeNull()
+  })
+  it('入れた場所と比べるときは、はっきり分かるものだけ（本文は、大見出しがあるとき）', async () => {
+    for (const part of ['cover', 'abstract', 'toc', 'body'] as const) expect(await wordLooksLike(fixture(part, 'x.docx'))).toEqual({ guess: part, sure: part })
+    expect(await wordLooksLike(file(makeDocx({ body: p('メモ') }), 'x.docx'))).toEqual({ guess: 'body', sure: null })
+    expect(await wordLooksLike(file(new TextEncoder().encode('%PDF-1.7'), 'x.docx'))).toBeNull()
   })
   it('大見出しのある文書は、「抄録」という言葉があっても本文', async () => {
     expect(sniffWordBlocks(await blocks(makeDocx({ body: [p('Ⅰ．企画・立案'), p('抄録の書き方を学んだ。')].join('') })))).toBe('body')
@@ -150,6 +155,8 @@ describe('Word のチェック（学生用ツールのセルフチェックと�
     expect(by(findings, 'body-pages')[0]).toMatchObject({ part: 'body', detail: '現在 3ページ（PDF のページの数）' })
     expect(by(findings, 'swatch-image')).toHaveLength(3)
     expect(by(findings, 'swatch-image').map((f) => f.snippets)).toEqual([['綿ブロード上着'], ['サテン帯'], ['麻ズボン']])
+    // 同じ指摘が並んでも、どのセルか分かる（表の番号・行の最初の文字・見出しの列）
+    expect(by(findings, 'swatch-image').map((f) => f.detail)).toEqual(['表1：「綿ブロード」の行、「生地見本」の列', '表1：「サテン」の行、「生地見本」の列', '表1：「麻」の行、「生地見本」の列'])
     expect(by(findings, 'template-margins')).toEqual([expect.objectContaining({ part: 'toc', detail: expect.stringContaining('左 30mm') })])
     expect(by(findings, 'toc-headings')).toEqual([expect.objectContaining({ part: 'toc', severity: 'warning', detail: '目次にだけある：「まとめ」' })])
     expect(covered).toEqual(new Set(['body-pages', 'figures-per-page', 'abstract-one-page']))
@@ -162,6 +169,13 @@ describe('Word のチェック（学生用ツールのセルフチェックと�
       expect(ids).not.toContain(dropped)
     // PDF がなければ、ページの数の指摘はしない
     expect(ids).not.toContain('body-pages')
+  })
+
+  it('本文の Word がなければ、本文の指摘は出さない（本文のページの数は、PDF の指摘で1回だけ出す）', async () => {
+    const reading = await readWord({ abstract: fixture('abstract', '02_抄録.docx') }, config)
+    const { findings, covered } = wordFindings(reading, config, { bodyPages: 3, abstractPages: 1, abstractLines: 9 })
+    expect(findings.filter((f) => f.part === 'body')).toEqual([])
+    expect(covered.has('body-pages')).toBe(false)
   })
 
   it('表紙の Word があるときだけ、表紙の空欄を指摘する（読み取れなかったと分かるように）', async () => {

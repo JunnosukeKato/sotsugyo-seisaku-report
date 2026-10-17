@@ -70,7 +70,7 @@ export function packRows(parts: PageSlot[][], width: number, tw: number, gap: nu
 /** 見出し（パートの名前とファイルの名前）の高さと、ページの絵の下の番号の高さ（check.css の .p-h と figure） */
 const HEAD_PX = 88
 /** 「Word のほうが新しい」の知らせがある段は、見出しを高くする（check.css の .c-row.noted .p-h） */
-export const NOTE_PX = 34
+export const NOTE_PX = 42
 const CAPTION_PX = 24
 const ROW_GAP_PX = 12
 

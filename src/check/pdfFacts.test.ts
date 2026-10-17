@@ -4,7 +4,7 @@ import { describe, expect, it } from 'vitest'
 import { png } from '../../scripts/e2e/fixtures/docx.mjs'
 import { currentConfig } from '../config'
 import { mergeParts, mergeProblem } from './merge'
-import { abstractLines, bodyPages, classifyPdf, isA4, pdfFindings, pdfOks, readPdf, type PdfFacts, type PdfPageFacts } from './pdfFacts'
+import { abstractLines, bodyPages, classifyPdf, isA4, pdfFindings, pdfLooksLike, pdfOks, readPdf, type PdfFacts, type PdfPageFacts } from './pdfFacts'
 
 // ファイルを読む道具（ブラウザの外だけで使う。型はブラウザ用の設定にないので、ここで書く）
 const fs: { readFileSync(p: string): Uint8Array } = await import(/* @vite-ignore */ `node:${'fs'}`)
@@ -92,6 +92,11 @@ describe('学科の見本と同じつくりの PDF（scripts/e2e/fixtures/word-s
     expect(classifyPdf(await load('toc'))).toBe('toc')
     expect(classifyPdf(await load('body'))).toBe('body')
   })
+  it('入れた場所と比べるときは、はっきり分かるものだけ（本文は、1ページ目にページ番号があるとき）', async () => {
+    for (const name of ['cover', 'abstract', 'toc', 'body'] as const) expect(pdfLooksLike(await load(name))).toBe(name)
+    // どれとも言えないページ（ページ番号もない）は null（本文とは言わない）
+    expect(pdfLooksLike({ pages: [fakePage(['2026年度', '卒業研究'])] })).toBeNull()
+  })
   it('本文は3ページで、下にページ番号 1〜3。表紙・抄録・目次にはページ番号がない', async () => {
     const body = await load('body')
     expect(body.pages.map((p) => p.pageNumber)).toEqual(['1', '2', '3'])
@@ -134,6 +139,10 @@ describe('本文のページの数と、PDF から分かる指摘', () => {
     expect(by('body', 'figures-per-page')).toMatchObject({ severity: 'warning', detail: '画像 7枚・本文 3ページ（目安は6枚まで）' })
     expect(by('abstract', 'abstract-one-page')).toMatchObject({ severity: 'error', detail: '現在 2ページ' })
     expect(by('photo', 'photo-one-page')).toMatchObject({ severity: 'error' })
+    // 表紙は1ページ（4つを1つにまとめた PDF を入れたとき）
+    expect(by('cover', 'cover-one-page')).toBeUndefined()
+    const merged = pdfFindings({ cover: { pages: [fakePage(['表紙']), fakePage(['抄録']), fakePage(['目次'])] } }, config)
+    expect(merged.find((x) => x.ruleId === 'cover-one-page')).toMatchObject({ severity: 'error', detail: '今 3ページ。1つにまとめた PDF ではなく、表紙だけの PDF を入れる' })
     // Word のチェックで出した指摘（ページの数）は、ここでは出さない
     const covered = pdfFindings({ body, abstract }, config, new Set(['body-pages', 'figures-per-page', 'abstract-one-page']))
     expect(covered.map((f) => f.ruleId).sort()).toEqual(['page-number-missing', 'pdf-a4'])

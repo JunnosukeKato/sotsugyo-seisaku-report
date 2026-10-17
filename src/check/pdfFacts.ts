@@ -125,11 +125,11 @@ export function countImages(fnArray: number[], argsArray: unknown[], OPS: PdfJs[
  * PDF を読む（ページごとの文字・大きさ・ページ番号・画像の数）。読めない PDF（パスワード・壊れている）は PdfReadError。
  * doc は、ページの小さな絵を作るのに使う（使い終えたら doc.loadingTask.destroy()）
  */
-export async function readPdf(bytes: Uint8Array, pdfjs: PdfJs): Promise<{ doc: PDFDocumentProxy; facts: PdfFacts }> {
+export async function readPdf(bytes: Uint8Array, pdfjs: PdfJs, worker?: import('pdfjs-dist').PDFWorker): Promise<{ doc: PDFDocumentProxy; facts: PdfFacts }> {
   let doc: PDFDocumentProxy
   try {
-    // data は pdf.js の中へ渡すと使えなくなるので、写しを渡す。知らせ（警告）は出さない
-    doc = await pdfjs.getDocument({ data: bytes.slice(), verbosity: 0 }).promise
+    // data は pdf.js の中へ渡すと使えなくなるので、写しを渡す。知らせ（警告）は出さない。worker：読む手伝いをする部品（ブラウザでは、1つを使い回す）
+    doc = await pdfjs.getDocument({ data: bytes.slice(), verbosity: 0, ...(worker ? { worker } : {}) }).promise
   } catch (e) {
     const name = e instanceof Error ? e.name : ''
     if (name === 'PasswordException') throw new PdfReadError('パスワードがかかっているため、読めません。Word から、パスワードを付けずに PDF に保存し直してください。')
@@ -175,6 +175,16 @@ export function classifyPdf(facts: PdfFacts): PartId {
   const largest = Math.max(0, ...first.lines.map((l) => l.size))
   if (all.includes('学籍番号') && all.includes('氏名') && largest >= 20) return 'cover'
   return 'body'
+}
+
+/**
+ * 1ページ目の中身から、はっきり分かるパート（入れた場所と中身が違うのを見つけるのに使う）。
+ * 本文は、1ページ目にページ番号があるときだけ。どれとも言えなければ null（classifyPdf のように本文とはしない）
+ */
+export function pdfLooksLike(facts: PdfFacts): PartId | null {
+  const part = classifyPdf(facts)
+  if (part !== 'body') return part
+  return facts.pages[0]?.pageNumber ? 'body' : null
 }
 
 // ---- 本文・抄録 ----
@@ -256,6 +266,9 @@ export function pdfFindings(pdfs: Partial<Record<PartId, PdfFacts>>, config: Yea
       const numbered = facts.pages.flatMap((p, i) => (p.pageNumber ? [i + 1] : []))
       if (numbered.length) add({ ruleId: 'page-number-extra', part, severity: 'warning', title: `${PART_NAMES[part]}にはページ番号を付けない`, detail: `ページ番号があるページ：${pageList(numbered)}`, page: numbered[0] })
     }
+    // 表紙は1ページ（4つを自分で1つにまとめた PDF を入れると、表紙の場所に入り、まとめると2回ずつ入る）
+    if (part === 'cover' && facts.pages.length > 1)
+      add({ ruleId: 'cover-one-page', part, severity: 'error', title: '表紙は1ページにする', detail: `今 ${facts.pages.length}ページ。1つにまとめた PDF ではなく、表紙だけの PDF を入れる` })
     if (part === 'abstract' && !covered.has('abstract-one-page') && facts.pages.length > 1)
       add({ ruleId: 'abstract-one-page', part, severity: 'error', title: '抄録は1ページに収める', detail: `現在 ${facts.pages.length}ページ` })
   }
