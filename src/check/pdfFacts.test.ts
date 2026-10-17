@@ -164,13 +164,14 @@ describe('1つの PDF にまとめる', () => {
     const one = (name: string) => makePdf([{ text: name }])
     const body = await makePdf([1, 2, 3].map((n) => ({ text: `BODY${n}`, footer: String(n) })))
     const photo = png(30, 40)
+    const wide = png(40, 30)
     const { bytes, pageCount } = await mergeParts(
       [
         { type: 'pdf', bytes: await one('COVER') },
         { type: 'pdf', bytes: await one('ABSTRACT') },
         { type: 'pdf', bytes: await one('TOC') },
         { type: 'pdf', bytes: body },
-        { type: 'image', bytes: photo, format: 'png', width: 30, height: 40 },
+        { type: 'photos', photos: [{ bytes: photo, format: 'png', width: 30, height: 40 }, { bytes: wide, format: 'png', width: 40, height: 30 }, { bytes: photo, format: 'png', width: 30, height: 40 }] },
       ],
       '2026_卒業制作報告書_00ZZ0123_文化花子',
     )
@@ -180,9 +181,9 @@ describe('1つの PDF にまとめる', () => {
     expect(merged.getTitle()).toBe('2026_卒業制作報告書_00ZZ0123_文化花子')
     const f = await facts(bytes)
     expect(f.pages.map((p) => p.lines[0]?.text ?? '')).toEqual(['COVER', 'ABSTRACT', 'TOC', 'BODY1', 'BODY2', 'BODY3', ''])
-    // 作品写真：A4 の1ページ、写真は1枚、透かしなどの文字はない
+    // 作品写真：写真が3枚でも A4 の1ページ。透かしなどの文字はない
     expect(isA4(f.pages[6])).toBe(true)
-    expect(f.pages[6]).toMatchObject({ images: 1, search: '' })
+    expect(f.pages[6]).toMatchObject({ images: 3, search: '' })
   })
   it('パスワード（保護）の付いた PDF・壊れた PDF は、まとめられない理由を返す', async () => {
     const doc = await PDFDocument.create()

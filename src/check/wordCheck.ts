@@ -249,8 +249,12 @@ export function wordFindings(reading: WordReading, config: YearConfig, pdf: PdfL
 
   const findings: CheckFinding[] = []
   const seen = new Map<string, number>()
-  for (const f of checkReport(report, config, layout)) {
+  const all = checkReport(report, config, layout)
+  // 生地見本の写真がないセルは、「表に空いているセルがある」とは言わない（同じセルの指摘が2つ並ばないように）
+  const swatchCells = new Set(all.filter((f) => f.ruleId === 'swatch-image').map((f) => f.blockId))
+  for (const f of all) {
     if (DROPPED.has(f.ruleId) || needsPdf(f)) continue
+    if (f.ruleId === 'table-cell-empty' && swatchCells.has(f.blockId)) continue
     // Word を入れていないパートの指摘は出さない（確かめる原稿では、空のままのため。本文のページの数は、PDF の指摘で出す）
     if ((f.area === 'body' || f.area === 'references') && !has.body) continue
     if (f.area === 'abstract' && !has.abstract) continue

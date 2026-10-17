@@ -156,6 +156,8 @@ describe('Word のチェック（学生用ツールのセルフチェックと�
     expect(by(findings, 'swatch-image')).toHaveLength(3)
     expect(by(findings, 'swatch-image').map((f) => f.snippets)).toEqual([['綿ブロード上着'], ['サテン帯'], ['麻ズボン']])
     // 同じ指摘が並んでも、どのセルか分かる（表の番号・行の最初の文字・見出しの列）
+    // 同じセルの「表に空いているセルがある」は出さない
+    expect(by(findings, 'table-cell-empty')).toEqual([])
     expect(by(findings, 'swatch-image').map((f) => f.detail)).toEqual(['表1：「綿ブロード」の行、「生地見本」の列', '表1：「サテン」の行、「生地見本」の列', '表1：「麻」の行、「生地見本」の列'])
     expect(by(findings, 'template-margins')).toEqual([expect.objectContaining({ part: 'toc', detail: expect.stringContaining('左 30mm') })])
     expect(by(findings, 'toc-headings')).toEqual([expect.objectContaining({ part: 'toc', severity: 'warning', detail: '目次にだけある：「まとめ」' })])

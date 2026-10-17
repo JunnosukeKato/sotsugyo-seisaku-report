@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { findPage, locateFindings, pagePins } from './locate'
 import { chooseThumbWidth, packRows, pageSlots } from './pageGrid'
-import { fitInPage, photoPixels } from './pageFit'
+import { A4, fitInPage, photoGrid, photoPixels, photoPlaces } from './pageFit'
 import { confirmText, fileKind, groupByPart, idAndName, isStale, mergedFileName, partFromName, placeFor, staleFinding, timeText, wrongPartFinding, type CheckFinding } from './parts'
 import type { PdfFacts, PdfPageFacts } from './pdfFacts'
 
@@ -93,6 +93,8 @@ describe('確かめの窓（エラーが残っているとき・まだ入れて�
     expect(confirmText(1, [], [], true)).toEqual({ title: 'エラーが1件残っています', sub: ['Word を入れていないので、書式や文はチェックしていません。'] })
     // Word がなくても、ほかに確かめることがなければ、窓は出さない（下の帯に「チェックなしで、まとめます」）
     expect(confirmText(0, [], [], true)).toBeNull()
+    // 本文だけ Word がないときは、そのパートの名前を言う
+    expect(confirmText(1, [], [], ['本文'])?.sub).toEqual(['本文は Word を入れていないので、書式や文はチェックしていません。'])
   })
 })
 
@@ -166,6 +168,32 @@ describe('作品写真を A4 の1ページに置く', () => {
     expect(big.width).toBeGreaterThan(1600)
     expect(big.height / big.width).toBeCloseTo(8000 / 6000, 2)
     expect(photoPixels(800, 600)).toEqual({ width: 800, height: 600 })
+  })
+  it('並べ方は枚数で決まる（2枚は、縦長だけなら左右、横長があれば上下。3〜4枚は 2×2、5〜6枚は 2×3）', () => {
+    const tall = { width: 3, height: 4 }
+    const wide = { width: 4, height: 3 }
+    expect(photoGrid([tall])).toEqual({ cols: 1, rows: 1 })
+    expect(photoGrid([tall, tall])).toEqual({ cols: 2, rows: 1 })
+    expect(photoGrid([tall, wide])).toEqual({ cols: 1, rows: 2 })
+    expect(photoGrid([tall, tall, wide])).toEqual({ cols: 2, rows: 2 })
+    expect(photoGrid(Array(6).fill(tall))).toEqual({ cols: 2, rows: 3 })
+  })
+  it('並べた写真は、10mm の余白の内側に、切らずに、重ならずに入る（左上から右へ、上の段から下の段へ）', () => {
+    const photos = [{ width: 3000, height: 4000 }, { width: 4000, height: 3000 }, { width: 3000, height: 3000 }, { width: 3000, height: 4000 }]
+    const places = photoPlaces(photos)
+    const margin = (10 / 25.4) * 72
+    for (const [i, p] of places.entries()) {
+      expect(p.x).toBeGreaterThanOrEqual(margin - 0.01)
+      expect(p.y).toBeGreaterThanOrEqual(margin - 0.01)
+      expect(p.x + p.width).toBeLessThanOrEqual(A4.width - margin + 0.01)
+      expect(p.y + p.height).toBeLessThanOrEqual(A4.height - margin + 0.01)
+      // 写真の縦横の比は変えない
+      expect(p.width / p.height).toBeCloseTo(photos[i].width / photos[i].height, 5)
+    }
+    // 1枚目は左上、2枚目は右上、3枚目は左下（pt は下が 0）
+    expect(places[1].x).toBeGreaterThan(places[0].x)
+    expect(places[2].y).toBeLessThan(places[0].y)
+    expect(places[2].x).toBeCloseTo(margin, 0)
   })
 })
 

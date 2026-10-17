@@ -104,7 +104,6 @@ button:focus-visible, input:focus-visible, [tabindex]:focus-visible { outline: 2
 .issue .go { display: block; min-width: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; -webkit-appearance: none; appearance: none; }
 .issue .ttl, .issue .detail { display: block; }
 .issue .ttl { font-size: 13.5px; font-weight: 700; line-height: 1.5; }
-.issue .src { display: inline-block; white-space: nowrap; margin-left: 6px; padding: 1px 6px; border-radius: 4px; background: var(--chip-bg); font-size: 10.5px; font-weight: 400; color: var(--muted); vertical-align: 1px; }
 .issue .detail { margin-top: 2px; font-size: 12.5px; color: var(--muted); line-height: 1.6; }
 .issue mark { padding: 0 2px; border-radius: 3px; background: #f4d9d5; color: var(--error); font-weight: 700; }
 .issue.warning mark { background: #eedfb9; color: var(--warn); }
@@ -309,7 +308,6 @@ button.pg { cursor: pointer; }
   .ig-h { font-size: 13px; }
   .issue .ttl { font-size: 14px; }
   .issue .detail { font-size: 13px; }
-  .issue .src { font-size: 11px; }
   .what li { font-size: 14px; }
   .what li small, .cant, .cant b, .unchecked small, .oks li span:last-child, .read-errors li, .read-errors b, .checking { font-size: 13px; }
   .oks li { font-size: 14px; }
@@ -344,9 +342,9 @@ button.pg { cursor: pointer; }
   .pp-info b { display: block; font-size: 15.5px; line-height: 1.5; letter-spacing: 0.06em; white-space: nowrap; }
   .pp .p-f { margin-top: 2px; }
   /* 指で押しやすく：ファイルの名前の行を高くし、× の押せる所を広げる（見た目の × は小さいまま） */
-  .pp .pf { font-size: 13px; line-height: 30px; }
+  .pp .pf { font-size: 13px; line-height: 34px; }
   .pp .pf .x { width: 20px; height: 20px; margin-left: 4px; }
-  .pp .pf .x::after { inset: -5px -12px; }
+  .pp .pf .x::after { inset: -7px -12px; }
   .pp .pf .x svg { width: 12px; height: 12px; }
   .pp-strip { display: flex; gap: 8px; min-width: 0; overflow-x: auto; padding: 8px 22px 2px 6px; scrollbar-width: none; -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 26px), transparent); --tw: 62px; }
   .pp-strip::-webkit-scrollbar { display: none; }
@@ -376,4 +374,46 @@ button.pg { cursor: pointer; }
   .popover-backdrop { background: rgba(20, 20, 25, 0.28); }
   .popover-title { font-size: 13px; }
   .popover button { padding: 13px 12px; font-size: 15px; }
+}
+
+/* ---- mockups/v31：作品写真を6枚まで（案A）・エラーと警告の意味（案1）・入れたときの知らせ ---- */
+.add-notes li.info { background: var(--accent-soft); color: #33406f; }
+.add-notes li.info .st.ok { background: var(--accent); }
+/* 「写真 4枚」は切らずに出し、入りきらなければ「（6枚まで）」を次の行へ */
+.pf.photos { flex-wrap: wrap; }
+.pf.photos .fname { flex: none; }
+.pf-sub { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
+.pf-link { align-self: flex-start; font-size: 11.5px; line-height: 19px; }
+.pg.none.pick { cursor: pointer; }
+.pg.none.pick:hover { border-color: #aab2d2; background: #f7f8fc; }
+.sev-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 10px 0 0; padding: 7px 12px; border-radius: 9px; background: #f7f6f3; font-size: 12.5px; line-height: 1.6; color: #3f4249; }
+.sev-legend > span { display: inline-flex; align-items: center; gap: 6px; }
+.sev-legend .st { width: 15px; height: 15px; margin: 0; font-size: 10px; }
+.sev-legend b { font-weight: 700; }
+.sev-legend b.e { color: var(--error); }
+.sev-legend b.w { color: var(--warn); }
+.unchecked-part { display: flex; align-items: flex-start; gap: 8px; margin: 12px 0 0; padding: 8px 12px; border-radius: 9px; background: var(--warn-soft); color: var(--warn); font-size: 13px; line-height: 1.6; }
+.unchecked-part .st { margin-top: 3px; }
+.photo-menu { width: 320px; }
+.photo-menu .popover-title b { margin-right: 8px; color: var(--ink); font-size: 13px; }
+.photo-menu ol { margin: 0; padding: 0; list-style: none; }
+.photo-menu li { display: grid; grid-template-columns: 36px minmax(0, 1fr) auto auto auto; align-items: center; gap: 4px; padding: 4px 4px 4px 6px; border-radius: 8px; }
+.photo-menu li img { width: 36px; height: 36px; object-fit: cover; border-radius: 4px; }
+.photo-menu .pm-name { display: flex; gap: 4px; min-width: 0; font-size: 13px; }
+.photo-menu .pm-name .fn { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.photo-menu button.pm-b { display: grid; place-items: center; width: 32px; height: 32px; padding: 0; border-radius: 6px; color: var(--muted); font-size: 15px; text-align: center; }
+.photo-menu button.pm-b:hover:not(:disabled) { background: var(--chip-bg); color: var(--ink); }
+.photo-menu button.pm-b:disabled { opacity: 0.3; }
+.photo-menu button.pm-b.x svg { width: 13px; height: 13px; }
+.photo-menu button.pm-add { display: flex; align-items: center; justify-content: center; gap: 6px; width: calc(100% - 8px); margin: 6px 4px 2px; padding: 9px; border: 1.5px dashed #aab2d2; border-radius: 9px; background: #f7f8fc; color: var(--accent); text-align: center; }
+.photo-menu button.pm-add svg { width: 16px; height: 16px; }
+.photo-menu .pm-hint { margin: 6px 6px 2px; font-size: 12px; line-height: 1.6; color: var(--muted); }
+@media (max-width: 760px) {
+  .pf-sub, .pf-link { font-size: 13px; line-height: 30px; }
+  .sev-legend { font-size: 13px; }
+  .photo-menu { width: auto; }
+  .photo-menu li { grid-template-columns: 44px minmax(0, 1fr) auto auto auto; }
+  .photo-menu li img { width: 44px; height: 44px; }
+  .photo-menu button.pm-b { width: 44px; height: 44px; }
+  .photo-menu .pm-name { font-size: 14px; }
 }

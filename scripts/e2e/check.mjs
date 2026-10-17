@@ -6,7 +6,7 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, statSync, utimesSync, writeFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { PDFDocument } from 'pdf-lib'
-import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
+import { getDocument, OPS } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { withEdge } from '../poc/edge.mjs'
 import { stubConfig } from './configStub.mjs'
 import { png } from './fixtures/docx.mjs'
@@ -58,6 +58,8 @@ const PDFS = [
 // 作品写真（選ぶ画面から入れる）と、作り直した本文の PDF（今の時刻のファイル）
 const PHOTO = resolve(`${OUT}/IMG_2041.png`)
 writeFileSync(PHOTO, png(300, 400, { figure: [47, 62, 117] }))
+const PHOTO2 = resolve(`${OUT}/IMG_2042.png`)
+writeFileSync(PHOTO2, png(400, 300, { figure: [181, 140, 40] }))
 const NEW_BODY_PDF = resolve(`${OUT}/04_本文.pdf`)
 writeFileSync(NEW_BODY_PDF, readFileSync(`${FIX}/word-sample-body.pdf`))
 // 作り直した PDF は、本文の Word より新しい
@@ -106,7 +108,9 @@ async function savedPdf(name) {
     const p = await doc.getPage(i)
     const text = (await p.getTextContent()).items.map((it) => it.str ?? '').join('').replace(/\s/g, '')
     const view = p.getViewport({ scale: 1 })
-    pages.push({ text, w: Math.round(view.width), h: Math.round(view.height) })
+    // 画像の数（作品写真のページに、写真が何枚あるか）
+    const images = (await p.getOperatorList()).fnArray.filter((fn) => fn === OPS.paintImageXObject).length
+    pages.push({ text, w: Math.round(view.width), h: Math.round(view.height), images })
   }
   await doc.loadingTask.destroy()
   return { count: lib.getPageCount(), pages }
@@ -197,13 +201,15 @@ await withEdge(async (browser) => {
       groups: [...document.querySelectorAll('.igroup .ig-h')].map((x) => x.firstChild.textContent),
       stale: document.querySelector('.p-note')?.textContent,
       legend: !!document.querySelector('.c2-legend'),
+      sevLegend: document.querySelector('.c2-side .sev-legend')?.textContent ?? '',
+      chips: document.querySelectorAll('.issue .src').length,
       pins: [...document.querySelectorAll('.pg .pin')].map((x) => x.textContent),
     }))
     const t = await tally(page)
     const texts = await findingTexts(page)
     await page.screenshot({ path: `${OUT}/c2-loaded-pc.png` })
     check('Word を入れると：名前で分からない抄録の Word（abstract-final.docx）は中身から抄録に入る', loaded.abstract.some((x) => x.includes('abstract-final.docx')), JSON.stringify(loaded.abstract))
-    check('指摘がパートごとに出る（エラー・警告の数、手順書の札）', /^\d+エラー\d+警告$/.test(t) && !t.startsWith('0') && loaded.groups.join(',') === '抄録,目次,本文' && texts.some((x) => x.includes('手順書')), `${t} ${loaded.groups}`)
+    check('指摘がパートごとに出る（エラー・警告の数）。札「手順書」「補助」はなく、一覧の上に「エラー：直してから出す」「警告：できれば直す」', /^\d+エラー\d+警告$/.test(t) && !t.startsWith('0') && loaded.groups.join(',') === '抄録,目次,本文' && loaded.chips === 0 && loaded.sevLegend.includes('エラー：直してから出す') && loaded.sevLegend.includes('警告：できれば直す'), `${t} ${loaded.groups}`)
     check('抄録：600〜900字・「である」調（指摘した文字に印）', texts.some((x) => x.includes('抄録は600〜900字にする')) && (await page.$('.issue mark')) !== null && texts.some((x) => x.includes('巻きました')))
     check('目次：ひな形と違う余白（左 30mm）と、本文にない見出し「まとめ」', texts.some((x) => x.includes('左 30mm')) && texts.some((x) => x.includes('目次にだけある：「まとめ」')))
     check('ツールの中でしか意味のない指摘（抄録はまだ書いていない・作品写真を入れる）は出さない', !texts.some((x) => /まだ書いていない|作品写真を入れる|コースが選ばれていない/.test(x)))
@@ -284,15 +290,28 @@ await withEdge(async (browser) => {
     check('「戻って直す」：窓が閉じ、入れたファイルはそのまま（保存しない）', !stayed.modal && stayed.files === 8 && !stayed.saved && readdirSync(DOWNLOADS).length === 0, JSON.stringify(stayed))
 
     // ---- 作品写真：読めない HEIC → 「写真を入れる」から入れる ----
-    await put(page, [{ name: 'IMG_9999.HEIC', b64: Buffer.from('not really a heic file').toString('base64'), lastModified: Date.now(), type: 'image/heic' }])
-    const heic = await page.evaluate(() => document.querySelector('.read-errors')?.textContent ?? '')
-    check('読めない写真（HEIC）：その写真の場所に、JPEG にするよう知らせる', /HEIC/.test(heic) && /JPEG/.test(heic), heic.slice(0, 80))
-    const [photoChooser] = await Promise.all([page.waitForFileChooser(), page.click('.pg.none.add')])
-    await photoChooser.accept([PHOTO])
-    await page.waitForFunction(() => !!document.querySelector('[aria-label="作品写真"] .pg img'), { timeout: 30000 }).catch(() => {})
+    await drop(page, [{ name: 'IMG_9999.HEIC', b64: Buffer.from('not really a heic file').toString('base64'), lastModified: Date.now(), type: 'image/heic' }])
+    await page.waitForFunction(() => [...document.querySelectorAll('.add-notes li')].some((x) => x.textContent.includes('IMG_9999.HEIC')), { timeout: 120000, polling: 100 })
     await settled(page)
-    const photo = await page.evaluate(() => ({ img: !!document.querySelector('[aria-label="作品写真"] .pg img'), no: document.querySelector('[aria-label="作品写真"] figure')?.textContent, small: document.querySelector('.m-file small')?.textContent, errors: !!document.querySelector('.read-errors') }))
-    check('「写真を入れる」から作品写真を入れると、最後のページ（7ページ目）になる', photo.img && photo.no === '7' && photo.small === '7ページ' && !photo.errors, JSON.stringify(photo))
+    const heic = await page.evaluate(() => ({ note: [...document.querySelectorAll('.add-notes li')].map((x) => x.textContent).join(''), photo: document.querySelector('[aria-label="作品写真"] .pf')?.textContent }))
+    check('読めない写真（HEIC）：入れずに、JPEG にするよう知らせる（作品写真は「まだありません」のまま）', /HEIC/.test(heic.note) && /JPEG/.test(heic.note) && heic.photo === 'まだありません', JSON.stringify(heic).slice(0, 160))
+    // 「写真を入れる」から、2枚まとめて選ぶ（縦長と横長 → 上下に並ぶ）
+    const [photoChooser] = await Promise.all([page.waitForFileChooser(), page.click('.pg.none.add')])
+    await photoChooser.accept([PHOTO, PHOTO2])
+    await page.waitForFunction(() => document.querySelector('[aria-label="作品写真"] .pf .fname')?.textContent === '写真 2枚', { timeout: 120000, polling: 100 })
+    await settled(page)
+    const photo = await page.evaluate(() => ({ img: !!document.querySelector('[aria-label="作品写真"] .pg img'), no: document.querySelector('[aria-label="作品写真"] figure')?.textContent, small: document.querySelector('.m-file small')?.textContent, label: document.querySelector('[aria-label="作品写真"] .p-f')?.textContent, errors: !!document.querySelector('.read-errors') }))
+    check('「写真を入れる」から写真を2枚入れると、「写真 2枚（6枚まで）」で、1ページ（最後の7ページ目）に並ぶ', photo.img && photo.no === '7' && photo.small === '7ページ' && !!photo.label?.startsWith('写真 2枚（6枚まで）') && !photo.errors, JSON.stringify(photo))
+    // 「並べ替え・外す」：2枚が並び、↓ で順番が変わる
+    await page.click('[aria-label="作品写真"] .pf-link')
+    await page.waitForSelector('.photo-menu')
+    const before = await page.evaluate(() => [...document.querySelectorAll('.photo-menu li .fn')].map((x) => x.textContent))
+    await page.evaluate(() => document.querySelector('.photo-menu li .pm-b[aria-label$="を後ろへ"]').click())
+    await wait(400)
+    const after = await page.evaluate(() => [...document.querySelectorAll('.photo-menu li .fn')].map((x) => x.textContent))
+    await page.keyboard.press('Escape')
+    await wait(150)
+    check('作品写真の「並べ替え・外す」：写真の一覧が出て、順番を変えられる', before.join() === 'IMG_2041.png,IMG_2042.png' && after.join() === 'IMG_2042.png,IMG_2041.png' && !(await page.$('.photo-menu')), JSON.stringify({ before, after }))
 
     // ---- まとめて保存する ----
     await page.click('.merge .btn.big')
@@ -306,7 +325,7 @@ await withEdge(async (browser) => {
     await page.screenshot({ path: `${OUT}/c2-done-pc.png` })
     check('写真を入れたあとの確かめの窓には、「作品写真も…」は出ない', sub2 === null, String(sub2))
     check('「このまままとめる」：「ダウンロード」に保存し、「保存しました」とファイル名・ページの数・大きさを出す', result.title === '保存しました' && result.file === FILE_NAME && /^7ページ・[\d.]+(MB|KB)　「ダウンロード」のフォルダ$/.test(result.small) && !result.bar && result.focus, JSON.stringify(result))
-    check('保存した PDF：7ページ（透かしなし・名前はそのまま）、表紙 → 抄録 → 目次 → 本文 → 作品写真 の順、どのページも A4', !!saved && saved.count === 7 && /学籍番号/.test(saved.pages[0].text) && /抄録/.test(saved.pages[1].text) && /^目次/.test(saved.pages[2].text) && /企画・立案/.test(saved.pages[3].text) && /使用素材/.test(saved.pages[4].text) && /制作過程/.test(saved.pages[5].text) && saved.pages[6].text === '' && saved.pages.every((p) => p.w === 595 && p.h === 842) && !saved.pages.some((p) => p.text.includes('下書き')), JSON.stringify(saved?.pages.map((p) => p.text.slice(0, 12))))
+    check('保存した PDF：7ページ（透かしなし・名前はそのまま）、表紙 → 抄録 → 目次 → 本文 → 作品写真（写真2枚を1ページに）の順、どのページも A4', !!saved && saved.count === 7 && /学籍番号/.test(saved.pages[0].text) && /抄録/.test(saved.pages[1].text) && /^目次/.test(saved.pages[2].text) && /企画・立案/.test(saved.pages[3].text) && /使用素材/.test(saved.pages[4].text) && /制作過程/.test(saved.pages[5].text) && saved.pages[6].text === '' && saved.pages[6].images === 2 && saved.pages.every((p) => p.w === 595 && p.h === 842) && !saved.pages.some((p) => p.text.includes('下書き')), JSON.stringify(saved?.pages.map((p) => p.text.slice(0, 12))))
 
     // ---- はじめから（確かめの窓が出る。窓の外を押しても閉じない） ----
     await page.evaluate(() => [...document.querySelectorAll('.c-saved .btn')].find((b) => b.textContent === 'はじめから').click())

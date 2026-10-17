@@ -187,12 +187,13 @@ export function wrongPartFinding(part: PartId, slot: SlotKind, looksLike: PartId
 /**
  * 「1つの PDF にまとめる」を押したときの、確かめの窓（決まり：エラーが残っていても、確かめてから、そのまままとめる。透かしは入れない）。
  * エラーが残っているか、PDF が Word より古いパート（stale）か、まだ入れていないパート（missing。作品写真など）があれば出す。
- * なければ null（すぐまとめる）。unchecked：Word を入れていない（チェックしていない）
+ * なければ null（すぐまとめる）。unchecked：Word を1つも入れていない（true）か、Word を入れていないパート（PDF だけのパートの名前）
  */
-export function confirmText(errors: number, missing: string[], stale: string[] = [], unchecked = false): { title: string; sub: string[] } | null {
+export function confirmText(errors: number, missing: string[], stale: string[] = [], unchecked: boolean | string[] = false): { title: string; sub: string[] } | null {
   const staleLine = stale.length ? `${stale.join('・')}の PDF が、Word より古いようです。` : null
   const missingLine = missing.length ? `${missing.join('・')}も、まだありません。` : null
-  const uncheckedLine = unchecked ? 'Word を入れていないので、書式や文はチェックしていません。' : null
+  const uncheckedLine =
+    unchecked === true ? 'Word を入れていないので、書式や文はチェックしていません。' : Array.isArray(unchecked) && unchecked.length ? `${unchecked.join('・')}は Word を入れていないので、書式や文はチェックしていません。` : null
   const lines = (...xs: (string | null)[]) => xs.filter((x): x is string => !!x)
   if (errors > 0) return { title: `エラーが${errors}件残っています`, sub: lines(staleLine, missingLine, uncheckedLine) }
   if (stale.length > 0) return { title: `${stale.join('・')}の PDF が、Word より古いようです`, sub: lines(missingLine, uncheckedLine) }

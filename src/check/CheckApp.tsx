@@ -8,6 +8,7 @@ import type { BuiltPdf, SaveMode } from '../pdf/exportPdf'
 import { CheckIcon as I } from './icons'
 import { locateFindings, pagePins } from './locate'
 import { chooseThumbWidth, isNotedRow, pageSlots, type PageSlot, type Segment } from './pageGrid'
+import { MAX_PHOTOS } from './pageFit'
 import { abstractLines, bodyPages, classifyPdf, pdfFindings, pdfLooksLike, pdfOks, type PdfFacts } from './pdfFacts'
 import {
   PART_NAMES,
@@ -61,12 +62,27 @@ interface Entry {
   message?: string
   /** PDF から分かったこと */
   facts?: PdfFacts
-  /** 作品写真（A4 の1ページにする JPEG） */
-  photo?: PreparedPhoto
+  /** 作品写真の写真（並べた順。6枚まで。A4 の1ページに並べる。file は1枚目） */
+  photos?: PhotoItem[]
+  /** 写真を並べたページの絵（data URL） */
+  pageImage?: string
   /** ページの小さな絵（URL。作れなかったページは空） */
   thumbs: string[]
   /** 中身からはっきり分かるパート（入れた場所と違えば知らせる。言えなければ null） */
   looksLike?: PartId | null
+}
+
+/** 作品写真の写真1枚 */
+interface PhotoItem {
+  id: number
+  file: File
+  photo: PreparedPhoto
+}
+
+/** 入れたときの知らせ。info：ただの知らせ（入れ替えた など）。ほかは注意（入れられなかった・古いファイル など） */
+interface Note {
+  text: string
+  info?: boolean
 }
 
 type SlotKey = `${PartId}:${SlotKind}`
@@ -78,7 +94,16 @@ const mergeEntry = (slots: Slots, part: PartId): Entry | null => {
   const e = slots[keyOf(part, 'pdf')]
   return e && e.state === 'ready' ? e : null
 }
-const pagesOf = (e: Entry | null) => (e ? (e.facts?.pages.length ?? (e.photo ? 1 : 0)) : 0)
+const pagesOf = (e: Entry | null) => (e ? (e.facts?.pages.length ?? (e.photos?.length ? 1 : 0)) : 0)
+
+/**
+ * 読めなかった Word の知らせ。入れた場所と中身が違う Word（例：本文に入れた表紙の Word）は、「中身が〇〇のようです」の指摘を出すので、
+ * 読み取りの失敗としては出さない（2回数えない。「04_本文.docx を入れてください」のような、学生のファイル名と違う言葉も出さない）
+ */
+const wordError = (slots: Slots, check: { wordErrors: Partial<Record<PartId, string>> }, part: PartId): string | undefined => {
+  const e = slots[keyOf(part, 'word')]
+  return e?.looksLike && e.looksLike !== part ? undefined : check.wordErrors[part]
+}
 
 /** 確かめた結果 */
 interface CheckState {
@@ -160,7 +185,7 @@ export function CheckApp() {
   const docs = useRef(new Map<number, PDFDocumentProxy>())
   const nextId = useRef(0)
   const [reading, setReading] = useState<{ done: number; total: number } | null>(null)
-  const [notes, setNotes] = useState<string[]>([])
+  const [notes, setNotes] = useState<Note[]>([])
   const [announce, setAnnounce] = useState('')
   const [check, setCheck] = useState<CheckState>({ findings: [], hasWord: false, forKey: '', forConfig: null, wordErrors: {}, oks: [] })
   const [selected, setSelected] = useState<string | null>(null)
@@ -169,6 +194,8 @@ export function CheckApp() {
   /** 「はじめから」を押した（確かめの窓） */
   const [askStartOver, setAskStartOver] = useState(false)
   const [menu, setMenu] = useState<{ key: SlotKey; rect: DOMRect } | null>(null)
+  /** 作品写真の「並べ替え・外す」の小さな窓（開いたボタンの位置） */
+  const [photoMenu, setPhotoMenu] = useState<DOMRect | null>(null)
   const [manual, setManual] = useState({ studentId: '', name: '' })
   const [dragging, setDragging] = useState(false)
   const narrow = useNarrow()
@@ -195,11 +222,15 @@ export function CheckApp() {
     slotsRef.current = next
     setSlotsState(next)
   }
+  const releasePhoto = (p: PhotoItem) => {
+    URL.revokeObjectURL(p.photo.url)
+    p.photo.preview.close()
+  }
   /** 外した・入れ替えたファイルの、絵の URL と PDF を解放する */
   const release = (e: Entry | undefined) => {
     if (!e) return
     for (const url of e.thumbs) if (url) URL.revokeObjectURL(url)
-    if (e.photo) URL.revokeObjectURL(e.photo.url)
+    for (const p of e.photos ?? []) releasePhoto(p)
     const doc = docs.current.get(e.id)
     if (doc) {
       void doc.loadingTask.destroy()
@@ -219,9 +250,13 @@ export function CheckApp() {
 
   async function addFiles(list: File[], forced?: { part: PartId; slot: SlotKind }) {
     if (list.length === 0) return
-    const out: string[] = []
+    const out: Note[] = []
     let placed = 0
     let refused = 0
+    /** 同じ名前の新しいファイルに入れ替えたもの（1行にまとめて知らせる） */
+    const renewed: string[] = []
+    const warn = (text: string) => out.push({ text })
+    const info = (text: string) => out.push({ text, info: true })
     /** この回に入れた場所（同じ場所に2つ入ったら、新しいほうを使って知らせる） */
     const used = new Map<SlotKey, File>()
     setNotes([])
@@ -229,7 +264,7 @@ export function CheckApp() {
     for (const [i, file] of list.entries()) {
       const kind = fileKind(file)
       if (typeof kind !== 'string') {
-        out.push(`「${file.name}」：${kind.problem}`)
+        warn(`「${file.name}」：${kind.problem}`)
         refused++
         setReading({ done: i + 1, total: list.length })
         continue
@@ -259,14 +294,41 @@ export function CheckApp() {
         } else {
           const { preparePhoto } = await loadPhoto()
           try {
-            entry.photo = await preparePhoto(file)
+            entry.photos = [{ id: entry.id, file, photo: await preparePhoto(file) }]
           } catch (e) {
-            Object.assign(entry, { state: 'error', message: e instanceof Error && e.name === 'PhotoError' ? e.message : 'この写真を読めませんでした。JPEG か PNG にしてから入れてください。' })
+            // 読めない写真は、入れない（入れてある写真は、そのまま）
+            warn(`「${file.name}」：${e instanceof Error && e.name === 'PhotoError' ? e.message : 'この写真を読めませんでした。JPEG か PNG にしてから入れてください。'}`)
+            refused++
+            setReading({ done: i + 1, total: list.length })
+            continue
           }
         }
       } catch {
-        out.push(`「${file.name}」：${LOAD_ERROR}`)
+        warn(`「${file.name}」：${LOAD_ERROR}`)
         refused++
+        setReading({ done: i + 1, total: list.length })
+        continue
+      }
+      // 作品写真の写真：入れてある写真の後ろに足す（6枚まで。並べ方は枚数で決まる）
+      if (entry.photos) {
+        const cur = slotsRef.current['photo:pdf']
+        const have = cur?.photos ?? []
+        const item = entry.photos[0]
+        if (have.some((p) => p.file.name === file.name && p.file.size === file.size && p.file.lastModified === file.lastModified)) {
+          info(`「${file.name}」は、もう入っています。`)
+          releasePhoto(item)
+        } else if (have.length >= MAX_PHOTOS) {
+          warn(`「${file.name}」：作品写真は${MAX_PHOTOS}枚までです。入れるときは、「並べ替え・外す」から、どれかを外してください。`)
+          releasePhoto(item)
+          refused++
+        } else {
+          if (cur && !cur.photos) {
+            info(`作品写真の PDF「${cur.file.name}」を外して、写真を並べるようにしました。`)
+            release(cur)
+          }
+          await setPhotos([...have, item], false)
+          placed++
+        }
         setReading({ done: i + 1, total: list.length })
         continue
       }
@@ -281,20 +343,22 @@ export function CheckApp() {
         // 同じ回に、同じ場所へ2つ：ファイルの時刻が新しいほうを使う（入れた順ではなく。時刻が同じなら、あとのほう）
         const older = file.lastModified + 2000 < before.lastModified
         const [kept, dropped] = older ? [before, file] : [file, before]
-        out.push(`「${before.name}」と「${file.name}」が、同じ場所（${label}）に入りました。新しいほうの「${kept.name}」（${timeText(kept.lastModified)}）を使います。「${dropped.name}」を使うときは、そのファイルだけをもう一度入れてください。`)
+        warn(`「${before.name}」と「${file.name}」が、同じ場所（${label}）に入りました。新しいほうの「${kept.name}」（${timeText(kept.lastModified)}）を使います。「${dropped.name}」を使うときは、そのファイルだけをもう一度入れてください。`)
         if (older) {
           release(entry)
           setReading({ done: i + 1, total: list.length })
           continue
         }
+        // 前のファイルは、この回に入れて数えたもの（入れたファイルの数は増やさない）
+        placed--
       } else if (prev[key]) {
-        // 前に入れたファイルと入れ替える（黙って入れ替えない。古いファイルで入れ替えたときは、そう言う）
-        const old = prev[key]!.file
-        out.push(
-          file.lastModified + 2000 < old.lastModified
-            ? `${labelThen}を「${file.name}」に入れ替えました。前の「${old.name}」（${timeText(old.lastModified)}）より古いファイルです（${timeText(file.lastModified)}）。`
-            : `${labelThen}を「${old.name}」から「${file.name}」に入れ替えました。`,
-        )
+        // 前に入れたファイルと入れ替える（黙って入れ替えない。古いファイルで入れ替えたときは、注意として言う）
+        const old = prev[key]!
+        if (old.photos) info(`作品写真の写真${old.photos.length}枚を外して、「${file.name}」にしました。`)
+        else if (file.lastModified + 2000 < old.file.lastModified)
+          warn(`${labelThen}を「${file.name}」に入れ替えました。前の「${old.file.name}」（${timeText(old.file.lastModified)}）より古いファイルです（${timeText(file.lastModified)}）。`)
+        else if (old.file.name === file.name) renewed.push(file.name)
+        else info(`${labelThen}を「${old.file.name}」から「${file.name}」に入れ替えました。`)
       }
       used.set(key, file)
       release(prev[key])
@@ -303,11 +367,53 @@ export function CheckApp() {
       setReading({ done: i + 1, total: list.length })
     }
     setReading(null)
+    // 同じ名前の新しいファイル（直して、入れ直した）は、1行にまとめる
+    if (renewed.length === 1) info(`「${renewed[0]}」を、新しいものに入れ替えました。`)
+    else if (renewed.length > 1) info(`${renewed.length}個のファイルを、同じ名前の新しいものに入れ替えました。`)
     setNotes(out)
     if (placed) {
       filesChanged()
       setAnnounce(`${placed}個のファイルを入れました。${refused ? '入れられなかったファイルがあります。' : ''}`)
     } else if (refused) setAnnounce('入れられなかったファイルがあります。')
+  }
+
+  /**
+   * 作品写真の写真の並びを、list にする（並べたページの絵も描き直す）。空なら、作品写真を外す。
+   * announce：変えたことを知らせ、保存したあとの知らせを閉じる（ファイルを入れているときは、入れ終わってからまとめて）
+   */
+  async function setPhotos(list: PhotoItem[], announce = true) {
+    const prev = slotsRef.current
+    const cur = prev['photo:pdf']
+    if (list.length === 0) {
+      const next = { ...prev }
+      delete next['photo:pdf']
+      commit(next)
+    } else {
+      const { photoPageImage } = await loadPhoto()
+      const base = cur?.photos ? cur : null
+      commit({ ...slotsRef.current, 'photo:pdf': { id: base?.id ?? ++nextId.current, file: list[0].file, kind: 'image', state: 'ready', thumbs: [], photos: list, pageImage: photoPageImage(list.map((p) => p.photo)) } })
+    }
+    if (announce) filesChanged()
+  }
+  /** 作品写真の写真を1枚外す */
+  const removePhoto = (id: number) => {
+    const have = slotsRef.current['photo:pdf']?.photos ?? []
+    const gone = have.find((p) => p.id === id)
+    if (!gone) return
+    releasePhoto(gone)
+    void setPhotos(have.filter((p) => p.id !== id))
+    setNotes([])
+    setAnnounce(`「${gone.file.name}」を外しました`)
+  }
+  /** 作品写真の写真の順番を変える（dir：-1 は前へ、1 は後ろへ） */
+  const movePhoto = (id: number, dir: -1 | 1) => {
+    const have = [...(slotsRef.current['photo:pdf']?.photos ?? [])]
+    const i = have.findIndex((p) => p.id === id)
+    const j = i + dir
+    if (i < 0 || j < 0 || j >= have.length) return
+    ;[have[i], have[j]] = [have[j], have[i]]
+    void setPhotos(have)
+    setAnnounce(`「${have[j].file.name}」を${j + 1}枚目にしました`)
   }
 
   const removeEntry = (key: SlotKey) => {
@@ -339,7 +445,7 @@ export function CheckApp() {
     const moved = `「${e.file.name}」を${spaced(slotLabel(toPart, slot))}に移しました。`
     // 移す先にあったファイルは、もとの場所へ入れ替わる（黙って入れ替えない）
     const swapped = prev[to] ? `もとの「${prev[to]!.file.name}」は、${spaced(slotLabel(fromPart, slot))}に移しました。` : ''
-    setNotes(swapped ? [moved + swapped] : [])
+    setNotes(swapped ? [{ text: moved + swapped, info: true }] : [])
     setAnnounce(moved + swapped)
   }
 
@@ -349,7 +455,8 @@ export function CheckApp() {
     const input = fileInput.current
     if (!input) return
     input.accept = accept
-    input.multiple = !target
+    // 作品写真は、何枚かまとめて選べる（6枚まで）
+    input.multiple = !target || target.part === 'photo'
     input.click()
   }
 
@@ -506,10 +613,12 @@ export function CheckApp() {
   const totalPages = PARTS.reduce((n, p) => n + pagesOf(mergeEntry(slots, p.id)), 0)
   const missing = PARTS.filter((p) => !mergeEntry(slots, p.id)).map((p) => p.name)
   // 読めなかったファイル（まとめられない・チェックできない）も、エラーに数える
-  const fileErrors = PARTS.flatMap((p) => (['word', 'pdf'] as const).filter((s) => slots[keyOf(p.id, s)] && (slots[keyOf(p.id, s)]!.state === 'error' || (s === 'word' && !!check.wordErrors[p.id])))).length
+  const fileErrors = PARTS.flatMap((p) => (['word', 'pdf'] as const).filter((s) => slots[keyOf(p.id, s)] && (slots[keyOf(p.id, s)]!.state === 'error' || (s === 'word' && !!wordError(slots, check, p.id))))).length
   const findingErrors = check.findings.filter((f) => f.severity === 'error').length
   const errors = findingErrors + fileErrors
   const warnings = check.findings.length - findingErrors
+  /** PDF はあるが Word を入れていないパート（Word をほかのパートに入れたとき、チェックの結果と確かめの窓で言う） */
+  const noWord = PARTS.filter((p) => p.id !== 'photo' && mergeEntry(slots, p.id) && !slots[keyOf(p.id, 'word')]).map((p) => p.name)
   /** PDF が Word より古いパート（確かめの窓で言う） */
   const stale = PARTS.filter((p) => p.id !== 'photo' && slots[keyOf(p.id, 'pdf')]?.kind === 'pdf' && isStale(slots[keyOf(p.id, 'word')]?.file, slots[keyOf(p.id, 'pdf')]?.file)).map((p) => p.name)
   // ファイル名の学籍番号・氏名：Word（表紙・抄録）、なければ表紙の PDF、なければ学生が入れたもの
@@ -520,7 +629,7 @@ export function CheckApp() {
   const fileName = mergedFileName(config, studentId, studentName)
 
   const startMerge = () => {
-    const ask = confirmText(errors, missing, stale, !check.hasWord)
+    const ask = confirmText(errors, missing, stale, check.hasWord ? noWord : true)
     if (ask) setPhase({ kind: 'confirm', ...ask })
     else void merge()
   }
@@ -541,7 +650,7 @@ export function CheckApp() {
       for (const p of PARTS) {
         const e = mergeEntry(slotsRef.current, p.id)
         if (!e) continue
-        if (e.photo) items.push({ type: 'image', bytes: e.photo.bytes, format: 'jpg', width: e.photo.width, height: e.photo.height })
+        if (e.photos) items.push({ type: 'photos', photos: e.photos.map((p) => ({ bytes: p.photo.bytes, format: 'jpg' as const, width: p.photo.width, height: p.photo.height })) })
         else items.push({ type: 'pdf', bytes: new Uint8Array(await e.file.arrayBuffer()) })
       }
       const { bytes, pageCount } = await mergeParts(items, fileName.replace(/\.pdf$/, ''))
@@ -550,6 +659,8 @@ export function CheckApp() {
       mergedUrl.current = pdf.url
       const mode = save.saveMode()
       setPhase({ kind: 'done', pdf, mode, size: `${pageCount}ページ・${save.sizeText(blob.size)}`, saved: '' })
+      // 入れたときの知らせは、保存したら閉じる
+      setNotes([])
       setAnnounce(mode === 'download' ? `保存しました：${fileName}` : `PDF ができました。「保存する」を押してください`)
       if (mode === 'download') save.downloadPdf(pdf)
     } catch {
@@ -604,7 +715,8 @@ export function CheckApp() {
     setSelected(on)
     if (on && f.page) {
       // 選んだ指摘のページが見えるようにする
-      requestAnimationFrame(() => docRef.current?.querySelector(`[data-page="${f.part}:${f.page}"]`)?.scrollIntoView({ block: 'nearest', inline: 'center', behavior: scrollBehavior() }))
+      // スマホは、ページの行を画面の真ん中に出す（「nearest」だと、画面の上の端で切れることがある）
+      requestAnimationFrame(() => docRef.current?.querySelector(`[data-page="${f.part}:${f.page}"]`)?.scrollIntoView({ block: narrow ? 'center' : 'nearest', inline: 'center', behavior: scrollBehavior() }))
     }
   }
   /** ページの丸を押したとき：そのページの最初の指摘を選ぶ */
@@ -631,14 +743,29 @@ export function CheckApp() {
     const one = (slot: SlotKind, e: Entry | undefined) => {
       const key = keyOf(p.id, slot)
       if (!e) {
-        const none = p.id === 'photo' ? (empty ? '写真' : 'まだありません') : empty ? <FileName name={`${p.base}.${slot === 'word' ? 'docx' : 'pdf'}`} oneLine /> : `${slot === 'word' ? 'Word' : 'PDF'} なし`
+        // 最初の画面は「Word」「PDF」だけ（見本の名前を出すと、名前を付け直すものと思われるため。mockups/v31 案1）
+        const none = p.id === 'photo' ? (empty ? '写真' : 'まだありません') : empty ? (slot === 'word' ? 'Word' : 'PDF') : `${slot === 'word' ? 'Word' : 'PDF'} なし`
         return (
           <span key={slot} className="pf none">
             {none}
           </span>
         )
       }
-      const ng = e.state === 'error' || (slot === 'word' && !!check.wordErrors[p.id])
+      if (e.photos) {
+        const open = (ev: React.MouseEvent<HTMLElement>) => setPhotoMenu(ev.currentTarget.getBoundingClientRect())
+        return [
+          <span key="photos" className="pf photos">
+            <button type="button" className="fname" aria-haspopup="dialog" onClick={open}>
+              写真 {e.photos.length}枚
+            </button>
+            <span className="pf-sub">（{MAX_PHOTOS}枚まで）</span>
+          </span>,
+          <button key="menu" type="button" className="link pf-link" aria-haspopup="dialog" onClick={open}>
+            並べ替え・外す
+          </button>,
+        ]
+      }
+      const ng = e.state === 'error' || (slot === 'word' && !!wordError(slots, check, p.id))
       return (
         <span key={slot} className={`pf${slot === 'pdf' && stale ? ' stale' : ''}${ng ? ' ng' : ''}`}>
           {slot === 'pdf' && stale && <Wn />}
@@ -681,24 +808,33 @@ export function CheckApp() {
             {'　'}
           </figure>
         )
+      const hint = p.id === 'body' && it.last && (
+        <>
+          {config.body.minPages}ページ
+          <br />
+          以上
+        </>
+      )
+      // PDF がまだないパートの空の枠は、押すとそのパートの PDF を選べる（最初の画面は、上の「ファイルを選ぶ」から）
+      if (!empty && !e)
+        return (
+          <figure key={`${it.part}-${it.k}`}>
+            <button type="button" className="pg none pick" aria-label={`${p.name}の PDF を入れる`} onClick={() => pick({ part: p.id, slot: 'pdf' }, '.pdf,application/pdf')}>
+              {hint}
+            </button>
+            {'　'}
+          </figure>
+        )
       return (
         <figure key={`${it.part}-${it.k}`} aria-hidden="true">
-          <span className="pg none">
-            {p.id === 'body' && it.last && (
-              <>
-                {config.body.minPages}ページ
-                <br />
-                以上
-              </>
-            )}
-          </span>
+          <span className="pg none">{hint}</span>
           {'　'}
         </figure>
       )
     }
     const pageKey = `${it.part}:${it.k}`
     const pin = pins.get(pageKey)
-    const src = e.photo ? e.photo.url : e.thumbs[it.k - 1]
+    const src = e.photos ? e.pageImage : e.thumbs[it.k - 1]
     // 絵を作っている途中（まだ作っていない）か、作れなかった（白い紙のまま）
     const tried = e.thumbs.length >= it.k
     const label = `${p.name}${pagesOf(e) > 1 ? ` ${it.k}ページ目` : ''}（全体の${it.no}ページ目）${pin ? `：指摘${pin.count}件` : ''}`
@@ -826,9 +962,9 @@ export function CheckApp() {
           {notes.length > 0 && (
             <ul className="add-notes">
               {notes.map((n, i) => (
-                <li key={i}>
-                  <Wn />
-                  {n}
+                <li key={i} className={n.info ? 'info' : undefined}>
+                  {n.info ? <Ok /> : <Wn />}
+                  {n.text}
                 </li>
               ))}
             </ul>
@@ -868,6 +1004,7 @@ export function CheckApp() {
           empty={empty}
           anyPdf={anyPdf}
           pdfCount={Object.keys(pdfs).length}
+          noWord={noWord}
           slots={slots}
           errors={errors}
           warnings={warnings}
@@ -938,6 +1075,16 @@ export function CheckApp() {
         />
       )}
       {help && <HelpDialog onClose={() => setHelp(false)} />}
+      {photoMenu && slots['photo:pdf']?.photos && (
+        <PhotoMenu
+          photos={slots['photo:pdf'].photos}
+          rect={photoMenu}
+          onMove={movePhoto}
+          onRemove={removePhoto}
+          onAdd={() => pick({ part: 'photo', slot: 'pdf' }, '.jpg,.jpeg,.png,.heic,.heif,image/*')}
+          onClose={() => setPhotoMenu(null)}
+        />
+      )}
       {menu && slots[menu.key] && (
         <MoveMenu
           entry={slots[menu.key]!}
@@ -964,7 +1111,7 @@ function DropArea({ big, dragging, reading, onPick }: { big: boolean; dragging: 
           <span className="pc-only">ここにファイルを入れる</span>
           <span className="ph-only">ファイルを入れる</span>
         </b>
-        <p className="d-s">{status ?? 'Word・PDF・作品写真を、まとめて入れられます'}</p>
+        <p className="d-s">{status ?? 'Word・PDF・作品写真を、まとめて入れられます。名前はそのままで大丈夫です'}</p>
         <button type="button" className="btn primary" onClick={onPick} disabled={!!reading}>
           ファイルを選ぶ
         </button>
@@ -992,6 +1139,8 @@ interface PanelProps {
   empty: boolean
   anyPdf: boolean
   pdfCount: number
+  /** PDF はあるが Word を入れていないパート */
+  noWord: string[]
   slots: Slots
   errors: number
   warnings: number
@@ -1000,6 +1149,26 @@ interface PanelProps {
   onPick: (f: CheckFinding) => void
   onAddWord: () => void
   ref: React.Ref<HTMLElement>
+}
+
+/** エラーと警告の意味（指摘の一覧の上。1つずつの札「手順書」「補助」の代わり。mockups/v31 案1） */
+function SeverityLegend() {
+  return (
+    <p className="sev-legend">
+      <span>
+        <i className="st no-ng" aria-hidden="true" />
+        <span>
+          <b className="e">エラー</b>：直してから出す
+        </span>
+      </span>
+      <span>
+        <Wn />
+        <span>
+          <b className="w">警告</b>：できれば直す
+        </span>
+      </span>
+    </p>
+  )
 }
 
 function Tally({ errors, warnings }: { errors: number; warnings: number }) {
@@ -1022,10 +1191,7 @@ function Issue({ f, sel, pages, onPick }: { f: CheckFinding; sel: boolean; pages
       <i className="dot" />
       {/* 指摘を押すと、そのページに枠が付く（キーボードでは、このボタンに Tab で移る） */}
       <button type="button" className="go" aria-pressed={sel} aria-label={`${f.severity === 'error' ? 'エラー' : '警告'}：${f.title}。${f.page ? `${PART_NAMES[f.part]}${pages > 1 ? ` ${f.page}ページ目` : ''}` : PART_NAMES[f.part]}${f.quote ? `。${f.quote.join('')}` : ''}${f.detail ? `。${f.detail}` : ''}`} onClick={onPick}>
-        <span className="ttl">
-          {f.title}
-          <span className="src">{f.source === 'guide' ? '手順書' : '補助'}</span>
-        </span>
+        <span className="ttl">{f.title}</span>
         <span className="detail">
           <Where f={f} pages={pages} />
           {f.quote && (
@@ -1042,7 +1208,7 @@ function Issue({ f, sel, pages, onPick }: { f: CheckFinding; sel: boolean; pages
   )
 }
 
-function CheckPanel({ check, checking, empty, anyPdf, pdfCount, slots, errors, warnings, selected, pdfPages, onPick, onAddWord, ref }: PanelProps) {
+function CheckPanel({ check, checking, empty, anyPdf, pdfCount, noWord, slots, errors, warnings, selected, pdfPages, onPick, onAddWord, ref }: PanelProps) {
   const sideRef = useRef<HTMLElement | null>(null)
   const [more, setMore] = useState(false)
   // 指摘の一覧が欄より長いとき：下に続くことが分かるように、欄の下をぼかす
@@ -1068,7 +1234,7 @@ function CheckPanel({ check, checking, empty, anyPdf, pdfCount, slots, errors, w
   const readErrors = PARTS.flatMap((p) =>
     (['word', 'pdf'] as const).flatMap((s) => {
       const e = slots[keyOf(p.id, s)]
-      const message = e?.state === 'error' ? e.message : s === 'word' && e ? check.wordErrors[p.id] : undefined
+      const message = e?.state === 'error' ? e.message : s === 'word' && e ? wordError(slots, check, p.id) : undefined
       return e && message ? [{ name: e.file.name, message }] : []
     }),
   )
@@ -1133,6 +1299,12 @@ function CheckPanel({ check, checking, empty, anyPdf, pdfCount, slots, errors, w
             ))}
           </ul>
         )}
+        {check.hasWord && noWord.length > 0 && (
+          <p className="unchecked-part">
+            <Wn />
+            <span>{noWord.join('・')}は Word を入れていないので、文や書式はチェックしていません。</span>
+          </p>
+        )}
         {!check.hasWord ? (
           <>
             <div className="unchecked">
@@ -1148,6 +1320,7 @@ function CheckPanel({ check, checking, empty, anyPdf, pdfCount, slots, errors, w
                 {I.word}Word を入れて、チェックする
               </button>
             </div>
+            {check.findings.length > 0 && <SeverityLegend />}
             {check.oks.length > 0 && (
               <ul className="oks">
                 {check.oks.map((o) => (
@@ -1179,6 +1352,7 @@ function CheckPanel({ check, checking, empty, anyPdf, pdfCount, slots, errors, w
                 <span className="nb">直したら、もう一度ここに入れます。</span>
               </span>
             </p>
+            <SeverityLegend />
             {pdfCount > 0 && (
               <p className="c2-legend">
                 <span className="nb">指摘を押すと、そのページに枠が付きます</span>
@@ -1451,6 +1625,62 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
         </button>
       </div>
     </Modal>
+  )
+}
+
+/** 作品写真の「並べ替え・外す」の小さな窓（写真の順番を変える・外す・足す。mockups/v31 案A） */
+function PhotoMenu({ photos, rect, onMove, onRemove, onAdd, onClose }: { photos: PhotoItem[]; rect: DOMRect; onMove: (id: number, dir: -1 | 1) => void; onRemove: (id: number) => void; onAdd: () => void; onClose: () => void }) {
+  const ref = useRef<HTMLDivElement>(null)
+  useDialogFocus(ref, onClose)
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const margin = 8
+    el.style.left = `${Math.max(margin, Math.min(rect.left, window.innerWidth - el.offsetWidth - margin))}px`
+    const below = rect.bottom + 6
+    el.style.top = `${below + el.offsetHeight > window.innerHeight - margin ? Math.max(margin, rect.top - el.offsetHeight - 6) : below}px`
+  }, [rect, photos.length])
+  return (
+    <div className="popover-backdrop" onMouseDown={onClose}>
+      <div className="popover photo-menu" ref={ref} role="dialog" aria-label="作品写真の並べ替え・外す" onMouseDown={(e) => e.stopPropagation()}>
+        <div className="popover-title">
+          <b>作品写真</b>
+          {photos.length}枚・{MAX_PHOTOS}枚まで（A4 の1ページに並べます）
+        </div>
+        <ol>
+          {photos.map((p, i) => (
+            <li key={p.id}>
+              <img src={p.photo.url} alt="" />
+              <span className="pm-name">
+                {i + 1}. <FileName name={p.file.name} oneLine />
+              </span>
+              <button type="button" className="pm-b" aria-label={`「${p.file.name}」を前へ`} disabled={i === 0} onClick={() => onMove(p.id, -1)}>
+                ↑
+              </button>
+              <button type="button" className="pm-b" aria-label={`「${p.file.name}」を後ろへ`} disabled={i === photos.length - 1} onClick={() => onMove(p.id, 1)}>
+                ↓
+              </button>
+              <button type="button" className="pm-b x" aria-label={`「${p.file.name}」を外す`} onClick={() => onRemove(p.id)}>
+                {I.x}
+              </button>
+            </li>
+          ))}
+        </ol>
+        {photos.length < MAX_PHOTOS && (
+          <button
+            type="button"
+            className="pm-add"
+            onClick={() => {
+              onClose()
+              onAdd()
+            }}
+          >
+            {I.plus}写真を足す
+          </button>
+        )}
+        <p className="pm-hint">並べ方は枚数で決まります。写真は切らずに入れます。</p>
+      </div>
+    </div>
   )
 }
 
