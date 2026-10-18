@@ -97,7 +97,9 @@ function migratePhotos(photos: Raw): Report['workPhotos'] {
     : undefined
   // 並べ方は、その枚数で選べるものだけ残す（なければ既定の並べ方）
   const columns = typeof photos.columns === 'number' && photoGrid({ layout, columns: photos.columns }).columns === photos.columns ? photos.columns : undefined
-  return { layout, imageIds, ...(columns ? { columns } : {}), ...(positions ? { positions } : {}) }
+  // 「全体を入れる（切らない）」（mockups/v32 ③）。前の版の原稿にはないので、今までどおり、どの写真も枠いっぱいに切り抜く
+  const whole = Array.isArray(photos.whole) ? (photos.whole as unknown[]).map((x) => x === true) : []
+  return { layout, imageIds, ...(columns ? { columns } : {}), ...(positions ? { positions } : {}), ...(whole.some(Boolean) ? { whole } : {}) }
 }
 
 export function migrateReport(input: unknown): Report {

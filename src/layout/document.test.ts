@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { currentConfig } from '../config'
 import { createReport } from '../model/newReport'
-import { ABSTRACT_SUBTITLE, abstractHtml, abstractRowFontPt, COVER_SUBTITLE, coverHtml, fitLineFontPt, formatReference, refitLineFontPt, subtitleLine, textUnits, yearDigits } from './document'
+import { ABSTRACT_SUBTITLE, abstractHtml, abstractRowFontPt, buildReportDocument, COVER_SUBTITLE, coverHtml, fitLineFontPt, formatReference, refitLineFontPt, subtitleLine, textUnits, yearDigits } from './document'
+import { documentCss } from './documentCss'
 
 describe('抄録の見出し（学籍番号・氏名と指導教員を1行に）', () => {
   it('文字の幅は全角を1、半角を0.5として数える', () => {
@@ -111,5 +112,29 @@ describe('引用・参考文献の書き方', () => {
     expect(formatReference({ ...book, title: '『ファッションの歴史' })).toBe('浜松隆志、『ファッションの歴史』、文化出版局、2019年')
     expect(formatReference({ ...book, title: 'ファッションの歴史』' })).toBe('浜松隆志、『ファッションの歴史』、文化出版局、2019年')
     expect(formatReference({ ...book, pages: '１２－３０' })).toBe('浜松隆志、『ファッションの歴史』、文化出版局、2019年、p.12-30')
+  })
+})
+
+describe('作品写真の「全体を入れる（切らない）」（mockups/v32 ③ 案A）', () => {
+  const photosOf = (workPhotos: ReturnType<typeof createReport>['workPhotos']) => {
+    const report = { ...createReport(currentConfig), workPhotos }
+    const html = buildReportDocument(report, currentConfig, { imageSrc: (id) => `img/${id}`, photoSrc: (id) => `photo/${id}`, figureSize: () => ({ widthMm: 60, heightMm: 45 }) })
+    return html.slice(html.indexOf('<section class="photos'))
+  }
+
+  it('全体を入れる写真の枠には whole を付け、切り抜く位置は使わない（ほかの写真は今までどおり切り抜く）', () => {
+    const html = photosOf({ layout: 2, columns: 1, imageIds: ['a', 'b'], positions: [{ x: 10, y: 20 }, { x: 30, y: 40 }], whole: [true, false] })
+    expect(html).toContain('<div class="slot whole" data-photo-slot="0"><img src="photo/a" alt=""></div>')
+    expect(html).toContain('<div class="slot" data-photo-slot="1"><img src="photo/b" style="object-position:30% 40%" alt=""></div>')
+  })
+
+  it('空いている枠には付けない。前の版の原稿（項目なし）は、どれも切り抜く', () => {
+    expect(photosOf({ layout: 2, imageIds: ['', 'b'], whole: [true, false] })).toContain('<div class="slot empty-slot" data-photo-slot="0"></div>')
+    expect(photosOf({ layout: 2, imageIds: ['a', 'b'] })).not.toContain('whole')
+  })
+
+  it('組版の CSS：切り抜くのは object-fit: cover、全体を入れるのは contain（画面と PDF で同じ）', () => {
+    expect(documentCss).toContain('.photos .slot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }')
+    expect(documentCss).toMatch(/\.photos \.slot\.whole img \{ object-fit: contain;/)
   })
 })

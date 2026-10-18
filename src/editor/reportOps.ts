@@ -210,8 +210,8 @@ export function split(report: Report, id: string, before: string, after: string)
     }
   }
   // 図・表のタイトル：そのまとまり（表）の下に段落を作る
-  const owner = report.body.flatMap((c) => c.blocks).find((b) => (b.type === 'figureRow' && b.figures.some((f) => f.id === id)) || (b.type === 'table' && b.id === id))
-  if (owner) return { report: mapBody(report, (b) => (b === owner ? [b, paragraph(created, '')] : b)), newId: created }
+  const below = paragraphAfter(report, id, created)
+  if (below) return below
   for (const chapter of report.body) {
     const i = chapter.blocks.findIndex((b) => b.id === id)
     const b = chapter.blocks[i]
@@ -233,6 +233,16 @@ export function split(report: Report, id: string, before: string, after: string)
     report: mapBody(report, (b) => (b.id === id && b.type === 'subheading' ? [{ ...b, title: before + after }, paragraph(created, '')] : b)),
     newId: created,
   }
+}
+
+/**
+ * 図・表のすぐ後ろ（同じ章の中）に、空の段落を作る（図・表のタイトルで Enter・「＋ ここに続きを書く」。mockups/v32 ① 案A）。
+ * id は図の ID か表の ID（表のタイトル）。図は、並んでいる図のまとまりの後ろに作る。図・表が見つからなければ null
+ */
+export function paragraphAfter(report: Report, id: string, created = newId('p')): { report: Report; newId: string } | null {
+  const owner = report.body.flatMap((c) => c.blocks).find((b) => (b.type === 'figureRow' && b.figures.some((f) => f.id === id)) || (b.type === 'table' && b.id === id))
+  if (!owner) return null
+  return { report: mapBody(report, (b) => (b === owner ? [b, paragraph(created, '')] : b)), newId: created }
 }
 
 /** 段落の先頭で Backspace：前の段落とつなげる。前が段落でなければ null */
@@ -399,19 +409,6 @@ export function insertRef(report: Report, paragraphId: string, offset: number, t
   // 段落の終わり（「。」のない文末）に入れたときは、後ろに「。」を付ける
   if (content[content.length - 1] === ref) content.push({ type: 'text', text: '。' })
   return mapBody(report, (b) => (b.id === paragraphId ? { ...paragraph, content } : b))
-}
-
-/** 段落の中で、その図表への参照が終わる文字位置（参照の後ろにカーソルを置くため）。なければ段落の最後 */
-export function refEnd(report: Report, paragraphId: string, targetId: string): number {
-  const paragraph = findParagraph(report, paragraphId)
-  if (!paragraph) return 0
-  const num = numbering(report)
-  let pos = 0
-  for (const node of paragraph.content) {
-    pos += contentToText([node], num).length
-    if (node.type === 'ref' && node.targetId === targetId) return pos
-  }
-  return pos
 }
 
 /**

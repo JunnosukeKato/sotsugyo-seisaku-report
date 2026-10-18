@@ -1,0 +1,168 @@
+import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
+import { editables } from '../editor/reportOps'
+import { FIELD_IDS, ABSTRACT_LOCK_TEXT } from '../layout/document'
+import { BAND_SIDE_QUERY, paragraphHint, photoBand, todoBand, type BandTodo } from './bandText'
+
+/**
+ * スマホ：紙面の中の小さな案内とボタンを、紙面の下の帯に、ふつうの文字の大きさで出す（mockups/v32 ④ 案A）。
+ * 紙面は画面の幅に合わせて縮めているので、紙面の中の案内（「（クリックして写真を選ぶ）」・抄録の「先生の許可が出た」など）は
+ * 6px ほどになり、指で広げることもできなかった。紙面には小さな印（↓・＋）だけを残す（印の見た目は index.css の「v32 ④」）。
+ * - 抄録を書き始める前：抄録の説明と「先生の許可が出た（抄録を書き始める）」
+ * - 作品写真のページに空いている枠：「下の枠に、まだ写真がありません」と「写真を選ぶ」
+ * - まだ書いていない欄（ひな形の段落・見出し・表紙の項目など）・写真を入れていない図の枠：いちばん上の所の言葉と「書く」「写真を選ぶ」
+ * 帯は紙面の外の部品なので、PDF・印刷には出ない。横向きのスマホでは、紙面の右に出す（紙面の下に出すと、紙面がとても小さくなるため）。
+ * 書いている間（下の書く欄）・図や表を選んでいる間・はじめての案内の間は出さない
+ */
+
+const svg = (children: ReactNode) => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.4} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+    {children}
+  </svg>
+)
+const Mark = {
+  down: svg(<path d="M12 5v13M6.5 12.5L12 18l5.5-5.5" />),
+  plus: svg(<path d="M12 5v14M5 12h14" />),
+}
+
+/** 帯に出すもの */
+type Band =
+  | { kind: 'abstract' }
+  | { kind: 'photos'; text: string; index: number }
+  | { kind: 'fields'; todo: BandTodo; text: string; sub: string | null; button: string }
+
+/** 紙面と帯の間・帯と下の道具の間（画面の px） */
+const GAP = 10
+
+/** いま見ているページの帯（出すものがなければ null） */
+function bandOf(editor: ReportEditor, snap: EditorSnapshot): Band | null {
+  const kind = snap.layout?.kinds[snap.page]
+  if (kind === 'abstract' && snap.report.abstract.started === false) return { kind: 'abstract' }
+  if (kind === 'photos') {
+    const photo = photoBand(snap.report.workPhotos)
+    return photo && { kind: 'photos', ...photo }
+  }
+  // まだ書いていない欄（空の欄は、紙面に仮の文字（data-placeholder）を出している）と、写真を入れていない図の枠。紙面の上から順に
+  const page = editor.pageElements()[snap.page]
+  if (!page) return null
+  const kinds = new Map(editables(snap.report).map((e) => [e.id, e.kind]))
+  const todos = [...page.querySelectorAll<HTMLElement>('figure[data-empty-figure], [data-block-id][data-placeholder]:empty')].flatMap((el): BandTodo[] => {
+    if (el.tagName === 'FIGURE') return el.dataset.figureId ? [{ kind: 'figure', id: el.dataset.figureId }] : []
+    const id = el.dataset.blockId!
+    if (id === FIELD_IDS.course) return [{ kind: 'course', id }]
+    const editable = kinds.get(id)
+    return editable ? [{ kind: 'field', id, editable, hint: paragraphHint(snap.report, id) }] : []
+  })
+  if (!todos.length) return null
+  return { kind: 'fields', todo: todos[0], ...todoBand(todos[0], todos.length - 1) }
+}
+
+/**
+ * 帯を置く。縦向き：紙面の下（ページ送り・選んでいる物の道具のすぐ上）。横向き：紙面の右（下の道具に重ならない高さの真ん中）。
+ * 縦向きのときは、帯の分だけ紙面を上に寄せる幅（台の --inset-band）を返す
+ */
+function place(band: HTMLElement, stage: HTMLElement): number {
+  const st = stage.getBoundingClientRect()
+  // 画面の下の道具（ページ送り・選んでいる物の道具。どちらも画面に固定して置いている）
+  const bars = [...document.querySelectorAll<HTMLElement>('.pager, .sel-bar > *')].map((e) => e.getBoundingClientRect()).filter((r) => r.height > 0)
+  if (!matchMedia(BAND_SIDE_QUERY).matches) {
+    const above = st.bottom - Math.min(st.bottom, ...bars.map((r) => r.top)) + GAP
+    band.style.top = ''
+    band.style.maxHeight = ''
+    band.style.bottom = `${above}px`
+    return above + band.offsetHeight + GAP
+  }
+  band.style.bottom = ''
+  band.style.maxHeight = ''
+  band.style.top = `${GAP}px`
+  const b = band.getBoundingClientRect()
+  const limit = Math.min(st.bottom, ...bars.filter((r) => r.left < b.right && r.right > b.left).map((r) => r.top)) - GAP
+  const room = Math.max(0, limit - st.top - GAP)
+  band.style.maxHeight = `${room}px`
+  band.style.top = `${GAP + Math.max(0, (room - band.offsetHeight) / 2)}px`
+  return 0
+}
+
+/** 紙面のその所を押したのと同じことをする（書く欄を開く・コースを選ぶ・写真を選ぶ。紙面を押したときの動きを、そのまま使う） */
+function tapPaper(editor: ReportEditor, todo: BandTodo): void {
+  const page = editor.pageElements()[editor.getSnapshot().page]
+  const selector = todo.kind === 'figure' ? `figure[data-figure-id="${CSS.escape(todo.id)}"] .figure-slot` : `[data-block-id="${CSS.escape(todo.id)}"]`
+  const el = page?.querySelector<HTMLElement>(selector)
+  if (!el) return
+  const r = el.getBoundingClientRect()
+  el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: r.left + Math.min(r.width / 2, 20), clientY: r.top + r.height / 2 }))
+}
+
+function BandView({ editor, band }: { editor: ReportEditor; band: Band }) {
+  const ref = useRef<HTMLElement>(null)
+  const stageRef = useRef<HTMLElement | null>(null)
+  // 帯を出している間だけ、台に印（data-band）を付けて紙面の中の案内を小さな印にし、帯の分だけ紙面を上に寄せる。帯を消したら元に戻す
+  useLayoutEffect(() => {
+    const stage = ref.current?.closest<HTMLElement>('.stage') ?? null
+    stageRef.current = stage
+    return () => {
+      if (!stage) return
+      delete stage.dataset.band
+      stage.style.removeProperty('--inset-band')
+      editor.refitPage()
+    }
+  }, [editor])
+  // 描くたびに置き直す（帯の中身・画面の向き・下の道具が変わるため）。紙面を寄せる幅が変わったときだけ、紙面の倍率を求め直す
+  useLayoutEffect(() => {
+    const el = ref.current
+    const stage = stageRef.current
+    if (!el || !stage) return
+    stage.dataset.band = band.kind
+    const inset = `${Math.round(place(el, stage))}px`
+    if (stage.style.getPropertyValue('--inset-band') !== inset) {
+      stage.style.setProperty('--inset-band', inset)
+      editor.refitPage()
+    }
+  })
+
+  if (band.kind === 'abstract') {
+    return (
+      <section className="page-band" aria-label="このページの案内" ref={ref}>
+        <div className="t">
+          <span className="mk">{Mark.down}</span>
+          <span>{ABSTRACT_LOCK_TEXT.title}</span>
+        </div>
+        <p>{ABSTRACT_LOCK_TEXT.note}</p>
+        <button onClick={() => editor.startAbstract()}>{ABSTRACT_LOCK_TEXT.button}</button>
+      </section>
+    )
+  }
+  const { text, sub, button, run }: { text: string; sub: string | null; button: string; run: () => void } =
+    band.kind === 'photos'
+      ? {
+          text: band.text,
+          sub: null,
+          button: '写真を選ぶ',
+          run: () => {
+            // 紙面の空いている枠を押したときと同じ（写真を選ぶ画面を開く）
+            editor.select({ kind: 'photos' })
+            void editor.setPhoto(band.index)
+          },
+        }
+      : { text: band.text, sub: band.sub, button: band.button, run: () => tapPaper(editor, band.todo) }
+  return (
+    <section className="page-band row" aria-label="このページの案内" ref={ref}>
+      <div className="t">
+        <span className="mk">{Mark.plus}</span>
+        <span>
+          {text}
+          {sub && <small>{sub}</small>}
+        </span>
+      </div>
+      <button onClick={run}>{button}</button>
+    </section>
+  )
+}
+
+/** スマホの紙面の下の帯。hidden：はじめての案内を出している間など */
+export function PageBand({ editor, snap, hidden }: { editor: ReportEditor; snap: EditorSnapshot; hidden?: boolean }) {
+  const kind = snap.layout?.kinds[snap.page]
+  const quiet = hidden || !snap.layout || !!snap.editingId || snap.zoomed || (!!snap.selection && kind !== 'photos')
+  const band = quiet ? null : bandOf(editor, snap)
+  return band ? <BandView editor={editor} band={band} /> : null
+}

@@ -496,17 +496,26 @@ await withEdge(async (browser) => {
   await waitEditing(() => window.__editor.getSnapshot().editingId?.startsWith('f-'))
   await page.keyboard.type('デザイン画')
   await page.keyboard.press('Enter')
-  await waitEditing((id) => window.__editor.getSnapshot().editingId === id, firstParagraph)
+  await waitEditing(() => window.__editor.getSnapshot().editingKind === 'paragraph')
   await ready()
   s = await snap()
   const blocksNow = s.report.body.flatMap((c) => c.blocks)
   const pIndex = blocksNow.findIndex((b) => b.id === firstParagraph)
   const group = blocksNow[pIndex + 1]
-  check('「図を入れる」で、書いている位置に（図1）が入り、段落のすぐ下にタイトル付きの図が入る', group?.type === 'figureRow' && group.figures[0].caption === 'デザイン画' && !!group.figures[0].imageId && /（図1）。$/.test(await page.evaluate(() => document.querySelector('.overlay-editor').innerText)), JSON.stringify(group?.figures))
-  check('図のタイトルを Enter で確定すると、書いていた段落の続きに戻る', s.editingId === firstParagraph)
+  const refAtEnd = blocksNow[pIndex].content.at(-2)?.targetId === group?.figures?.[0].id && blocksNow[pIndex].content.at(-1)?.text === '。'
+  check('「図を入れる」で、書いている位置に（図1）が入り、段落のすぐ下にタイトル付きの図が入る', group?.type === 'figureRow' && group.figures[0].caption === 'デザイン画' && !!group.figures[0].imageId && refAtEnd, JSON.stringify(group?.figures))
+  // 図のタイトルで Enter：図の上の段落に戻らず、図の後ろに新しい段落ができて、そこで書き続ける（mockups/v32 ① 案A）
+  const afterFigure = blocksNow[pIndex + 2]
+  check('図のタイトルで Enter を押すと、図の後ろに新しい段落ができて、そこで書ける（図の上の段落には戻らない）', afterFigure?.type === 'paragraph' && s.editingId === afterFigure.id && afterFigure.content.every((n) => !n.text), JSON.stringify({ editing: s.editingId, after: afterFigure?.id }))
   check('参照していない図の指摘が出ない', !s.findings.some((x) => x.ruleId === 'figure-unreferenced'))
   await page.keyboard.press('Escape')
   await ready()
+  // 元に戻す1回で、作った段落だけが消える（図とタイトルは残る）
+  await page.evaluate(() => window.__editor.undo())
+  await ready()
+  s = await snap()
+  const undoneFlat = s.report.body.flatMap((c) => c.blocks)
+  check('元に戻す1回で、図のタイトルの Enter で作った段落だけが消える（タイトルは残る）', !undoneFlat.some((b) => b.id === afterFigure?.id) && undoneFlat.find((b) => b.id === group?.id)?.figures[0].caption === 'デザイン画', JSON.stringify(undoneFlat.slice(pIndex, pIndex + 3).map((b) => b.id)))
 
   // 図を選んで「もう1枚」：すぐ後ろに入り、横に並び、本文に（図2）が入る
   const figAt = await page.evaluate(() => {
@@ -518,7 +527,8 @@ await withEdge(async (browser) => {
   await chooser2.accept([pngPath])
   await waitEditing(() => (window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow')?.figures.length ?? 0) === 2 && window.__editor.getSnapshot().editingId?.startsWith('f-'))
   await page.keyboard.type('型紙')
-  await page.keyboard.press('Enter')
+  // Esc で書き終える（Enter は図の後ろに段落を作る）
+  await page.keyboard.press('Escape')
   await ready()
   s = await snap()
   const two = s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow')
@@ -582,10 +592,17 @@ await withEdge(async (browser) => {
   check('「表を入れる」で、書いている位置に（表n）が入り、表のタイトルを書く欄が開く（タイトルが空ならエラー）', !!tableBlock && s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.some((n) => n.type === 'ref' && n.targetId === tableBlock.id) && s.findings.some((x) => x.ruleId === 'required-text' && x.blockId === tableBlock.id), tableBlock?.id)
   await page.keyboard.type('使用した生地')
   await page.keyboard.press('Enter')
-  await waitEditing((id) => window.__editor.getSnapshot().editingId === id, firstParagraph)
-  check('表のタイトルを Enter で確定すると、書いていた段落の続きに戻る', true)
+  await waitEditing(() => window.__editor.getSnapshot().editingKind === 'paragraph')
+  await ready()
+  s = await snap()
+  const tableFlat = s.report.body.flatMap((c) => c.blocks)
+  const afterTable = tableFlat[tableFlat.findIndex((b) => b.id === tableBlock.id) + 1]
+  check('表のタイトルで Enter を押すと、表の後ろに新しい段落ができて、そこで書ける', afterTable?.type === 'paragraph' && s.editingId === afterTable.id && tableFlat.find((b) => b.id === tableBlock.id).caption === '使用した生地', JSON.stringify({ editing: s.editingId, after: afterTable?.id }))
   await page.keyboard.press('Escape')
   await ready()
+  await page.evaluate(() => window.__editor.undo())
+  await ready()
+  check('元に戻す1回で、表の後ろに作った段落が消える', !(await snap()).report.body.flatMap((c) => c.blocks).some((b) => b.id === afterTable?.id))
   // 表の操作：セルを書き、行・列を足し、列の幅を切り替え、セルに画像を入れる
   const tableNow = () => snap().then((x) => x.report.body.flatMap((c) => c.blocks).find((b) => b.id === tableBlock.id))
   await clickBlock((await tableNow()).rows[1].cells[0].id)
@@ -771,10 +788,61 @@ await withEdge(async (browser) => {
     JSON.stringify(idsAfter) === JSON.stringify(idsBefore.filter((id) => id !== doomed)) && (!stillRendering || openedDuring === null),
     JSON.stringify({ stillRendering, openedDuring, removed: idsBefore.filter((id) => !idsAfter.includes(id)) }),
   )
-  await page.evaluate(() => window.__editor.finishEditing())
+  // PC でも、紙面の台の下に「段落を削除しました［戻す］」が出る。15秒か、次の操作まで（下の細い線は残りの時間。mockups/v32 ② 案A）
+  const pcBar = () =>
+    page.evaluate(() => {
+      const area = document.querySelector('.stage .undo-area')
+      const toast = area?.querySelector('.undo-toast')
+      const line = toast?.querySelector('.undo-timer span')
+      const r = toast?.getBoundingClientRect()
+      const p = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current')?.getBoundingClientRect()
+      return {
+        text: toast?.textContent ?? '',
+        role: area?.getAttribute('role'),
+        button: !!toast?.querySelector('button'),
+        line: line ? { duration: getComputedStyle(line).animationDuration, scale: new DOMMatrix(getComputedStyle(line).transform).a } : null,
+        centered: !!r && !!p && Math.abs(r.left + r.width / 2 - (p.left + p.width / 2)) < 2 && r.bottom > p.bottom - 80,
+      }
+    })
+  const barNow = await pcBar()
+  await page.screenshot({ path: `${OUT}/2-delete-bar.png` })
+  check('PC でも、段落を削除すると紙面の下の真ん中に「段落を削除しました［戻す］」が出る（残りの時間の線・読み上げにも伝わる）', barNow.text === '段落を削除しました戻す' && barNow.role === 'status' && barNow.button && barNow.line?.duration === '15s' && barNow.centered, JSON.stringify(barNow))
+  await pause0(7000)
+  const barLater = await pcBar()
+  check('7秒たっても知らせは出たまま（15秒出す）で、残りの時間の線は縮んでいる', barLater.button && barLater.line && barLater.line.scale < 0.7 && barLater.line.scale > 0.3, JSON.stringify(barLater.line))
+  await page.click('.stage .undo-area .undo-toast button')
+  await ready()
+  const restoredPc = await page.evaluate((id) => ({ text: document.querySelector('.stage .undo-area')?.textContent ?? '', flash: !!document.querySelector(`.page-viewport.front .undo-flash[data-block-id="${id}"]`), page: window.__editor.getSnapshot().page, at: window.__editor.pageOfBlock(id) }), doomed)
+  await page.screenshot({ path: `${OUT}/2-delete-restored.png` })
+  check('知らせの「戻す」で削除した段落が戻り、「✓ 段落を戻しました」と出て、戻した段落が光る', JSON.stringify(await bodyIds()) === JSON.stringify(idsBefore) && restoredPc.text === '段落を戻しました' && restoredPc.flash && restoredPc.page === restoredPc.at, JSON.stringify(restoredPc))
+  await pause0(1700)
+  check('光るのは少しの間だけ（1.5秒ほどで消える）', !(await page.$('.page-viewport.front .undo-flash')))
+  // 次の操作（ほかの段落に書く）をすると、知らせは消える
+  await clickBlock(doomed)
+  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 20000 }, doomed)
+  await clickPaletteButton('削除')
+  await ready()
+  const shownAgain = (await pcBar()).button
+  const other = idsBefore.find((id) => id !== doomed && s.report.body.flatMap((c) => c.blocks).find((b) => b.id === id)?.type === 'paragraph')
+  await clickBlock(other)
+  await page.keyboard.type('あ')
+  await pause0(300)
+  const afterTyping = await pcBar()
+  check('知らせは、次の操作（ほかの段落に書く）をすると消える', shownAgain && !afterTyping.text, JSON.stringify({ shownAgain, afterTyping: afterTyping.text }))
+  await page.keyboard.press('Escape')
+  await ready()
   await page.evaluate(() => window.__editor.undo())
   await ready()
-  check('「元に戻す」で、削除した段落が戻る', JSON.stringify(await bodyIds()) === JSON.stringify(idsBefore))
+  // ほかのページを見ているときに Ctrl+Z で戻しても、戻した所へ移って光る（何をどこに戻したか分かる）
+  await page.evaluate(() => window.__editor.goToPage(0, 'none'))
+  await ready()
+  await page.keyboard.down('Control')
+  await page.keyboard.press('z')
+  await page.keyboard.up('Control')
+  await ready()
+  await pause0(200)
+  const movedBack = await page.evaluate((id) => ({ page: window.__editor.getSnapshot().page, at: window.__editor.pageOfBlock(id), flash: !!document.querySelector(`.page-viewport.front .undo-flash[data-block-id="${id}"]`) }), doomed)
+  check('ほかのページで元に戻す（Ctrl+Z）と、戻した段落のページへ移って光る', JSON.stringify(await bodyIds()) === JSON.stringify(idsBefore) && movedBack.page === movedBack.at && movedBack.page > 0 && movedBack.flash, JSON.stringify(movedBack))
   s = await snap()
 
   // ---- PDF に書き出す（学生が「PDFに保存」を選んだときと同じ印刷処理） ----
@@ -792,6 +860,82 @@ await withEdge(async (browser) => {
   const page1 = await doc.getPage(1)
   const vp = page1.getViewport({ scale: 1 })
   check('PDF は A4', Math.abs(vp.width - 595.3) < 2 && Math.abs(vp.height - 841.9) < 2, `${vp.width.toFixed(1)}x${vp.height.toFixed(1)}pt`)
+
+  // ---- 図・表のあとの続き：章の最後の図の下が空いていれば「＋ ここに続きを書く」。押すと図の後ろに段落ができる（画面だけ。mockups/v32 ① 案A） ----
+  await page.evaluate(() => {
+    const t = (text) => ({ type: 'text', text })
+    const body = [
+      { id: 'kc1', title: '制作過程', blocks: [{ type: 'paragraph', id: 'kpA', content: [t('袖には波の模様を刺繍した'), { type: 'ref', targetId: 'kf1', withParens: true }, t('。')] }, { type: 'figureRow', id: 'kg1', figures: [{ id: 'kf1', imageId: '', caption: '袖の刺繍' }] }] },
+      { id: 'kc2', title: 'まとめ', blocks: [{ type: 'paragraph', id: 'kpZ', content: [t('まとめた。')] }] },
+    ]
+    window.__editor.update((r) => ({ ...r, body }))
+  })
+  await pause(300)
+  await ready()
+  await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfBlock('kpA'), 'none'))
+  await ready()
+  await pause0(200)
+  const contRow = () =>
+    page.evaluate(() => {
+      const b = document.querySelector('.continue-row')
+      const g = document.querySelector('.page-viewport.front .figure-group[data-group-id="kg1"]')?.getBoundingClientRect()
+      const r = b?.getBoundingClientRect()
+      return { shown: !!b && !b.hidden && r.height > 0, text: b?.textContent ?? '', below: !!g && !!r && r.top >= g.bottom && r.top - g.bottom < 40, inPaper: !!b?.closest('.page-viewport'), x: r ? r.left + 60 : 0, y: r ? r.top + r.height / 2 : 0 }
+    })
+  const autoRow = await contRow()
+  await page.screenshot({ path: `${OUT}/2-continue-row.png` })
+  check('章の最後の図がページの最後で、下が空いているときは、図のすぐ下に「＋ ここに続きを書く」が出る（紙面の外の層に置く）', autoRow.shown && autoRow.text === 'ここに続きを書く' && autoRow.below && !autoRow.inPaper, JSON.stringify(autoRow))
+  const pagesNow = (await snap()).layout.kinds.length
+  await page.pdf({ path: `${OUT}/continue-row.pdf`, preferCSSPageSize: true, printBackground: true })
+  const crDoc = await getDocument({ url: `${OUT}/continue-row.pdf`, verbosity: 0 }).promise
+  let crText = ''
+  for (let n = 1; n <= crDoc.numPages; n++) crText += (await (await crDoc.getPage(n)).getTextContent()).items.map((it) => it.str).join('')
+  check('「＋ ここに続きを書く」は PDF に出ず、ページの数も変わらない', !crText.includes('ここに続きを書く') && crText.replace(/\s/g, '').includes('袖の刺繍') && crDoc.numPages === pagesNow, `${crDoc.numPages} / ${pagesNow}ページ`)
+  // 下が空いている図を選んだときも、その空いた所（本文の領域の中）に出る
+  await page.evaluate(() => window.__editor.select({ kind: 'figure', id: 'kf1' }))
+  await pause0(200)
+  const selRow = await page.evaluate(() => {
+    const r = document.querySelector('.continue-row').getBoundingClientRect()
+    const p = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current').getBoundingClientRect()
+    return { inside: r.bottom <= p.top + (p.height * (297 - 25)) / 297 }
+  })
+  check('下が空いている図を選んだときも、図のすぐ下の空いた所（本文の領域の中）に出る', (await contRow()).shown && (await contRow()).below && selRow.inside, JSON.stringify(selRow))
+  await page.evaluate(() => window.__editor.select(null))
+  await pause0(200)
+  await page.mouse.click(autoRow.x, autoRow.y)
+  await waitEditing(() => window.__editor.getSnapshot().editingKind === 'paragraph')
+  await ready()
+  await page.keyboard.type('最初の図案は波が細かすぎた。')
+  await page.keyboard.press('Escape')
+  await ready()
+  s = await snap()
+  const kc1 = s.report.body.find((c) => c.id === 'kc1').blocks
+  check('「＋ ここに続きを書く」を押すと、図の後ろ（同じ章の中）に新しい段落ができ、そこで書ける', kc1.length === 3 && kc1[1].id === 'kg1' && kc1[2].type === 'paragraph' && kc1[2].content.map((n) => n.text ?? '').join('') === '最初の図案は波が細かすぎた。' && s.report.body.find((c) => c.id === 'kc2').blocks.length === 1, JSON.stringify(kc1.map((b) => b.id)))
+  await pause0(150)
+  check('図の後ろに段落があるときは、選ばなければ出ない', !(await contRow()).shown)
+  // 選んでも、後ろに段落が続く（下が空いていない）ときは出さない。続きの段落の1行目に重ならず、押せば書ける
+  await page.evaluate(() => window.__editor.select({ kind: 'figure', id: 'kf1' }))
+  await pause0(200)
+  const nextLine = await page.evaluate((id) => {
+    const b = document.querySelector('.continue-row')
+    const r = b.getBoundingClientRect()
+    const p = [...document.querySelectorAll(`.page-viewport.front [data-block-id="${id}"]`)].find((e) => e.getBoundingClientRect().height > 0)
+    const range = document.createRange()
+    range.selectNodeContents(p)
+    const line = range.getClientRects()[0]
+    const hit = document.elementFromPoint(line.left + 20, (line.top + line.bottom) / 2)
+    return { shown: !b.hidden && r.height > 0, overlap: !b.hidden && r.bottom > line.top && r.top < line.bottom, hit: hit?.closest('[data-block-id]')?.getAttribute('data-block-id') ?? hit?.className }
+  }, kc1[2].id)
+  await page.screenshot({ path: `${OUT}/2-continue-row-none.png` })
+  check('図を選んでも、後ろに段落が続くときは「＋ ここに続きを書く」を出さない（続きの段落の1行目に重ならない）', !nextLine.shown && !nextLine.overlap && nextLine.hit === kc1[2].id, JSON.stringify(nextLine))
+  await page.evaluate(() => window.__editor.select(null))
+  // 元に戻す（書いた文 → 作った段落）で、きれいに元どおりになる
+  await page.evaluate(() => window.__editor.undo())
+  await ready()
+  await page.evaluate(() => window.__editor.undo())
+  await ready()
+  await pause0(150)
+  check('元に戻すと、作った段落が消え、また図の下に「＋ ここに続きを書く」が出る', (await snap()).report.body.find((c) => c.id === 'kc1').blocks.length === 2 && (await contRow()).shown)
 
 
   // ---- 図が段落の下に入りきらないときは、図だけ次のページの上へ送り、後ろの文章でページを埋める ----
@@ -1063,7 +1207,177 @@ await withEdge(async (browser) => {
 
   // ---- 「PDFを書き出す」：エラーが0件の原稿で、ツールの中で PDF を作り、そのまま保存する（mockups/v28 案C） ----
   await pdfSaveCheck(browser)
+
+  // ---- 作品写真の「全体を入れる（切らない）」（mockups/v32 ③ 案A） ----
+  await photoWholeCheck(browser)
 })
+
+/**
+ * 作品写真の「全体を入れる（切らない）」（mockups/v32 ③ 案A）：写真を押すと「この写真」の道具にスイッチが出る。
+ * 入れると、紙面でも PDF でも、写真の全体が枠に入る（まわりは白）。入れている間は動かせない。元に戻せる。
+ * 並べ方を変えても残り、写真を差し替えると外れる（今までどおり枠いっぱいに切り抜く）
+ */
+async function photoWholeCheck(browser) {
+  const context = await browser.createBrowserContext()
+  const page = await context.newPage()
+  await noHotReload(page)
+  await stubConfig(page)
+  page.on('pageerror', (e) => console.log('pageerror(whole):', e.message))
+  await page.evaluateOnNewDocument(() => {
+    try {
+      localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+    } catch {}
+  })
+  await page.setViewport({ width: 1440, height: 900 })
+  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  const ready = () =>
+    page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
+  const pause = (ms = 400) => new Promise((r) => setTimeout(r, ms))
+  await ready()
+  await page.waitForSelector('.guide.step-course .g-opts button')
+  await page.evaluate(() => document.querySelector('.g-opts button').click())
+  await page.waitForSelector('.guide.step-word .g-word-opt.no')
+  await page.evaluate(() => document.querySelector('.g-word-opt.no').click())
+  await page.waitForSelector('.g-later')
+  await page.evaluate(() => document.querySelector('.g-later').click())
+  await page.evaluate(() => window.__editor.finishEditing())
+  await ready()
+  await page.evaluate(setupWriting)
+  // 上の枠に縦長の全身の写真（枠いっぱいだと頭と裾が切れる）、下の枠に横長の写真（2枚・上下）
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: { layout: 2, columns: 1, imageIds: ['g-photo1', 'g-mood'] } })))
+  await pause(500)
+  await ready()
+  await page.evaluate(() => window.__editor.goToArea('photos'))
+  await ready()
+  const slotState = (i) =>
+    page.evaluate((i) => {
+      const slot = document.querySelector(`.page-viewport.front [data-photo-slot="${i}"]`)
+      const img = slot?.querySelector('img')
+      return { whole: !!slot?.classList.contains('whole'), fit: img ? getComputedStyle(img).objectFit : null, cursor: img ? getComputedStyle(img).cursor : null }
+    }, i)
+  const model = () => page.evaluate(() => window.__editor.getSnapshot().report.workPhotos)
+  const clickSwitch = async () => {
+    await page.click('.palette .photo-sw')
+    await pause(300)
+    await ready()
+  }
+  // 道具の「元に戻す」（ほかの道具の「戻す」と取り違えないように、名前で探す）
+  const undo = async () => {
+    await page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('元に戻す')).click())
+    await pause(300)
+    await ready()
+  }
+  /** ツールの中で作る PDF（「PDFを書き出す」と同じ部品）で、作品写真のページの上の枠の左端・真ん中・右端の色 */
+  const pdfColors = () =>
+    page.evaluate(async () => {
+      const { buildPdf } = await import('/src/pdf/exportPdf.ts')
+      const ed = window.__editor
+      const photos = ed.pageElements()[ed.getSnapshot().layout.kinds.indexOf('photos')]
+      let colors = null
+      await buildPdf([photos], {
+        title: 'whole-check',
+        draft: false,
+        onPage: ({ canvas }) => {
+          const ctx = canvas.getContext('2d')
+          const y = Math.round(canvas.height * 0.25)
+          const at = (x) => [...ctx.getImageData(Math.round(canvas.width * x), y, 1, 1).data].slice(0, 3)
+          colors = { left: at(0.04), center: at(0.5), right: at(0.96) }
+        },
+      })
+      return colors
+    })
+  const white = (c) => !!c && c.every((v) => v >= 245)
+
+  // 写真を押すと、道具の「この写真」に、スイッチ「全体を入れる（切らない）」が出る（まだ入っていない）
+  const p0 = await page.evaluate(() => { const r = document.querySelector('.page-viewport.front [data-photo-slot="0"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  await page.mouse.click(p0.x, p0.y)
+  await pause(300)
+  const tools = await page.evaluate(() => {
+    const sw = document.querySelector('.palette .group.ctx .photo-sw')
+    return { label: sw?.closest('.group.ctx')?.querySelector('.ctx-label')?.textContent, text: sw?.textContent, role: sw?.getAttribute('role'), checked: sw?.getAttribute('aria-checked') }
+  })
+  const before = await slotState(0)
+  const cropped = await pdfColors()
+  check(
+    '作品写真を押すと、「この写真」の道具にスイッチ「全体を入れる（切らない）」が出る（はじめは切っている：紙面も PDF も枠いっぱい）',
+    tools.label === 'この写真' && tools.text === '全体を入れる（切らない）' && tools.role === 'switch' && tools.checked === 'false' && before.fit === 'cover' && !before.whole && !white(cropped?.left),
+    JSON.stringify({ tools, before, cropped }),
+  )
+
+  // スイッチを入れる：その写真だけ、枠の中に全体が入る（紙面・印刷・PDF）。選んだまま
+  await clickSwitch()
+  const on = await slotState(0)
+  const other = await slotState(1)
+  const m1 = await model()
+  await page.emulateMediaType('print')
+  const printed = await slotState(0)
+  await page.emulateMediaType(null)
+  const whole = await pdfColors()
+  const still = await page.evaluate(() => ({ sel: window.__editor.getSnapshot().selection, checked: document.querySelector('.palette .photo-sw')?.getAttribute('aria-checked') }))
+  await page.screenshot({ path: `${OUT}/photo-whole.png` })
+  check(
+    'スイッチを入れると、その写真だけ、紙面でも印刷でも枠の中に全体が入る（ほかの写真は切ったまま。写真は選んだまま）',
+    on.whole && on.fit === 'contain' && printed.fit === 'contain' && other.fit === 'cover' && JSON.stringify(m1.whole) === '[true,false]' && still.sel?.index === 0 && still.checked === 'true',
+    JSON.stringify({ on, other, printed, whole: m1.whole, still }),
+  )
+  check('「PDFを書き出す」で作る PDF でも、全体を入れた写真のまわりは白になる（真ん中は写真）', white(whole?.left) && white(whole?.right) && !white(whole?.center), JSON.stringify(whole))
+
+  // 全体を入れている写真は、つかんで動かしても動かない（つかむ形のカーソルも出さない）
+  const d = await page.evaluate(() => { const r = document.querySelector('.page-viewport.front [data-photo-slot="0"] img').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  await page.mouse.move(d.x, d.y)
+  await page.mouse.down()
+  for (let k = 1; k <= 8; k++) await page.mouse.move(d.x + k * 10, d.y + k * 12)
+  const dragging = await page.evaluate(() => !!document.querySelector('.page-viewport.front [data-photo-slot] img.dragging'))
+  await page.mouse.up()
+  await pause()
+  await ready()
+  const m2 = await model()
+  check('全体を入れている写真は、つかんで動かしても動かない（つかむ形のカーソルも出ない）', !dragging && !m2.positions?.[0] && on.cursor !== 'grab', JSON.stringify({ dragging, positions: m2.positions, cursor: on.cursor }))
+
+  // 元に戻す：切った写真に戻る。もう一度入れる
+  await undo()
+  const undone = await slotState(0)
+  const m3 = await model()
+  check('「元に戻す」で、枠いっぱいに切った写真に戻る', !undone.whole && undone.fit === 'cover' && !m3.whole, JSON.stringify({ undone, whole: m3.whole }))
+  await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
+  await pause(300)
+  await clickSwitch()
+
+  // 並べ方を変えても残る（2枚・左右 → 2枚・上下）
+  const arrange = async (title) => {
+    await page.evaluate((title) => [...document.querySelectorAll('.palette .lay')].find((b) => b.title.startsWith(title)).click(), title)
+    await pause(300)
+    await ready()
+  }
+  await arrange('2枚（左右')
+  const side = await slotState(0)
+  await arrange('2枚（上下')
+  const back = await slotState(0)
+  check('並べ方を変えても、全体を入れた写真はそのまま', side.whole && side.fit === 'contain' && back.whole && back.fit === 'contain', JSON.stringify({ side, back }))
+
+  // 写真を差し替えると、外れる（新しい写真は、今までどおり枠いっぱいに切り抜く）
+  const png = await page.evaluate(async () => {
+    const c = new OffscreenCanvas(400, 300)
+    const g = c.getContext('2d')
+    g.fillStyle = '#7a5c3c'
+    g.fillRect(0, 0, 400, 300)
+    const blob = await c.convertToBlob({ type: 'image/png' })
+    return btoa(String.fromCharCode(...new Uint8Array(await blob.arrayBuffer())))
+  })
+  const replacePath = join(tmpdir(), 'sotsugyo-e2e-whole.png')
+  writeFileSync(replacePath, Buffer.from(png, 'base64'))
+  await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
+  await pause(300)
+  const [chooser] = await Promise.all([page.waitForFileChooser(), page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('差し替え')).click())])
+  await chooser.accept([replacePath])
+  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos.imageIds[0] !== 'g-photo1', { timeout: 20000 })
+  await pause(300)
+  await ready()
+  const replaced = await slotState(0)
+  const m4 = await model()
+  check('写真を差し替えると「全体を入れる」は外れ、新しい写真は枠いっぱいに切り抜く', !replaced.whole && replaced.fit === 'cover' && !m4.whole?.[0], JSON.stringify({ replaced, whole: m4.whole }))
+  await context.close()
+}
 
 /** エラーが0件の見本の原稿で、3つを確かめる → PDF を作る（進み具合・できたページの絵）→「ダウンロード」に保存、までを確かめる */
 async function pdfSaveCheck(browser) {

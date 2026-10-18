@@ -112,6 +112,8 @@ section.body { counter-reset: page 1; }
 ${PHOTO_ARRANGEMENTS.map((a) => `.photos.grid-${a.columns}x${a.rows} { grid-template: repeat(${a.rows}, 1fr) / repeat(${a.columns}, 1fr); }`).join('\n')}
 .photos .slot { position: relative; min-width: 0; min-height: 0; overflow: hidden; }
 .photos .slot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+/* 「全体を入れる（切らない）」にした写真：枠の中に全体を入れ、真ん中に置く（まわりはページの白。mockups/v32 ③ 案A） */
+.photos .slot.whole img { object-fit: contain; object-position: 50% 50%; }
 `
 
 export { FONT_SIZE_PT, LETTER_SPACING_PT, LINE_PITCH_PT }

@@ -16,7 +16,10 @@ import { ConflictDialog, IdMismatchDialog, LoginGate, OtherAccountDialog, Relogi
 import { Icon } from './app/icons'
 import { openLastPlace, useRememberPlace } from './app/lastPlace'
 import { Palette } from './app/Palette'
+import { PageBand } from './app/PageBand'
 import { PhoneChrome } from './app/Phone'
+import { UndoBar } from './app/UndoBar'
+import { useUndoNotice } from './app/useUndoNotice'
 import { useKeyboardInset, useNarrow, useSwipe, useWheelPaging } from './app/uiShared'
 import { SidePanel, PageColumn } from './app/SidePanel'
 import { StartGuide, type GuideStep } from './app/StartGuide'
@@ -140,6 +143,8 @@ export default function App() {
   const snap = useSyncExternalStore(editor?.subscribe ?? noopSubscribe, editor?.getSnapshot ?? nullSnapshot) as EditorSnapshot | null
   // 今年度だけ：Word から写したあとの「つぎにすること」（閉じるまで、この端末に覚えておく）
   const { todo: wordTodo, update: setWordTodo } = useWordTodo(snap)
+  // PC：削除したあとの「戻す」の知らせ（出しておく時間が過ぎたら閉じる。mockups/v32 ② 案A）
+  const undoNotice = useUndoNotice(snap)
   /** スマホ：Word から写し終えたら、チェックの欄を開く（増やすと開く） */
   const [checkRequest, setCheckRequest] = useState(0)
   // ドライブ（ログイン必須）。このタブでログイン済みなら、ボタンを押さずに始める
@@ -653,6 +658,8 @@ export default function App() {
       <main className="stage" ref={stageRef}>
         <div className="page-scroller" ref={scrollerRef} />
         <div id="overlay-layer" ref={layerRef} />
+        {/* スマホ：紙面の中の小さな案内とボタンを、紙面の下（横向きは右）の帯に出す（mockups/v32 ④ 案A） */}
+        {ready && snap.layout && narrow && <PageBand editor={editor} snap={snap} hidden={!!guide} />}
         {ready && snap.layout && !narrow && (
           <>
             <Palette editor={editor} snap={snap} onReferences={() => setDialog({ kind: 'references' })} />
@@ -670,6 +677,8 @@ export default function App() {
                 {Icon.zoom}拡大
               </button>
             </div>
+            {/* 削除したあとの「段落を削除しました［戻す］」（紙面の台の下の真ん中。スマホは PhoneChrome の中。mockups/v32 ② 案A） */}
+            <UndoBar editor={editor} notice={undoNotice.notice} onClose={undoNotice.close} className="on-stage" />
           </>
         )}
         {(!snap || (snap.rendering && !snap.layout)) && !loadError && <div className="loading">紙面を準備しています…（初回は数秒かかります）</div>}

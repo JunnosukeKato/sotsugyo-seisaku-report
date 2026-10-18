@@ -167,7 +167,6 @@ describe('図を入れる（書いている位置に（図n）、段落の下に
     r = ops.addFigureBelow(r, 'pa', fig('f1'))
     expect(paraText(r, 'pa')).toBe('袖を大きくした（図1）。帯を巻いた。')
     expect(r.body[0].blocks.map((b) => b.type)).toEqual(['paragraph', 'figureRow', 'paragraph'])
-    expect(ops.refEnd(r, 'pa', 'f1')).toBe('袖を大きくした（図1）'.length)
   })
 
   it('同じ段落から入れた図はひとまとまりにし、段落の中で参照している順に並べる', () => {
@@ -245,6 +244,41 @@ describe('表を入れる・Enter で段落を分ける（段落の下の図・�
     r = ops.split(r, 'f1', 'デザイン画', '').report
     expect(types(r)).toEqual(['paragraph', 'figureRow', 'paragraph', 'paragraph'])
     expect(ops.findEditable(r, 'f1')?.text).toBe('デザイン画')
+  })
+})
+
+describe('図・表の後ろに段落を作る（「＋ ここに続きを書く」・タイトルで Enter。mockups/v32 ① 案A）', () => {
+  const base = (): Report => ({
+    ...demoReport(),
+    body: [
+      { id: 'c1', title: '企画', blocks: [{ type: 'paragraph', id: 'pa', content: [{ type: 'text', text: '袖を大きくした。' }] }] },
+      { id: 'c2', title: '制作', blocks: [{ type: 'paragraph', id: 'pc', content: [{ type: 'text', text: '縫った。' }] }] },
+    ],
+  })
+  const ids = (r: Report) => r.body.map((c) => c.blocks.map((b) => b.id))
+
+  it('並んだ図のどれを指しても、図のまとまりのすぐ後ろ（同じ章の中）に空の段落ができる', () => {
+    let r = ops.addFigureBelow(base(), 'pa', { id: 'f1', imageId: 'i', caption: '' })
+    r = ops.addFigureAfter(r, 'f1', { id: 'f2', imageId: 'j', caption: '' })
+    const row = r.body[0].blocks[1].id
+    const made = ops.paragraphAfter(r, 'f1', 'pn')!
+    expect(ids(made.report)).toEqual([['pa', row, 'pn'], ['pc']])
+    expect(made.newId).toBe('pn')
+    expect(ops.findEditable(made.report, 'pn')).toEqual({ id: 'pn', kind: 'paragraph', text: '' })
+    expect(ids(ops.paragraphAfter(r, 'f2', 'pn')!.report)).toEqual([['pa', row, 'pn'], ['pc']])
+  })
+
+  it('表は、表のすぐ後ろ（表のあとに段落があっても、その前）に作る', () => {
+    let r = ops.addTableBelow(base(), 'pa', blankTable('t1', ops.newId))
+    r = ops.insertAfter(r, 't1', { type: 'paragraph', id: 'pb', content: [{ type: 'text', text: '次。' }] })
+    expect(ids(ops.paragraphAfter(r, 't1', 'pn')!.report)).toEqual([['pa', 't1', 'pn', 'pb'], ['pc']])
+  })
+
+  it('図・表でないもの・ないものを指したら null（元の原稿は変えない）', () => {
+    const r = base()
+    expect(ops.paragraphAfter(r, 'pa')).toBeNull()
+    expect(ops.paragraphAfter(r, 'nothing')).toBeNull()
+    expect(ids(r)).toEqual([['pa'], ['pc']])
   })
 })
 

@@ -6,14 +6,16 @@ import type { LayoutInfo } from '../layout/measure'
 import { FIGURE_MAX_PX, fitFigureSize, importImage, PHOTO_MAX_PX } from '../model/images'
 import { putImage, type StoredImage } from '../model/storage'
 import { applyCourseTemplate, bodyWritten } from '../model/template'
-import { changeArrangement, clampPercent, movePhoto, putPhoto } from '../model/photos'
+import { changeArrangement, clampPercent, movePhoto, putPhoto, wholePhoto } from '../model/photos'
 import { addColumn, addRow, blankTable, cellPosition, materialTable, removeColumn, removeRow, setCellImage } from '../model/table'
 import type { BodyBlock, Chapter, PhotoPosition, Report, TableBlock, WorkPhotoLayout } from '../model/types'
+import { ContinueRow, endsPageWithRoom, type ContinueTarget } from './continueRow'
 import { OverlayEditor, type OverlayKind, type OverlayPlacement, type OverlayTarget } from './overlayEditor'
 import { PageStage } from './pageStage'
 import { blockPaperKey, markFocusable, PAPER_FOCUSABLE, paperElement, paperKeyOf, paperOrder, rememberTabStop, setTabStop } from './paperFocus'
 import * as ops from './reportOps'
 import { ReportRenderer, type PageEffect } from './reportRenderer'
+import { changedPlace, type ChangedPlace, type RemovedWhat, type UndoNotice } from './undoNotice'
 
 /**
  * 報告書の編集の中核（画面の部品から独立した、紙面まわりの処理）。
@@ -72,6 +74,8 @@ export interface EditorSnapshot {
   sheet: boolean
   /** 書いている欄のカーソルの位置（書いていなければ null） */
   caret: number | null
+  /** 画面の下に出す、削除・戻したあとの知らせ（ほかを変えたら・書き始めたら null。mockups/v32 ② 案A） */
+  notice: UndoNotice | null
   version: number
 }
 
@@ -94,6 +98,8 @@ interface ImageEntry {
 
 const RENDER_DELAY_MS = 600
 const FIGURE_MAX_MM = 80
+/** 元に戻した所を光らせておく時間（mockups/v32 ② 案A） */
+const UNDO_FLASH_MS = 1500
 
 /** 原稿の抄録・本文にある ID（段落・章・ブロック・図）。削除して消えたものを見つけるため */
 function bodyIds(report: Report): Set<string> {
@@ -138,8 +144,8 @@ export class ReportEditor {
   private pendingOpen: { id: string; caret: number } | null = null
   /** 入力欄を開いたまま書く先を移し、紙面を組み直すのを待っている（anchor：その間、後ろの文章をずらす基準のブロック） */
   private continuing: { id: string; anchor: string | null } | null = null
-  /** 「図を入れる」の後、図のタイトルを Enter で確定したら、書いていた段落のこの位置に戻る */
-  private returnTo: { from: string; id: string; caret: number } | null = null
+  /** 図・表のすぐ下の「＋ ここに続きを書く」（mockups/v32 ① 案A） */
+  private readonly continueRow: ContinueRow
   private currentId: string | null = null
   private selection: Selection = null
   private page = 0
@@ -171,6 +177,9 @@ export class ReportEditor {
     this.marker.hidden = true
     this.marker.textContent = 'ここに入ります'
     layer.append(this.marker)
+    this.continueRow = new ContinueRow(layer, (id) => this.continueAfter(id))
+    // 拡大してスクロールしたら、「＋ ここに続きを書く」も紙面に合わせて動かす
+    scroller.addEventListener('scroll', () => this.placeContinueRow())
 
     this.overlay = new OverlayEditor(layer, scroller, {
       onInput: (id, text) => {
@@ -179,8 +188,9 @@ export class ReportEditor {
       },
       onCommit: (id, text, byKey) => this.onCommitEdit(id, text, byKey),
       onSplit: (id, before, after) => {
-        // 図・表を入れた直後のタイトル：Enter で、書いていた段落の続きに戻る
-        if (this.returnTo?.from === id) return this.onCommitEdit(id, before + after, true)
+        // 図・表のタイトル：Enter で、図・表の後ろに新しい段落を作る（mockups/v32 ① 案A）
+        const editing = ops.findEditable(this.report, id)?.kind
+        if (editing === 'figureCaption' || editing === 'tableCaption') return this.enterAfterCaption(id, before + after)
         this.pushHistory(this.reportBeforeEdit ?? this.report)
         const result = ops.split(ops.setText(this.report, id, before + after), id, before, after)
         this.report = result.report
@@ -294,6 +304,7 @@ export class ReportEditor {
       turning: this.turning !== null,
       sheet: this.overlay.inSheet,
       caret: this.overlay.blockId ? this.caretPos : null,
+      notice: this.currentNotice,
       version: this.version,
     }
     return this.snapshotCache
@@ -302,6 +313,7 @@ export class ReportEditor {
   private notify(): void {
     this.version += 1
     for (const listener of this.listeners) listener()
+    this.placeContinueRow()
   }
 
   // ---- 写真 ----
@@ -425,6 +437,12 @@ export class ReportEditor {
       this.openEditor(id, caret)
     } else if (this.overlay.blockId) {
       this.followCaret()
+    }
+    // 元に戻した所を、組み直した紙面で見せる（続けてもう一度組み直すときは、その後で。戻したあとにほかを変えていたら見せない）
+    const undone = this.undone
+    if (undone && !this.renderAgain) {
+      this.undone = null
+      if (rendered === this.report) this.showUndone(undone)
     }
     this.notify()
     if (this.renderAgain) {
@@ -555,6 +573,11 @@ export class ReportEditor {
     this.stage.setZoom(zoomed)
   }
 
+  /** 紙面のまわりに空ける幅（台の CSS の変数）を変えたとき、紙面の倍率と位置を求め直す（スマホの紙面の下の帯。app/PageBand.tsx） */
+  refitPage(): void {
+    this.stage.fit()
+  }
+
   /**
    * スマホ：書く欄を画面の下に出す（host はその中の、入力欄を置く要素）。null なら紙面に重ねる（PC）
    */
@@ -616,13 +639,7 @@ export class ReportEditor {
     if (this.reportBeforeEdit && JSON.stringify(this.reportBeforeEdit) !== JSON.stringify(this.report)) this.pushHistory(this.reportBeforeEdit)
     this.reportBeforeEdit = null
     this.hideStyle.textContent = ''
-    // 図を入れた後、タイトルを Enter で確定したら、書いていた段落の続きに戻る
-    const back = this.returnTo?.from === id ? this.returnTo : null
-    if (this.returnTo?.from === id) this.returnTo = null
-    if (back && byKey) {
-      this.hideStyle.textContent = this.editingStyle(back.id)
-      this.pendingOpen = { id: back.id, caret: back.caret }
-    } else if (byKey && !this.overlay.inSheet) {
+    if (byKey && !this.overlay.inSheet) {
       // Esc・Enter で書き終えた（PC）：書いていた紙面の欄にフォーカスを戻す（ページ全体に戻ると、どこにいたか分からなくなる）。
       // 欄がまだ紙面にない（分けたばかりの段落など）ときは、組み直してから戻す
       if (!this.focusPaper(blockPaperKey(id), true)) this.refocusKey = blockPaperKey(id)
@@ -800,12 +817,14 @@ export class ReportEditor {
     this.pendingOpen = null
     this.currentId = id
     this.selection = null
-    this.reportBeforeEdit = this.report
     const hidden = this.overlay.inSheet ? [id] : [id, how.ghostOf, how.alsoHide].filter((x): x is string => !!x)
     this.hideStyle.textContent = hidden.map((x) => this.editingStyle(x)).join('\n')
     this.markSelection()
     this.shiftFollowing()
     this.afterChange({ render: 'now', save: true })
+    // 書き始める前の原稿は、afterChange のあとで覚える（保存の時刻だけが違う原稿が、何も変わらない「元に戻す」の1回分にならないように。
+    // 図・表のタイトルで Enter を押して、何も書かずに閉じたとき、元に戻す1回で作った段落が消えるように）
+    this.reportBeforeEdit = this.report
   }
 
   /** 組み直した紙面に、書いている箇所が出た：入力欄を正しい位置・書体に合わせる（continueWriting のあと） */
@@ -822,6 +841,100 @@ export class ReportEditor {
     this.hideStyle.textContent = this.editingStyle(id)
     this.pendingOpen = { id, caret }
     this.afterChange({ render: 'now', save: true })
+  }
+
+  // ---- 図・表のあとの続き（mockups/v32 ① 案A。「＋ ここに続きを書く」の部品は continueRow.ts） ----
+
+  /**
+   * 図・表のタイトルで Enter：タイトルを確定し、図・表のすぐ後ろに新しい段落を作って、続けて書く
+   * （前は図の上の段落の終わりに戻ったため、次の文が図の前に入ってしまっていた）。
+   * 元に戻すと、まず作った段落だけが消える（タイトルは残る）
+   */
+  private enterAfterCaption(id: string, text: string): void {
+    const titled = ops.setText(this.report, id, text)
+    const created = ops.paragraphAfter(titled, id)
+    if (!created) return this.onCommitEdit(id, text, true)
+    const before = this.reportBeforeEdit ?? this.report
+    if (ops.findEditable(before, id)?.text !== ops.findEditable(titled, id)?.text) this.pushHistory(before)
+    this.pushHistory(titled)
+    this.report = created.report
+    this.autoPeriod = null
+    this.continueWriting(created.newId, 0, { ghostOf: id })
+  }
+
+  /** 「＋ ここに続きを書く」：図・表（objectId は図の ID か表の ID）のすぐ後ろに新しい段落を作り、書き始める */
+  continueAfter(objectId: string): void {
+    if (this.settlingRemoval || !ops.paragraphAfter(this.report, objectId)) return
+    this.marker.hidden = true
+    // 書いていたタイトルを確定してから作る（確定した原稿の後ろに作る）
+    this.commitForChange()
+    const created = ops.paragraphAfter(this.report, objectId)
+    if (!created) return
+    this.pushHistory(this.report)
+    this.report = created.report
+    this.selection = null
+    this.markSelection()
+    this.currentId = created.newId
+    if (this.overlay.inSheet) this.openUnrendered(created.newId)
+    else this.reopenAfterRender(created.newId, 0)
+  }
+
+  /**
+   * スマホ：まだ紙面にない段落を、すぐ下の書く欄で開く（組み直してから開くと、押した操作の外になり、キーボードが出ないため）。
+   * 組み直した紙面にその段落が出たら、紙面の印を合わせる（render の終わりの settleContinued）
+   */
+  private openUnrendered(id: string): void {
+    const none = { left: 0, top: 0, right: 0, bottom: 0 }
+    this.hideStyle.textContent = this.editingStyle(id)
+    this.overlay.open({ rect: none, clip: none, scale: this.stage.scale, alignOffset: 0, blockId: id, kind: 'paragraph', text: '', caret: 0, styleSource: this.viewport })
+    this.continuing = { id, anchor: null }
+    if (!this.stage.zoomed) this.stage.setZoom(true)
+    this.afterChange({ render: 'now', save: true })
+    this.reportBeforeEdit = this.report
+  }
+
+  /** 「＋ ここに続きを書く」を出す図・表（なければ null） */
+  private continueTarget(): ContinueTarget | null {
+    // 削除・組み直しの途中、ページを送っている途中、段落などを書いている途中は出さない（書いて行が増えると、図・表が動くため）
+    if (this.turning || this.removed.size > 0 || this.pendingOpen || this.continuing) return null
+    if (this.overlay.blockId && this.overlay.kind !== 'line') return null
+    const editing = this.overlay.blockId ? ops.findEditable(this.report, this.overlay.blockId) : undefined
+    if (editing && editing.kind !== 'figureCaption' && editing.kind !== 'tableCaption') return null
+    const view = this.renderer.pageView
+    const page = view.pages()[this.page]
+    if (!page || !this.layout) return null
+    const onPage = (objectId: string): ContinueTarget | null => {
+      const owner = this.report.body.flatMap((c) => c.blocks).find((b) => (b.type === 'figureRow' && b.figures.some((f) => f.id === objectId)) || b.id === objectId)
+      const selector = owner?.type === 'figureRow' ? `.figure-group[data-group-id="${CSS.escape(owner.id)}"]` : owner?.type === 'table' ? `.data-table[data-table-id="${CSS.escape(owner.id)}"]` : null
+      // 図・表がページをまたぐときは、最後の部分（その後ろに段落ができる）
+      const element = selector ? [...this.viewport.querySelectorAll<HTMLElement>(selector)].at(-1) : undefined
+      return element && view.pageIndexOf(element) === this.page ? { objectId, element, page } : null
+    }
+    // 選んでいる図・表（タイトルを書いているときも）。下が空いているときだけ（同じページで後ろに段落などが続くときは、文に重ねないよう出さない）
+    const s = this.selection
+    const focused = editing?.id ?? (s?.kind === 'figure' || s?.kind === 'table' ? s.id : null)
+    if (focused) {
+      const target = onPage(focused)
+      return target && endsPageWithRoom(page, target.element) ? target : null
+    }
+    // 章の最後の図・表が、ページの最後で、下が空いているとき（選ばなくても出す）
+    for (const chapter of this.report.body) {
+      const last = chapter.blocks.at(-1)
+      const objectId = last?.type === 'figureRow' ? last.figures[0]?.id : last?.type === 'table' ? last.id : undefined
+      const target = objectId ? onPage(objectId) : null
+      if (target && endsPageWithRoom(page, target.element)) return target
+    }
+    return null
+  }
+
+  /** 「＋ ここに続きを書く」を出し直す（紙面・選んでいる物・書いている欄が変わったとき。同じ描画の間に何度呼ばれても1回だけ測る） */
+  private continueFrame = 0
+  private placeContinueRow(): void {
+    if (this.continueFrame) return
+    this.continueFrame = requestAnimationFrame(() => {
+      this.continueFrame = 0
+      this.continueRow.show(this.continueTarget())
+    })
   }
 
   commitEditing(): void {
@@ -1080,13 +1193,19 @@ export class ReportEditor {
   }
 
   undo(): void {
+    // 削除の知らせが出ている間に戻した（知らせの「戻す」でも、道具の「元に戻す」でも）：「〜を戻しました」と知らせる
+    const removal = this.currentNotice?.kind === 'removed' ? this.currentNotice : null
     this.commitForChange()
     const previous = this.history.pop()
     if (!previous) return
+    // 戻した所は、組み直した紙面で見せる（ほかのページでも、そこへ移って少しの間光らせる）
+    this.undone = changedPlace(this.report, previous)
     this.report = previous
     this.afterChange({ render: 'now', save: true })
+    this.notice = removal ? { notice: { kind: 'restored', what: removal.what, id: ++this.noticeCount }, report: this.report } : null
     // 削除して、まだ組み直していない間に戻したもの：すぐまた見せる
     this.hideRemoved()
+    this.notify()
   }
 
   /** 報告書を丸ごと入れ替える（復元・新規作成）。履歴は消す */
@@ -1096,6 +1215,7 @@ export class ReportEditor {
     this.report = report
     this.selection = null
     this.currentId = null
+    this.undone = null
     this.removed.clear()
     this.hideRemoved()
     this.afterChange({ render: 'now', save: true })
@@ -1108,13 +1228,71 @@ export class ReportEditor {
    */
   private readonly removed = new Set<string>()
 
-  /** 原稿を削除で変える（元に戻せる）。消えたものは、組み直すのを待たずに紙面から隠す */
-  private removeNow(fn: (report: Report) => Report): void {
+  /** 原稿を削除で変える（元に戻せる）。消えたものは、組み直すのを待たずに紙面から隠す。what：消したもの（画面の下に知らせる） */
+  private removeNow(fn: (report: Report) => Report, what: RemovedWhat): void {
     const before = bodyIds(this.report)
     this.update(fn)
     const after = bodyIds(this.report)
-    for (const id of before) if (!after.has(id)) this.removed.add(id)
+    const gone = [...before].filter((id) => !after.has(id))
+    for (const id of gone) this.removed.add(id)
     this.hideRemoved()
+    if (gone.length > 0) this.noticeRemoved(what)
+  }
+
+  // ---- 削除の「戻す」の知らせと、元に戻した所（mockups/v32 ② 案A。言葉と比べ方は undoNotice.ts、知らせの部品は app/UndoBar.tsx） ----
+
+  /** 画面の下に出す知らせと、出したときの原稿（ほかを変えたら出さない） */
+  private notice: { notice: UndoNotice; report: Report } | null = null
+  private noticeCount = 0
+  /** 元に戻して変わった所（組み直したら、そこへ移って光らせる） */
+  private undone: ChangedPlace | null = null
+
+  /** いま出す知らせ：削除した・戻した直後の原稿のまま（ほかを変えていない）で、書き始めていないとき */
+  private get currentNotice(): UndoNotice | null {
+    return this.notice && this.notice.report === this.report && !this.overlay.blockId ? this.notice.notice : null
+  }
+
+  /** 削除した（画面の下に「〜を削除しました［戻す］」を出す） */
+  private noticeRemoved(what: RemovedWhat): void {
+    this.notice = { notice: { kind: 'removed', what, id: ++this.noticeCount }, report: this.report }
+    this.notify()
+  }
+
+  /** 元に戻した所へ移り（ほかのページならめくる。拡大していれば、そこまで動かす）、少しの間光らせる */
+  private showUndone(place: ChangedPlace): void {
+    const view = this.renderer.pageView
+    const targets = this.undoneElements(place)
+    const page = targets.length ? view.pageIndexOf(targets[0]) : place.kind === 'area' ? (this.layout?.kinds.indexOf(place.area) ?? -1) : -1
+    if (page < 0) return
+    const still = matchMedia('(prefers-reduced-motion: reduce)').matches
+    const flash = () => {
+      const here = targets.filter((el) => view.pageIndexOf(el) === this.page)
+      if (this.stage.zoomed) here[0]?.scrollIntoView({ block: 'center', behavior: still ? 'auto' : 'smooth' })
+      for (const el of here) el.classList.add('undo-flash')
+      window.setTimeout(() => here.forEach((el) => el.classList.remove('undo-flash')), UNDO_FLASH_MS)
+    }
+    if (page === this.page) flash()
+    else void this.goToPage(page).then(flash)
+  }
+
+  /** 元に戻した所の、紙面の要素（段落・見出しごと、図・表ごと） */
+  private undoneElements(place: ChangedPlace): HTMLElement[] {
+    const all = (selector: string) => [...this.viewport.querySelectorAll<HTMLElement>(selector)]
+    switch (place.kind) {
+      case 'block':
+        return this.renderer.pageView.fragments(place.id).map((el) => el.closest<HTMLElement>('h1, h2, figure, td, th, .table-caption') ?? el)
+      case 'figure':
+        return all(`figure[data-figure-id="${CSS.escape(place.id)}"]`)
+      case 'group':
+        // 図のまとまりは本文の幅いっぱいなので、図（写真とタイトル）ごとに光らせる
+        return all(`.figure-group[data-group-id="${CSS.escape(place.id)}"] figure`)
+      case 'table':
+        return all(`.data-table[data-table-id="${CSS.escape(place.id)}"]`)
+      case 'photo':
+        return all(`[data-photo-slot="${place.index}"]`)
+      case 'area':
+        return []
+    }
   }
 
   /** 削除したものを紙面で隠す（元に戻して、原稿にまたあるものは隠さない） */
@@ -1255,7 +1433,7 @@ export class ReportEditor {
 
   /**
    * 図を入れる。必ず文中の入れたい位置で入れる：段落を書いているカーソルの位置に「（図n）」を入れ、その段落のすぐ下に図を置く
-   * （同じ段落の図はひとまとまり）。写真を選んだら図のタイトルの入力欄を開き、Enter で段落の続きに戻る
+   * （同じ段落の図はひとまとまり）。写真を選んだら図のタイトルの入力欄を開き、Enter で図の後ろに新しい段落ができる（mockups/v32 ① 案A）
    */
   async addFigure(): Promise<void> {
     if (this.settlingRemoval) return
@@ -1283,16 +1461,14 @@ export class ReportEditor {
     this.pushHistory(this.report)
     let next = ops.insertRef(this.report, paragraphId, caret, figureId)
     next = ops.addFigureBelow(next, paragraphId, { id: figureId, imageId, caption: '' })
-    // 段落にその図の番号を手で書いていたら（「図1に示す」）、（図1）は足さずに、書いた番号を図につなげる（書いていた位置に戻る）
-    const linked = ops.linkWrittenRef(next, paragraphId, figureId)
-    this.report = linked ?? next
-    this.returnTo = { from: figureId, id: paragraphId, caret: linked ? caret : ops.refEnd(next, paragraphId, figureId) }
+    // 段落にその図の番号を手で書いていたら（「図1に示す」）、（図1）は足さずに、書いた番号を図につなげる
+    this.report = ops.linkWrittenRef(next, paragraphId, figureId) ?? next
     this.reopenAfterRender(figureId, 0)
   }
 
   /**
    * 表を入れる（空の表か、素材表のひな形）。図と同じく、文中の入れたい位置に「（表n）」が入り、段落のすぐ下に表が入る。
-   * タイトルを書いて Enter を押すと、書いていた段落の続きに戻る
+   * タイトルを書いて Enter を押すと、表の後ろに新しい段落ができる
    */
   addTable(kind: 'blank' | 'material'): void {
     const paragraphId = this.editingParagraph()
@@ -1304,9 +1480,7 @@ export class ReportEditor {
     let next = ops.insertRef(this.report, paragraphId, caret, tableId)
     next = ops.addTableBelow(next, paragraphId, kind === 'material' ? materialTable(tableId, ops.newId) : blankTable(tableId, ops.newId))
     // 段落にその表の番号を手で書いていたら（「表1に示す」）、（表1）は足さずに、書いた番号を表につなげる
-    const linked = ops.linkWrittenRef(next, paragraphId, tableId)
-    this.report = linked ?? next
-    this.returnTo = { from: tableId, id: paragraphId, caret: linked ? caret : ops.refEnd(next, paragraphId, tableId) }
+    this.report = ops.linkWrittenRef(next, paragraphId, tableId) ?? next
     // 仮のタイトル（素材表の「使用素材表」）があれば、その後ろから書く（前に付け足してしまわないように）
     this.reopenAfterRender(tableId, ops.findEditable(next, tableId)?.text.length ?? 0)
   }
@@ -1333,13 +1507,9 @@ export class ReportEditor {
     const newFigure = { id: ops.newId('f'), imageId, caption: '' }
     this.pushHistory(this.report)
     this.report = ops.insertRefAfterRef(ops.addFigureAfter(this.report, figureId, newFigure), figureId, newFigure.id)
-    // タイトルを書いて Enter を押したら、1枚目と同じく、その図を参照している段落の続きに戻る
+    // 段落にその図の番号を手で書いていたら（「図2に示す」）、（図2）は足さずに、書いた番号を図につなげる
     const paragraph = this.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'paragraph' && b.content.some((n) => n.type === 'ref' && n.targetId === newFigure.id))
-    if (paragraph) {
-      // 段落にその図の番号を手で書いていたら（「図2に示す」）、（図2）は足さずに、書いた番号を図につなげる
-      this.report = ops.linkWrittenRef(this.report, paragraph.id, newFigure.id) ?? this.report
-      this.returnTo = { from: newFigure.id, id: paragraph.id, caret: ops.refEnd(this.report, paragraph.id, newFigure.id) }
-    }
+    if (paragraph) this.report = ops.linkWrittenRef(this.report, paragraph.id, newFigure.id) ?? this.report
     this.reopenAfterRender(newFigure.id, 0)
   }
 
@@ -1349,7 +1519,8 @@ export class ReportEditor {
     if (!editable || this.removed.size > 0) return
     this.hideStyle.textContent = ''
     this.currentId = null
-    this.removeNow((r) => (editable.kind === 'chapter' ? ops.removeChapter(r, id) : ops.removeBlock(r, id)))
+    const what = editable.kind === 'chapter' ? '大見出し（章）' : editable.kind === 'subheading' ? '小見出し' : '段落'
+    this.removeNow((r) => (editable.kind === 'chapter' ? ops.removeChapter(r, id) : ops.removeBlock(r, id)), what)
   }
 
   removeSelected(): void {
@@ -1357,7 +1528,10 @@ export class ReportEditor {
     if (!s || s.kind === 'photos' || this.removed.size > 0) return
     this.selection = null
     // 図・表を消すときは、本文のその図・表への参照も一緒に消す（文の中の参照は「図?」になり、チェックで指摘される）
-    this.removeNow((r) => (s.kind === 'figure' ? ops.removeFigure(r, s.id) : s.kind === 'table' ? ops.removeTable(r, s.id) : ops.removeBlock(r, s.id)))
+    this.removeNow(
+      (r) => (s.kind === 'figure' ? ops.removeFigure(r, s.id) : s.kind === 'table' ? ops.removeTable(r, s.id) : ops.removeBlock(r, s.id)),
+      s.kind === 'figure' ? '図' : s.kind === 'table' ? '表' : '改ページ',
+    )
   }
 
   /** 表を書いているセル（書いていなければ最後に触ったセル） */
@@ -1458,15 +1632,25 @@ export class ReportEditor {
     this.update((r) => ({ ...r, workPhotos: putPhoto(r.workPhotos, index, imageId) }))
   }
 
-  /** index 枚目の写真を外して、枠を空にする（元に戻せる） */
+  /** index 枚目の写真を外して、枠を空にする（元に戻せる。画面の下に「作品写真を外しました［戻す］」を出す） */
   removePhoto(index: number): void {
     if (this.selection?.kind === 'photos') this.selection = { kind: 'photos' }
+    const had = !!this.report.workPhotos.imageIds[index]
     this.update((r) => ({ ...r, workPhotos: putPhoto(r.workPhotos, index, '') }))
+    if (had) this.noticeRemoved('作品写真')
   }
 
   /** 写真の切り抜く位置を変える（x・y は %。50 が中央） */
   setPhotoPosition(index: number, position: PhotoPosition): void {
     this.update((r) => ({ ...r, workPhotos: movePhoto(r.workPhotos, index, position) }))
+  }
+
+  /**
+   * index 枚目の写真を「全体を入れる（切らない）」にする・枠いっぱいに切り抜くのに戻す（元に戻せる。mockups/v32 ③ 案A）。
+   * 選んでいる写真は、選んだまま（道具のスイッチを続けて押せるように）
+   */
+  setPhotoWhole(index: number, on: boolean): void {
+    this.update((r) => ({ ...r, workPhotos: wholePhoto(r.workPhotos, index, on) }))
   }
 
   // 作品写真をつかんで動かし、枠の中で見える位置を変える（つかまずに離したらクリック＝写真を選び直す）
@@ -1478,6 +1662,8 @@ export class ReportEditor {
     if (!img || e.button !== 0 || !img.naturalWidth) return
     const slot = img.closest<HTMLElement>('[data-photo-slot]')!
     const index = Number(slot.dataset.photoSlot)
+    // 全体を入れている写真は切り抜いていないので、動かさない（押すと、ふつうのクリック＝写真を選ぶ）
+    if (this.report.workPhotos.whole?.[index] || slot.classList.contains('whole')) return
     const cell = slot.getBoundingClientRect()
     const k = Math.max(cell.width / img.naturalWidth, cell.height / img.naturalHeight)
     this.photoDrag = {

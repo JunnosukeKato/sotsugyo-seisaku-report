@@ -170,6 +170,11 @@ export interface WorkPhotos {
   imageIds: string[]
   /** 写真ごとの切り抜く位置（imageIds と同じ順。null は中央） */
   positions?: (PhotoPosition | null)[]
+  /**
+   * 写真ごとの「全体を入れる（切らない）」（imageIds と同じ順。mockups/v32 ③ 案A）。
+   * true の写真は、枠の中に写真の全体を入れる（まわりは白）。省略・false は、今までどおり枠いっぱいに切り抜く
+   */
+  whole?: boolean[]
 }
 
 /** 画像の実体は文書データとは別に保存し、ID で参照する */

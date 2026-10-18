@@ -29,27 +29,47 @@ export function photoGrid(photos: Pick<WorkPhotos, 'layout' | 'columns'>): Photo
   return candidates.find((a) => a.columns === photos.columns) ?? candidates[0] ?? PHOTO_ARRANGEMENTS[0]
 }
 
-/** ページに載せる写真（先頭から layout 枚。空いている枠は ''） */
-export function shownPhotos(photos: WorkPhotos): { imageId: string; position: PhotoPosition | null }[] {
-  return Array.from({ length: photos.layout }, (_, i) => ({ imageId: photos.imageIds[i] ?? '', position: photos.positions?.[i] ?? null }))
+/** ページに載せる写真（先頭から layout 枚。空いている枠は ''）。whole：全体を入れる（切らない）写真か */
+export function shownPhotos(photos: WorkPhotos): { imageId: string; position: PhotoPosition | null; whole: boolean }[] {
+  return Array.from({ length: photos.layout }, (_, i) => ({ imageId: photos.imageIds[i] ?? '', position: photos.positions?.[i] ?? null, whole: photos.whole?.[i] === true }))
+}
+
+/**
+ * 「全体を入れる（切らない）」を付け直す。どの写真も切り抜くときは、項目ごと外す
+ * （前の版の原稿と同じ形のままにする。切らない写真がなければ、保存するデータも今までと変わらない）
+ */
+function withWhole(photos: WorkPhotos, whole: boolean[]): WorkPhotos {
+  const next: WorkPhotos = { ...photos }
+  if (whole.some(Boolean)) next.whole = whole
+  else delete next.whole
+  return next
 }
 
 /**
  * 並べ方を変える。写真は消さずに、入っているものを先頭へ詰める
- * （例：4枚の2枚目だけに写真があるとき、1枚にすると、その写真が載る）
+ * （例：4枚の2枚目だけに写真があるとき、1枚にすると、その写真が載る）。
+ * 切り抜く位置と「全体を入れる（切らない）」は、写真といっしょに動かす
  */
 export function changeArrangement(photos: WorkPhotos, layout: WorkPhotoLayout, columns: number): WorkPhotos {
-  const filled = photos.imageIds.map((id, i) => ({ id, position: photos.positions?.[i] ?? null })).filter((p) => p.id)
-  return { layout, columns, imageIds: filled.map((p) => p.id), positions: filled.map((p) => p.position) }
+  const filled = photos.imageIds.map((id, i) => ({ id, position: photos.positions?.[i] ?? null, whole: photos.whole?.[i] === true })).filter((p) => p.id)
+  return withWhole(
+    { layout, columns, imageIds: filled.map((p) => p.id), positions: filled.map((p) => p.position) },
+    filled.map((p) => p.whole),
+  )
 }
 
-/** index 枚目の写真を入れる（切り抜く位置は中央に戻す） */
+/**
+ * index 枚目の写真を入れる（差し替える・外す）。新しい写真は、切り抜く位置を中央に戻し、
+ * 「全体を入れる（切らない）」も外す（今までどおり枠いっぱいに切り抜く。前の写真の設定は、別の写真には合わないため）
+ */
 export function putPhoto(photos: WorkPhotos, index: number, imageId: string): WorkPhotos {
   const imageIds = Array.from({ length: Math.max(photos.imageIds.length, index + 1) }, (_, i) => photos.imageIds[i] ?? '')
   const positions = imageIds.map((_, i) => photos.positions?.[i] ?? null)
+  const whole = imageIds.map((_, i) => photos.whole?.[i] === true)
   imageIds[index] = imageId
   positions[index] = null
-  return { ...photos, imageIds, positions }
+  whole[index] = false
+  return withWhole({ ...photos, imageIds, positions }, whole)
 }
 
 /** index 枚目の写真の切り抜く位置を変える */
@@ -57,6 +77,16 @@ export function movePhoto(photos: WorkPhotos, index: number, position: PhotoPosi
   const positions = photos.imageIds.map((_, i) => photos.positions?.[i] ?? null)
   positions[index] = { x: clampPercent(position.x), y: clampPercent(position.y) }
   return { ...photos, positions }
+}
+
+/**
+ * index 枚目の写真を「全体を入れる（切らない）」にする（on：false で、枠いっぱいに切り抜くのに戻す）。
+ * 切り抜く位置は残しておく（切り抜くのに戻したとき、前に動かした位置で見える）
+ */
+export function wholePhoto(photos: WorkPhotos, index: number, on: boolean): WorkPhotos {
+  const whole = photos.imageIds.map((_, i) => photos.whole?.[i] === true)
+  if (index >= 0 && index < whole.length) whole[index] = on
+  return withWhole(photos, whole)
 }
 
 export function clampPercent(v: number): number {

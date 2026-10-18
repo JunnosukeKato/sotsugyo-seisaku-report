@@ -901,3 +901,112 @@ body.resizing .page-viewport { pointer-events: none; }
 .sheet-body .word-todo li small { font-size: 12px; }
 .sheet-body .word-todo .go { padding: 5px 12px; font-size: 12.5px; }
 @media (prefers-reduced-motion: reduce) { .word-status .busy::before { animation: none; } }
+
+/* ---- v32 ③ 作品写真の「全体を入れる（切らない）」（mockups/v32 ③ 案A。写真を押したときの「この写真」の道具のスイッチ） ---- */
+/* PC の道具は幅 86px なので、つまみの下に名前。スマホの下の道具（横に1列）は、つまみの右に名前 */
+.photo-sw { position: relative; display: flex; flex-direction: column; align-items: center; gap: 4px; width: 100%; padding: 8px 2px 7px; border: 0; background: none; color: var(--palette-ink); font-size: 10.5px; line-height: 1.35; text-align: center; border-radius: var(--r-md); transition: background 0.15s, color 0.15s; }
+.photo-sw i { position: relative; flex: none; width: 32px; height: 18px; border-radius: 999px; background: #c9c6c0; transition: background 0.15s; }
+.photo-sw i::after { content: ''; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: #fff; box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2); transition: left 0.15s; }
+.photo-sw.on { color: var(--accent); font-weight: 700; }
+.photo-sw.on i { background: var(--accent); }
+.photo-sw.on i::after { left: 16px; }
+.photo-sw:hover { background: rgba(255, 255, 255, 0.75); }
+.photo-sw:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.palette .group.ctx .photo-sw { margin-top: 2px; border-top: 1px solid rgba(47, 62, 117, 0.12); border-radius: 0 0 8px 8px; }
+.sel-bar .photo-sw { flex-direction: row; width: auto; min-height: 44px; gap: 7px; margin-left: 2px; padding: 6px 8px 6px 10px; border-left: 1px solid var(--line); border-radius: 0; font-size: 12px; text-align: left; }
+@media (prefers-reduced-motion: reduce) { .photo-sw, .photo-sw i, .photo-sw i::after { transition: none; } }
+/* スマホの下の道具：名前を途中で折り返さない。幅の狭いスマホ（360px など）では、「この写真（1枚目）」の名前を省く（紙面の写真に「1枚目」の札が出ている） */
+.sel-bar .group.ctx:has(.photo-sw) :is(.tb span, .photo-sw span) { white-space: nowrap; }
+@media (max-width: 379px) { .app.phone .sel-bar .group.ctx:has(.photo-sw) .ctx-label { display: none; } }
+/* 紙面：全体を入れた写真は動かせないので、つかむ形のカーソルにしない（スマホでは、指ではらうとページを送れる） */
+.page-viewport [data-photo-slot].whole img { cursor: pointer; touch-action: auto; }
+
+/* ---- v32 ④ スマホの見やすさ（mockups/v32 ④ 案A）。スマホの並べ方（.app.phone）だけで、PC は変えない ---- */
+/* 小さいボタン（指摘の「直す」・書く欄の「完了」・案内の「あとで入力する」・「＋引用・参考文献を入れる」・ページ送り・「ページ全体に戻す」）を、見た目も高さ 44px 以上に */
+.app.phone .pager button { width: 44px; height: 44px; }
+.app.phone .issue .fix { min-height: 44px; padding: 0 16px; font-size: 13px; }
+.app.phone .es-head .done { min-height: 44px; padding: 0 20px; }
+.app.phone .add-refs, .app.phone .g-later { display: inline-flex; align-items: center; min-height: 44px; }
+.app.phone .unzoom { min-height: 44px; }
+/* ページ送りが高くなった分（高さ 52px）、選んでいる物の道具を少し上に（重ならないように。知らせが出ている間の位置は、そのまま） */
+.app.phone .sel-bar:not(.above-undo) { bottom: calc(62px + 12px + 52px + 8px); }
+
+/* 紙面の下の帯（app/PageBand.tsx）：紙面の中の小さな案内とボタンを、ふつうの文字の大きさで出す。PDF・印刷には出さない */
+/* 幅の広い縦向きの画面（タブレット）では、帯を広げすぎない（真ん中に置く） */
+.page-band { position: absolute; z-index: 12; left: 10px; right: 10px; max-width: 600px; margin: 0 auto; box-sizing: border-box; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: #fff; box-shadow: var(--float-shadow); color: var(--ink); overflow-y: auto; }
+.page-band * { box-sizing: border-box; }
+.page-band .t { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; font-weight: 700; line-height: 1.6; }
+.page-band .t small { display: block; margin-top: 1px; font-size: 13px; font-weight: 400; line-height: 1.5; color: var(--muted); }
+.page-band .mk { flex: none; display: inline-grid; place-items: center; width: 22px; height: 22px; margin-top: 1px; border-radius: 50%; background: var(--accent); color: #fff; }
+.page-band .mk svg { width: 14px; height: 14px; }
+.page-band p { margin: 4px 0 10px 30px; font-size: 13px; line-height: 1.65; color: var(--muted); }
+.page-band button { display: block; width: 100%; min-height: 44px; padding: 0 16px; border: 0; border-radius: 10px; background: var(--accent); color: var(--accent-ink); font-size: 14.5px; font-weight: 700; }
+.page-band button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* 1行の帯（作品写真の空いている枠・まだ書いていない欄）：言葉の右にボタン */
+.page-band.row { display: flex; align-items: center; gap: 10px; padding: 8px 8px 8px 12px; }
+.page-band.row .t { flex: 1; min-width: 0; align-items: center; font-size: 13.5px; }
+.page-band.row button { width: auto; flex: none; }
+/* 横向きのスマホ：帯は紙面の右（紙面の下に出すと、紙面がとても小さくなるため。app/bandText.ts の BAND_SIDE_QUERY と同じ形の画面） */
+@media (min-aspect-ratio: 4/3) {
+  .app.phone .page-band { left: calc(var(--page-left) + var(--page-w) + 18px); right: 10px; max-width: 380px; margin: 0; padding: 14px 16px; }
+  .app.phone .page-band.row { flex-wrap: wrap; padding: 10px 10px 10px 14px; }
+  .app.phone .page-band.row button { margin-left: auto; }
+}
+@media print { .page-band { display: none !important; } }
+/* 帯を出している間、紙面の中の案内は小さな印にする（帯を出していないとき・PDF・印刷では、今までどおり）。
+   印の大きさは画面での大きさ（紙面は縮小しているので、--s で割る）。組版の CSS が要素に直接付ける値より強くするため、!important を付けるものがある */
+@media screen {
+  /* 抄録を書き始める前：抄録の欄は小さくして「↓」の印だけ（説明と「先生の許可が出た」は帯に） */
+  .app.phone .stage[data-band='abstract'] .page-viewport .abstract-lock { height: 16mm !important; padding: 0 !important; }
+  .app.phone .stage[data-band='abstract'] .page-viewport .abstract-lock > * { display: none !important; }
+  .app.phone .stage[data-band='abstract'] .page-viewport .abstract-lock::after { content: ''; position: absolute; left: 50%; top: 50%; width: calc(26px / var(--s)); height: calc(26px / var(--s)); transform: translate(-50%, -50%); border-radius: 50%; background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M12 5v13M6.5 12.5L12 18l5.5-5.5'/%3E%3C/svg%3E") center / 62% no-repeat; box-shadow: 0 0 0 calc(3px / var(--s)) rgba(255, 255, 255, 0.9); }
+  /* 作品写真の空いている枠・写真を入れていない図の枠：「（クリックして写真を選ぶ）」の代わりに「＋」の印 */
+  .app.phone .stage[data-band='photos'] .page-viewport [data-photo-slot]:empty::before,
+  .app.phone .stage[data-band='fields'] .page-viewport .figure-slot::before { content: ''; inset: auto; left: 50%; top: 50%; width: calc(34px / var(--s)); height: calc(34px / var(--s)); transform: translate(-50%, -50%); border-radius: 50%; background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%232f3e75' stroke-width='2.2' stroke-linecap='round'%3E%3Cpath d='M12 5v14M5 12h14'/%3E%3C/svg%3E") center / 60% no-repeat; box-shadow: inset 0 0 0 calc(2px / var(--s)) var(--accent); }
+  .app.phone .stage[data-band='fields'] .page-viewport .figure-slot { position: relative; }
+  .app.phone .stage[data-band='fields'] .page-viewport .figure-slot::before { position: absolute; }
+  /* まだ書いていない欄：小さな仮の文字（「（クリックして入力）」・ひな形の「何を書くか」など）の代わりに、欄の始めに「＋」の印。
+     仮の文字は見えなくするだけで、場所は残す（紙面の組み方・ページ数を PC と変えないため）。何を書くかは、帯と書く欄に出す */
+  .app.phone .stage[data-band='fields'] .page-viewport [data-block-id][data-placeholder]:empty { position: relative; }
+  .app.phone .stage[data-band='fields'] .page-viewport [data-block-id][data-placeholder]:empty::before { color: transparent !important; }
+  .app.phone .stage[data-band='fields'] .page-viewport [data-block-id][data-placeholder]:empty::after { content: ''; position: absolute; left: 0; top: 0.5lh; width: calc(14px / var(--s)); height: calc(14px / var(--s)); transform: translateY(-50%); border-radius: 50%; background: var(--accent) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3' stroke-linecap='round'%3E%3Cpath d='M12 6v12M6 12h12'/%3E%3C/svg%3E") center / 72% no-repeat; pointer-events: none; }
+}
+/* 書く欄：空の欄を書き始めるとき、ひな形の「ここに何を書くか」を出す（紙面では「＋」の印にしているため） */
+.es-hint { margin: 0 16px 6px; padding: 6px 10px; border-radius: 8px; background: var(--accent-soft); font-size: 13.5px; line-height: 1.6; color: var(--ink); }
+.es-hint b { color: var(--accent); }
+
+/* ---- v32 ① 図・表のすぐ下の「＋ ここに続きを書く」（mockups/v32 ① 案A。部品は editor/continueRow.ts） ----
+   紙面に重ねる層（#overlay-layer）に置く画面だけの部品。紙面の中には入れないので、PDF・印刷には出ず、ページの組み方も変えない。
+   図・表の下が空いているときだけ、その空いた所に出す（文の上には重ねない） */
+.continue-row { position: absolute; z-index: 8; box-sizing: border-box; display: flex; align-items: center; gap: 6px; height: 30px; margin: 0; padding: 0 12px; border: 1.5px dashed #9fa8cc; border-radius: 8px; background: rgba(232, 235, 245, 0.8); color: var(--accent); font-size: 12.5px; font-weight: 700; letter-spacing: 0.03em; white-space: nowrap; pointer-events: auto; }
+.continue-row[hidden] { display: none; }
+.continue-row svg { width: 15px; height: 15px; flex: none; }
+.continue-row:hover { border-color: var(--accent); background: var(--accent-soft); }
+.continue-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+/* スマホ：押せる範囲は、高さ 44px ほどまで広げる（見た目の高さはそのまま） */
+.app.phone .continue-row::after { content: ''; position: absolute; inset: -7px 0; }
+@media print { .continue-row { display: none !important; } }
+
+/* ---- v32 ② 削除の「戻す」の知らせを PC にも出し、15秒か次の操作まで出す（mockups/v32 ② 案A。部品は app/UndoBar.tsx） ---- */
+/* PC：紙面の台の下の真ん中（紙面の下に少し重なる）。スマホは前からの .undo-area のまま（下のタブの上） */
+.stage .undo-area.on-stage { position: absolute; left: 50%; right: auto; bottom: 18px; width: min(380px, calc(100% - 32px)); transform: translateX(-50%); }
+/* 残りの時間の細い線（右から縮む。マウスを重ねている・中に移っている間は止める） */
+.undo-toast { position: relative; overflow: hidden; }
+.undo-toast .undo-timer { position: absolute; left: 0; right: 0; bottom: 0; height: 3px; background: rgba(255, 255, 255, 0.16); pointer-events: none; }
+.undo-toast .undo-timer span { position: absolute; inset: 0; background: rgba(255, 255, 255, 0.7); transform-origin: left center; animation: undo-timer linear forwards; }
+.undo-toast.held .undo-timer span { animation-play-state: paused; }
+@keyframes undo-timer { from { transform: scaleX(1); } to { transform: scaleX(0); } }
+/* 戻したあとの「✓ 段落を戻しました」 */
+.undo-toast .undo-done { display: inline-flex; align-items: center; gap: 8px; }
+.undo-toast .undo-done svg { width: 18px; height: 18px; flex: none; color: #8fd0a4; stroke-width: 2.2; }
+/* 元に戻した所を、少しの間光らせる（紙面は縮小しているので、--s で割って画面での太さにする。1.1秒そのままにして、0.4秒で消える） */
+.page-viewport .undo-flash { background-color: #ffe7a1; box-shadow: 0 0 0 calc(5px / var(--s)) #ffe7a1, 0 0 0 calc(7px / var(--s)) #e0b23c; border-radius: calc(5px / var(--s)); animation: undo-flash 0.4s ease 1.1s forwards; }
+.page-viewport .page-break.undo-flash { background: none; box-shadow: none; animation: none; }
+.page-viewport .page-break.undo-flash::after { background: #ffe7a1; outline: calc(2px / var(--s)) solid #e0b23c; }
+@keyframes undo-flash { to { background-color: rgba(255, 231, 161, 0); box-shadow: 0 0 0 calc(5px / var(--s)) rgba(255, 231, 161, 0), 0 0 0 calc(7px / var(--s)) rgba(224, 178, 60, 0); } }
+/* 「動きを減らす」設定のとき：線は1秒ごとに縮め、光は消えるときに動かさない（スクロールも、なめらかにしない） */
+@media (prefers-reduced-motion: reduce) {
+  .undo-toast .undo-timer span { animation-timing-function: steps(15, end); }
+  .page-viewport .undo-flash { animation: none; }
+}
+@media print { .page-viewport .undo-flash { background: none !important; box-shadow: none !important; } }

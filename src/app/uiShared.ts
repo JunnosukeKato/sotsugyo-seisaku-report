@@ -122,9 +122,9 @@ export function useSwipe(target: React.RefObject<HTMLElement | null>, editor: Re
   useEffect(() => {
     const el = target.current
     if (!el || !editor || !enabled) return
-    // 作品写真をつかんで動かすときは、ページを送らない
+    // 作品写真をつかんで動かすときは、ページを送らない（「全体を入れる（切らない）」の写真は動かせないので、はらうとページを送る）
     const down = (e: PointerEvent) =>
-      (start.current = e.pointerType === 'mouse' || (e.target as HTMLElement).closest?.('[data-photo-slot] img') ? null : { x: e.clientX, y: e.clientY })
+      (start.current = e.pointerType === 'mouse' || (e.target as HTMLElement).closest?.('[data-photo-slot]:not(.whole) img') ? null : { x: e.clientX, y: e.clientY })
     const up = (e: PointerEvent) => {
       const s = start.current
       start.current = null

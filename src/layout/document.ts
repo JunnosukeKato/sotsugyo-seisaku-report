@@ -153,6 +153,15 @@ export function refitLineFontPt(pt: number, ratio: number, box: LineBox, tooBig 
   return Math.max(box.minPt, next)
 }
 
+/**
+ * 抄録を書き始める前の案内の言葉（紙面の抄録の欄に出す。スマホは、同じ言葉を紙面の下の帯に出す。app/PageBand.tsx）
+ */
+export const ABSTRACT_LOCK_TEXT = {
+  title: '抄録は、本文を書き終えて、先生のチェックで許可が出てから書きます。',
+  note: '許可が出たら、下のボタンを押してください（それまで、このページは PDF には入りません）。',
+  button: '先生の許可が出た（抄録を書き始める）',
+} as const
+
 export function abstractHtml(report: Report, config: YearConfig): string {
   const course = findCourse(config, report.basicInfo.courseId)
   const { basicInfo } = report
@@ -167,7 +176,7 @@ export function abstractHtml(report: Report, config: YearConfig): string {
   // 書き始めるまでは、抄録の欄に案内と「先生の許可が出た」ボタンを出す（画面だけ。PDF では空欄）
   const locked = report.abstract.started === false
   const paragraphs = locked
-    ? `<div class="abstract-lock"><b>抄録は、本文を書き終えて、先生のチェックで許可が出てから書きます。</b><span>許可が出たら、下のボタンを押してください（それまで、このページは PDF には入りません）。</span><span class="abstract-start" data-abstract-start>先生の許可が出た（抄録を書き始める）</span></div>`
+    ? `<div class="abstract-lock"><b>${ABSTRACT_LOCK_TEXT.title}</b><span>${ABSTRACT_LOCK_TEXT.note}</span><span class="abstract-start" data-abstract-start>${ABSTRACT_LOCK_TEXT.button}</span></div>`
     : report.abstract.paragraphs
     .map((p) => {
       const text = p.content.map((n) => (n.type === 'text' ? n.text : '')).join('')
@@ -264,14 +273,18 @@ ${items}
 </section>`
 }
 
-/** 作品写真：枠いっぱいに切り抜いて並べる。切り抜く位置は学生が写真をつかんで動かして決める */
+/**
+ * 作品写真：枠いっぱいに切り抜いて並べる。切り抜く位置は学生が写真をつかんで動かして決める。
+ * 「全体を入れる（切らない）」にした写真（whole）は、枠の中に全体を入れる（まわりは白。mockups/v32 ③ 案A）
+ */
 function photosHtml(report: Report, options: DocumentRenderOptions): string {
   const grid = photoGrid(report.workPhotos)
   const slots = shownPhotos(report.workPhotos)
-    .map(({ imageId, position }, i) => {
-      const at = position ? ` style="object-position:${position.x}% ${position.y}%"` : ''
+    .map(({ imageId, position, whole }, i) => {
+      // 全体を入れる写真は切り抜かないので、切り抜く位置は使わない（真ん中に置く）
+      const at = position && !whole ? ` style="object-position:${position.x}% ${position.y}%"` : ''
       const img = imageId && options.photoSrc ? `<img src="${escapeHtml(options.photoSrc(imageId))}"${at} alt="">` : ''
-      return `<div class="slot${img ? '' : ' empty-slot'}" data-photo-slot="${i}">${img}</div>`
+      return `<div class="slot${img ? '' : ' empty-slot'}${img && whole ? ' whole' : ''}" data-photo-slot="${i}">${img}</div>`
     })
     .join('')
   return `<section class="photos grid-${grid.columns}x${grid.rows}">${slots}</section>`

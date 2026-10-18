@@ -73,23 +73,39 @@ function TableMenu({ editor, disabled }: { editor: ReportEditor; disabled: boole
   )
 }
 
+/**
+ * 作品写真のスイッチ「全体を入れる（切らない）」（mockups/v32 ③ 案A）。その写真だけ、枠の中に全体を入れる（まわりは白）。
+ * 切ると、今までどおり枠いっぱいに切り抜く（つかんで動かすと、見える位置を変えられる）
+ */
+function WholeSwitch({ on, index, onToggle }: { on: boolean; index: number; onToggle: (on: boolean) => void }) {
+  return (
+    <button
+      className={`photo-sw${on ? ' on' : ''}`}
+      role="switch"
+      aria-checked={on}
+      title={on ? `${index + 1}枚目の写真は、全体を入れています（切ると、枠いっぱいに切り抜きます）` : `${index + 1}枚目の写真を、切らずに全体を枠の中に入れます（まわりは白）`}
+      onMouseDown={keepFocus}
+      onClick={() => onToggle(!on)}
+    >
+      <i aria-hidden="true" />
+      <span>
+        全体を入れる
+        <br />
+        （切らない）
+      </span>
+    </button>
+  )
+}
+
 interface SelectionToolsProps extends Omit<Props, 'onReferences'> {
   /** スマホの下の道具（横に1列に並べるので、作品写真を選んでいるときは「この写真」の道具だけを出す） */
   phone?: boolean
-  /** 図・表・改ページを削除した、作品写真を外した（スマホは、画面の下に「戻す」の知らせを出す） */
-  onRemoved?: (message: string) => void
 }
 
-/** 書いている物・選んでいる物の道具 */
-export function SelectionTools({ editor, snap, phone, onRemoved }: SelectionToolsProps) {
+/** 書いている物・選んでいる物の道具（削除する・外すと、画面の下に「戻す」の知らせが出る。UndoBar） */
+export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
   const { editingKind, editingId, selection, report } = snap
   const kind = snap.layout?.kinds[snap.page]
-  /** 削除する（外す）。原稿が変わったら、onRemoved で知らせる */
-  const removing = (message: string, run: () => void) => {
-    const before = editor.getSnapshot().report
-    run()
-    if (editor.getSnapshot().report !== before) onRemoved?.(message)
-  }
 
   if (kind === 'photos') {
     const current = photoGrid(report.workPhotos)
@@ -104,8 +120,9 @@ export function SelectionTools({ editor, snap, phone, onRemoved }: SelectionTool
           icon={Icon.remove}
           danger
           title={`${photo + 1}枚目の写真を外す（枠を空にする）`}
-          onClick={() => removing('写真を外しました', () => editor.removePhoto(photo))}
+          onClick={() => editor.removePhoto(photo)}
         />
+        <WholeSwitch on={report.workPhotos.whole?.[photo] === true} index={photo} onToggle={(on) => editor.setPhotoWhole(photo, on)} />
       </div>
     )
     if (phone && photoTools) return photoTools
@@ -150,12 +167,10 @@ export function SelectionTools({ editor, snap, phone, onRemoved }: SelectionTool
           icon={Icon.remove}
           danger
           title="この図を削除（本文の「（図n）」も消えます）"
-          onClick={() =>
-            removing('図を削除しました', () => {
-              editor.select({ kind: 'figure', id: figureId })
-              editor.removeSelected()
-            })
-          }
+          onClick={() => {
+            editor.select({ kind: 'figure', id: figureId })
+            editor.removeSelected()
+          }}
         />
       </div>
     )
@@ -170,7 +185,7 @@ export function SelectionTools({ editor, snap, phone, onRemoved }: SelectionTool
           icon={Icon.remove}
           danger
           title="この改ページを削除"
-          onClick={() => removing('改ページを削除しました', () => editor.removeSelected())}
+          onClick={() => editor.removeSelected()}
         />
       </div>
     )
@@ -205,12 +220,10 @@ export function SelectionTools({ editor, snap, phone, onRemoved }: SelectionTool
           icon={Icon.remove}
           danger
           title="この表を削除"
-          onClick={() =>
-            removing('表を削除しました', () => {
-              editor.select({ kind: 'table', id: tableId })
-              editor.removeSelected()
-            })
-          }
+          onClick={() => {
+            editor.select({ kind: 'table', id: tableId })
+            editor.removeSelected()
+          }}
         />
       </div>
     )

@@ -213,7 +213,8 @@ await withEdge(async (browser) => {
   await page.click('.edit-sheet .done')
   await ready()
 
-  // 選んだ表を削除すると、画面の下に「表を削除しました［戻す］」が出て、「戻す」で元に戻る（mockups/v23 ⑦ 案A）
+  // 選んだ表を削除すると、画面の下に「表を削除しました［戻す］」が出て、「戻す」で元に戻る（mockups/v23 ⑦ 案A）。
+  // 15秒か次の操作まで出し、下の細い線で残りの時間を示す。戻すと「✓ 表を戻しました」と出て、戻した表が光る（mockups/v32 ② 案A）
   await page.evaluate((id) => window.__editor.select({ kind: 'table', id }), tableId)
   await page.waitForSelector('.sel-bar .tb')
   await page.evaluate(() => [...document.querySelectorAll('.sel-bar .tb')].find((b) => b.textContent.includes('削除')).click())
@@ -223,15 +224,95 @@ await withEdge(async (browser) => {
     const b = area?.querySelector('.undo-toast button')
     const r = b?.getBoundingClientRect()
     const a = b && getComputedStyle(b, '::after')
-    return { text: area?.textContent ?? '', role: area?.getAttribute('role'), hitH: r ? r.height - parseFloat(a.top) - parseFloat(a.bottom) : 0 }
+    const line = area?.querySelector('.undo-timer span')
+    return { text: area?.textContent ?? '', role: area?.getAttribute('role'), hitH: r ? r.height - parseFloat(a.top) - parseFloat(a.bottom) : 0, line: line ? getComputedStyle(line).animationDuration : null }
   })
   const tableGone = !(await snap()).report.body.flatMap((c) => c.blocks).some((b) => b.id === tableId)
   await shot('7b-undo-notice')
-  check('選んだ表を削除すると、画面の下に「表を削除しました［戻す］」が出る（読み上げにも伝わる）', tableGone && toast.text.includes('表を削除しました') && toast.role === 'status', JSON.stringify(toast))
+  check('選んだ表を削除すると、画面の下に「表を削除しました［戻す］」が出る（読み上げにも伝わる・残りの時間の線は15秒）', tableGone && toast.text.includes('表を削除しました') && toast.role === 'status' && toast.line === '15s', JSON.stringify(toast))
   check('知らせの「戻す」は、押せる範囲が高さ 44px 以上', toast.hitH >= 44, `${toast.hitH}px`)
+  await wait(7000)
+  check('7秒たっても、知らせは出たまま（前は6秒ほどで消えていた）', !!(await page.$('.undo-toast button')))
   await page.click('.undo-toast button')
   await ready()
-  check('知らせの「戻す」で、削除した表が戻り、知らせが消える', (await snap()).report.body.flatMap((c) => c.blocks).some((b) => b.id === tableId) && !(await page.$('.undo-toast')))
+  await wait(150)
+  const restoredPh = await page.evaluate((id) => ({ text: document.querySelector('.undo-toast')?.textContent ?? '', button: !!document.querySelector('.undo-toast button'), flash: !!document.querySelector(`.page-viewport.front .data-table.undo-flash[data-table-id="${id}"]`) }), tableId)
+  await shot('7c-undo-restored')
+  check('知らせの「戻す」で、削除した表が戻り、「✓ 表を戻しました」と出て、戻した表が光る', (await snap()).report.body.flatMap((c) => c.blocks).some((b) => b.id === tableId) && restoredPh.text === '表を戻しました' && !restoredPh.button && restoredPh.flash, JSON.stringify(restoredPh))
+
+  // 表の下が空いていれば、表を選ぶと、表のすぐ下に「＋ ここに続きを書く」。押すと、表の後ろに段落ができ、下の書く欄ですぐ書ける（mockups/v32 ① 案A）。
+  // 表のすぐ後ろに段落が続くときは出さない（文に重ねない）
+  const tableLast = (next) =>
+    page.evaluate(
+      (id, next) =>
+        window.__editor.update((r) => ({
+          ...r,
+          body: r.body.map((c) => {
+            const i = c.blocks.findIndex((b) => b.id === id)
+            return i < 0 ? c : { ...c, blocks: [...c.blocks.slice(0, i + 1), ...(next ? [{ type: 'paragraph', id: 'ph-next', content: [{ type: 'text', text: '表のあとに続く段落である。' }] }] : [])] }
+          }),
+        })),
+      tableId,
+      next,
+    )
+  await tableLast(true)
+  await ready()
+  await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), cellId)
+  await ready()
+  await page.evaluate((id) => window.__editor.select({ kind: 'table', id }), tableId)
+  await wait(300)
+  const noRow = await page.evaluate(() => {
+    const b = document.querySelector('.continue-row')
+    const p = [...document.querySelectorAll('.page-viewport.front [data-block-id="ph-next"]')].find((e) => e.getBoundingClientRect().height > 0)
+    const range = document.createRange()
+    range.selectNodeContents(p)
+    const line = range.getClientRects()[0]
+    const hit = document.elementFromPoint(line.left + 10, (line.top + line.bottom) / 2)
+    return { shown: !b.hidden, hit: hit?.closest('[data-block-id]')?.getAttribute('data-block-id') ?? hit?.className }
+  })
+  check('スマホでも、表のすぐ後ろに段落が続くときは、表を選んでも「＋ ここに続きを書く」を出さない（段落の1行目に重ならない）', !noRow.shown && noRow.hit === 'ph-next', JSON.stringify(noRow))
+  await tableLast(false)
+  await ready()
+  await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), cellId)
+  await ready()
+  await page.evaluate((id) => window.__editor.select({ kind: 'table', id }), tableId)
+  await wait(300)
+  const phoneRow = await page.evaluate((id) => {
+    const b = document.querySelector('.continue-row')
+    const r = b.getBoundingClientRect()
+    const t = document.querySelector(`.page-viewport.front .data-table[data-table-id="${id}"]`).getBoundingClientRect()
+    const a = getComputedStyle(b, '::after')
+    return { shown: !b.hidden && r.height > 0, below: r.top >= t.bottom && r.top - t.bottom < 30, inside: r.left >= 0 && r.right <= innerWidth, hitH: r.height - parseFloat(a.top) - parseFloat(a.bottom), x: r.left + 60, y: r.top + r.height / 2 }
+  }, tableId)
+  await shot('7d-continue-row')
+  check('スマホでも、表の下が空いていれば、表を選ぶと、表のすぐ下に「＋ ここに続きを書く」が出る（押せる範囲は高さ 44px 以上）', phoneRow.shown && phoneRow.below && phoneRow.inside && phoneRow.hitH >= 44, JSON.stringify(phoneRow))
+  await page.touchscreen.tap(phoneRow.x, phoneRow.y)
+  await wait(300)
+  const contOpen = await page.evaluate((id) => {
+    const s = window.__editor.getSnapshot()
+    const flat = s.report.body.flatMap((c) => c.blocks)
+    return { editing: s.editingId, after: flat[flat.findIndex((b) => b.id === id) + 1]?.id, focused: document.activeElement?.classList.contains('overlay-editor') && !!document.activeElement.closest('.edit-sheet.open') }
+  }, tableId)
+  check('「＋ ここに続きを書く」をタップすると、表の後ろに段落ができ、下の書く欄ですぐ書ける', !!contOpen.editing && contOpen.editing === contOpen.after && contOpen.focused, JSON.stringify(contOpen))
+  await page.keyboard.type('素材は三種類を使った。')
+  await page.click('.edit-sheet .done')
+  await ready()
+  check('書いた文は、表の後ろの段落に入る', (await snap()).report.body.flatMap((c) => c.blocks).find((b) => b.id === contOpen.editing)?.content.map((n) => n.text ?? '').join('') === '素材は三種類を使った。')
+  // 書く欄で段落を削除すると知らせが出て、次の操作（「追加」で小見出しを足す）をすると消える
+  const contAt = await page.evaluate((id) => { const r = document.querySelector(`.page-viewport.front [data-block-id="${id}"]`).getBoundingClientRect(); return { x: r.left + 30, y: r.top + r.height / 2 } }, contOpen.editing)
+  await page.touchscreen.tap(contAt.x, contAt.y)
+  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 20000 }, contOpen.editing)
+  await page.evaluate(() => [...document.querySelectorAll('.edit-sheet .es-tools button')].find((b) => b.textContent.includes('削除')).click())
+  await ready()
+  const paraNotice = await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? '')
+  await page.click('.p-nav .add')
+  await page.waitForSelector('.sheet .add-grid')
+  await page.evaluate(() => [...document.querySelectorAll('.sheet .add-grid .tb')].find((b) => b.textContent.includes('小見出し')).click())
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId, { timeout: 30000 })
+  await ready()
+  check('書く欄で段落を削除すると「段落を削除しました［戻す］」が出て、次の操作（小見出しを足す）をすると消える', paraNotice === '段落を削除しました戻す' && !(await page.$('.undo-toast')), paraNotice)
+  await page.click('.edit-sheet .done')
+  await ready()
 
   // 作品写真：入っている写真を押すと「この写真（1枚目）：差し替え／外す」が出て、「外す」で枠を空にできる（mockups/v23 ⑧ 案A）
   await page.evaluate(async () => {
@@ -256,7 +337,7 @@ await withEdge(async (browser) => {
   await page.evaluate(() => [...document.querySelectorAll('.sel-bar .tb')].find((b) => b.textContent.includes('外す')).click())
   await ready()
   s = await snap()
-  check('「外す」で枠が空になり、「写真を外しました［戻す］」が出る', s.report.workPhotos.imageIds[0] === '' && (await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? '')).includes('写真を外しました'))
+  check('「外す」で枠が空になり、「作品写真を外しました［戻す］」が出る', s.report.workPhotos.imageIds[0] === '' && (await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? '')).includes('作品写真を外しました'))
   await page.click('.undo-toast button')
   await ready()
   check('知らせの「戻す」で、外した写真が戻る', (await snap()).report.workPhotos.imageIds[0] === 'e2e-photo')
@@ -347,7 +428,255 @@ await withEdge(async (browser) => {
 
   // iPhone：PDF を作ったあと「保存する」で共有の画面から保存する（mockups/v28 案C）
   await iphoneShareCheck(browser)
+
+  // 紙面の下の帯（紙面の中の小さな案内を、ふつうの文字の大きさで出す）と、高さ 44px のボタン（mockups/v32 ④ 案A）
+  await bandCheck(browser)
 })
+
+/**
+ * スマホの見やすさ（mockups/v32 ④ 案A）：
+ * - 紙面の中の小さな案内とボタン（抄録の「先生の許可が出た」・作品写真の空いている枠・まだ書いていない欄）を、紙面の下の帯に、ふつうの文字の大きさで出す。紙面には小さな印だけ
+ * - 横向きでは、帯は紙面の右（紙面が小さくなりすぎない）
+ * - 小さいボタン（「直す」「完了」「あとで入力する」「＋引用・参考文献を入れる」・ページ送り・「ページ全体に戻す」）は高さ 44px 以上
+ * - 縦向きでも横向きでも、画面が横にはみ出さない
+ */
+async function bandCheck(browser) {
+  const context = await browser.createBrowserContext()
+  const page = await context.newPage()
+  await noHotReload(page)
+  await stubConfig(page)
+  page.on('pageerror', (e) => console.log('pageerror(band):', e.message))
+  await page.evaluateOnNewDocument(() => {
+    try {
+      localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+    } catch {}
+  })
+  const PORTRAIT = { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
+  const LANDSCAPE = { width: 844, height: 390, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
+  await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
+  await page.setViewport(PORTRAIT)
+  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  const ready = () =>
+    page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
+  await ready()
+  const { setupWriting } = await import('./sampleReport.mjs')
+  const showKind = async (kind) => {
+    await page.evaluate((kind) => window.__editor.goToPage(window.__editor.getSnapshot().layout.kinds.indexOf(kind), 'none'), kind)
+    await ready()
+    await wait(400)
+  }
+  /** 高さ（px）。押せる範囲を ::after で広げているものは、その分も足す */
+  const height = (sel) =>
+    page.evaluate((sel) => {
+      const el = document.querySelector(sel)
+      if (!el) return 0
+      const r = el.getBoundingClientRect()
+      const a = getComputedStyle(el, '::after')
+      const grow = a.content !== 'none' && a.position === 'absolute' ? -(parseFloat(a.top) || 0) - (parseFloat(a.bottom) || 0) : 0
+      return Math.round(Math.max(r.height, r.height + grow))
+    }, sel)
+  /** 帯のようす：文字の大きさ（いちばん小さいもの）・ボタンの高さ・位置（紙面・ページ送り・下の道具と重ならないか）・横にはみ出していないか */
+  const band = () =>
+    page.evaluate(() => {
+      const el = document.querySelector('.page-band')
+      const pageEl = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current').getBoundingClientRect()
+      const scrollX = document.documentElement.scrollWidth > innerWidth + 1
+      if (!el) return { shown: false, scrollX, pageW: Math.round(pageEl.width) }
+      const r = el.getBoundingClientRect()
+      const texts = [...el.querySelectorAll('.t, .t small, p, button')].filter((e) => e.textContent.trim())
+      const btn = el.querySelector('button').getBoundingClientRect()
+      const bars = [...document.querySelectorAll('.pager, .sel-bar > *')].map((e) => e.getBoundingClientRect())
+      const overlapsBar = bars.some((b) => b.top < r.bottom - 0.5 && b.bottom > r.top + 0.5 && b.left < r.right && b.right > r.left)
+      return {
+        shown: true,
+        text: el.textContent,
+        minFont: Math.min(...texts.map((e) => parseFloat(getComputedStyle(e).fontSize))),
+        button: el.querySelector('button').textContent,
+        buttonH: Math.round(btn.height),
+        inside: r.left >= 0 && r.right <= innerWidth + 0.5 && r.top >= 0 && r.bottom <= innerHeight,
+        belowPage: r.top >= pageEl.bottom - 0.5,
+        rightOfPage: r.left >= pageEl.right - 0.5,
+        overlapsBar,
+        pageW: Math.round(pageEl.width),
+        scrollX,
+      }
+    })
+
+  // はじめての案内：「あとで入力する（案内を閉じる）」は高さ 44px 以上。案内の間は、帯を出さない
+  await page.waitForSelector('.guide.step-course .g-opts button')
+  await page.evaluate(() => document.querySelector('.g-opts button').click())
+  await page.waitForSelector('.guide.step-word .g-word-opt.no')
+  await page.evaluate(() => document.querySelector('.g-word-opt.no').click())
+  await page.waitForSelector('.guide .g-later')
+  await wait(300)
+  const laterH = await height('.guide .g-later')
+  const duringGuide = await band()
+  await page.evaluate(() => document.querySelector('.guide .g-later').click())
+  await page.evaluate(() => window.__editor.finishEditing())
+  await ready()
+  check('案内の「あとで入力する（案内を閉じる）」は高さ 44px 以上。案内の間は、紙面の下の帯を出さない', laterH >= 44 && !duringGuide.shown, JSON.stringify({ laterH, duringGuide }))
+
+  // 見本の原稿：抄録はまだ（先生の許可が出る前）・作品写真は2枚（上下）で下の枠が空いている・本文に「見頃」（指摘の「直す」が出る）
+  await page.evaluate(setupWriting)
+  await page.evaluate(() =>
+    window.__editor.update((r) => ({
+      ...r,
+      basicInfo: { ...r.basicInfo, studentId: '00ZZ0123' },
+      abstract: { ...r.abstract, started: false },
+      workPhotos: { layout: 2, columns: 1, imageIds: ['g-photo1', ''] },
+      body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 'p7' ? { ...b, content: [{ type: 'text', text: '二回目の仮縫いでは、見頃の丈も確かめた。' }] } : b)) })),
+    })),
+  )
+  await wait(500)
+  await ready()
+
+  // 抄録：説明と「先生の許可が出た（抄録を書き始める）」は帯に（ふつうの文字の大きさ・高さ 44px のボタン）。紙面の欄は「↓」の印だけ
+  await showKind('abstract')
+  const abs = await band()
+  const lock = await page.evaluate(() => {
+    const el = document.querySelector('.page-viewport.front .abstract-lock')
+    return { childrenHidden: [...el.children].every((c) => getComputedStyle(c).display === 'none'), mark: getComputedStyle(el, '::after').content !== 'none', h: Math.round(el.getBoundingClientRect().height) }
+  })
+  await page.screenshot({ path: `${OUT}/12-band-abstract.png` })
+  check(
+    '抄録：「先生の許可が出た（抄録を書き始める）」と説明は、紙面の下の帯にふつうの文字（13px 以上）で出て、ボタンは高さ 44px 以上。紙面には「↓」の印だけ',
+    abs.shown && abs.text.includes('先生のチェックで許可が出てから') && abs.button === '先生の許可が出た（抄録を書き始める）' && abs.minFont >= 13 && abs.buttonH >= 44 && abs.belowPage && !abs.overlapsBar && abs.inside && !abs.scrollX && lock.childrenHidden && lock.mark,
+    JSON.stringify({ abs, lock }),
+  )
+
+  // PDF・印刷に帯は入らない（帯は紙面の外の部品。印刷のときは出さず、紙面の案内も小さな印にしない）
+  await page.emulateMediaType('print')
+  const printed = await page.evaluate(() => ({ band: getComputedStyle(document.querySelector('.page-band')).display, mark: getComputedStyle(document.querySelector('.page-viewport.front .abstract-lock'), '::after').content }))
+  await page.emulateMediaType(null)
+  check('印刷（PDF）には、帯も紙面の印も出さない', printed.band === 'none' && printed.mark === 'none', JSON.stringify(printed))
+
+  // 作品写真：空いている枠は「＋」の印だけ。帯に「下の枠に、まだ写真がありません」と「写真を選ぶ」。並べ方の道具とも重ならない
+  await showKind('photos')
+  const ph = await band()
+  const slotMark = await page.evaluate(() => {
+    const before = getComputedStyle(document.querySelector('.page-viewport.front [data-photo-slot="1"]'), '::before')
+    return { content: before.content, w: before.width }
+  })
+  await page.screenshot({ path: `${OUT}/13-band-photo.png` })
+  check(
+    '作品写真：空いている枠は「＋」の印だけになり、帯に「下の枠に、まだ写真がありません」と「写真を選ぶ」（13px 以上・高さ 44px 以上。並べ方の道具に重ならない）',
+    ph.shown && ph.text.includes('下の枠に、まだ写真がありません') && ph.button === '写真を選ぶ' && ph.minFont >= 13 && ph.buttonH >= 44 && ph.belowPage && !ph.overlapsBar && ph.inside && !ph.scrollX && !slotMark.content.includes('クリック'),
+    JSON.stringify({ ph, slotMark }),
+  )
+
+  // 作品写真を押すと、下の道具にスイッチ「全体を入れる（切らない）」（mockups/v32 ③ 案A）。入れると枠の中に全体が入る
+  await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
+  await wait(400)
+  const swH = await height('.sel-bar .photo-sw')
+  await page.tap('.sel-bar .photo-sw')
+  await wait(300)
+  await ready()
+  const phoneWhole = await page.evaluate(() => ({ fit: getComputedStyle(document.querySelector('.page-viewport.front [data-photo-slot="0"] img')).objectFit, checked: document.querySelector('.sel-bar .photo-sw')?.getAttribute('aria-checked'), whole: window.__editor.getSnapshot().report.workPhotos.whole }))
+  await page.screenshot({ path: `${OUT}/14-photo-whole.png` })
+  check('スマホ：写真を押すと下の道具にスイッチ「全体を入れる（切らない）」が出て（高さ 44px 以上）、入れると枠の中に全体が入る', swH >= 44 && phoneWhole.fit === 'contain' && phoneWhole.checked === 'true' && phoneWhole.whole?.[0] === true, JSON.stringify({ swH, phoneWhole }))
+  await page.evaluate(() => window.__editor.select(null))
+  await wait(300)
+
+  // まだ書いていない欄：ひな形の段落は「ここに何を書くか」を帯に出し、「書く」でその段落を書き始める（書く欄にも出す）
+  await page.evaluate(() =>
+    window.__editor.update((r) => ({ ...r, body: [...r.body, { id: 'c-band', title: 'おわりに', blocks: [{ type: 'paragraph', id: 'p-band', content: [{ type: 'text', text: '' }], hint: '制作を振り返り、できたこと・課題を書く' }] }] })),
+  )
+  await wait(400)
+  await ready()
+  await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfBlock('p-band'), 'none'))
+  await ready()
+  await wait(300)
+  const fields = await band()
+  const fieldMark = await page.evaluate(() => {
+    const el = document.querySelector('.page-viewport.front [data-block-id="p-band"]')
+    return { text: getComputedStyle(el, '::before').color, mark: getComputedStyle(el, '::after').content !== 'none' }
+  })
+  await page.screenshot({ path: `${OUT}/15-band-fields.png` })
+  await page.tap('.page-band button')
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p-band', { timeout: 20000 }).catch(() => {})
+  await wait(400)
+  const writing = await page.evaluate(() => ({ id: window.__editor.getSnapshot().editingId, hint: document.querySelector('.edit-sheet .es-hint')?.textContent ?? '', band: !!document.querySelector('.page-band'), done: document.querySelector('.edit-sheet .done').getBoundingClientRect().height }))
+  check(
+    'まだ書いていない段落：紙面の小さな仮の文字は「＋」の印にし、帯に「ここに何を書くか」（13px 以上）。「書く」でその段落を書き始め、書く欄にも出る（帯は隠れる）',
+    fields.shown && fields.text.includes('制作を振り返り、できたこと・課題を書く') && fields.button === '書く' && fields.minFont >= 13 && fields.buttonH >= 44 && fieldMark.mark && fieldMark.text === 'rgba(0, 0, 0, 0)' && writing.id === 'p-band' && writing.hint.includes('制作を振り返り') && !writing.band,
+    JSON.stringify({ fields, fieldMark, writing }),
+  )
+  check('書く欄の「完了」は高さ 44px 以上', writing.done >= 44, `${writing.done}px`)
+  await page.click('.edit-sheet .done')
+  await ready()
+
+  // ページ送り・「ページ全体に戻す」・「＋引用・参考文献を入れる」・指摘の「直す」は高さ 44px 以上
+  const pagerH = await height('.pager button')
+  await page.evaluate(() => window.__editor.setZoom(true))
+  await wait(300)
+  const unzoomH = await height('.unzoom')
+  await page.evaluate(() => window.__editor.setZoom(false))
+  await wait(300)
+  await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfBlock('p1'), 'none'))
+  await ready()
+  await page.click('.p-nav .add')
+  await page.waitForSelector('.sheet .add-refs')
+  const refsH = await height('.sheet .add-refs')
+  await page.click('.sheet-close')
+  await wait(300)
+  await page.evaluate(() => [...document.querySelectorAll('.p-nav button')].find((b) => b.textContent.includes('チェック')).click())
+  await page.waitForSelector('.sheet .issue .fix')
+  await wait(300)
+  const fixH = await height('.sheet .issue .fix')
+  await page.screenshot({ path: `${OUT}/16-buttons-44.png` })
+  await page.click('.sheet-close')
+  await wait(300)
+  check('ページ送り・「ページ全体に戻す」・「＋引用・参考文献を入れる」・指摘の「直す」は、高さ 44px 以上', pagerH >= 44 && unzoomH >= 44 && refsH >= 44 && fixH >= 44, JSON.stringify({ pagerH, unzoomH, refsH, fixH }))
+
+  // 横向き（844×390）：帯は紙面の右。紙面は小さくなりすぎず、画面は横にはみ出さない
+  await page.setViewport(LANDSCAPE)
+  await wait(800)
+  await ready()
+  await showKind('abstract')
+  const land = await band()
+  await page.screenshot({ path: `${OUT}/17-band-landscape.png` })
+  check(
+    '横向き：抄録の帯は紙面の右に出て（13px 以上・高さ 44px のボタン）、紙面は幅 140px 以上のまま。画面は横にはみ出さない',
+    land.shown && land.rightOfPage && land.inside && land.minFont >= 13 && land.buttonH >= 44 && land.pageW >= 140 && !land.scrollX,
+    JSON.stringify(land),
+  )
+  await showKind('photos')
+  const landPhoto = await band()
+  check('横向き：作品写真の帯も紙面の右で、画面の中に収まり、下の道具に重ならない', landPhoto.shown && landPhoto.rightOfPage && landPhoto.inside && !landPhoto.overlapsBar && !landPhoto.scrollX, JSON.stringify(landPhoto))
+  await page.setViewport(PORTRAIT)
+  await wait(800)
+  await ready()
+
+  // 帯のボタンで、紙面のボタンと同じことができる：「写真を選ぶ」で写真を選ぶ画面が開き、入れると帯が消える。「先生の許可が出た」で抄録を書き始める
+  await showKind('photos')
+  const png = await page.evaluate(async () => {
+    const c = new OffscreenCanvas(300, 400)
+    const g = c.getContext('2d')
+    g.fillStyle = '#4a6a8a'
+    g.fillRect(0, 0, 300, 400)
+    const blob = await c.convertToBlob({ type: 'image/png' })
+    return btoa(String.fromCharCode(...new Uint8Array(await blob.arrayBuffer())))
+  })
+  const { writeFileSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const { join } = await import('node:path')
+  const pngPath = join(tmpdir(), 'sotsugyo-e2e-band.png')
+  writeFileSync(pngPath, Buffer.from(png, 'base64'))
+  const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 10000 }), page.tap('.page-band button')])
+  await chooser.accept([pngPath])
+  await page.waitForFunction(() => !!window.__editor.getSnapshot().report.workPhotos.imageIds[1], { timeout: 20000 })
+  await ready()
+  await wait(300)
+  const afterPhoto = await band()
+  check('帯の「写真を選ぶ」で写真を選ぶ画面が開き、写真を入れると帯が消える', !afterPhoto.shown, JSON.stringify(afterPhoto))
+  await showKind('abstract')
+  await page.tap('.page-band button')
+  await wait(400)
+  await ready()
+  const started = await page.evaluate(() => ({ started: window.__editor.getSnapshot().report.abstract.started, lock: !!document.querySelector('.page-viewport.front .abstract-lock') }))
+  check('帯の「先生の許可が出た（抄録を書き始める）」で、抄録を書き始められる（紙面の案内も消える）', started.started === true && !started.lock, JSON.stringify(started))
+  await context.close()
+}
 
 /**
  * iPhone で「PDFを書き出す」：作り終えたら、もう一度「保存する」を押して共有の画面から保存する（作るのに数秒かかり、最初のタップでは開けないため）。
