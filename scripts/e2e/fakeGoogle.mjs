@@ -24,9 +24,13 @@ export function fakeDrive(email = '00zz901@bunka-wu.ac.jp') {
   }
   const multipart = (body, contentType) => {
     const boundary = contentType.match(/boundary=(.+)$/)[1]
-    const [first, second] = body.split(`--${boundary}`).filter((p) => p.trim() && p.trim() !== '--')
+    // 画像など文字でない中身は、base64 で渡ってくる
+    const binary = !body.includes(`--${boundary}`)
+    const text = binary ? Buffer.from(body, 'base64').toString('latin1') : body
+    const [first, second] = text.split(`--${boundary}`).filter((p) => p.trim() && p.trim() !== '--')
     const part = (p) => p.slice(p.indexOf('\r\n\r\n') + 4).replace(/\r\n$/, '')
-    return { metadata: JSON.parse(part(first)), content: Buffer.from(part(second), 'utf8') }
+    const metadata = JSON.parse(binary ? Buffer.from(part(first), 'latin1').toString('utf8') : part(first))
+    return { metadata, content: Buffer.from(part(second), binary ? 'latin1' : 'utf8') }
   }
   /** ドライブの API の1回の呼び出しに答える（[状態, 返す中身, 中身の種類]） */
   drive.answer = async (method, url, headers, body) => {
