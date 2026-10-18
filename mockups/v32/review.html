@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v32 書き方の分かりにくい所（4つ）</title>
+<!-- 画面の絵は node scripts/mockup-shots-v32.mjs で作る（本物の学生用ツールを開き、案ごとに一部を書き換えて写したもの）。このページの写しは同じスクリプトの review で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  .top { max-width: 1240px; margin: 0 0 22px; font-size: 13.5px; color: var(--muted); line-height: 1.8; }
+  .top b { color: var(--ink); font-size: 15px; }
+  section { max-width: 1240px; margin: 0 0 40px; padding-top: 4px; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 3px; }
+  figcaption span { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row > div { background: #fff; align-self: stretch; }
+  .pc2 { grid-template-columns: 1fr 1fr; }
+  /* PC の絵（縦長に切り出したもの）とスマホの絵の高さが、だいたいそろう幅 */
+  .pc2-ph { grid-template-columns: 8.5fr 8.5fr 5fr; }
+  .pc2-ph2 { grid-template-columns: 8.5fr 8.5fr 5fr 5fr; }
+  .ph-land { grid-template-columns: 1fr 1fr 2.25fr; }
+  .c4 { grid-template-columns: repeat(4, 1fr); }
+  .one { grid-template-columns: 1fr; }
+  .one > div { padding: 0 29%; background: #f6f5f2 !important; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 12px; border: 1px solid #ddd; }
+  .row small { display: block; padding: 6px 12px 9px; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .row small b { color: var(--ink); }
+  .note { padding: 14px 16px !important; font-size: 13px; color: var(--muted); line-height: 1.8; background: #faf9f7 !important; }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 10px 16px 12px; font-size: 13.5px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: var(--ok); }
+  .pw .weak b { color: #b5443b; }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+  .pair figure { margin-bottom: 18px; }
+  .now { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+  .now > b { display: block; padding: 10px 16px 8px; font-size: 14px; border-bottom: 1px solid var(--line); }
+</style>
+</head>
+<body>
+
+<p class="top"><b>v32　書いていて分かりにくかった所（4つ）</b><br>はじめての学生役の試しで出た点です。質問ごとに1つ選んでください。画面は本物のツールを開いて、案の部分だけ書き換えて写したものです（絵を押すと大きく見られます）。</p>
+
+<section id="after">
+  <h1>① 図・表のあとの続きの書き方</h1>
+  <p class="lead">図の下の空いている所を押しても、何も起きません。図のタイトルで Enter を押すと、図の上の段落の終わりに戻るので、次の文が図の前に入ってしまいます。</p>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　図のすぐ下に「＋ ここに続きを書く」<span class="rec">おすすめ</span></b><span>図・表を選んだとき、図・表がページの最後で下が空いているときに出ます。押すか、タイトルで Enter を押すと、図・表の後ろに新しい段落ができます。</span></figcaption>
+    <div class="row pc2">
+      <div><a href="shots/after-a-1.png"><img src="shots/after-a-1.png"></a><small>図を選んだところ（薄い行は PDF には出ません）</small></div>
+      <div><a href="shots/after-result.png"><img src="shots/after-result.png"></a><small>押したあと：図の後ろの段落で、続きを書く</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>続きをどこに書くか、見て分かります。</div><div class="weak"><b>弱いところ</b><br>図の下に部品が1つ増えます。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　図の下の空いている所を押すと、段落ができる</b><span>目に見える部品は足しません。タイトルで Enter を押しても、図・表の後ろに段落ができます。</span></figcaption>
+    <div class="row pc2">
+      <div><a href="shots/after-b-1.png"><img src="shots/after-b-1.png"></a><small>空いている所を押す（矢印と丸は説明のための印）</small></div>
+      <div><a href="shots/after-result.png"><img src="shots/after-result.png"></a><small>押したあと：案Aと同じ</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>画面は今と同じで、すっきりしています。</div><div class="weak"><b>弱いところ</b><br>押せることに気づかない学生がいます。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C　今の動きのまま、戻ったことを吹き出しで知らせる</b><span>タイトルで Enter を押すと、今までどおり図の上の段落に戻り、カーソルのそばに吹き出しが出ます。</span></figcaption>
+    <div class="row pc2">
+      <div><a href="shots/after-now.png"><img src="shots/after-now.png"></a><small><b>いま</b>：図の上の段落の終わりに戻る</small></div>
+      <div><a href="shots/after-c.png"><img src="shots/after-c.png"></a><small><b>案C</b>：吹き出しで知らせる</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>動きが変わらないので、慣れた人も困りません。</div><div class="weak"><b>弱いところ</b><br>Enter がもう1回要ります。空いている所を押しても何も起きないのは同じです。</div></div>
+  </figure>
+</section>
+
+<section id="undo">
+  <h1>② 削除の「戻す」</h1>
+  <p class="lead">削除したあと、スマホの「削除しました［戻す］」は5秒ほどで消え、PC には出ません。書く欄の「戻す」は、ほかのページの変更でも、何をどこに戻すか言わずに戻します。</p>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　PC にも「段落を削除しました［戻す］」を出す<span class="rec">おすすめ</span></b><span>15秒か、次の操作をするまで出ます（スマホは今の知らせを長くします）。戻すと「段落を戻しました」と出て、戻した所へ移り、少しの間光ります。</span></figcaption>
+    <div class="row pc2-ph2">
+      <div><a href="shots/undo-a-pc.png"><img src="shots/undo-a-pc.png"></a><small>削除したところ（下の細い線は残りの時間）</small></div>
+      <div><a href="shots/undo-a-pc-2.png"><img src="shots/undo-a-pc-2.png"></a><small>「戻す」を押したあと：戻った段落が光る</small></div>
+      <div class="ph"><a href="shots/undo-a-ph.png"><img src="shots/undo-a-ph.png"></a><small>スマホ：削除したところ</small></div>
+      <div class="ph"><a href="shots/undo-a-ph-2.png"><img src="shots/undo-a-ph-2.png"></a><small>スマホ：戻したあと</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>消した直後に、何を戻すかがはっきりしています。</div><div class="weak"><b>弱いところ</b><br>知らせが紙面の下に少し重なります。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　削除する前に確かめる</b><span>「この段落を削除しますか？」で「削除する」を押したときだけ消えます。知らせは出しません。</span></figcaption>
+    <div class="row one"><div><a href="shots/undo-b-pc.png"><img src="shots/undo-b-pc.png"></a><small>「削除」を押したところ（消える段落を赤く示す）</small></div></div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>消してしまう前に止められます。</div><div class="weak"><b>弱いところ</b><br>削除のたびに1回多く押します。消したあとは今と同じです。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C　知らせは出さず、「元に戻す」に戻すものの名前を出す</b><span>道具の「元に戻す」に「段落の削除」と出ます。押すと戻した所へ移り、少しの間光ります。</span></figcaption>
+    <div class="row pc2">
+      <div><a href="shots/undo-c-pc.png"><img src="shots/undo-c-pc.png"></a><small>削除したあと（マウスを重ねると、黒い札も出る）</small></div>
+      <div><a href="shots/undo-c-pc-2.png"><img src="shots/undo-c-pc-2.png"></a><small>押したあと：戻った段落が光る</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>画面に出る物が増えません。</div><div class="weak"><b>弱いところ</b><br>「元に戻す」を見ないと気づきません。スマホは書く欄を閉じると見えません。</div></div>
+  </figure>
+</section>
+
+<section id="photo">
+  <h1>③ 作品写真が切れる</h1>
+  <p class="lead">作品写真は枠いっぱいに切り抜くので、縦長の写真は頭や裾が切れます。写真を押しても「差し替え」「外す」だけで、全体を入れる方法がありません。</p>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　写真を押すと「全体を入れる（切らない）」を選べる<span class="rec">おすすめ</span></b><span>その写真だけ、枠の中に全体を入れます（まわりは白）。</span></figcaption>
+    <div class="row pc2-ph">
+      <div><a href="shots/photo-a-pc-1.png"><img src="shots/photo-a-pc-1.png"></a><small>写真を押したところ（頭と裾が切れている）</small></div>
+      <div><a href="shots/photo-a-pc-2.png"><img src="shots/photo-a-pc-2.png"></a><small>スイッチを入れたところ</small></div>
+      <div class="ph"><a href="shots/photo-a-ph.png"><img src="shots/photo-a-ph.png"></a><small>スマホ</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>切りたくない写真だけ、全体を入れられます。</div><div class="weak"><b>弱いところ</b><br>写真ごとに選ぶので、枚数が多いと手間です。</div></div>
+  </figure>
+
+  <div class="pair">
+    <figure>
+      <figcaption><b>案B　ページ全体のスイッチ「写真を切らずに入れる」</b><span>並べ方の下に1つ。入れると、全部の写真が切れなくなります。</span></figcaption>
+      <a href="shots/photo-b-pc.png"><img src="shots/photo-b-pc.png"></a>
+      <div class="pw"><div class="good"><b>よいところ</b><br>1回で全部の写真が切れなくなります。</div><div class="weak"><b>弱いところ</b><br>写真ごとには選べません。横長の写真にも白が出ます。</div></div>
+    </figure>
+    <figure>
+      <figcaption><b>案C　はじめから全部「切らずに入れる」</b><span>提出前チェックと同じです。写真を押すと「枠いっぱいにする」を選べます。</span></figcaption>
+      <a href="shots/photo-c-pc.png"><img src="shots/photo-c-pc.png"></a>
+      <div class="pw"><div class="good"><b>よいところ</b><br>何もしなくても写真は切れません。</div><div class="weak"><b>弱いところ</b><br>今まで枠いっぱいで並べていた人は、見た目が変わります。</div></div>
+    </figure>
+  </div>
+</section>
+
+<section id="phone">
+  <h1>④ スマホの見やすさ</h1>
+  <p class="lead">紙面の中の小さな案内（「（クリックして写真を選ぶ）」、抄録の「先生の許可が出た」とその説明）は 6px ほどで、指で広げられません。高さ 44px に足りないボタン（「直す」「完了」「あとで入力する」「＋引用・参考文献を入れる」、ページ送り）もあります。横向きでは紙面の幅が 160px ほどになります。</p>
+
+  <div class="now"><b>いま　と　3案とも同じこと（小さいボタンを高さ 44px 以上に）</b>
+    <div class="row c4">
+      <div class="ph"><a href="shots/phone-now-abstract.png"><img src="shots/phone-now-abstract.png"></a><small><b>いま</b>：抄録の案内</small></div>
+      <div class="ph"><a href="shots/phone-now-photo.png"><img src="shots/phone-now-photo.png"></a><small><b>いま</b>：空いている枠</small></div>
+      <div class="ph"><a href="shots/phone-btn-now.png"><img src="shots/phone-btn-now.png"></a><small><b>いま</b>：「直す」は高さ 19px</small></div>
+      <div class="ph"><a href="shots/phone-btn-44.png"><img src="shots/phone-btn-44.png"></a><small><b>3案とも</b>：高さ 44px に</small></div>
+    </div>
+  </div>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　紙面の中の案内とボタンを、ページの下の帯に出す<span class="rec">おすすめ</span></b><span>帯はふつうの文字の大きさです。紙面には小さな印（↓・＋）だけ残します。</span></figcaption>
+    <div class="row ph-land">
+      <div class="ph"><a href="shots/phone-a-abstract.png"><img src="shots/phone-a-abstract.png"></a><small>抄録</small></div>
+      <div class="ph"><a href="shots/phone-a-photo.png"><img src="shots/phone-a-photo.png"></a><small>作品写真</small></div>
+      <div class="ph"><a href="shots/phone-a-land.png"><img src="shots/phone-a-land.png"></a><small>横向き（帯は紙面の右に出す）</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>そのまま読めて、押しやすくなります。</div><div class="weak"><b>弱いところ</b><br>帯の分、紙面が少し小さくなります（幅 370px → 330px ほど）。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　紙面を2本の指で広げられるようにする</b><span>1本の指は今のまま（めくる・押す）です。</span></figcaption>
+    <div class="row ph-land">
+      <div class="ph"><a href="shots/phone-b-abstract.png"><img src="shots/phone-b-abstract.png"></a><small>抄録を広げたところ</small></div>
+      <div class="ph"><a href="shots/phone-b-photo.png"><img src="shots/phone-b-photo.png"></a><small>作品写真を広げたところ</small></div>
+      <div class="note">指の丸と矢印は、説明のための印です。広げる前は「いま」と同じ見た目です。</div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>見たい所を好きなだけ大きくできます。</div><div class="weak"><b>弱いところ</b><br>広げられると気づかない学生がいます。広げると文が画面からはみ出します。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C　はじめから拡大した表示で開く</b><span>本文の幅を画面の幅に合わせ、上下に動かして見ます。「ページ全体に戻す」で全体も見られます。</span></figcaption>
+    <div class="row ph-land">
+      <div class="ph"><a href="shots/phone-c-abstract.png"><img src="shots/phone-c-abstract.png"></a><small>抄録</small></div>
+      <div class="ph"><a href="shots/phone-c-photo.png"><img src="shots/phone-c-photo.png"></a><small>作品写真</small></div>
+      <div class="note">今の「書くときの拡大」と同じ表示です。字は今の1.4倍ほどになります。</div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>本文の字が大きくなり、操作は要りません。</div><div class="weak"><b>弱いところ</b><br>案内の字は 8px ほどで、まだ小さいです。作品写真は左右が切れて見えます。</div></div>
+  </figure>
+</section>
+
+</body>
+</html>
