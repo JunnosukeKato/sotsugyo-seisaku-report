@@ -1,7 +1,8 @@
-import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import type { YearConfig } from '../config'
 import { newId } from '../editor/reportOps'
 import { formatReference, halfDigits, yearDigits } from '../layout/document'
+import { referenceFilled, referencesChanged } from '../model/references'
 import type { Snapshot } from '../model/storage'
 import type { Reference, Report } from '../model/types'
 import { useDialogFocus } from './useDialogFocus'
@@ -141,12 +142,37 @@ function Field({
   )
 }
 
+/**
+ * 引用・参考文献の窓。書いた内容が反映してある内容と違うまま「×」「やめる」を押したら、窓の下で
+ * 「書いた内容を反映せずに閉じますか？」と聞く（「反映して閉じる」（濃いボタン。開いたときに移る）・「反映せずに閉じる」・「戻る」）。
+ * 前は、4冊書いたあと「×」を押すと、確かめずに閉じて、書いた内容がすべて消えていた。
+ * 並べ方は、本文を書き始めてからコースを変えるときの窓（CourseChangeDialog）と同じ：戻る方を左、消える方は目立たせず、残す方を濃いボタンに
+ */
 export function ReferencesDialog({ report, onSave, onClose }: { report: Report; onSave: (refs: Reference[]) => void; onClose: () => void }) {
   const [refs, setRefs] = useState<Reference[]>(report.references)
+  // 閉じる前に聞いているところ（書いた内容を反映せずに閉じるか）
+  const [asking, setAsking] = useState(false)
+  const keepRef = useRef<HTMLButtonElement>(null)
+  const cancelRef = useRef<HTMLButtonElement>(null)
+  const askId = useId()
+  // 聞いたら「反映して閉じる」に移り（Enter でうっかり消さないように）、「戻る」で「やめる」に戻る
+  const askedOnce = useRef(false)
+  useEffect(() => {
+    if (asking) keepRef.current?.focus()
+    else if (askedOnce.current) cancelRef.current?.focus()
+    askedOnce.current ||= asking
+  }, [asking])
   const update = (id: string, patch: Partial<Reference>) => setRefs(refs.map((r) => (r.id === id ? ({ ...r, ...patch } as Reference) : r)))
+  const save = () => {
+    // 出版年は、変換の途中で押されても半角の数字にそろえる
+    onSave(refs.map((r) => (r.type === 'book' ? { ...r, year: yearDigits(r.year) } : r)))
+    onClose()
+  }
+  // 「×」「やめる」：書いた内容が反映してある内容と違えば、閉じる前に聞く（何も変えていなければ、すぐ閉じる）
+  const tryClose = () => (referencesChanged(report.references, refs) ? setAsking(true) : onClose())
   return (
-    // 書きかけの内容が消えないよう、窓の外を押しても Esc でも閉じない（「×」と「やめる」「保存」だけ）
-    <Modal title="引用・参考文献" onClose={onClose} wide keepOpen>
+    // 書きかけの内容が消えないよう、窓の外を押しても Esc でも閉じない（「×」と「やめる」「反映する」だけ。「×」「やめる」は、書いた内容があれば聞いてから閉じる）
+    <Modal title="引用・参考文献" onClose={tryClose} wide keepOpen>
       <p className="lead">
         項目を埋めると、手順書の書き方（著者名、『書名』、出版社、出版年）に自動で整えます。なくても構いません。本文の後に改ページして載ります。
       </p>
@@ -160,8 +186,7 @@ export function ReferencesDialog({ report, onSave, onClose }: { report: Report; 
                 aria-label={`${i + 1}つ目の種類`}
                 onChange={(e) => {
                   // 書籍とWebサイトでは項目が違うため、入れ替えると書いた内容は消える。書いてあれば確かめる
-                  const filled = Object.entries(ref).some(([k, v]) => k !== 'type' && k !== 'id' && k !== 'accessedOn' && typeof v === 'string' && v.trim())
-                  if (filled && !confirm('種類を変えると、この文献に書いた内容は消えます。変えますか？')) return
+                  if (referenceFilled(ref) && !confirm('種類を変えると、この文献に書いた内容は消えます。変えますか？')) return
                   setRefs(refs.map((r) => (r.id === ref.id ? emptyReference(e.target.value as Reference['type']) : r)))
                 }}
               >
@@ -192,22 +217,35 @@ export function ReferencesDialog({ report, onSave, onClose }: { report: Report; 
           </div>
         ))}
       </div>
-      <div className="row-buttons">
-        <button onClick={() => setRefs([...refs, emptyReference('book')])}>＋ 書籍を追加</button>
-        <button onClick={() => setRefs([...refs, emptyReference('web')])}>＋ Webサイトを追加</button>
-        <span className="spacer" />
-        <button onClick={onClose}>やめる</button>
-        <button
-          className="primary"
-          onClick={() => {
-            // 出版年は、変換の途中で押されても半角の数字にそろえる
-            onSave(refs.map((r) => (r.type === 'book' ? { ...r, year: yearDigits(r.year) } : r)))
-            onClose()
-          }}
-        >
-          反映する
-        </button>
-      </div>
+      {asking ? (
+        <div className="ref-ask" role="group" aria-labelledby={askId}>
+          <p className="ref-ask-q" id={askId}>
+            書いた内容を反映せずに閉じますか？
+          </p>
+          <div className="row-buttons">
+            <button onClick={() => setAsking(false)}>戻る</button>
+            <span className="spacer" />
+            <button className="ref-discard" onClick={onClose}>
+              反映せずに閉じる
+            </button>
+            <button className="primary ref-keep" ref={keepRef} onClick={save}>
+              反映して閉じる
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className="row-buttons">
+          <button onClick={() => setRefs([...refs, emptyReference('book')])}>＋ 書籍を追加</button>
+          <button onClick={() => setRefs([...refs, emptyReference('web')])}>＋ Webサイトを追加</button>
+          <span className="spacer" />
+          <button ref={cancelRef} onClick={tryClose}>
+            やめる
+          </button>
+          <button className="primary" onClick={save}>
+            反映する
+          </button>
+        </div>
+      )}
     </Modal>
   )
 }

@@ -227,6 +227,17 @@ describe('Word のチェック（学生用ツールのセルフチェックと�
     expect(reading.imagesInWord).toEqual(new Set(['図1']))
     expect(by(wordFindings(reading, config, {}).findings, 'figure-image')).toEqual([])
   })
+
+  it('本文で参照していない図は、直し方（「図1に示す」のように書く）を出す（学生用ツールと同じ言葉。Word でもそのまま当てはまる）', async () => {
+    const body = makeDocx({
+      media: { 'image1.png': png(40, 40) },
+      body: [p('Ⅰ．企画・立案'), p('　デザイン画を描いた。'), p(floatingImage(rid('image1.png'))), p(textBox('図1　デザイン画'))].join(''),
+    })
+    const reading = await readWord({ body: file(body, '04_本文.docx') }, config)
+    expect(by(wordFindings(reading, config, {}).findings, 'figure-unreferenced')).toEqual([
+      expect.objectContaining({ part: 'body', title: '本文中に「図1」または「（図1）」を入れる', detail: '図の前の段落に「図1に示す」のように書く' }),
+    ])
+  })
 })
 
 describe('「Word から読み込む」の読み取り（画像を縮めない）', () => {

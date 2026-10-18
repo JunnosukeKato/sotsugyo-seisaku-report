@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { forTouch, paragraphHint, photoBand, photoSlotName, todoBand } from './bandText'
+import { STUDENT_TOPICS } from '../help/helpTopics'
+import { forTouch, paragraphHint, photoBand, photoSlotName, todoBand, topicsForTouch } from './bandText'
 import { PAGE_CONTEXT } from './uiShared'
 
 describe('スマホの紙面の下の帯の言葉（mockups/v32 ④ 案A）', () => {
@@ -47,5 +48,28 @@ describe('ひな形の段落の「ここに何を書くか」（帯と、スマ�
     expect(paragraphHint(withHint, 'p')).toBe('制作の手順を書く')
     expect(paragraphHint(withHint, 'q')).toBeUndefined()
     expect(paragraphHint(withHint, 'c')).toBeUndefined()
+  })
+})
+
+describe('スマホの「？ 使い方」の言葉（「クリック」を「タップ」に）', () => {
+  const touch = topicsForTouch(STUDENT_TOPICS)
+  const byId = (id: string) => touch.find((t) => t.id === id)!
+
+  it('題・ひとこと・手順の「クリック」は「タップ」になり、「クリック（スマホはタップ）」は「タップ」だけになる', () => {
+    expect(byId('write').title).toBe('書き方（タップして書く）')
+    expect(byId('write').lead).toBe('紙面の文をタップすると、その場で書けます。')
+    expect(byId('figure').lead).toBe('文中の入れたい位置をタップしてから、道具の「図を入れる」「表を入れる」。')
+    expect(byId('references').steps?.[1]).toBe('直す・足すときは、そのページをタップ')
+    for (const t of touch) expect([t.title, t.lead ?? '', ...(t.steps ?? [])].join('')).not.toContain('クリック')
+  })
+
+  it('パソコンのことを書いた補足（「パソコンでは」）は変えない。PC の項目（元の一覧）もそのまま', () => {
+    expect(byId('relogin').items?.find((it) => it.h === 'パソコンでは')?.t).toContain('クリックしながら')
+    expect(STUDENT_TOPICS.find((t) => t.id === 'write')?.title).toBe('書き方（クリックして書く）')
+  })
+
+  it('変えた項目は「クリック」でも探せる（探す言葉に足す）。変えていない項目はそのまま', () => {
+    expect(byId('write').words).toContain('クリック')
+    expect(byId('login')).toBe(STUDENT_TOPICS.find((t) => t.id === 'login'))
   })
 })

@@ -1118,12 +1118,200 @@ async function firstTimeFixesPhone(browser) {
   }
   await page.screenshot({ path: `${OUT}/18c-table-row-note.png` })
   check(
-    'スマホ：2行の表で「行を消す」を押すと、わけと表ごと消す方法（「完了」で閉じてタイトルをタップ→「この表」の「削除」）が書く欄の上に出る（書く欄はそのまま）',
-    rowNote.text.includes('見出しの行ともう1行が要ります') && rowNote.text.includes('表のタイトルをタップし') && rowNote.text.includes('「この表」の「削除」') && rowNote.editingId === 'tc2' && rowNote.aboveSheet,
+    'スマホ：2行の表で「行を消す」を押すと、わけと表ごと消す方法（書く欄の「この表を削除」）が書く欄の上に出る（書く欄はそのまま）',
+    rowNote.text.includes('見出しの行ともう1行が要ります') && rowNote.text.includes('書く欄の「この表を削除」') && rowNote.editingId === 'tc2' && rowNote.aboveSheet,
     JSON.stringify(rowNote),
+  )
+  // 書く欄の「この表を削除」：表ごと消え、書く欄が閉じて、画面の下に「表を削除しました［戻す］」。［戻す］で戻る
+  // （前は、閉じてから表のタイトル（ページ全体の表示では高さ 7px ほど）をタップするしかなかった）
+  const delTool = await page.evaluate(() => { const b = [...document.querySelectorAll('.edit-sheet .es-tools button')].find((x) => x.textContent.includes('この表を削除')); const r = b?.getBoundingClientRect(); return { shown: !!b, h: r ? Math.round(r.height) : 0, danger: !!b?.classList.contains('danger') } })
+  await page.evaluate(() => [...document.querySelectorAll('.edit-sheet .es-tools button')].find((b) => b.textContent.includes('この表を削除')).click())
+  await ready()
+  await wait(300)
+  const tableDeleted = await page.evaluate(() => ({
+    gone: !window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).some((b) => b.id === 'tM'),
+    toast: document.querySelector('.undo-toast')?.textContent ?? '',
+    button: !!document.querySelector('.undo-toast button'),
+    sheet: !!document.querySelector('.edit-sheet.open'),
+    zoomed: window.__editor.getSnapshot().zoomed,
+  }))
+  await page.screenshot({ path: `${OUT}/18c2-table-deleted-from-cell.png` })
+  await page.tap('.undo-toast button')
+  await ready()
+  const tableBack = await page.evaluate(() => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).some((b) => b.id === 'tM'))
+  check(
+    'スマホ：表のセルを書いているとき、書く欄の「この表を削除」で表ごと消え、書く欄が閉じて「表を削除しました［戻す］」が出る（［戻す］で戻る。ボタンは高さ 44px 以上）',
+    delTool.shown && delTool.danger && delTool.h >= 44 && tableDeleted.gone && tableDeleted.toast.includes('表を削除しました') && tableDeleted.button && !tableDeleted.sheet && !tableDeleted.zoomed && tableBack,
+    JSON.stringify({ delTool, tableDeleted, tableBack }),
   )
   await page.evaluate(() => window.__editor.finishEditing())
   await ready()
+
+  // ---- はじめて使う学生の試し（2回目）で見つかったこと（スマホ） ----
+  // 書く欄を開いたまま、下の「追加」を1回押すと、書く欄が閉じて「追加」の欄が開く（前は1回目で書く欄が閉じるだけだった）
+  await showBlock('p1')
+  const p1At = await page.evaluate(() => { const r = document.querySelector('.page-viewport.front [data-block-id="p1"]').getBoundingClientRect(); return { x: r.left + 20, y: r.top + r.height / 2 } })
+  await page.touchscreen.tap(p1At.x, p1At.y)
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p1', { timeout: 20000 })
+  await wait(400)
+  const navAdd = await page.evaluate(() => {
+    const b = document.querySelector('.p-nav .add')
+    const r = b.getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2, onTop: b.contains(document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2)), sheetOpen: !!document.querySelector('.edit-sheet.open') }
+  })
+  await page.screenshot({ path: `${OUT}/19-sheet-and-tabs.png` })
+  await page.touchscreen.tap(navAdd.x, navAdd.y)
+  await wait(500)
+  const oneTap = await page.evaluate(() => ({ sheet: document.querySelector('.sheet h2')?.textContent ?? '', editing: window.__editor.getSnapshot().editingId, open: !!document.querySelector('.edit-sheet.open') }))
+  await page.screenshot({ path: `${OUT}/19b-add-one-tap.png` })
+  check('スマホ：書く欄を開いているときも下のタブは隠れず、「追加」を1回押すと、書く欄が閉じて「追加」の欄が開く', navAdd.sheetOpen && navAdd.onTop && oneTap.sheet === '追加' && !oneTap.editing && !oneTap.open, JSON.stringify({ navAdd, oneTap }))
+  // 「追加」の欄・ページ一覧の欄の「×」は 44px 四方以上
+  const closeBox = () => page.evaluate(() => { const r = document.querySelector('.sheet .sheet-close').getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) } })
+  const addClose = await closeBox()
+  // 引用・参考文献の窓：書いた内容があるまま「×」を押すと、窓の中で聞く（「反映せずに閉じる」で閉じ、反映しない。ボタンは高さ 44px 以上）
+  await page.tap('.sheet .add-refs')
+  await page.waitForSelector('.modal .row-buttons')
+  await page.evaluate(() => [...document.querySelectorAll('.modal button')].find((b) => b.textContent.includes('書籍を追加')).click())
+  await wait(200)
+  await page.tap('.modal .ref-card .field:first-child input')
+  await page.keyboard.type('浜松隆志')
+  await page.tap('.modal .close')
+  await wait(300)
+  const phoneAsk = await page.evaluate(() => ({
+    modal: !!document.querySelector('.modal'),
+    ask: document.querySelector('.ref-ask-q')?.textContent ?? '',
+    buttons: [...document.querySelectorAll('.ref-ask button')].map((b) => `${b.textContent.trim()}:${Math.round(b.getBoundingClientRect().height)}`),
+  }))
+  await page.screenshot({ path: `${OUT}/19c-refs-ask.png` })
+  await page.evaluate(() => [...document.querySelectorAll('.ref-ask button')].find((b) => b.textContent.trim() === '反映せずに閉じる').click())
+  await wait(300)
+  const phoneDiscard = await page.evaluate(() => ({ modal: !!document.querySelector('.modal'), refs: window.__editor.getSnapshot().report.references.length }))
+  check(
+    'スマホ：引用・参考文献の窓で書いたまま「×」を押すと、窓の中で「書いた内容を反映せずに閉じますか？」と聞き（ボタンは高さ 44px 以上）、「反映せずに閉じる」で閉じる（反映しない）',
+    phoneAsk.modal && phoneAsk.ask === '書いた内容を反映せずに閉じますか？' && phoneAsk.buttons.length === 3 && phoneAsk.buttons.every((b) => Number(b.split(':').at(-1)) >= 44) && !phoneDiscard.modal && phoneDiscard.refs === 0,
+    JSON.stringify({ phoneAsk, phoneDiscard }),
+  )
+  await page.evaluate(() => [...document.querySelectorAll('.p-nav button')].find((b) => b.textContent.includes('ページ一覧')).click())
+  await page.waitForSelector('.sheet .sheet-close')
+  const pagesClose = await closeBox()
+  await page.tap('.sheet .sheet-close')
+  await wait(300)
+  // 書く欄を開いたときに拡大した紙面を、ページ全体の表示に戻す
+  await page.evaluate(() => window.__editor.setZoom(false))
+  await ready()
+  // 選んでいる表・図の下の道具：「列の幅」（いまの幅を出すボタン1つ。押すと切り替わる）・「削除」などは、幅も高さも 44px 以上。道具は画面の中に入る
+  const selTools = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('.sel-bar button')].map((b) => {
+        const r = b.getBoundingClientRect()
+        return { name: b.textContent.trim(), w: Math.round(r.width), h: Math.round(r.height), inside: r.left >= 0 && r.right <= innerWidth }
+      }),
+    )
+  await page.evaluate(() => window.__editor.select({ kind: 'table', id: 'tM' }))
+  await wait(400)
+  const tableTools = await selTools()
+  await page.screenshot({ path: `${OUT}/19d-table-tools-44.png` })
+  await page.evaluate(() => document.querySelector('.sel-bar .width-toggle').click())
+  await ready()
+  await wait(300)
+  const toggled = { widths: await page.evaluate(() => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === 'tM').widths), tools: await selTools() }
+  await page.evaluate(() => window.__editor.select({ kind: 'figure', id: 'f1' }))
+  await wait(400)
+  const figureTools = await selTools()
+  await page.evaluate(() => window.__editor.select(null))
+  await wait(200)
+  const big = (list) => list.length > 0 && list.every((t) => t.w >= 44 && t.h >= 44 && t.inside)
+  check(
+    'スマホ：表・図を選んだときの下の道具（「列の幅」・「削除」など）は幅も高さも 44px 以上で、画面の中に入る。「列の幅」は押すたびに「そろえる」「中身に合わせる」が切り替わる。「追加」「ページ一覧」の「×」は 44px 四方以上',
+    big(tableTools) && tableTools.some((t) => t.name === '列の幅そろえる') && toggled.widths === 'auto' && big(toggled.tools) && toggled.tools.some((t) => t.name === '列の幅中身に合わせる') && big(figureTools) && figureTools.some((t) => t.name === '削除') && addClose.w >= 44 && addClose.h >= 44 && pagesClose.w >= 44 && pagesClose.h >= 44,
+    JSON.stringify({ tableTools, toggled, figureTools, addClose, pagesClose }),
+  )
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 'tM' ? { ...b, widths: 'equal' } : b)) })) })))
+  await ready()
+
+  // 章の最後の小見出しの下にも「＋ ここに続きを書く」（高さ 44px）。押すと、見出しのすぐ後ろに段落ができ、下の書く欄ですぐ書ける
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, body: [...r.body, { id: 'cH', title: '補足', blocks: [{ type: 'subheading', id: 'sH', title: '追記' }] }] })))
+  await ready()
+  await showBlock('sH')
+  const phoneHeadRow = await page.evaluate(() => {
+    const b = document.querySelector('.continue-row')
+    const r = b.getBoundingClientRect()
+    const h = document.querySelector('.page-viewport.front [data-block-id="sH"]').closest('h2').getBoundingClientRect()
+    return { shown: !b.hidden && r.height > 0, h: Math.round(r.height), below: r.top >= h.bottom, x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })
+  await page.screenshot({ path: `${OUT}/19e-heading-row.png` })
+  await page.touchscreen.tap(phoneHeadRow.x, phoneHeadRow.y)
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingKind === 'paragraph', { timeout: 20000 }).catch(() => {})
+  await wait(300)
+  const fromHeadRow = await page.evaluate(() => { const s = window.__editor.getSnapshot(); const c = s.report.body.find((x) => x.id === 'cH'); return { editing: s.editingId, sheet: !!document.querySelector('.edit-sheet.open'), blocks: c.blocks.map((b) => b.id) } })
+  check(
+    'スマホ：章の最後の小見出しの下にも「＋ ここに続きを書く」（高さ 44px 以上）が出て、押すと見出しのすぐ後ろに段落ができ、下の書く欄で書ける',
+    phoneHeadRow.shown && phoneHeadRow.h >= 44 && phoneHeadRow.below && fromHeadRow.sheet && fromHeadRow.blocks.length === 2 && fromHeadRow.editing === fromHeadRow.blocks[1],
+    JSON.stringify({ phoneHeadRow, fromHeadRow }),
+  )
+  await page.evaluate(() => window.__editor.finishEditing())
+  await ready()
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, body: r.body.filter((c) => c.id !== 'cH') })))
+  await ready()
+
+  // 横向き：空の段落の「＋」の印は、段落の左の余白（上の見出しの文字に重ならない）。印の上の方・印のまわりを押してもその段落が開き、見出しの文字を押せば見出しが開く
+  await page.setViewport(LANDSCAPE)
+  await wait(800)
+  await ready()
+  await showBlock('pE')
+  const landMark = await page.evaluate(() => {
+    const p = document.querySelector('.page-viewport.front [data-block-id="pE"]')
+    const mark = getComputedStyle(p, '::after')
+    const s = parseFloat(getComputedStyle(document.querySelector('.stage')).getPropertyValue('--s'))
+    const r = p.getBoundingClientRect()
+    const size = parseFloat(mark.width) * s
+    const cx = r.left + parseFloat(mark.left) * s + size / 2
+    const cy = r.top + parseFloat(mark.top) * s
+    const heading = document.querySelector('.page-viewport.front [data-block-id="c3"]').getBoundingClientRect()
+    const num = document.querySelector('.page-viewport.front [data-block-id="c3"]').closest('h1').getBoundingClientRect()
+    return { cx, cy, size, markRight: cx + size / 2, textLeft: num.left, heading: { x: heading.left + Math.min(heading.width / 2, 8), y: (heading.top + heading.bottom) / 2 } }
+  })
+  const tapOpens = async (x, y) => {
+    await page.touchscreen.tap(x, y)
+    await page.waitForFunction(() => !!window.__editor.getSnapshot().editingId, { timeout: 5000 }).catch(() => {})
+    await wait(300)
+    const id = (await snap()).editingId
+    await page.evaluate(() => window.__editor.finishEditing())
+    await ready()
+    await wait(300)
+    return id
+  }
+  await page.screenshot({ path: `${OUT}/19f-land-mark.png` })
+  const markTaps = {
+    topEdge: await tapOpens(landMark.cx, landMark.cy - landMark.size / 2 + 1),
+    around: await tapOpens(landMark.cx - 15, landMark.cy - 15),
+    heading: await tapOpens(landMark.heading.x, landMark.heading.y),
+  }
+  check(
+    '横向き：空の段落の「＋」の印は段落の左の余白に出て（見出しの文字に重ならない）、印の上の端・印のまわり（44px 四方）を押してもその段落が開く。見出しの文字を押すと見出しが開く',
+    landMark.markRight <= landMark.textLeft + 0.5 && markTaps.topEdge === 'pE' && markTaps.around === 'pE' && markTaps.heading === 'c3',
+    JSON.stringify({ landMark, markTaps }),
+  )
+  await page.setViewport(PORTRAIT)
+  await wait(800)
+  await ready()
+
+  // スマホの使い方の題は「タップ」（「書き方（タップして書く）」。PC は「クリック」のまま：smoke.mjs）
+  await page.tap('.p-top .icon-btn')
+  await page.waitForSelector('.sheet .links')
+  await page.evaluate(() => [...document.querySelectorAll('.sheet button')].find((b) => b.textContent.includes('使い方')).click())
+  await page.waitForSelector('.help-sheet .help-list')
+  const phoneHelp = await page.evaluate(() => [...document.querySelectorAll('.help-sheet .help-list button')].map((b) => b.textContent))
+  await page.evaluate(() => [...document.querySelectorAll('.help-sheet .help-list button')].find((b) => b.textContent.startsWith('書き方')).click())
+  await wait(300)
+  const phoneTopic = await page.evaluate(() => document.querySelector('.help-sheet .help-lead')?.textContent ?? '')
+  await page.evaluate(() => document.querySelector('.help-sheet .help-close').click())
+  await wait(300)
+  check(
+    'スマホの使い方の題・ひとことは「タップ」（「書き方（タップして書く）」。「クリック」が残らない）',
+    phoneHelp.includes('書き方（タップして書く）') && !phoneHelp.some((t) => t.includes('クリック')) && phoneTopic === '紙面の文をタップすると、その場で書けます。',
+    JSON.stringify({ phoneHelp: phoneHelp.filter((t) => /書き方|タップ|クリック/.test(t)), phoneTopic }),
+  )
 
   // 抄録の帯の「先生の許可が出た」：画面の下に「抄録を書き始めました［戻す］」。［戻す］で、書き始める前に戻る
   await page.evaluate(() => window.__editor.goToPage(window.__editor.getSnapshot().layout.kinds.indexOf('abstract'), 'none'))

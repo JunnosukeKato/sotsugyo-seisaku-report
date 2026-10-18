@@ -1,8 +1,32 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
+import type { Reference } from '../model/types'
+import { referencesChanged } from '../model/references'
 import { BackupDialog, CourseChangeDialog } from './dialogs'
 
 const noop = () => {}
+
+describe('引用・参考文献の窓を閉じるとき、書いた内容が反映してある内容と違うか（違えば、閉じる前に聞く）', () => {
+  const book = (id: string, author = ''): Reference => ({ type: 'book', id, author, title: '', publisher: '', year: '', pages: '' })
+  const web = (id: string, siteTitle = ''): Reference => ({ type: 'web', id, siteTitle, url: '', accessedOn: '2026-10-18' })
+  const saved = [book('r1', '浜松隆志')]
+
+  it('何も変えていなければ違わない（すぐ閉じる）', () => {
+    expect(referencesChanged(saved, saved)).toBe(false)
+    expect(referencesChanged([], [])).toBe(false)
+  })
+
+  it('足しただけで何も書いていない文献（Web サイトの参照日だけ入っているものも）は、違いに数えない', () => {
+    expect(referencesChanged(saved, [...saved, book('r2'), web('r3')])).toBe(false)
+  })
+
+  it('書いた・書き直した・消したときは違う', () => {
+    expect(referencesChanged(saved, [...saved, book('r2', '文化花子')])).toBe(true)
+    expect(referencesChanged(saved, [book('r1', '浜松')])).toBe(true)
+    expect(referencesChanged(saved, [])).toBe(true)
+    expect(referencesChanged([], [web('r4', 'クラウン')])).toBe(true)
+  })
+})
 
 describe('本文を書き始めてからコースを変えるときの窓', () => {
   it('濃いボタン（開いたときに移るボタン）は、本文を残す「コース名だけ変える」。「下書きを入れ替える」は目立たせない', () => {

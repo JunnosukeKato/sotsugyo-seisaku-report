@@ -250,6 +250,49 @@ export function paragraphAfter(report: Report, id: string, created = newId('p'))
   return { report: mapBody(report, (b) => (b === owner ? [b, paragraph(created, '')] : b)), newId: created }
 }
 
+/**
+ * 「＋ ここに続きを書く」：図・表・見出しのすぐ後ろに、空の段落を作る（mockups/v32 ① 案A）。
+ * 図・表は paragraphAfter と同じ。小見出しは、そのすぐ後ろ。大見出し（章の ID）は、その章のいちばん初め。
+ * どれでもなければ null
+ */
+export function paragraphBelow(report: Report, id: string, created = newId('p')): { report: Report; newId: string } | null {
+  const below = paragraphAfter(report, id, created)
+  if (below) return below
+  if (report.body.some((c) => c.id === id)) {
+    return { report: { ...report, body: report.body.map((c) => (c.id === id ? { ...c, blocks: [paragraph(created, ''), ...c.blocks] } : c)) }, newId: created }
+  }
+  const heading = report.body.flatMap((c) => c.blocks).find((b) => b.type === 'subheading' && b.id === id)
+  if (!heading) return null
+  return { report: mapBody(report, (b) => (b === heading ? [b, paragraph(created, '')] : b)), newId: created }
+}
+
+/**
+ * 見出し（大見出しは章の ID、小見出しはその ID）のすぐ後ろにある、何も書いていない段落（ひな形の説明もない）の ID。なければ null。
+ * 見出しで Enter を押したとき、その段落があれば、新しい段落を作らずにそこへ移る（「大見出し」を足すと付いてくる空の段落を、
+ * もう1つ増やして、空のまま残さないように）
+ */
+export function blankParagraphAfterHeading(report: Report, id: string): string | null {
+  const chapter = report.body.find((c) => c.id === id)
+  if (chapter) {
+    const first = chapter.blocks[0]
+    return first?.type === 'paragraph' && isBlankParagraph(report, first.id) ? first.id : null
+  }
+  for (const c of report.body) {
+    const i = c.blocks.findIndex((b) => b.id === id && b.type === 'subheading')
+    if (i < 0) continue
+    const next = c.blocks[i + 1]
+    return next?.type === 'paragraph' && isBlankParagraph(report, next.id) ? next.id : null
+  }
+  return null
+}
+
+/** 見出し（大見出しは章の ID、小見出しはその ID）が、その章のいちばん最後か（大見出しは、章の中に何もないとき） */
+export function headingEndsChapter(report: Report, id: string): boolean {
+  const chapter = report.body.find((c) => c.id === id)
+  if (chapter) return chapter.blocks.length === 0
+  return report.body.some((c) => c.blocks.at(-1)?.type === 'subheading' && c.blocks.at(-1)?.id === id)
+}
+
 /** 段落の先頭で Backspace：前の段落とつなげる。前が段落でなければ null */
 export function mergeBackward(report: Report, id: string, text: string): { report: Report; targetId: string; caret: number } | null {
   const num = numbering(report)

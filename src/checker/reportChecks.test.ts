@@ -109,6 +109,13 @@ describe('checkReport', () => {
     expect(ids(r, layout())).not.toContain('table-unreferenced')
   })
 
+  it('参照していない図表の指摘は、直し方（「図1に示す」のように書く）を言う', () => {
+    const fig = checkReport(ops.setText(cleanReport(), 'p2', 'デザインを考えた。'), currentConfig, layout()).find((f) => f.ruleId === 'figure-unreferenced')
+    expect(fig?.detail).toBe('図の前の段落に「図1に示す」のように書く')
+    const table = checkReport(ops.setText(cleanReport(), 'p3', '使用した素材をまとめる。'), currentConfig, layout()).find((f) => f.ruleId === 'table-unreferenced')
+    expect(table?.detail).toBe('表の前の段落に「表1に示す」のように書く')
+  })
+
   it('存在しない図の番号を指摘する', () => {
     const r = ops.setText(cleanReport(), 'p4', '縫い付けた（図9）。')
     const finding = checkReport(r, currentConfig, layout()).find((f) => f.ruleId === 'reference-missing')

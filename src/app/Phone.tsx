@@ -76,7 +76,9 @@ function Sheet({ title, extra, onClose, children }: { title: string; extra?: Rea
 
 /**
  * 下から出る書く欄。入力欄そのもの（.overlay-editor）は、編集の中核が host の中に入れる。
- * 段落・見出しを削除すると、書く欄が閉じて中の「戻す」も見えなくなるので、画面の下に「戻す」の知らせが出る（UndoBar）
+ * 段落・見出し・表（表のセル・タイトルを書いているときの「この表を削除」）を削除すると、書く欄が閉じて中の「戻す」も見えなくなるので、
+ * 画面の下に「戻す」の知らせが出る（UndoBar）。
+ * キーボードを閉じているときは、下のタブ（ページ一覧・追加など）の上に出す（タブを隠さない。index.css の「はじめて使う学生の試し（2回目）」）
  */
 function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: EditorSnapshot; hostRef: React.RefObject<HTMLDivElement | null> }) {
   const id = snap.editingId
@@ -148,6 +150,10 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
             </button>
             <button onMouseDown={keepFocus} onClick={() => editor.setTableWidths(tableId, tableWidths === 'equal' ? 'auto' : 'equal')}>
               {tableWidths === 'equal' ? '幅：そろえる' : '幅：中身に合わせる'}
+            </button>
+            {/* 表ごと消す（画面の下に「表を削除しました［戻す］」）。前は、閉じてから表のタイトル（ページ全体の表示では高さ 7px ほど）をタップするしかなかった */}
+            <button className="danger" onMouseDown={keepFocus} onClick={() => editor.removeTable(tableId)}>
+              {Icon.remove}この表を削除
             </button>
           </>
         )}

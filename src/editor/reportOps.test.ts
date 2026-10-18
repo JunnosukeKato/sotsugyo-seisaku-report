@@ -280,6 +280,49 @@ describe('図・表の後ろに段落を作る（「＋ ここに続きを書く
     expect(ops.paragraphAfter(r, 'nothing')).toBeNull()
     expect(ids(r)).toEqual([['pa'], ['pc']])
   })
+
+  it('見出しの後ろ（「＋ ここに続きを書く」）：小見出しはそのすぐ後ろ、大見出しは章のいちばん初めに空の段落ができる', () => {
+    const r = ops.insertAfter(base(), 'pa', { type: 'subheading', id: 's1', title: '素材の選定' })
+    expect(ids(ops.paragraphBelow(r, 's1', 'pn')!.report)).toEqual([['pa', 's1', 'pn'], ['pc']])
+    const empty: Report = { ...r, body: [...r.body, { id: 'c3', title: 'まとめ', blocks: [] }] }
+    expect(ids(ops.paragraphBelow(empty, 'c3', 'pn')!.report)).toEqual([['pa', 's1'], ['pc'], ['pn']])
+    // 図・表は paragraphAfter と同じ。段落・ないものは null
+    const fig = ops.addFigureBelow(base(), 'pa', { id: 'f1', imageId: 'i', caption: '' })
+    expect(ids(ops.paragraphBelow(fig, 'f1', 'pn')!.report)).toEqual([['pa', fig.body[0].blocks[1].id, 'pn'], ['pc']])
+    expect(ops.paragraphBelow(r, 'pa')).toBeNull()
+    expect(ops.paragraphBelow(r, 'nothing')).toBeNull()
+  })
+
+  it('見出しが章のいちばん最後か（大見出しは、章の中に何もないとき）', () => {
+    const r = ops.insertAfter(base(), 'pa', { type: 'subheading', id: 's1', title: '素材の選定' })
+    expect(ops.headingEndsChapter(r, 's1')).toBe(true)
+    expect(ops.headingEndsChapter(ops.insertAfter(r, 's1', { type: 'paragraph', id: 'pb', content: [{ type: 'text', text: '' }] }), 's1')).toBe(false)
+    expect(ops.headingEndsChapter(r, 'c1')).toBe(false)
+    expect(ops.headingEndsChapter({ ...r, body: [...r.body, { id: 'c3', title: '', blocks: [] }] }, 'c3')).toBe(true)
+    expect(ops.headingEndsChapter(r, 'pa')).toBe(false)
+  })
+})
+
+describe('見出しで Enter を押したときに移る、すぐ後ろの空の段落', () => {
+  const blank = (id: string, hint?: string) => ({ type: 'paragraph' as const, id, content: [{ type: 'text' as const, text: '' }], ...(hint ? { hint } : {}) })
+  const r: Report = {
+    ...demoReport(),
+    body: [
+      { id: 'c1', title: '追加の大見出し', blocks: [blank('p1'), { type: 'subheading', id: 's1', title: '素材' }, blank('p2')] },
+      { id: 'c2', title: 'まとめ', blocks: [blank('p3', '振り返りを書く'), { type: 'subheading', id: 's2', title: '' }, { type: 'paragraph', id: 'p4', content: [{ type: 'text', text: '書いた。' }] }] },
+    ],
+  }
+
+  it('大見出しは章の最初、小見出しはすぐ後ろの段落が、何も書いていない（説明もない）ならその ID', () => {
+    expect(ops.blankParagraphAfterHeading(r, 'c1')).toBe('p1')
+    expect(ops.blankParagraphAfterHeading(r, 's1')).toBe('p2')
+  })
+
+  it('ひな形の説明がある段落・書いてある段落・段落でないもののときは null', () => {
+    expect(ops.blankParagraphAfterHeading(r, 'c2')).toBeNull()
+    expect(ops.blankParagraphAfterHeading(r, 's2')).toBeNull()
+    expect(ops.blankParagraphAfterHeading(r, 'p1')).toBeNull()
+  })
 })
 
 describe('図・表を消したときの本文の参照（文を崩さない）', () => {

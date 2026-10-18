@@ -200,6 +200,9 @@ export class ReportEditor {
         // 図・表のタイトル：Enter で、図・表の後ろに新しい段落を作る（mockups/v32 ① 案A）
         const editing = ops.findEditable(this.report, id)?.kind
         if (editing === 'figureCaption' || editing === 'tableCaption') return this.enterAfterCaption(id, before + after)
+        // 見出し：すぐ後ろに何も書いていない段落（「大見出し」を足すと付いてくる段落など）があれば、新しく作らずにそこへ移る
+        const blank = editing === 'chapter' || editing === 'subheading' ? ops.blankParagraphAfterHeading(this.report, id) : null
+        if (blank) return this.enterBelowHeading(id, before + after, blank)
         this.pushHistory(this.reportBeforeEdit ?? this.report)
         const result = ops.split(ops.setText(this.report, id, before + after), id, before, after)
         this.report = result.report
@@ -468,9 +471,26 @@ export class ReportEditor {
 
   private runChecks(): void {
     const checked = checkReportDetailed(this.report, this.config, this.layout)
-    this.findings = checked.findings
+    // 書いている途中の段落は「空の段落がある」と言わない（閉じても空のままなら言う）
+    const writing = this.writingBlankIds()
+    this.findings = writing.size ? checked.findings.filter((f) => !(f.ruleId === 'paragraph-empty' && f.blockId && writing.has(f.blockId))) : checked.findings
     this.acknowledged = checked.acknowledged
     this.refreshHighlights()
+  }
+
+  /**
+   * 書いている途中の段落（「空の段落がある」と言わないもの）：入力欄を開いている段落と、書いている見出しのすぐ後ろの空の段落
+   * （「大見出し」を足すと、見出しを書いている間に、付いてきた空の段落のことを言っていたため。見出しで Enter を押すと、その段落へ移る）
+   */
+  private writingBlankIds(): Set<string> {
+    const id = this.overlay.blockId
+    const kind = id ? ops.findEditable(this.report, id)?.kind : undefined
+    if (!id || !kind) return new Set()
+    if (kind === 'chapter' || kind === 'subheading') {
+      const blank = ops.blankParagraphAfterHeading(this.report, id)
+      return new Set(blank ? [blank] : [])
+    }
+    return new Set([id])
   }
 
   private refreshHighlights(): void {
@@ -655,6 +675,8 @@ export class ReportEditor {
     if (this.reportBeforeEdit && JSON.stringify(this.reportBeforeEdit) !== JSON.stringify(this.report)) this.pushHistory(this.reportBeforeEdit)
     this.reportBeforeEdit = null
     this.hideStyle.textContent = ''
+    // 閉じた段落が空のままなら、すぐ「空の段落がある」と言う（組み直すのを待たない）
+    this.runChecks()
     if (byKey && !this.overlay.inSheet) {
       // Esc・Enter で書き終えた（PC）：書いていた紙面の欄にフォーカスを戻す（ページ全体に戻ると、どこにいたか分からなくなる）。
       // 欄がまだ紙面にない（分けたばかりの段落など）ときは、組み直してから戻す
@@ -804,7 +826,8 @@ export class ReportEditor {
       if (!this.stage.zoomed) this.stage.setZoom(true)
       this.revealEditing()
     }
-    this.refreshHighlights()
+    // 開いた段落の「空の段落がある」を消す（書いている間は言わない。runChecks）
+    this.runChecks()
     this.notify()
   }
 
@@ -819,9 +842,10 @@ export class ReportEditor {
   /**
    * 段落を分けた・つなげた・↑↓で移ったとき：紙面を組み直すのを待たずに、入力欄を開いたまま書く先を移す。
    * 組み直しは長い原稿だと数秒かかり、待つ間に打った文字が消えていたため。組み直したら正しい位置へ動かす（render の終わり）。
-   * ghostOf：分けた前の段落（組み直すまで、入力欄の上に仮に表示する）。alsoHide：つなげて無くなった段落（組み直すまで隠す）
+   * ghostOf：分けた前の段落（組み直すまで、入力欄の上に仮に表示する）。alsoHide：つなげて無くなった段落（組み直すまで隠す）。
+   * inPlace：移る先の段落は、もう紙面にある（見出しの後ろの空の段落。後ろの文章は、その段落を基準にずらす）
    */
-  private continueWriting(id: string, caret: number, how: { ghostOf?: string; alsoHide?: string } = {}): void {
+  private continueWriting(id: string, caret: number, how: { ghostOf?: string; alsoHide?: string; inPlace?: boolean } = {}): void {
     const editable = ops.findEditable(this.report, id)
     if (!editable || !this.overlay.blockId) return this.reopenAfterRender(id, caret)
     const kind = this.overlayKind(editable.kind)
@@ -834,7 +858,7 @@ export class ReportEditor {
     this.overlay.continueIn({ blockId: id, kind, text: editable.text, caret, styleSource }, ghost)
     const placement = fragment ? this.overlayPlacement(id) : null
     if (placement) this.overlay.moveTo(placement)
-    this.continuing = { id, anchor: how.ghostOf ?? how.alsoHide ?? null }
+    this.continuing = { id, anchor: how.inPlace ? null : (how.ghostOf ?? how.alsoHide ?? null) }
     this.pendingOpen = null
     this.currentId = id
     this.selection = null
@@ -896,7 +920,7 @@ export class ReportEditor {
     this.markSelection()
     // 書き始める前の原稿（何も書かずに閉じたら、元に戻す1回分にしない）
     this.reportBeforeEdit = this.report
-    this.refreshHighlights()
+    this.runChecks()
     this.notify()
     return true
   }
@@ -967,13 +991,25 @@ export class ReportEditor {
     this.continueWriting(created.newId, 0, { ghostOf: id })
   }
 
-  /** 「＋ ここに続きを書く」：図・表（objectId は図の ID か表の ID）のすぐ後ろに新しい段落を作り、書き始める */
+  /**
+   * 見出しで Enter：すぐ後ろの、何も書いていない段落（blankId）へ移って書く（新しい段落は作らない）。
+   * 前は、もう1つ空の段落を作ったため、「大見出し」に付いてきた段落が空のまま残り、「空の段落がある」と言われていた
+   */
+  private enterBelowHeading(id: string, text: string, blankId: string): void {
+    const before = this.reportBeforeEdit ?? this.report
+    this.report = ops.setText(this.report, id, text)
+    if (ops.findEditable(before, id)?.text !== ops.findEditable(this.report, id)?.text) this.pushHistory(before)
+    this.autoPeriod = null
+    this.continueWriting(blankId, 0, { ghostOf: id, inPlace: true })
+  }
+
+  /** 「＋ ここに続きを書く」：図・表・見出し（objectId は図・表・小見出しの ID か、大見出しの章の ID）のすぐ後ろに新しい段落を作り、書き始める */
   continueAfter(objectId: string): void {
-    if (this.settlingRemoval || !ops.paragraphAfter(this.report, objectId)) return
+    if (this.settlingRemoval || !ops.paragraphBelow(this.report, objectId)) return
     this.marker.hidden = true
-    // 書いていたタイトルを確定してから作る（確定した原稿の後ろに作る）
+    // 書いていたタイトル・見出しを確定してから作る（確定した原稿の後ろに作る）
     this.commitForChange()
-    const created = ops.paragraphAfter(this.report, objectId)
+    const created = ops.paragraphBelow(this.report, objectId)
     if (!created) return
     this.pushHistory(this.report)
     this.report = created.report
@@ -998,25 +1034,33 @@ export class ReportEditor {
     this.reportBeforeEdit = this.report
   }
 
-  /** 「＋ ここに続きを書く」を出す図・表（なければ null） */
+  /**
+   * 「＋ ここに続きを書く」を出す図・表・見出し（なければ null）。
+   * 見出し（大見出し・小見出し）は、章のいちばん最後にあるときだけ（見出しの下の空いた所を押して書くと、見出しの続きになっていたため）
+   */
   private continueTarget(): ContinueTarget | null {
     // 削除・組み直しの途中、ページを送っている途中、段落などを書いている途中は出さない（書いて行が増えると、図・表が動くため）
     if (this.turning || this.removed.size > 0 || this.pendingOpen || this.continuing) return null
     if (this.overlay.blockId && this.overlay.kind === 'paragraph') return null
     const editing = this.overlay.blockId ? ops.findEditable(this.report, this.overlay.blockId) : undefined
-    // 図・表のタイトルと、表のセルを書いているときは出す（セルを書いている間も消えず、紙面の余白を押さなくても出るように）
-    if (editing && editing.kind !== 'figureCaption' && editing.kind !== 'tableCaption' && editing.kind !== 'tableCell') return null
+    // 図・表のタイトルと、表のセルを書いているときは出す（セルを書いている間も消えず、紙面の余白を押さなくても出るように）。
+    // 見出しを書いているときも、章の最後の見出しなら出す（書き終えて、すぐ下に続きを書けるように）
+    const heading = editing?.kind === 'chapter' || editing?.kind === 'subheading'
+    if (heading && !ops.headingEndsChapter(this.report, editing.id)) return null
+    if (editing && !heading && editing.kind !== 'figureCaption' && editing.kind !== 'tableCaption' && editing.kind !== 'tableCell') return null
     const view = this.renderer.pageView
     const page = view.pages()[this.page]
     if (!page || !this.layout) return null
     const onPage = (objectId: string): ContinueTarget | null => {
       const owner = this.report.body.flatMap((c) => c.blocks).find((b) => (b.type === 'figureRow' && b.figures.some((f) => f.id === objectId)) || b.id === objectId)
       const selector = owner?.type === 'figureRow' ? `.figure-group[data-group-id="${CSS.escape(owner.id)}"]` : owner?.type === 'table' ? `.data-table[data-table-id="${CSS.escape(owner.id)}"]` : null
-      // 図・表がページをまたぐときは、最後の部分（その後ろに段落ができる）
-      const element = selector ? [...this.viewport.querySelectorAll<HTMLElement>(selector)].at(-1) : undefined
+      // 図・表がページをまたぐときは、最後の部分（その後ろに段落ができる）。見出しは、見出しの行（番号も含む）
+      const element = selector
+        ? [...this.viewport.querySelectorAll<HTMLElement>(selector)].at(-1)
+        : (view.fragments(objectId).map((f) => f.closest<HTMLElement>('h1, h2')).filter((h): h is HTMLElement => !!h).at(-1) ?? undefined)
       return element && view.pageIndexOf(element) === this.page ? { objectId, element, page } : null
     }
-    // 選んでいる図・表（タイトル・表のセルを書いているときも）。下が空いているときだけ（同じページで後ろに段落などが続くときは、文に重ねないよう出さない）
+    // 選んでいる図・表（タイトル・表のセルを書いているときも）・書いている見出し。下が空いているときだけ（同じページで後ろに段落などが続くときは、文に重ねないよう出さない）
     const s = this.selection
     const focused = editing ? (editing.kind === 'tableCell' ? (ops.findTable(this.report, editing.id)?.id ?? null) : editing.id) : s?.kind === 'figure' || s?.kind === 'table' ? s.id : null
     if (focused) {
@@ -1025,10 +1069,10 @@ export class ReportEditor {
       if (target && editing?.kind === 'tableCell' && !this.overlay.inSheet && this.overlay.bottom > target.element.getBoundingClientRect().bottom + 1) return null
       return target && endsPageWithRoom(page, target.element) ? target : null
     }
-    // 章の最後の図・表が、ページの最後で、下が空いているとき（選ばなくても出す）
+    // 章の最後の図・表・見出し（中に何もない章は、大見出し）が、ページの最後で、下が空いているとき（選ばなくても出す）
     for (const chapter of this.report.body) {
       const last = chapter.blocks.at(-1)
-      const objectId = last?.type === 'figureRow' ? last.figures[0]?.id : last?.type === 'table' ? last.id : undefined
+      const objectId = !last ? chapter.id : last.type === 'figureRow' ? last.figures[0]?.id : last.type === 'table' || last.type === 'subheading' ? last.id : undefined
       const target = objectId ? onPage(objectId) : null
       if (target && endsPageWithRoom(page, target.element)) return target
     }
@@ -1080,6 +1124,13 @@ export class ReportEditor {
     const touch = keyHit === undefined ? this.rawTouch(e) : null
     const { clientX: x, clientY: y } = touch ?? e
     const target = (touch?.target ?? e.target) as HTMLElement
+    // スマホ：まだ書いていない欄の「＋」の印（とそのまわり 44px 四方）を押した：その欄を開く（markerAt）
+    const marked = touch ? this.markerAt(x, y, target) : null
+    if (marked === FIELD_IDS.course) return this.callbacks.onCourseClick(this.renderer.pageView.fragments(marked)[0].getBoundingClientRect())
+    if (marked) return this.openOrSelect(marked, ops.findEditable(this.report, marked)?.text.length ?? 0, false)
+    // 紙の外（まわりの灰色の所）を押した：書いている欄を閉じる（Esc と同じ。近くの欄は開かない）。
+    // 前は、閉じた直後に、押した所にいちばん近い欄が開き直していたため、紙の外を押しても書く欄を閉じられなかった
+    if (keyHit === undefined && this.outsidePaper(x, y)) return this.select(null)
     // 抄録の「先生の許可が出た」
     if (target.closest('[data-abstract-start]')) return this.startAbstract()
     // 改ページの印：選ぶ（道具の「削除」で消せる）
@@ -1092,7 +1143,10 @@ export class ReportEditor {
     // （スマホの横向きで、空の段落の「＋」を押したら、上の見出し「まとめ」の途中が開いていた）。押した要素が欄でなければ、近い文字の欄
     const clickedBlock = target.closest<HTMLElement>('[data-block-id]')?.dataset.blockId
     const point = keyHit === undefined ? this.renderer.pageView.offsetFromPoint(x, y) : null
-    const hit = keyHit !== undefined ? keyHit : clickedBlock ? { blockId: clickedBlock, offset: point?.blockId === clickedBlock ? point.offset : 0 } : point
+    let hit = keyHit !== undefined ? keyHit : clickedBlock ? { blockId: clickedBlock, offset: point?.blockId === clickedBlock ? point.offset : 0 } : point
+    // 押した点が、見出し・図表のタイトルの行より下（その下の空いた所）なら、その欄は開かない。
+    // 近い文字が見出しになり、足したばかりの小見出しの下を押して書くと、見出しの続きになっていた（「素材の選定使う布」）。続きは「＋ ここに続きを書く」から
+    if (hit && !clickedBlock && keyHit === undefined && this.belowLine(hit.blockId, y)) hit = null
     if (hit?.blockId === FIELD_IDS.course || target.closest(`[data-block-id="${FIELD_IDS.course}"]`)) {
       this.callbacks.onCourseClick((target.closest('[data-block-id]') ?? target).getBoundingClientRect())
       return
@@ -1157,7 +1211,7 @@ export class ReportEditor {
   /**
    * 押した欄を書き始める。ただしスマホで表のタイトルを押したときは、まず表を選ぶ（下に「この表」の道具が出て、「削除」で表ごと消せる）。
    * 選んでいる表のタイトルをもう一度押すと、タイトルを書く。
-   * スマホの書く欄には表を消す道具がなく、表を選ぶには表の外側を押すしかなかったため（小さな紙面では、ほぼ押せない）。
+   * 表を選ぶには表の外側を押すしかなかったため（小さな紙面では、ほぼ押せない）。セルを書いている間は、書く欄の「この表を削除」でも消せる。
    * byKey：キーボードで紙面の欄に移って Enter を押した（すぐ書き始める）
    */
   private openOrSelect(id: string, offset: number, byKey: boolean): void {
@@ -1245,6 +1299,53 @@ export class ReportEditor {
       if (!r.width && !r.height) continue
       const d = Math.hypot(Math.max(r.left - x, 0, x - r.right), Math.max(r.top - y, 0, y - r.bottom))
       if (d <= within && (!best || d < best.d)) best = { id, d }
+    }
+    return best?.id ?? null
+  }
+
+  /** (x, y) が、見えているページの紙の外（まわりの灰色の所）か（紙面がまだなければ false） */
+  private outsidePaper(x: number, y: number): boolean {
+    const paper = this.renderer.pageView.pages()[this.page]?.getBoundingClientRect()
+    return !!paper && paper.width > 0 && (x < paper.left || x > paper.right || y < paper.top || y > paper.bottom)
+  }
+
+  /** id が見出し・図表のタイトルで、y がその行（見えているページの部分）より下か */
+  private belowLine(id: string, y: number): boolean {
+    const kind = ops.findEditable(this.report, id)?.kind
+    if (kind !== 'chapter' && kind !== 'subheading' && kind !== 'figureCaption' && kind !== 'tableCaption') return false
+    const view = this.renderer.pageView
+    const fragment = view.fragments(id).filter((f) => view.pageIndexOf(f) === this.page).at(-1)
+    const line = fragment?.closest<HTMLElement>('h1, h2, figcaption, .table-caption') ?? fragment
+    return !!line && y > line.getBoundingClientRect().bottom + 2
+  }
+
+  /**
+   * スマホ：まだ書いていない欄の「＋」の印（紙面の下の帯を出している間だけ出る。見た目は index.css の「v32 ④」「v32 の直し」）を押したか。
+   * 押した欄の ID（なければ null）。印は紙面では 14px ほどで、横向きの小さな紙面では、印の上の方を押すと上の見出しが開いていたため、
+   * 印のまわり 44px 四方を、その欄の押せる範囲にする。ただし、ほかの欄（見出しなどの文字・図・表のセル・写真の枠）の上を押したときは、
+   * そちらを開く（印そのものの上は、印が上に描かれているので、印の欄）。いくつかの印が近いときは、いちばん近い印
+   */
+  private markerAt(x: number, y: number, target: HTMLElement): string | null {
+    if (this.scroller.closest<HTMLElement>('.stage')?.dataset.band !== 'fields') return null
+    const page = this.renderer.pageView.pages()[this.page]
+    if (!page) return null
+    const scale = this.stage.scale
+    // 押した所にある、紙面の物
+    const content = target.closest<HTMLElement>('[data-block-id], h1, h2, p, figure, figcaption, td, th, [data-photo-slot], [data-abstract-start], .el')
+    let best: { id: string; d: number } | null = null
+    for (const el of page.querySelectorAll<HTMLElement>('[data-block-id][data-placeholder]:empty')) {
+      const mark = getComputedStyle(el, '::after')
+      const size = parseFloat(mark.width) * scale
+      if (mark.content === 'none' || mark.content === 'normal' || !(size > 0)) continue
+      // 印の真ん中（印は、上端の位置を真ん中にして描いている：translateY(-50%)）
+      const r = el.getBoundingClientRect()
+      const cx = r.left + parseFloat(mark.left) * scale + size / 2
+      const cy = r.top + parseFloat(mark.top) * scale
+      const d = Math.hypot(x - cx, y - cy)
+      const onMark = d <= size / 2 + 1
+      if (!onMark && (Math.abs(x - cx) > 22 || Math.abs(y - cy) > 22)) continue
+      if (!onMark && content && content !== el && !content.contains(el)) continue
+      if (!best || d < best.d) best = { id: el.dataset.blockId!, d }
     }
     return best?.id ?? null
   }
@@ -1792,8 +1893,21 @@ export class ReportEditor {
   private removeTableHow(): string {
     // PC：表のセル・タイトルを書いている間も、表を選んでいる間も、左の道具に「この表」の「削除」がある
     if (!this.overlay.inSheet) return '表ごと消すときは、左の「この表」の「削除」を押します。'
-    // スマホ：書く欄には表の「削除」がない。閉じて表のタイトルをタップすると、表を選び、下に「この表」の道具が出る
-    return this.overlay.blockId ? '表ごと消すときは、「完了」で閉じてから表のタイトルをタップし、「この表」の「削除」を押します。' : '表ごと消すときは、「この表」の「削除」を押します。'
+    // スマホ：表のセル・タイトルを書いている間は、書く欄の道具に「この表を削除」がある。表を選んでいる間は、下の「この表」の道具に「削除」がある
+    return this.overlay.blockId ? '表ごと消すときは、書く欄の「この表を削除」を押します。' : '表ごと消すときは、「この表」の「削除」を押します。'
+  }
+
+  /**
+   * 表を削除する（表のセル・タイトルを書いている間も。スマホの書く欄の「この表を削除」）。書く欄は閉じ、スマホはページ全体の表示に戻す。
+   * 画面の下に「表を削除しました［戻す］」が出る。前は、スマホで表を消すには表のタイトル（ページ全体の表示では高さ 7px ほど）をタップするしかなかった
+   */
+  removeTable(tableId: string): void {
+    if (!ops.findTable(this.report, tableId) || this.removed.size > 0) return
+    // 書いていたセルの文字を確定してから消す（組み直すのは、消したあとの1回だけ）
+    this.commitForChange()
+    if (this.overlay.inSheet) this.setZoom(false)
+    this.selection = { kind: 'table', id: tableId }
+    this.removeSelected()
   }
 
   /** 戻すもののない短い知らせを、画面の下に出す（書いている間も出す。ほかを変えたら消える） */

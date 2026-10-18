@@ -1349,6 +1349,195 @@ await withEdge(async (browser) => {
     await ready()
   }
 
+  // ---- はじめて使う学生の試し（2回目）で見つかったこと ----
+  // （ここでも本文を入れ替えて確かめ、終わったら元の原稿に戻す）
+  {
+    const savedReport = await page.evaluate(() => window.__editor.getSnapshot().report)
+    await page.evaluate(() => {
+      const t = (text) => ({ type: 'text', text })
+      const body = [
+        { id: 'gc1', title: '企画', blocks: [{ type: 'paragraph', id: 'gp1', content: [t('この制作の目的は、砂漠の王女の衣装を作ることである。')] }] },
+        { id: 'gc2', title: '追加の大見出し', blocks: [{ type: 'subheading', id: 'gs1', title: '素材の選定' }] },
+      ]
+      window.__editor.update((r) => ({ ...r, body, references: [] }))
+    })
+    await ready()
+    const blocksOf = async (chapterId) => (await snap()).report.body.find((c) => c.id === chapterId)?.blocks ?? []
+    const textOf = (b) => (b.type === 'subheading' ? `【${b.title}】` : b.type === 'paragraph' ? b.content.map((n) => (n.type === 'ref' ? '(ref)' : n.text)).join('') : `[${b.type}]`)
+    const ctrlEnd = async () => {
+      await page.keyboard.down('Control')
+      await page.keyboard.press('End')
+      await page.keyboard.up('Control')
+    }
+    const rowAt = () =>
+      page.evaluate(() => {
+        const b = document.querySelector('.continue-row')
+        const h = document.querySelector('.page-viewport.front [data-block-id="gs1"]')?.closest('h2')?.getBoundingClientRect()
+        const r = b?.getBoundingClientRect()
+        return { shown: !!b && !b.hidden && r.height > 0, below: !!h && !!r && r.top >= h.bottom, x: r ? r.left + r.width / 2 : 0, y: r ? r.top + r.height / 2 : 0, bottom: r?.bottom ?? 0, left: h?.left ?? 0 }
+      })
+
+    // 章の最後の小見出し（足したばかりで、後ろに何もない）の下に「＋ ここに続きを書く」が出る（mockups/v32 ① 案A を見出しにも）
+    await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfBlock('gs1'), 'none'))
+    await ready()
+    await pause0(300)
+    const headRow = await rowAt()
+    await page.screenshot({ path: `${OUT}/g1-heading-row.png` })
+    check('章の最後の小見出し（後ろに何もない）の下が空いていれば、そのすぐ下に「＋ ここに続きを書く」が出る', headRow.shown && headRow.below, JSON.stringify(headRow))
+    // 見出しの下の空いた所を押して打っても、見出しの続きにならない（前は「素材の選定使う布」になった）
+    await page.mouse.click(headRow.left + 60, headRow.bottom + 80)
+    await pause0(300)
+    const afterBlank = (await snap()).editingId
+    await page.keyboard.type('使う布')
+    await pause0(200)
+    const headAfter = (await blocksOf('gc2')).map(textOf)
+    check('見出しの下の空いた所を押して打っても、見出しの続きにならない（見出しの書く欄は開かない）', afterBlank === null && JSON.stringify(headAfter) === JSON.stringify(['【素材の選定】']), JSON.stringify({ afterBlank, headAfter }))
+    // 見出しを書いている間も出て、押すと見出しのすぐ後ろに段落ができ、そこに書ける
+    await clickBlock('gs1')
+    await waitEditing(() => window.__editor.getSnapshot().editingId === 'gs1')
+    await pause0(300)
+    const whileHead = await rowAt()
+    await page.mouse.click(whileHead.x, whileHead.y)
+    await waitEditing(() => window.__editor.getSnapshot().editingKind === 'paragraph')
+    await page.keyboard.type('使う布を選んだ。')
+    await page.keyboard.press('Escape')
+    await ready()
+    const headRowAfter = (await blocksOf('gc2')).map(textOf)
+    check('見出しを書いている間も出て、押すと見出しのすぐ後ろに段落ができ、そこに書ける（見出しは変わらない）', whileHead.shown && JSON.stringify(headRowAfter) === JSON.stringify(['【素材の選定】', '使う布を選んだ。']), JSON.stringify({ whileHead, headRowAfter }))
+
+    // 「大見出し」を足す：見出しを書いている間は、付いてきた空の段落を「空の段落がある」と言わない。
+    // Enter で、その段落へ移る（空の段落をもう1つ作らない）。書かずに閉じたら言う
+    const emptyShown = () => page.evaluate(() => ({ findings: window.__editor.getSnapshot().findings.filter((f) => f.ruleId === 'paragraph-empty').map((f) => f.blockId), side: [...document.querySelectorAll('.side .issue')].some((x) => x.textContent.includes('空の段落がある')) }))
+    await clickPaletteButton('大見出し')
+    await waitEditing(() => window.__editor.getSnapshot().editingKind === 'chapter')
+    await page.keyboard.type('まとめ')
+    await ready()
+    const chapterId = await page.evaluate(() => window.__editor.getSnapshot().editingId)
+    const whileTitle = await emptyShown()
+    await page.screenshot({ path: `${OUT}/g2-new-chapter.png` })
+    await page.keyboard.press('Enter')
+    await ready()
+    const enter = await page.evaluate((id) => { const s = window.__editor.getSnapshot(); const c = s.report.body.find((x) => x.id === id); return { editing: s.editingId, kind: s.editingKind, blocks: c.blocks.map((b) => b.id), title: c.title } }, chapterId)
+    const whilePara = await emptyShown()
+    await page.keyboard.press('Escape')
+    await ready()
+    const afterClose = await emptyShown()
+    check(
+      '「大見出し」を足して見出しを書いている間・Enter で付いてきた段落へ移って書いている間は「空の段落がある」と言わず、空のまま閉じたら言う',
+      !whileTitle.findings.length && !whileTitle.side && enter.title === 'まとめ' && enter.kind === 'paragraph' && enter.blocks.length === 1 && enter.editing === enter.blocks[0] && !whilePara.findings.length && afterClose.findings.includes(enter.blocks[0]) && afterClose.side,
+      JSON.stringify({ whileTitle, enter, whilePara, afterClose }),
+    )
+
+    // 紙の外（まわりの灰色の所）を押すと、書く欄を閉じる（Esc と同じ。書いた文字は残る。近くの欄が開き直さない）
+    await page.evaluate(() => window.__editor.openWhenReady('gp1', 3))
+    await waitEditing(() => window.__editor.getSnapshot().editingId === 'gp1')
+    await page.keyboard.type('とても')
+    const grey = await page.evaluate(() => {
+      const p = [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].map((e) => e.getBoundingClientRect()).find((r) => r.width > 0 && r.left > 0)
+      return { x: p.right + 40, y: p.top + 60 }
+    })
+    await page.mouse.click(grey.x, grey.y)
+    await pause0(500)
+    const greyClosed = { editing: (await snap()).editingId, text: textOf((await blocksOf('gc1'))[0]) }
+    check('紙の外（まわりの灰色の所）を押すと、書く欄を閉じる（書いた文字は残り、近くの欄が開き直さない）', greyClosed.editing === null && greyClosed.text === 'この制とても作の目的は、砂漠の王女の衣装を作ることである。', JSON.stringify(greyClosed))
+    await ready()
+
+    // 何も書いていない段落で「図を入れる」：表と同じく、（図n）は入らず、その段落の位置に図が入る。
+    // 指摘「本文中に「図1」…を入れる」は、直し方（「図1に示す」のように書く）を言う
+    await clickBlock('gp1')
+    await ctrlEnd()
+    await page.keyboard.press('Enter')
+    await waitEditing(() => window.__editor.getSnapshot().editingKind === 'paragraph' && window.__editor.getSnapshot().editingId !== 'gp1')
+    const [emptyFigChooser] = await Promise.all([page.waitForFileChooser(), clickPaletteButton('図を入れる')])
+    await emptyFigChooser.accept([pngPath])
+    await waitEditing(() => window.__editor.getSnapshot().editingKind === 'figureCaption')
+    await page.keyboard.type('全体像')
+    await page.keyboard.press('Escape')
+    await ready()
+    const emptyFig = await page.evaluate(() => {
+      const s = window.__editor.getSnapshot()
+      const blocks = s.report.body.find((c) => c.id === 'gc1').blocks
+      const fig = s.findings.find((f) => f.ruleId === 'figure-unreferenced')
+      return { blocks: blocks.map((b) => (b.type === 'paragraph' ? b.content.map((n) => (n.type === 'ref' ? '(ref)' : n.text)).join('') : b.type)), detail: fig?.detail, side: [...document.querySelectorAll('.side .issue')].find((x) => x.textContent.includes('本文中に「図1」'))?.textContent ?? '' }
+    })
+    check(
+      '何も書いていない段落で「図を入れる」と、表と同じく（図n）は入らず、その段落の位置に図が入る。指摘は「図の前の段落に「図1に示す」のように書く」と直し方を言う',
+      JSON.stringify(emptyFig.blocks) === JSON.stringify(['この制とても作の目的は、砂漠の王女の衣装を作ることである。', 'figureRow']) && emptyFig.detail === '図の前の段落に「図1に示す」のように書く' && emptyFig.side.includes('図1に示す'),
+      JSON.stringify(emptyFig),
+    )
+
+    // 引用・参考文献の窓：書いた内容があるまま「×」「やめる」を押すと、窓の中で「書いた内容を反映せずに閉じますか？」と聞く（前は、すぐ閉じて消えた）
+    const openRefs = async () => {
+      await page.evaluate(() => [...document.querySelectorAll('.side button')].find((b) => b.textContent.includes('引用・参考文献を入れる')).click())
+      await page.waitForSelector('.modal .ref-card, .modal .row-buttons')
+    }
+    const refsState = () =>
+      page.evaluate(() => ({
+        modal: !!document.querySelector('.modal'),
+        ask: document.querySelector('.ref-ask-q')?.textContent ?? '',
+        buttons: [...document.querySelectorAll('.ref-ask button')].map((b) => b.textContent.trim()),
+        focus: document.activeElement?.textContent?.trim() ?? '',
+        first: document.querySelector('.modal .ref-card input')?.value ?? null,
+        saved: window.__editor.getSnapshot().report.references.map((r) => r.author ?? r.siteTitle),
+      }))
+    const refsButton = (label) => page.evaluate((label) => [...document.querySelectorAll('.modal button')].find((b) => b.textContent.trim() === label).click(), label)
+    // 何も書いていなければ（文献を足しただけでも）、「×」ですぐ閉じる
+    await openRefs()
+    await refsButton('＋ 書籍を追加')
+    await page.click('.modal .close')
+    await pause0(200)
+    const plainClose = await refsState()
+    // 4冊書いて「×」：閉じずに聞く。「反映して閉じる」に移る（Enter でうっかり消さない）
+    await openRefs()
+    for (let i = 0; i < 4; i++) await refsButton('＋ 書籍を追加')
+    const authorInputs = await page.$$('.modal .ref-card .field:first-child input')
+    for (const [i, input] of authorInputs.entries()) await input.type(`著者${i + 1}`)
+    await page.click('.modal .close')
+    await pause0(200)
+    const askedX = await refsState()
+    await page.screenshot({ path: `${OUT}/g3-refs-ask.png` })
+    // 「戻る」：書いた内容はそのまま、窓に戻る
+    await refsButton('戻る')
+    await pause0(200)
+    const back = await refsState()
+    // 「やめる」→「反映せずに閉じる」：閉じて、書いた内容は反映しない
+    await refsButton('やめる')
+    await pause0(200)
+    const askedCancel = await refsState()
+    await refsButton('反映せずに閉じる')
+    await ready()
+    const discarded = await refsState()
+    check(
+      '引用・参考文献の窓：何も書いていなければ「×」ですぐ閉じ、書いた内容があれば「×」「やめる」で窓の中で「書いた内容を反映せずに閉じますか？」と聞く（反映して閉じる・反映せずに閉じる・戻る）。「戻る」で書いた内容のまま戻り、「反映せずに閉じる」で閉じる',
+      !plainClose.modal &&
+        askedX.modal && askedX.ask === '書いた内容を反映せずに閉じますか？' && JSON.stringify(askedX.buttons) === JSON.stringify(['戻る', '反映せずに閉じる', '反映して閉じる']) && askedX.focus === '反映して閉じる' &&
+        back.modal && !back.ask && back.first === '著者1' && back.focus === 'やめる' &&
+        askedCancel.ask.includes('反映せずに') && !discarded.modal && discarded.saved.length === 0,
+      JSON.stringify({ plainClose, askedX, back, askedCancel, discarded }),
+    )
+    // 「反映して閉じる」：書いた内容を反映して閉じる
+    await openRefs()
+    await refsButton('＋ 書籍を追加')
+    await (await page.$('.modal .ref-card .field:first-child input')).type('浜松隆志')
+    await page.click('.modal .close')
+    await pause0(200)
+    await refsButton('反映して閉じる')
+    await ready()
+    const kept = await refsState()
+    check('「反映して閉じる」で、書いた内容を反映して閉じる', !kept.modal && JSON.stringify(kept.saved) === JSON.stringify(['浜松隆志']), JSON.stringify(kept))
+
+    // PC の使い方の題は「クリック」のまま（スマホだけ「タップ」。phone.mjs）
+    await page.click('.side .help-btn')
+    await page.waitForSelector('.side .help-list')
+    const pcHelp = await page.evaluate(() => [...document.querySelectorAll('.side .help-list button')].map((b) => b.textContent).find((t) => t.startsWith('書き方')))
+    await page.evaluate(() => document.querySelector('.side .help-close').click())
+    await page.waitForSelector('.side .help-btn')
+    check('PC の使い方の題は「書き方（クリックして書く）」のまま', pcHelp === '書き方（クリックして書く）', pcHelp)
+
+    await page.evaluate((r) => window.__editor.update(() => r), savedReport)
+    await ready()
+  }
+
   // ---- 左右の欄の境目をつかんで、幅を変える（ダブルクリックで元の幅） ----
   const colWidth = (sel) => page.evaluate((sel) => Math.round(document.querySelector(sel).getBoundingClientRect().width), sel)
   const dragHandle = async (side, dx) => {

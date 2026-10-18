@@ -50,6 +50,15 @@ const AREA_OF_KIND: Record<EditableKind, Area> = {
 const SENTENCE_KINDS: EditableKind[] = ['paragraph', 'abstractParagraph']
 const SENTENCE_RULES = ['taigen-dome', 'sentence-end', 'long-sentence']
 
+/**
+ * 本文から参照していない図表の、直し方（前は「図1が本文から参照されていない」だけで、何をすればよいか分からなかった。
+ * 何も書いていない段落で「図を入れる」「表を入れる」を押すと、（図n）（表n）は入らないため、この指摘が出る）。
+ * ツールでは、書いた「表1」は確定すると表とつながる。提出前チェックのページ（Word を確かめる。check/wordCheck.ts）でも、そのまま出す
+ */
+export function unreferencedDetail(kind: '図' | '表', n: number | undefined): string {
+  return `${kind}の前の段落に「${kind}${n ?? ''}に示す」のように書く`
+}
+
 function guide(ruleId: string, severity: Severity, title: string, area: Area, extra: Partial<ReportFinding> = {}): ReportFinding {
   return { ruleId, severity, source: 'guide', title, area, ...extra }
 }
@@ -367,12 +376,12 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
         const n = num.numbers.get(f.id)
         if (!f.imageId) findings.push(guide('figure-image', 'error', `図${n}の画像が入っていない`, 'body', { blockId: f.id }))
         if (!referenced.has(f.id))
-          findings.push(guide('figure-unreferenced', 'error', `本文中に「図${n}」または「（図${n}）」を入れる`, 'body', { blockId: f.id, detail: `図${n}が本文から参照されていない` }))
+          findings.push(guide('figure-unreferenced', 'error', `本文中に「図${n}」または「（図${n}）」を入れる`, 'body', { blockId: f.id, detail: unreferencedDetail('図', n) }))
       }
     } else if (block.type === 'table') {
       const n = num.numbers.get(block.id)
       if (!referenced.has(block.id))
-        findings.push(guide('table-unreferenced', 'error', `本文中に「表${n}」または「（表${n}）」を入れる`, 'body', { blockId: block.id, detail: `表${n}が本文から参照されていない` }))
+        findings.push(guide('table-unreferenced', 'error', `本文中に「表${n}」または「（表${n}）」を入れる`, 'body', { blockId: block.id, detail: unreferencedDetail('表', n) }))
       // 素材表（見出しに「生地見本」の列がある表）：生地見本に写真を入れる
       const swatch = swatchColumn(block)
       if (swatch >= 0) {

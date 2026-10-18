@@ -985,6 +985,10 @@ body.resizing .page-viewport { pointer-events: none; }
 .continue-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 /* スマホ：見た目の高さも 44px にする（下が空いているかは、この高さで測る。editor/continueRow.ts） */
 .app.phone .continue-row { height: 44px; font-size: 13.5px; }
+/* 紙面が小さく（スマホの横向き）、ページの幅いっぱいに広げても言葉が入らないとき：字を少し詰める（editor/continueRow.ts）。それでもはみ出す分は見せない */
+.continue-row { overflow: hidden; }
+.continue-row.tight { gap: 3px; padding: 0 6px; font-size: 11.5px; letter-spacing: 0; }
+.app.phone .continue-row.tight { font-size: 12px; }
 @media print { .continue-row { display: none !important; } }
 
 /* ---- v32 ② 削除の「戻す」の知らせを PC にも出し、15秒か次の操作まで出す（mockups/v32 ② 案A。部品は app/UndoBar.tsx） ---- */
@@ -1044,3 +1048,26 @@ body.resizing .page-viewport { pointer-events: none; }
 /* ---- はじめて使う学生の試し（v32 のあと）の直し：戻すもののない短い知らせ（表の行・列を消せないわけなど。app/UndoBar.tsx の .undo-info） ---- */
 /* 2〜3行になることがあるので、行の間を少し空けて読みやすくする */
 .undo-toast .undo-info { line-height: 1.55; padding: 2px 6px 2px 0; }
+
+/* ---- はじめて使う学生の試し（2回目）の直し ---- */
+/* 引用・参考文献の窓：書いた内容があるまま「×」「やめる」を押したときに、窓の下に出す問い（app/dialogs.tsx の ReferencesDialog） */
+.ref-ask { margin-top: 18px; padding: 12px 14px; border: 1.5px solid var(--warn); border-radius: 12px; background: var(--warn-soft); }
+.ref-ask-q { margin: 0; font-size: 14px; font-weight: 700; line-height: 1.6; color: var(--ink); }
+.ref-ask .row-buttons { margin-top: 10px; }
+/* スマホ：書く欄は、キーボードを閉じているときは下のタブの上に出す（タブを隠さない）。
+   前は書く欄が下のタブに重なり、「追加」があった所を押すと書く欄が閉じるだけで、もう一度押さないと「追加」が開かなかった。
+   キーボードを出しているときは、今までどおりキーボードのすぐ上（下のタブはキーボードに隠れる） */
+.app.phone .edit-sheet { bottom: max(var(--kb, 0px), 62px); padding-bottom: 0; }
+/* スマホ：指で押す物の大きさ（残り）。選んでいる図・表の道具（「削除」など）は、幅も高さも 44px 以上。
+   表の「列の幅」は、いまの幅を出すボタン1つ（押すたびに切り替える。app/Palette.tsx）。下から出る欄（追加・ページ一覧など）の「×」も 44px 四方 */
+.app.phone .sel-bar .tb { min-width: 44px; min-height: 44px; justify-content: center; }
+.app.phone .sel-bar .width-toggle { max-width: 64px; gap: 2px; padding: 4px 8px; line-height: 1.3; }
+.app.phone .sel-bar .width-toggle b { font-size: 11.5px; line-height: 1.25; color: var(--accent); word-break: keep-all; }
+/* 表の道具の名前は、前と同じく2字ずつで折り返す（「行を／足す」。幅が広がって「行を足／す」にならないように） */
+.app.phone .sel-bar .group.ctx:has(.width-toggle) .tb:not(.width-toggle) { max-width: 50px; }
+.app.phone .sheet-close { width: 44px; height: 44px; }
+/* スマホ：本文の空の段落の「＋」の印は、段落の左の余白に出す（段落の始めに出すと、横向きの小さな紙面では上の見出しの文字に重なり、
+   印の上の方を押すと見出しが開いていた）。印のまわり 44px 四方は、その段落の押せる範囲（editor/reportEditor.ts の markerAt） */
+@media screen {
+  .app.phone .stage[data-band='fields'] .page-viewport section.body p[data-block-id][data-placeholder]:empty::after { left: calc(-17px / var(--s)); }
+}

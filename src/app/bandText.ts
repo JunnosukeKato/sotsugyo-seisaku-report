@@ -1,4 +1,5 @@
 import type { EditableKind } from '../editor/reportOps'
+import type { HelpTopic } from '../help/helpTopics'
 import { photoGrid, shownPhotos } from '../model/photos'
 import type { Report, WorkPhotos } from '../model/types'
 
@@ -74,6 +75,26 @@ export function todoBand(todo: BandTodo, rest: number): { text: string; sub: str
  */
 export function forTouch(text: string): string {
   return text.replace(/クリック/g, 'タップ')
+}
+
+/**
+ * スマホの「？ 使い方」の項目：題・ひとこと・手順・補足の「クリック」を「タップ」にする（forTouch。PC はそのまま）。
+ * 「クリック（スマホはタップ）」は「タップ」だけにする。パソコンのことを書いた補足（「パソコンでは」）と、端末ごとの手順は変えない。
+ * 「クリック」で探しても見つかるよう、変えた項目は探す言葉に「クリック」を足す
+ */
+export function topicsForTouch(topics: HelpTopic[]): HelpTopic[] {
+  const touch = (text: string) => forTouch(text.replace(/クリック[（(]スマホはタップ[）)]/g, 'タップ'))
+  return topics.map((t) => {
+    const next: HelpTopic = {
+      ...t,
+      title: touch(t.title),
+      ...(t.lead !== undefined ? { lead: touch(t.lead) } : {}),
+      ...(t.steps ? { steps: t.steps.map(touch) } : {}),
+      ...(t.items ? { items: t.items.map((it) => (/パソコン/.test(it.h) ? it : { h: touch(it.h), t: touch(it.t) })) } : {}),
+    }
+    const changed = JSON.stringify(next) !== JSON.stringify(t)
+    return changed ? { ...next, words: [t.words, 'クリック'].filter(Boolean).join(' ') } : t
+  })
 }
 
 /** ひな形の段落（抄録・本文）の「ここに何を書くか」（なければ undefined） */

@@ -21,6 +21,7 @@ import { PhoneChrome } from './app/Phone'
 import { UndoBar } from './app/UndoBar'
 import { useUndoNotice } from './app/useUndoNotice'
 import { useKeyboardInset, useNarrow, useSwipe, useWheelPaging } from './app/uiShared'
+import { topicsForTouch } from './app/bandText'
 import { SidePanel, PageColumn } from './app/SidePanel'
 import { StartGuide, type GuideStep } from './app/StartGuide'
 import { TabLockedOverlay } from './app/TabLock'
@@ -37,6 +38,8 @@ import { STUDENT_TOPICS } from './help/helpTopics'
 import { STUDENT_GUIDE_PATH, STUDENT_HELP_IMAGES } from './help/links'
 
 const noopSubscribe = () => () => {}
+/** スマホの「？ 使い方」の項目（「クリック」を「タップ」に。PC は STUDENT_TOPICS のまま） */
+const STUDENT_TOPICS_TOUCH = topicsForTouch(STUDENT_TOPICS)
 const nullSnapshot = () => null
 
 type Dialog =
@@ -622,7 +625,7 @@ export default function App() {
   }, [help, narrow])
   const helpView = (variant: 'side' | 'sheet') => (
     <HelpView
-      topics={STUDENT_TOPICS}
+      topics={narrow ? STUDENT_TOPICS_TOUCH : STUDENT_TOPICS}
       who="student"
       imageBase={STUDENT_HELP_IMAGES}
       guides={[{ label: '学生用', href: STUDENT_GUIDE_PATH }]}

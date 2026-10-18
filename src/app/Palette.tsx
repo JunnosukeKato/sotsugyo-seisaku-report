@@ -207,14 +207,41 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
           ))}
         <Tool label="行を消す" icon={Icon.rowRemove} title="書いているセルの行を消す（見出しの行は消せません）" onClick={() => editor.removeTableRow(tableId)} />
         <Tool label="列を消す" icon={Icon.colRemove} title="書いているセルの列を消す" onClick={() => editor.removeTableColumn(tableId)} />
-        <div className="ctx-label sub">列の幅</div>
-        <div className="seg">
-          {(['equal', 'auto'] as const).map((w) => (
-            <button key={w} className={table?.widths === w ? 'on' : ''} aria-pressed={table?.widths === w} onMouseDown={keepFocus} onClick={() => editor.setTableWidths(tableId, w)}>
-              {w === 'equal' ? 'そろえる' : '中身に合わせる'}
-            </button>
-          ))}
-        </div>
+        {phone ? (
+          // スマホの下の道具：「そろえる」「中身に合わせる」を2つ並べると、指で押すには小さすぎた（高さ 21px）。
+          // 書く欄の道具と同じく、いまの幅を出すボタン1つにして、押すたびに切り替える（高さ 44px 以上。index.css）
+          <button
+            className="tb width-toggle"
+            title={table.widths === 'equal' ? '列の幅：そろえる（押すと、中身に合わせる）' : '列の幅：中身に合わせる（押すと、そろえる）'}
+            onMouseDown={keepFocus}
+            onClick={() => editor.setTableWidths(tableId, table.widths === 'equal' ? 'auto' : 'equal')}
+          >
+            <span>列の幅</span>
+            {/* 「中身に合わせる」は、道具が画面の幅に入るよう、「中身に／合わせる」の2行にする */}
+            <b>
+              {table.widths === 'equal' ? (
+                'そろえる'
+              ) : (
+                <>
+                  中身に
+                  <wbr />
+                  合わせる
+                </>
+              )}
+            </b>
+          </button>
+        ) : (
+          <>
+            <div className="ctx-label sub">列の幅</div>
+            <div className="seg">
+              {(['equal', 'auto'] as const).map((w) => (
+                <button key={w} className={table?.widths === w ? 'on' : ''} aria-pressed={table?.widths === w} onMouseDown={keepFocus} onClick={() => editor.setTableWidths(tableId, w)}>
+                  {w === 'equal' ? 'そろえる' : '中身に合わせる'}
+                </button>
+              ))}
+            </div>
+          </>
+        )}
         <Tool
           label="削除"
           icon={Icon.remove}
