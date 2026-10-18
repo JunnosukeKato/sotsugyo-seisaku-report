@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v33 横向きの並べ方</title>
+<!-- 画面の絵は node scripts/mockup-shots-v33.mjs で作る（本物の学生用ツールを開き、案ごとに一部を書き換えて写したもの）。このページの写しは同じスクリプトの review で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  section { max-width: 1240px; margin: 0; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 3px; }
+  figcaption span { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 11.5px; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row > div { background: #fff; align-self: stretch; }
+  .two { grid-template-columns: 1fr 1fr; }
+  /* 横向きの絵（案の絵と同じ幅）と縦向きの絵の高さが、だいたいそろう幅 */
+  .now-row { grid-template-columns: 4.7fr 1fr 3.7fr; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 10px; border: 1px solid #ddd; }
+  .row small { display: block; padding: 6px 4px 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .row small b { color: var(--ink); }
+  .note { display: flex; align-items: center; padding: 14px 22px !important; font-size: 13.5px; color: var(--muted); line-height: 1.8; background: #faf9f7 !important; }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 10px 16px 12px; font-size: 13.5px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: var(--ok); }
+  .pw .weak b { color: #b5443b; }
+  .now { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+  .now > b { display: block; padding: 10px 16px 8px; font-size: 14px; border-bottom: 1px solid var(--line); }
+</style>
+</head>
+<body>
+
+<section id="land">
+  <h1>v33　スマホを横にしたときの「並べ方」</h1>
+  <p class="lead">スマホを横にすると、作品写真のページで「並べ方」の道具が紙面の大半を隠し、写真を見ながら選べません。1つ選んでください。<br>画面は本物のツールを開いて、案の部分だけ書き換えて写したものです（絵を押すと大きく見られます）。</p>
+
+  <div class="now"><b>いま</b>
+    <div class="row now-row">
+      <div class="ph"><a href="shots/land-now.png"><img src="shots/land-now.png" alt=""></a><small><b>横向き</b>：道具が下の写真を隠す</small></div>
+      <div class="ph"><a href="shots/portrait.png"><img src="shots/portrait.png" alt=""></a><small><b>縦向き</b>：3案とも今のまま</small></div>
+      <div class="note">横向きで写真がない枠があると、紙面の右に帯が出ます。<br>3案とも、変えるのは横向きのときだけです。</div>
+    </div>
+  </div>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　紙面の右の列に、6つの並べ方を出す<span class="rec">おすすめ</span></b><span>横向きのときだけ、帯と同じ右の列に出します。押すと、すぐ紙面が変わります。</span></figcaption>
+    <div class="row two">
+      <div class="ph"><a href="shots/land-a-1.png"><img src="shots/land-a-1.png" alt=""></a><small>選ぶ前（2枚 上下）</small></div>
+      <div class="ph"><a href="shots/land-a-2.png"><img src="shots/land-a-2.png" alt=""></a><small>「2枚 左右」を押したあと</small></div>
+      <div class="ph"><a href="shots/land-a-3.png"><img src="shots/land-a-3.png" alt=""></a><small>下の枠が空いているとき：帯の下に並ぶ</small></div>
+      <div class="note">紙面の大きさは今と同じです。<br>縦向きでは、今までどおり下に出ます。</div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>写真を見ながら、1回押すだけで選べます。</div><div class="weak"><b>弱いところ</b><br>縦と横で、道具の場所が変わります。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　下のボタン「並べ方：2枚 上下 ▾」1つにまとめる</b><span>押すと小さな欄が開き、選ぶと閉じます。</span></figcaption>
+    <div class="row two">
+      <div class="ph"><a href="shots/land-b-1.png"><img src="shots/land-b-1.png" alt=""></a><small>閉じているとき</small></div>
+      <div class="ph"><a href="shots/land-b-2.png"><img src="shots/land-b-2.png" alt=""></a><small>押したところ（紙面は隠れない）</small></div>
+      <div class="ph"><a href="shots/land-b-3.png"><img src="shots/land-b-3.png" alt=""></a><small>「2枚 左右」を選んだあと（欄は閉じる）</small></div>
+      <div class="note">ボタンは、ページ送りの右に置きます。</div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>ふだんは紙面のまわりがすっきりします。</div><div class="weak"><b>弱いところ</b><br>選ぶのに2回押します。開くまで、ほかの並べ方が見えません。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C　下の道具を、細い1列にする</b><span>絵と小さな名前だけにして、紙面はその上に収まるよう小さくします。</span></figcaption>
+    <div class="row two">
+      <div class="ph"><a href="shots/land-c-1.png"><img src="shots/land-c-1.png" alt=""></a><small>選ぶ前（2枚 上下）</small></div>
+      <div class="ph"><a href="shots/land-c-2.png"><img src="shots/land-c-2.png" alt=""></a><small>「2枚 左右」を押したあと</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>道具の場所は縦向きと同じ（下）です。</div><div class="weak"><b>弱いところ</b><br>紙面がとても小さくなります（幅 158px → 98px ほど）。</div></div>
+  </figure>
+</section>
+
+</body>
+</html>
