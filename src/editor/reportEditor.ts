@@ -476,6 +476,16 @@ export class ReportEditor {
     return this.renderer.pageView.pageOfOffset(blockId, offset)
   }
 
+  /** page ページ目（0 から）で始まる欄のうち、いちばん上のものの ID（なければ null。最後に見ていたページを覚える目印に使う） */
+  firstBlockOn(page: number): string | null {
+    const view = this.renderer.pageView
+    for (const el of view.pages()[page]?.querySelectorAll<HTMLElement>('[data-block-id]') ?? []) {
+      const id = el.dataset.blockId!
+      if (view.pageOfOffset(id, 0) === page) return id
+    }
+    return null
+  }
+
   /** 指摘の箇所があるページ（0 から）。わからなければ -1 */
   pageOfFinding(finding: ReportFinding): number {
     if (finding.blockId) {

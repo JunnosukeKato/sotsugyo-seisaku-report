@@ -25,7 +25,8 @@ interface TextRule {
   severity: Severity
   source: 'guide' | 'supplementary'
   title: string
-  find: (text: string) => Omit<TextFinding, 'ruleId' | 'severity' | 'source' | 'title'>[]
+  /** title：指摘ごとに題を変えるとき（「1文が長すぎる（182字）」など）。なければ規則の題 */
+  find: (text: string) => (Omit<TextFinding, 'ruleId' | 'severity' | 'source' | 'title'> & { title?: string })[]
 }
 
 function matches(text: string, re: RegExp) {
@@ -47,6 +48,30 @@ export function quoted(text: string, index: number): boolean {
 
 const KATAKANA = 'ァ-ヶ'
 const KANJI = '\\u3400-\\u9fff々'
+
+/** 字数（空白と改行を除く。抄録の字数と同じ数え方） */
+export function charCount(text: string): number {
+  return text.replace(/[\s　]/g, '').length
+}
+
+/** 1文がこの字数より多いと、長すぎると知らせる */
+export const LONG_SENTENCE_CHARS = 150
+
+/**
+ * 絵文字（😊👗✨ など）。絵として出る文字だけを見る：はじめから絵で出る文字か、後ろに「絵で出す」印（U+FE0F）が付いた文字。
+ * 肌の色・ZWJ でつないだもの（👩‍🎨）・国旗（🇯🇵）・数字の絵（1️⃣）は1つとして数え、続けて並んだ絵文字はまとめる。
+ * ※ 〇 ● → 「」や、ふつうは文字として出る記号（★ ♪ ® など。印が付いていないもの）は、絵文字にしない
+ */
+const EMOJI_ONE = String.raw`(?:\p{Emoji_Presentation}|\p{Extended_Pictographic}️)(?:\p{Emoji_Modifier}|️|[\u{E0020}-\u{E007F}])*`
+const EMOJI = String.raw`\p{Regional_Indicator}{2}|[#*0-9]️?⃣|${EMOJI_ONE}(?:‍\p{Extended_Pictographic}️?\p{Emoji_Modifier}?)*`
+const EMOJI_RUN = new RegExp(`(?:${EMOJI})+`, 'gu')
+
+export const EMOJI_TITLE = '絵文字は使わない'
+
+/** 文字列の中の絵文字（続けて並んだものは1つにまとめる） */
+export function findEmoji(text: string): string[] {
+  return [...text.matchAll(EMOJI_RUN)].map((m) => m[0])
+}
 
 /**
  * 変換を間違えやすい語（ツールに入っている一覧。管理ページで年度ごとに追加・編集できる：YearConfig.wordChecks）
@@ -244,6 +269,28 @@ export const TEXT_RULES: TextRule[] = [
       matches(text, /[ｦ-ﾟ]+/g).map(({ match, start, end }) => {
         const full = match[0].normalize('NFKC')
         return { start, end, replacement: full, detail: `半角の「${match[0]}」→ 全角の「${full}」` }
+      }),
+  },
+  {
+    // 絵文字（findEmoji と同じもの）。「直す」で取る
+    id: 'emoji',
+    severity: 'error',
+    source: 'supplementary',
+    title: EMOJI_TITLE,
+    find: (text) => matches(text, EMOJI_RUN).map(({ match, start, end }) => ({ start, end, replacement: '', detail: `「${match[0]}」を消す` })),
+  },
+  {
+    // 1文（「。」「！」「？」か段落の区切りまで）が長すぎる。段落だけに当てる（見出しや図表のタイトル、表のセルには当てない）。
+    // 字数は抄録と同じく空白を除いて数え、下線はその文の全体に引く
+    id: 'long-sentence',
+    severity: 'warning',
+    source: 'supplementary',
+    title: '1文が長すぎる。「。」で区切る',
+    find: (text) =>
+      matches(text, /[^。！？!?\n]+[。！？!?]*/g).flatMap(({ match, start, end }) => {
+        const n = charCount(match[0])
+        const lead = match[0].length - match[0].trimStart().length
+        return n > LONG_SENTENCE_CHARS ? [{ start: start + lead, end, title: `1文が長すぎる（${n}字）。「。」で区切る` }] : []
       }),
   },
 ]

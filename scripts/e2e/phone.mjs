@@ -154,6 +154,13 @@ await withEdge(async (browser) => {
   await page.waitForSelector('.sheet .meters')
   await shot('5-check')
   check('「チェック」で、セルフチェックが下から出る', (await page.$$('.sheet .issue')).length > 0)
+  // エラーと警告の意味は、一覧の上に1行（指摘ごとの札「手順書」「補助」はない。mockups/v31 案1）。スマホの幅で横にはみ出さない
+  const phoneLegend = await page.evaluate(() => {
+    const el = document.querySelector('.sheet .sev-legend')
+    const r = el?.getBoundingClientRect()
+    return { text: el?.textContent ?? '', inside: !!r && r.left >= 0 && r.right <= innerWidth, chips: document.querySelectorAll('.sheet .issue .src').length, fontSize: el ? parseFloat(getComputedStyle(el).fontSize) : 0 }
+  })
+  check('チェックの欄の一覧の上に「エラー：直してから出す」「警告：できれば直す」が出て、札（手順書・補助）はない', phoneLegend.text.includes('エラー：直してから出す') && phoneLegend.text.includes('警告：できれば直す') && phoneLegend.inside && phoneLegend.chips === 0 && phoneLegend.fontSize >= 13, JSON.stringify(phoneLegend))
   await page.click('.sheet-close')
 
   // ページ一覧
@@ -270,7 +277,7 @@ await withEdge(async (browser) => {
     return { top: Math.round(r.top), left: r.left, right: r.right, width: innerWidth, menu: !!document.querySelector('.sheet'), topics: document.querySelectorAll('.help-list button').length, modal: document.querySelector('.help-sheet').getAttribute('aria-modal'), pdf: document.querySelector('.help-foot .help-pdf')?.getAttribute('href') }
   })
   await shot('8a-help')
-  check('メニューの「？ 使い方」で、画面いっぱいの使い方の欄が出る（メニューは閉じる・項目16・印刷用の手引き（PDF））', helpSheet.top <= 12 && helpSheet.left === 0 && helpSheet.right === helpSheet.width && !helpSheet.menu && helpSheet.topics === 16 && helpSheet.modal === 'true' && helpSheet.pdf === './guides/student-guide.pdf', JSON.stringify(helpSheet))
+  check('メニューの「？ 使い方」で、画面いっぱいの使い方の欄が出る（メニューは閉じる・項目18・印刷用の手引き（PDF））', helpSheet.top <= 12 && helpSheet.left === 0 && helpSheet.right === helpSheet.width && !helpSheet.menu && helpSheet.topics === 18 && helpSheet.modal === 'true' && helpSheet.pdf === './guides/student-guide.pdf', JSON.stringify(helpSheet))
   await page.type('.help-search input', 'PDF 出ない')
   await wait(300)
   const phoneFound = await page.evaluate(() => ({ titles: [...document.querySelectorAll('.help-results .t')].map((t) => t.textContent).slice(0, 2), marks: document.querySelectorAll('.help-results mark').length }))
@@ -327,6 +334,12 @@ await withEdge(async (browser) => {
   await wait(100)
   await ready()
   check('指で左にはらうと、次のページへめくれる', (await snap()).page === 1)
+  // 読み込み直すと、最後に見ていたページが開く（下のページ送りも、そのページを指す）
+  await wait(300)
+  await page.reload({ waitUntil: 'networkidle0' })
+  await ready()
+  const reopened = await page.evaluate(() => ({ page: window.__editor.getSnapshot().page, pager: document.querySelector('.pager .lbl')?.textContent ?? '' }))
+  check('スマホでも、読み込み直すと最後に見ていたページが開く', reopened.page === 1 && reopened.pager.includes('2 /'), JSON.stringify(reopened))
   await context.close()
 
   // 今年度だけ：小さい画面（360×640）で、はじめての案内から見本の Word を読み込む（mockups/v24 ④）

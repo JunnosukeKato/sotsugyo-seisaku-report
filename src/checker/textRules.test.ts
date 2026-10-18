@@ -176,6 +176,45 @@ describe('「」『』の中（人の言葉の引用・作品名）', () => {
   })
 })
 
+describe('絵文字', () => {
+  it('絵文字はエラー（補助のチェック）。続けて並んだものは1つにまとめて示し、「直す」で取れる', () => {
+    const [f] = checkText('ドレスが完成した😊✨。')
+    expect(f).toMatchObject({ ruleId: 'emoji', severity: 'error', source: 'supplementary', title: '絵文字は使わない', start: 8, end: 11, replacement: '', detail: '「😊✨」を消す' })
+    expect(fixAll('ドレスが完成した😊✨。')).toBe('ドレスが完成した。')
+  })
+
+  it('つないだ絵文字・肌の色・国旗・「絵で出す」印の付いた記号・数字の絵も、1つの絵文字として見つける', () => {
+    for (const e of ['👗', '👩‍🎨', '👍🏽', '🇯🇵', '❤️', '☀️', '1️⃣']) {
+      expect(checkText(`衣装を作った${e}。`).filter((x) => x.ruleId === 'emoji').map((x) => x.detail), e).toEqual([`「${e}」を消す`])
+    }
+  })
+
+  it('ふつうの記号（※ 〇 ● → 「」）や、文字として出る記号（★ ♪ ® ♥）は絵文字にしない', () => {
+    expect(ids('※〇●→「★」♪®♥の記号を使った。')).not.toContain('emoji')
+  })
+})
+
+describe('1文の長さ', () => {
+  it('150字より長い文は警告（補助のチェック）。題に字数を出し、その文の全体を示す', () => {
+    const long = `${'あ'.repeat(150)}。`
+    const f = checkText(`短い文である。${long}次の文である。`).find((x) => x.ruleId === 'long-sentence')
+    expect(f).toMatchObject({ severity: 'warning', source: 'supplementary', title: '1文が長すぎる（151字）。「。」で区切る', start: 7, end: 158 })
+    expect(f?.replacement).toBeUndefined()
+  })
+
+  it('150字までの文は指摘しない。字数は抄録と同じく、空白を除いて数える（文の初めの空白は示さない）', () => {
+    expect(ids(`${'あ'.repeat(149)}。`)).not.toContain('long-sentence')
+    expect(ids(`${'あ'.repeat(100)}　 ${'あ'.repeat(49)}。`)).not.toContain('long-sentence')
+    const f = checkText(`短い文である。　${'あ'.repeat(151)}。`).find((x) => x.ruleId === 'long-sentence')
+    expect(f).toMatchObject({ start: 8, title: '1文が長すぎる（152字）。「。」で区切る' })
+  })
+
+  it('「！」「？」でも文を区切る。「。」のない段落の終わりまでも1文として数える', () => {
+    expect(ids(`${'あ'.repeat(100)}！${'あ'.repeat(100)}？`)).not.toContain('long-sentence')
+    expect(ids('あ'.repeat(151))).toContain('long-sentence')
+  })
+})
+
 describe('その他', () => {
   it('テンプレートの仮の文字はエラー', () => {
     expect(ids('―●●●の衣装制作―').filter((id) => id !== 'sentence-end')).toEqual(['placeholder'])

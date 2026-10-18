@@ -192,11 +192,20 @@ const PART_OF_AREA: Record<Area, PartId> = { cover: 'cover', abstract: 'abstract
  */
 const DROPPED = new Set(['abstract-not-started', 'photos-required', 'photos-empty-slot', 'manual-ref', 'paragraph-empty'])
 
+/** 指摘した文字がこれより長いとき（1文が長すぎる、など）は、指摘した文字の初めと終わりだけを出す */
+const LONG_QUOTE = 40
+
 /** 指摘した文字のまわり（前は12字まで、後ろは8字まで） */
 function quoteOf(text: string, start: number, end: number): [string, string, string] {
   const from = Math.max(0, start - 12)
   const to = Math.min(text.length, end + 8)
-  return [`${from > 0 ? '…' : ''}${text.slice(from, start).trimStart()}`, text.slice(start, end), `${text.slice(end, to)}${to < text.length ? '…' : ''}`]
+  // 1字ずつ（絵文字を途中で切らないように）
+  const match = [...text.slice(start, end)]
+  return [
+    `${from > 0 ? '…' : ''}${text.slice(from, start).trimStart()}`,
+    match.length > LONG_QUOTE ? `${match.slice(0, 20).join('')}…${match.slice(-10).join('')}` : match.join(''),
+    `${text.slice(end, to)}${to < text.length ? '…' : ''}`,
+  ]
 }
 
 /**
@@ -280,7 +289,9 @@ export function wordFindings(reading: WordReading, config: YearConfig, pdf: PdfL
       if (match.trim() && !f.blockId?.startsWith('basic:')) quote = [before, match, after]
       const b = before.replace(/^…/, '')
       const a = after.replace(/…$/, '')
-      snippets.push(b + match + a, match + a, b + match, match)
+      // 場所を探す文字は、縮める前の指摘した文字で（長い文はページをまたぐこともあるので、文の初めのところでも探す）
+      const whole = text.slice(f.start, f.end)
+      snippets.push(b + whole + a, whole + a, b + whole, whole, ...(whole !== match ? [b + whole.slice(0, 20)] : []))
       // 指摘の説明は、直し方だけにする（直す文字は quote に出す）
       if (quote && f.replacement) detail = `→「${f.replacement}」`
     } else if (text?.trim()) {

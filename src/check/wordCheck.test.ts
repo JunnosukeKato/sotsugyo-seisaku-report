@@ -199,6 +199,22 @@ describe('Word のチェック（学生用ツールのセルフチェックと�
     expect(reading.errors.body).toContain('表紙のファイルのようです')
   })
 
+  it('絵文字（エラー）と長すぎる文（警告）も指摘する。長い文は、指摘した文字の初めと終わりだけを出す', async () => {
+    const long = `${'あ'.repeat(160)}である。`
+    const body = makeDocx({ body: [p('Ⅰ．企画・立案'), p(`　衣装を作った😊。${long}`)].join('') })
+    const reading = await readWord({ body: file(body, '04_本文.docx') }, config)
+    const { findings } = wordFindings(reading, config, {})
+    const [emoji] = by(findings, 'emoji')
+    expect(emoji).toMatchObject({ part: 'body', severity: 'error', source: 'supplementary', title: '絵文字は使わない', detail: '「😊」を消す' })
+    expect(emoji.quote?.[1]).toBe('😊')
+    const [sentence] = by(findings, 'long-sentence')
+    expect(sentence).toMatchObject({ part: 'body', severity: 'warning', source: 'supplementary', title: '1文が長すぎる（164字）。「。」で区切る' })
+    expect(sentence.quote?.[1]).toBe(`${'あ'.repeat(20)}…${'あ'.repeat(6)}である。`)
+    // PDF から探す文字は、縮める前の文（ページをまたぐときのため、文の初めのところも）
+    expect(sentence.snippets).toContain(long)
+    expect(sentence.snippets?.at(-1)).toBe(`衣装を作った😊。${'あ'.repeat(20)}`)
+  })
+
   it('グラフ・Word の図形の図は、Word に画像があるので「画像が入っていない」と言わない', async () => {
     const emf = new Uint8Array(88)
     emf.set([1, 0, 0, 0], 0)

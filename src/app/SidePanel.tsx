@@ -181,11 +181,8 @@ function Issue({ finding, editor, onPick, active }: { finding: ReportFinding; ed
     >
       <i className="dot" />
       {/* キーボードでは、題名の部分のボタンに Tab で移り、Enter でその箇所へ（押すと上の li の onClick が働く） */}
-      <button type="button" className="go" aria-label={`${finding.severity === 'error' ? 'エラー' : '注意'}：${finding.title}${finding.detail ? `（${finding.detail}）` : ''}`}>
-        <span className="ttl">
-          {finding.title}
-          <span className="src">{finding.source === 'guide' ? '手順書' : '補助'}</span>
-        </span>
+      <button type="button" className="go" aria-label={`${finding.severity === 'error' ? 'エラー' : '警告'}：${finding.title}${finding.detail ? `（${finding.detail}）` : ''}`}>
+        <span className="ttl">{finding.title}</span>
         {finding.detail && <span className="detail">{finding.detail}</span>}
       </button>
       {finding.replacement !== undefined ? (
@@ -214,6 +211,29 @@ function Issue({ finding, editor, onPick, active }: { finding: ReportFinding; ed
         </button>
       )}
     </li>
+  )
+}
+
+/**
+ * エラーと警告の意味（指摘の一覧の上。1つずつの札「手順書」「補助」の代わり。提出前チェックと同じ形。mockups/v31 案1）。
+ * 補助の指摘にもエラーがあり、札と色が食い違って分かりにくかったため。印は指摘の一覧と同じ（エラー：× の丸、警告：! のひし形）
+ */
+function SeverityLegend() {
+  return (
+    <p className="sev-legend">
+      <span>
+        <i className="dot" aria-hidden="true" />
+        <span>
+          <b className="e">エラー</b>：直してから出す
+        </span>
+      </span>
+      <span>
+        <i className="dot warning" aria-hidden="true" />
+        <span>
+          <b className="w">警告</b>：できれば直す
+        </span>
+      </span>
+    </p>
   )
 }
 
@@ -276,6 +296,7 @@ export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEdit
         <Meter label="図の枚数" value={`${figures}枚（目安 ${figureMax}枚まで）`} ok={figures <= figureMax} ratio={figures / figureMax} />
       </div>
       <div ref={listRef}>
+      {findings.length > 0 && <SeverityLegend />}
       {findings.length === 0 ? (
         <div className="empty">✓ 指摘はありません。PDFを書き出せます。</div>
       ) : (

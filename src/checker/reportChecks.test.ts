@@ -31,7 +31,8 @@ function cleanReport(): Report {
   r = ops.setText(r, 'p5', '袖口には細かいピンタックを施した。')
   r = {
     ...r,
-    abstract: { paragraphs: [{ type: 'paragraph', id: 'a1', content: [{ type: 'text', text: 'あ'.repeat(700) + 'である。' }] }] },
+    // 抄録は704字（1文は88字。150字より長い文は「1文が長すぎる」の指摘になる）
+    abstract: { paragraphs: [{ type: 'paragraph', id: 'a1', content: [{ type: 'text', text: ('あ'.repeat(84) + 'である。').repeat(8) }] }] },
     body: r.body.map((c) => ({
       ...c,
       blocks: c.blocks.map((b) =>
@@ -177,6 +178,36 @@ describe('確認済み（補助の指摘を、学生がこのままにする）'
     expect(findings.some((f) => f.ruleId === 'sentence-end' && f.blockId === 'p1')).toBe(false)
     expect(findings.some((f) => f.ruleId === 'desu-masu' && f.blockId === 'p1')).toBe(true)
     expect(acknowledged.map((f) => f.ruleId)).toEqual(['sentence-end'])
+  })
+})
+
+describe('絵文字・1文の長さ（補助のチェック）', () => {
+  it('絵文字は、表紙・本文・図のタイトル・引用・参考文献のどこでもエラーにする（確認済みにもできる）', () => {
+    let r = ops.setText(cleanReport(), 'p1', '筆者が担当したのは、主人公の衣装である😊。')
+    r = ops.setText(r, 'f1', 'デザイン画✨')
+    r = { ...r, basicInfo: { ...r.basicInfo, name: '文化　花子🌸' } }
+    r = { ...r, references: [{ type: 'web', id: 'ref2', siteTitle: '衣装の歴史👗まとめ', url: 'https://example.com/', accessedOn: '2026-08-18' }] }
+    const emoji = checkReport(r, currentConfig, layout()).filter((f) => f.ruleId === 'emoji')
+    expect(emoji.every((f) => f.severity === 'error' && f.source === 'supplementary' && f.title === '絵文字は使わない' && f.key)).toBe(true)
+    expect(emoji.map((f) => [f.area, f.blockId, f.detail])).toEqual([
+      ['cover', 'basic:name', '「🌸」を消す'],
+      ['body', 'p1', '「😊」を消す'],
+      ['body', 'f1', '「✨」を消す'],
+      ['references', undefined, '1つ目の文献の「👗」を消す'],
+    ])
+    const acked = { ...r, acknowledged: emoji.map((f) => f.key!) }
+    expect(checkReport(acked, currentConfig, layout()).some((f) => f.ruleId === 'emoji')).toBe(false)
+  })
+
+  it('150字より長い文は、段落だけで警告する（見出し・図のタイトルには当てない）', () => {
+    const long = `${'あ'.repeat(160)}である。`
+    let r = ops.setText(cleanReport(), 'p4', `前身頃には金のブレードを縫い付けた。${long}`)
+    r = ops.setText(r, 's1', long)
+    r = ops.setText(r, 'f1', long)
+    const found = checkReport(r, currentConfig, layout()).filter((f) => f.ruleId === 'long-sentence')
+    expect(found).toEqual([
+      expect.objectContaining({ severity: 'warning', source: 'supplementary', area: 'body', blockId: 'p4', start: 18, end: 182, title: '1文が長すぎる（164字）。「。」で区切る' }),
+    ])
   })
 })
 

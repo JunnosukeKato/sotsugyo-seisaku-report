@@ -14,6 +14,7 @@ import { BackupDialog, CourseChangeDialog, CourseMenu, ReferencesDialog } from '
 import { ExportDialog } from './app/ExportDialog'
 import { ConflictDialog, IdMismatchDialog, LoginGate, OtherAccountDialog, ReloginDialog, WipeDialog, type DriveControls, type GateState } from './app/DriveUi'
 import { Icon } from './app/icons'
+import { openLastPlace, useRememberPlace } from './app/lastPlace'
 import { Palette } from './app/Palette'
 import { PhoneChrome } from './app/Phone'
 import { useKeyboardInset, useNarrow, useSwipe, useWheelPaging } from './app/uiShared'
@@ -160,6 +161,9 @@ export default function App() {
     void drive?.flush()
   })
   const editorRef = useRef<ReportEditor | null>(null)
+  // 最後に見ていたページ：開いたときにそのページを見せ（placeOpened）、そのあとは見ているページを覚える（別のタブで開いて書けない間は覚えない）
+  const [placeOpened, setPlaceOpened] = useState(false)
+  useRememberPlace(editor, snap, placeOpened && !tabLock.locked)
   const configRef = useRef<YearConfig>(currentConfig)
   /** 公開中の年度の設定（「最初から作り直す」は、公開中の年度で作る） */
   const publishedRef = useRef<YearConfig>(currentConfig)
@@ -349,6 +353,9 @@ export default function App() {
         // 開発中だけ、自動テストから操作できるようにする
         if (import.meta.env.DEV) Object.assign(window, { __editor: ed })
         await ed.render()
+        // 前に開いたとき最後に見ていたページを見せる（新しい原稿は表紙から。はじめての案内が出るときは、案内が表紙に戻す）
+        if (saved) await openLastPlace(ed)
+        setPlaceOpened(true)
         if (!drive || stoppedRef.current) startGuide(loaded, report, !saved)
         // 紙面の準備より先にログインが済んでいたら、ここで始める
         else if (drive.tokenValid) void enter(ed)

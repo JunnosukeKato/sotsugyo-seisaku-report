@@ -4,7 +4,7 @@ import { COVER_SUBTITLE, OVERFLOW_RATIO, yearDigits } from '../layout/document'
 import type { LayoutInfo } from '../layout/measure'
 import type { Report } from '../model/types'
 import { swatchColumn } from '../model/table'
-import { checkText, DEFAULT_WORD_CHECKS, type TextFinding } from './textRules'
+import { charCount, checkText, DEFAULT_WORD_CHECKS, EMOJI_TITLE, findEmoji, type TextFinding } from './textRules'
 import type { Severity } from './types'
 
 /**
@@ -46,8 +46,9 @@ const AREA_OF_KIND: Record<EditableKind, Area> = {
   tableCell: 'body',
 }
 
-/** 体言止めの判定は段落だけにする（見出しや図のタイトル、表のセルは名詞で終わるのが普通） */
+/** 体言止め・文末の「。」・1文の長さの判定は段落だけにする（見出しや図のタイトル、表のセルは名詞で終わるのが普通） */
 const SENTENCE_KINDS: EditableKind[] = ['paragraph', 'abstractParagraph']
+const SENTENCE_RULES = ['taigen-dome', 'sentence-end', 'long-sentence']
 
 function guide(ruleId: string, severity: Severity, title: string, area: Area, extra: Partial<ReportFinding> = {}): ReportFinding {
   return { ruleId, severity, source: 'guide', title, area, ...extra }
@@ -56,7 +57,7 @@ function guide(ruleId: string, severity: Severity, title: string, area: Area, ex
 /** 抄録の文字数（空白と改行を除く） */
 export function abstractCharCount(report: Report): number {
   const num = numbering(report)
-  return report.abstract.paragraphs.reduce((n, p) => n + contentToText(p.content, num).replace(/[\s　]/g, '').length, 0)
+  return report.abstract.paragraphs.reduce((n, p) => n + charCount(contentToText(p.content, num)), 0)
 }
 
 /**
@@ -143,7 +144,7 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   for (const e of list) {
     const area = AREA_OF_KIND[e.kind]
     for (const f of checkText(e.text, words) as TextFinding[]) {
-      if ((f.ruleId === 'taigen-dome' || f.ruleId === 'sentence-end') && !SENTENCE_KINDS.includes(e.kind)) continue
+      if (SENTENCE_RULES.includes(f.ruleId) && !SENTENCE_KINDS.includes(e.kind)) continue
       const key = f.source === 'supplementary' ? `${f.ruleId}|${e.id}|${e.text.slice(f.start, f.end)}` : undefined
       findings.push({ ...f, area, blockId: e.id, ...(key ? { key } : {}) })
     }
@@ -371,7 +372,7 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   }
 
   // ---- 引用・参考文献 ----
-  for (const ref of report.references) {
+  report.references.forEach((ref, i) => {
     const missing =
       ref.type === 'book'
         ? [['著者名', ref.author], ['書名', ref.title], ['出版社', ref.publisher], ['出版年', ref.year]]
@@ -382,7 +383,20 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     // 出版年は西暦の4桁（和暦は西暦に直して載せる。それでも4桁にならなければ、そのまま載ると間違うので指摘する）
     if (ref.type === 'book' && ref.year.trim() && !/^\d{4}$/.test(yearDigits(ref.year)))
       findings.push(guide('reference-year', 'error', '引用・参考文献の出版年は、西暦の4桁で入れる', 'references', { detail: `今は「${ref.year.trim()}」（例：2019）` }))
-  }
+    // 絵文字：本文と同じく指摘する（Web サイトの名前を、ブラウザのタブから写したときなど）
+    const emoji = (ref.type === 'book' ? [ref.author, ref.title, ref.publisher, ref.pages] : [ref.siteTitle, ref.url]).flatMap(findEmoji).join('')
+    if (emoji) {
+      findings.push({
+        ruleId: 'emoji',
+        severity: 'error',
+        source: 'supplementary',
+        title: EMOJI_TITLE,
+        detail: `${i + 1}つ目の文献の「${emoji}」を消す`,
+        area: 'references',
+        key: `emoji|${ref.id}|${emoji}`,
+      })
+    }
+  })
 
   // ---- 作品写真 ----
   // ページに載るのは先頭から layout 枚（枚数を減らしても、後ろの写真は消さずに残している）

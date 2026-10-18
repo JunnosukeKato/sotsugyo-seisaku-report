@@ -168,7 +168,7 @@ await withEdge(async (browser) => {
     pdf: document.querySelector('.help-foot .help-pdf')?.getAttribute('href'),
     paper: !!document.querySelector('.palette'),
   }))
-  check('「？ 使い方」で、右の欄が使い方に替わる（項目16・見出しに移る・紙面と道具はそのまま・いちばん下に印刷用の手引き（PDF））', helpOpen.topics === 16 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf', JSON.stringify(helpOpen))
+  check('「？ 使い方」で、右の欄が使い方に替わる（項目18・見出しに移る・紙面と道具はそのまま・いちばん下に印刷用の手引き（PDF））', helpOpen.topics === 18 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf', JSON.stringify(helpOpen))
   await page.type('.help-search input', 'PDF 出ない')
   await pause0(300)
   const found = await page.evaluate(() => ({
@@ -203,6 +203,16 @@ await withEdge(async (browser) => {
   await page.click('.help-back')
   await page.click('.help-clear')
   await pause0(200)
+  // 学生が探して見つからなかった言葉（引用・参考文献・最初から・やり直・新しく）でも、その項目が先に出る
+  const firstHits = []
+  for (const q of ['引用', '参考文献', '最初から', 'やり直', '新しく']) {
+    await page.type('.help-search input', q)
+    await pause0(200)
+    firstHits.push(await page.evaluate(() => document.querySelector('.help-results .t')?.textContent ?? ''))
+    await page.click('.help-clear')
+    await pause0(100)
+  }
+  check('「引用」「参考文献」で引用・参考文献の項目、「最初から」「やり直」「新しく」で最初から作り直す項目が先に出る', firstHits.join(',') === ['引用・参考文献', '引用・参考文献', ...Array(3).fill('最初から作り直す（新しく始める）')].join(','), JSON.stringify(firstHits))
   // 使い方の「指差し確認をもう一度見る」→「いま見る」：使い方を閉じて、指差し確認を出す。Esc は「とばす」
   await page.evaluate(() => document.querySelector('.help-list [data-topic="tour"]').click())
   await page.waitForSelector('.help-action')
@@ -369,6 +379,15 @@ await withEdge(async (browser) => {
   s = await snap()
   const ruleIds = s.findings.filter((f) => f.blockId === firstParagraph).map((f) => f.ruleId)
   check('本文の誤りを見つける', ['first-person', 'digit-fullwidth', 'seisaku'].every((r) => ruleIds.includes(r)), ruleIds.join(','))
+  // エラーと警告の意味は、一覧の上に1行で出す（指摘ごとの札「手順書」「補助」はなくした。提出前チェックと同じ。mockups/v31 案1）
+  const legend = await page.evaluate(() => ({
+    text: document.querySelector('.side .sec.check .sev-legend')?.textContent ?? '',
+    aboveList: !!document.querySelector('.side .sec.check .sev-legend + .igroup'),
+    icons: [...document.querySelectorAll('.side .sev-legend .dot')].map((i) => getComputedStyle(i, '::before').content),
+    chips: document.querySelectorAll('.side .issue .src').length,
+    chipText: /手順書|補助/.test([...document.querySelectorAll('.side .issue .ttl')].map((t) => t.textContent).join('')),
+  }))
+  check('セルフチェックの一覧の上に「× エラー：直してから出す」「! 警告：できれば直す」が出て、指摘ごとの札（手順書・補助）はない', legend.text.includes('エラー：直してから出す') && legend.text.includes('警告：できれば直す') && legend.aboveList && legend.icons.join(',') === '"×","!"' && legend.chips === 0 && !legend.chipText, JSON.stringify(legend))
   await page.screenshot({ path: `${OUT}/1-findings.png` })
   for (let i = 0; i < 3; i++) {
     const fix = await page.$('.side .issue .fix')
@@ -693,10 +712,13 @@ await withEdge(async (browser) => {
 
   // ---- 自動保存：読み込み直しても残っている ----
   await new Promise((r) => setTimeout(r, 1500))
+  const pageBeforeReload = (await snap()).page
   await page.reload({ waitUntil: 'networkidle0' })
   await ready()
   s = await snap()
   check('読み込み直しても原稿が残っている（自動保存）', s.report.basicInfo.name === '文化　花子' && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'figureRow'))
+  // 最後に見ていたページは、この端末に覚えておく（ページの番号と欄の ID だけ）
+  check('読み込み直すと、表紙ではなく、最後に見ていたページ（作品写真）が開く', pageBeforeReload > 0 && s.page === pageBeforeReload && s.layout.kinds[s.page] === 'photos', `${pageBeforeReload} → ${s.page}`)
   const imgLoaded = await page.evaluate(() => { const img = document.querySelector('.page-viewport.front figure img'); return img?.src.startsWith('blob:') && img.naturalWidth > 0 })
   check('読み込み直しても写真が残っている', imgLoaded)
 
@@ -712,6 +734,17 @@ await withEdge(async (browser) => {
   s = await snap()
   const keptText = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === lastPara)?.content.map((n) => n.text ?? '').join('') ?? ''
   check('書いて0.1秒後に読み込み直しても、最後に書いた文が残っている', keptText.includes('読み込み直す直前に書いた文である。'), keptText.slice(-40))
+  const lastParaPage = await page.evaluate((id) => window.__editor.pageOfBlock(id), lastPara)
+  check('読み込み直すと、最後に書いていた段落のページが開く', lastParaPage > 0 && s.page === lastParaPage, `${s.page} / ${lastParaPage}`)
+  const place = await page.evaluate(() => localStorage.getItem('sotsugyo-seisaku-report-place') ?? '')
+  check('覚えておくのはページの番号と欄の ID だけ（原稿の文字は入れない）', /^\{"page":\d+,"blockId":"[^"]+"\}$/.test(place) && !place.includes('読み込み直す'), place)
+  // 覚えたページがもうないとき（欄が消え、ページの数も減った）は、表紙から
+  const badPlace = await page.evaluateOnNewDocument(() => localStorage.setItem('sotsugyo-seisaku-report-place', JSON.stringify({ page: 999, blockId: 'gone' })))
+  await page.reload({ waitUntil: 'networkidle0' })
+  await page.removeScriptToEvaluateOnNewDocument(badPlace.identifier)
+  await ready()
+  s = await snap()
+  check('覚えたページがもうなければ、表紙が開く', s.page === 0, String(s.page))
 
   // ---- 段落の「削除」：押したらすぐ紙面から消え、組み直す前にもう一度押しても、隣のブロックは消えない ----
   const bodyIds = () => snap().then((x) => x.report.body.flatMap((c) => c.blocks.map((b) => b.id)))

@@ -47,6 +47,11 @@ describe('言葉で探す：項目を探す', () => {
     expect(hit.line.label).toBe('iPhone')
   })
 
+  it('学生が探した言葉（引用・参考文献・最初から・やり直・新しく）で、引用・参考文献と、最初から作り直す項目が先に出る', () => {
+    for (const q of ['引用', '参考文献']) expect(ids(searchTopics(STUDENT_TOPICS, q).hits)[0], q).toBe('references')
+    for (const q of ['最初から', 'やり直', '新しく']) expect(ids(searchTopics(STUDENT_TOPICS, q).hits)[0], q).toBe('restart')
+  })
+
   it('どこにも入っていない言葉では、何も出ない', () => {
     expect(searchTopics(STUDENT_TOPICS, 'ラーメン').hits).toEqual([])
   })
@@ -76,8 +81,8 @@ describe('言葉で探す：印を付ける', () => {
 describe('使い方の項目', () => {
   const all = [...STUDENT_TOPICS, ...TEACHER_TOPICS]
 
-  it('学生用は16項目、先生用は10項目。id は重ならない', () => {
-    expect(STUDENT_TOPICS).toHaveLength(16)
+  it('学生用は18項目、先生用は10項目。id は重ならない', () => {
+    expect(STUDENT_TOPICS).toHaveLength(18)
     expect(TEACHER_TOPICS).toHaveLength(10)
     expect(new Set(all.map((t) => t.id)).size).toBe(all.length)
   })

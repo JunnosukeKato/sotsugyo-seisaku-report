@@ -326,7 +326,7 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
     return (
       <Modal key="start" title="PDFを書き出す前に" onClose={onClose}>
         <p className="lead">
-          手順書のルールに合っていない箇所（エラー）が <b className="ng">{errors.length}件</b> あります。エラーを0件にすると、提出用のPDFを書き出せます。
+          直してから出す箇所（エラー）が <b className="ng">{errors.length}件</b> あります。エラーを0件にすると、提出用のPDFを書き出せます。
         </p>
         <ul className="error-list">
           {errors.slice(0, 8).map((f, i) => (
