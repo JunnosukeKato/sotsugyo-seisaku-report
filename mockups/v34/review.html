@@ -1,0 +1,104 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v34 最初から作り直す</title>
+<!-- 画面の絵は node scripts/mockup-shots-v34.mjs で作る（本物の学生用ツールを開き、案ごとに一部を書き換えて写したもの）。このページの写しは同じスクリプトの review で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  section { max-width: 1240px; margin: 0; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 3px; }
+  figcaption span { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff !important; font-size: 11.5px !important; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .why { display: block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #e8ebf5; color: var(--accent) !important; font-size: 13px !important; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > div { background: #fff; align-self: stretch; }
+  .row > .lbl { grid-column: 1 / -1; padding: 7px 16px 5px !important; background: #f4f2ee !important; font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+  /* 絵の高さが、だいたいそろう幅（絵の横÷縦の比） */
+  .r-now { grid-template-columns: 1.78fr 1.32fr 0.46fr; }
+  .r-a-pc { grid-template-columns: 0.68fr 1.11fr 0.93fr; }
+  .r-b { grid-template-columns: 0.68fr 2.17fr 0.46fr; }
+  .r-c { grid-template-columns: 0.68fr 0.68fr 1.65fr 0.46fr; }
+  .r-ph2 { grid-template-columns: 250px 250px 1fr; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 10px; border: 1px solid #ddd; }
+  .row small { display: block; padding: 6px 4px 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .row small b { color: var(--ink); }
+  .note { display: flex; align-items: center; padding: 14px 22px !important; font-size: 13.5px; color: var(--muted); line-height: 1.8; background: #faf9f7 !important; }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 10px 16px 12px; font-size: 13.5px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: var(--ok); }
+  .pw .weak b { color: #b5443b; }
+  .now { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+  .now > b { display: block; padding: 10px 16px 8px; font-size: 14px; border-bottom: 1px solid var(--line); }
+</style>
+</head>
+<body>
+
+<section id="startover">
+  <h1>v34　「最初から作り直す」の場所</h1>
+  <p class="lead">新しく始めたい学生が、やり方を見つけられません（いまは「バックアップ」の窓のいちばん下だけ）。1つ選んでください。<br>どの案でも、前の原稿は「自動の控え」に残り、「この時点に戻す」で戻せます。画面は本物のツールに、案の部分だけ書き足して写したものです。</p>
+
+  <div class="now"><b>いま</b>
+    <div class="row r-now">
+      <div class="ph"><a href="shots/pc-now-full.png"><img src="shots/pc-now-full.png" alt=""></a><small><b>パソコン</b>：右の欄の「バックアップ」を押すと…</small></div>
+      <div class="ph"><a href="shots/pc-now-dialog.png"><img src="shots/pc-now-dialog.png" alt=""></a><small>…窓のいちばん下の左にある</small></div>
+      <div class="ph"><a href="shots/ph-now-menu.png"><img src="shots/ph-now-menu.png" alt=""></a><small><b>スマホ</b>：メニューの「バックアップ」から</small></div>
+    </div>
+  </div>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　ボタンの名前を「バックアップ・作り直す」にする<span class="rec">おすすめ</span></b><span>窓の中では、いちばん下に区切って出し、「いまの原稿は自動の控えに残ります」と書きます。</span><span class="why">おすすめの理由：場所は1つのまま名前で見つかり、すぐ上に戻し方（自動の控え）が見えて安心だから。</span></figcaption>
+    <div class="row r-a-pc">
+      <div class="lbl">パソコン</div>
+      <div class="ph"><a href="shots/pc-a-panel.png"><img src="shots/pc-a-panel.png" alt=""></a><small>右の欄</small></div>
+      <div class="ph"><a href="shots/pc-a-dialog.png"><img src="shots/pc-a-dialog.png" alt=""></a><small>窓：いちばん下に区切って出す</small></div>
+      <div class="ph"><a href="shots/pc-a-confirm.png"><img src="shots/pc-a-confirm.png" alt=""></a><small>押すと、いまと同じ確かめ</small></div>
+    </div>
+    <div class="row r-ph2">
+      <div class="lbl">スマホ</div>
+      <div class="ph"><a href="shots/ph-a-menu.png"><img src="shots/ph-a-menu.png" alt=""></a><small>メニュー</small></div>
+      <div class="ph"><a href="shots/ph-a-dialog.png"><img src="shots/ph-a-dialog.png" alt=""></a><small>窓</small></div>
+      <div class="note">使い方の説明も、この名前にそろえます。<br>手順書のボタンが出る年は、3つ並びで少し狭くなります。</div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>ボタンの名前で見つかります。</div><div class="weak"><b>弱いところ</b><br>名前が長くなり、作り直すまで2回押します。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　「最初から作り直す」を、それだけの小さなボタンにする</b><span>「バックアップ」「使い方」の下（スマホはメニューの中）。押すと、すぐ確かめが出ます。窓の中のボタンも残します。</span></figcaption>
+    <div class="row r-b">
+      <div class="ph"><a href="shots/pc-b-panel.png"><img src="shots/pc-b-panel.png" alt=""></a><small><b>パソコン</b>：右の欄</small></div>
+      <div class="ph"><a href="shots/pc-b-confirm.png"><img src="shots/pc-b-confirm.png" alt=""></a><small>押すと、すぐ確かめ（戻し方を1行足す）</small></div>
+      <div class="ph"><a href="shots/ph-b-menu.png"><img src="shots/ph-b-menu.png" alt=""></a><small><b>スマホ</b>：メニュー</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>1回押すだけ。いちばん見つけやすい。</div><div class="weak"><b>弱いところ</b><br>いつも見えるので、間違えて押しやすい。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C　ボタンはそのまま。吹き出しと案内で知らせる</b><span>マウスを乗せたとき・使い方で探したとき・はじめての案内の最後に、ひとこと出します。メニュー・窓・確かめは、いまと同じです。</span></figcaption>
+    <div class="row r-c">
+      <div class="ph"><a href="shots/pc-c-panel.png"><img src="shots/pc-c-panel.png" alt=""></a><small><b>パソコン</b>：マウスを乗せたとき</small></div>
+      <div class="ph"><a href="shots/pc-c-help.png"><img src="shots/pc-c-help.png" alt=""></a><small>使い方で「新しく」と探す</small></div>
+      <div class="ph"><a href="shots/pc-c-guide.png"><img src="shots/pc-c-guide.png" alt=""></a><small>はじめての案内の最後</small></div>
+      <div class="ph"><a href="shots/ph-c-help.png"><img src="shots/ph-c-help.png" alt=""></a><small><b>スマホ</b>：使い方で探す（吹き出しはなし）</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>画面の形が変わりません。</div><div class="weak"><b>弱いところ</b><br>画面そのものには出ません。</div></div>
+  </figure>
+</section>
+
+</body>
+</html>
