@@ -1,6 +1,6 @@
 // スマホ版の動作確認（Edge をスマホの画面の大きさ・タッチ操作にして動かす）。
 // 使い方: node scripts/e2e/phone.mjs（開発サーバーが http://localhost:5173 で動いていること）
-import { existsSync, mkdirSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { withEdge } from '../poc/edge.mjs'
 import { stubConfig } from './configStub.mjs'
@@ -40,7 +40,7 @@ const undoPlacement = async (page) => {
   return page.evaluate(() => {
     const toast = document.querySelector('.undo-toast')?.getBoundingClientRect()
     if (!toast) return { shown: false }
-    const parts = ['.pager', '.unzoom', '.sel-bar > *', '.page-band'].flatMap((sel) => [...document.querySelectorAll(sel)].map((el) => ({ sel, r: el.getBoundingClientRect() }))).filter(({ r }) => r.height > 0)
+    const parts = ['.pager', '.unzoom', '.sel-bar > *', '.page-band', '.page-side > *'].flatMap((sel) => [...document.querySelectorAll(sel)].map((el) => ({ sel, r: el.getBoundingClientRect() }))).filter(({ r }) => r.height > 0)
     const hit = (r) => r.top < toast.bottom - 0.5 && r.bottom > toast.top + 0.5 && r.left < toast.right - 0.5 && r.right > toast.left + 0.5
     return {
       shown: true,
@@ -469,6 +469,15 @@ await withEdge(async (browser) => {
 
   // はじめて使う学生の試し（v32 のあと）で見つかったこと（横向きの「＋」・表のタイトル・表の行を消せないとき・抄録を書き始めたあとの［戻す］）
   await firstTimeFixesPhone(browser)
+
+  // 書いている欄が、上の案内・下の書く欄に隠れない（縦向き・横向き・小さい画面。はじめての案内のサブタイトルが案内に隠れていた）
+  await writingVisibleCheck(browser)
+
+  // 2回目から開くのが速い（最後に見ていたページを先に見せる。「（初回は数秒かかります）」は、はじめて開いたときだけ）
+  await quickOpenCheck(browser)
+
+  // 横向き：作品写真のページの並べ方と、選んだ写真の道具を、紙面の右の列に出す（mockups/v33 案A）
+  await sideToolsCheck(browser)
 })
 
 /**
@@ -778,9 +787,10 @@ async function bandCheck(browser) {
   const landPhoto = await band()
   check('横向き：作品写真の帯も紙面の右で、画面の中に収まり、下の道具に重ならない', landPhoto.shown && landPhoto.rightOfPage && landPhoto.inside && !landPhoto.overlapsBar && !landPhoto.scrollX, JSON.stringify(landPhoto))
   // 横向き：作品写真を外したときの知らせも、ページ送り・下の道具・紙面の右の帯に重ならない（戻すと写真も戻る）
+  // （横向きでは、選んだ写真の道具は紙面の右の列に出る。mockups/v33 案A）
   await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
   await wait(300)
-  await page.evaluate(() => [...document.querySelectorAll('.sel-bar .tb')].find((b) => b.textContent.includes('外す')).click())
+  await page.evaluate(() => [...document.querySelectorAll('.page-side .tb')].find((b) => b.textContent.includes('外す')).click())
   await ready()
   await wait(400)
   const landUndo = await undoPlacement(page)
@@ -1335,6 +1345,515 @@ async function firstTimeFixesPhone(browser) {
     startNote.text.includes('抄録を書き始めました') && startNote.button && !startNote.sheet && back.started === false && back.text.includes('抄録を書き始める前に戻しました') && back.band.includes('先生の許可が出た'),
     JSON.stringify({ startNote, back }),
   )
+  await context.close()
+}
+
+/**
+ * 横向きのスマホ：作品写真のページの道具を、紙面の右の列（帯と同じ列）に出す（mockups/v33 案A）：
+ * - 6つの並べ方は右の列に3列×2段（絵の下に1行の名前・高さ 44px 以上・いまの並べ方に印と aria-pressed）。下の道具には出さない。紙面・帯・ページ送りに重ならない
+ * - 押すと並べ方が変わる（本物のボタン）
+ * - 空いている枠があるときは、帯が同じ列の上に出て、どちらも全部見える
+ * - 写真を押して選ぶと、「この写真」の道具（差し替え・外す・全体を入れる（切らない））も右の列に出る（高さ 44px 以上）
+ * - 紙面はほかのページと同じ大きさで、ページ送りに隠れない。844×390・800×360 で画面が横にはみ出さない
+ * - 縦向きは今までどおり（下の道具）
+ */
+async function sideToolsCheck(browser) {
+  const context = await browser.createBrowserContext()
+  const page = await context.newPage()
+  await noHotReload(page)
+  await stubConfig(page)
+  page.on('pageerror', (e) => console.log('pageerror(side):', e.message))
+  await page.evaluateOnNewDocument(() => {
+    try {
+      localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+    } catch {}
+  })
+  const PORTRAIT = { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
+  const LANDSCAPE = { width: 844, height: 390, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
+  const SMALL = { width: 800, height: 360, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
+  await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
+  await page.setViewport(PORTRAIT)
+  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  const ready = () =>
+    page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
+  await ready()
+  // はじめての案内は「あとで入力する」で閉じる
+  await page.waitForSelector('.guide.step-course .g-opts button')
+  await page.evaluate(() => document.querySelector('.g-opts button').click())
+  await page.waitForSelector('.guide.step-word .g-word-opt.no')
+  await page.evaluate(() => document.querySelector('.g-word-opt.no').click())
+  await page.waitForSelector('.guide .g-later')
+  await page.evaluate(() => document.querySelector('.guide .g-later').click())
+  await page.evaluate(() => window.__editor.finishEditing())
+  await ready()
+  // 見本の原稿。作品写真は2枚（上下）で、どちらの枠にも写真がある
+  const { setupWriting } = await import('./sampleReport.mjs')
+  await page.evaluate(setupWriting)
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: '00ZZ0123' }, workPhotos: { layout: 2, columns: 1, imageIds: ['g-photo1', 'g-process'] } })))
+  await wait(500)
+  await ready()
+  const turnTo = async (vp) => {
+    await page.setViewport(vp)
+    await wait(800)
+    await ready()
+  }
+  const showPhotos = async () => {
+    await page.evaluate(() => {
+      window.__editor.select(null)
+      window.__editor.goToPage(window.__editor.getSnapshot().layout.kinds.indexOf('photos'), 'none')
+    })
+    await ready()
+    await wait(400)
+  }
+  const photos = () => page.evaluate(() => window.__editor.getSnapshot().report.workPhotos)
+  /** 右の列のようす：並べ方・選んだ写真の道具の位置と大きさ、紙面・帯・ページ送りとの重なり、画面の横のはみ出し */
+  const side = () =>
+    page.evaluate(() => {
+      const rect = (el) => {
+        const r = el.getBoundingClientRect()
+        return { left: r.left, top: r.top, right: r.right, bottom: r.bottom, height: r.height }
+      }
+      const hit = (a, b) => a.left < b.right - 0.5 && a.right > b.left + 0.5 && a.top < b.bottom - 0.5 && a.bottom > b.top + 0.5
+      const inside = (r) => r.left >= -0.5 && r.top >= -0.5 && r.right <= innerWidth + 0.5 && r.bottom <= innerHeight + 0.5
+      const pageEl = rect(document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current'))
+      const pagerEl = document.querySelector('.pager')
+      const pager = pagerEl ? rect(pagerEl) : null
+      const col = document.querySelector('.page-side')
+      const band = document.querySelector('.page-band')
+      const bandR = band ? rect(band) : null
+      const lays = [...document.querySelectorAll('.page-side .lay')].map((b) => {
+        const n = b.querySelector('.lay-n').getBoundingClientRect()
+        const sub = b.querySelector('.lay-sub')?.getBoundingClientRect()
+        return { name: b.textContent.trim(), r: rect(b), on: b.classList.contains('on'), pressed: b.getAttribute('aria-pressed'), oneLine: !sub || Math.abs(sub.top - n.top) < 1 }
+      })
+      const tools = [...document.querySelectorAll('.page-side :is(.tb, .photo-sw)')].map((b) => ({ name: b.textContent.trim(), r: rect(b), role: b.getAttribute('role'), checked: b.getAttribute('aria-checked') }))
+      const cards = [...document.querySelectorAll('.page-side > *')].map(rect)
+      const buttons = [...lays, ...tools]
+      return {
+        shown: !!col,
+        selBar: !!document.querySelector('.sel-bar'),
+        label: [...document.querySelectorAll('.page-side .ctx-label')].map((e) => e.textContent),
+        lays: lays.map((l) => `${l.name}:${Math.round(l.r.height)}${l.on ? ':on' : ''}:${l.pressed}${l.oneLine ? '' : ':2行'}`),
+        tools: tools.map((t) => `${t.name}:${Math.round(t.r.height)}${t.role ? `:${t.role}=${t.checked}` : ''}`),
+        rows: new Set(lays.map((l) => Math.round(l.r.top))).size,
+        cols: new Set(lays.map((l) => Math.round(l.r.left))).size,
+        minH: buttons.length ? Math.round(Math.min(...buttons.map((b) => b.r.height)) * 10) / 10 : 0,
+        oneLine: lays.every((l) => l.oneLine),
+        pressedOk: lays.every((l) => l.pressed === String(l.on)) && lays.filter((l) => l.on).length === 1,
+        band: band?.textContent ?? '',
+        bandInColumn: !!band && !!col?.contains(band),
+        bandButtonH: band ? Math.round(band.querySelector('button').getBoundingClientRect().height) : 0,
+        bandAbove: !bandR || (cards.length === 2 && bandR.bottom <= cards[1].top + 0.5),
+        overPage: cards.some((c) => hit(c, pageEl)) || (!!bandR && hit(bandR, pageEl)),
+        overBand: !!bandR && buttons.some((b) => hit(b.r, bandR)),
+        overPager: !!pager && (cards.some((c) => hit(c, pager)) || (!!bandR && hit(bandR, pager))),
+        rightOfPager: !!col && !!pager && col.getBoundingClientRect().left >= pager.right - 0.5,
+        allInside: cards.length > 0 && cards.every(inside) && (!bandR || inside(bandR)),
+        pageCovered: !!pager && pager.top < pageEl.bottom - 0.5 && pager.left < pageEl.right && pager.right > pageEl.left,
+        pageW: Math.round((pageEl.right - pageEl.left) * 10) / 10,
+        scrollX: document.documentElement.scrollWidth > innerWidth + 1,
+      }
+    })
+  const placed = (s) => s.shown && !s.selBar && s.minH >= 44 && !s.overPage && !s.overBand && !s.overPager && s.rightOfPager && s.allInside && !s.pageCovered && !s.scrollX
+  const tapButton = async (sel, text) => {
+    const el = await page.evaluateHandle((sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.trim() === text), sel, text)
+    await el.tap()
+    await wait(300)
+    await ready()
+    await wait(300)
+  }
+
+  // 横向き（844×390）：紙面の大きさ（表紙のページで測る。作品写真のページも同じ大きさのまま）
+  await turnTo(LANDSCAPE)
+  await page.evaluate(() => window.__editor.goToPage(0, 'none'))
+  await ready()
+  await wait(300)
+  const coverW = await page.evaluate(() => Math.round(document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current').getBoundingClientRect().width * 10) / 10)
+  // 何も選んでいないとき：6つの並べ方が右の列に3列×2段。下の道具には出さない
+  await showPhotos()
+  const land = await side()
+  await page.screenshot({ path: `${OUT}/20-side-layouts.png` })
+  check(
+    '横向き：作品写真のページの6つの並べ方は、紙面の右の列に3列×2段（絵の下に1行の名前・高さ 44px 以上・いまの「2枚 上下」に印と aria-pressed）。下の道具には出さない',
+    placed(land) && land.label.join() === '並べ方' && land.lays.length === 6 && land.lays.map((l) => l.split(':')[0]).join() === '1枚,2枚左右,2枚上下,4枚,6枚2列,6枚3列' && land.rows === 2 && land.cols === 3 && land.oneLine && land.pressedOk && land.lays[2].includes(':on:true'),
+    JSON.stringify(land),
+  )
+  check('横向き：紙面はほかのページと同じ大きさのままで、ページ送りに隠れず、並べ方にも重ならない（画面は横にはみ出さない）', land.pageW === coverW && !land.pageCovered && !land.overPage && !land.scrollX, JSON.stringify({ coverW, pageW: land.pageW, pageCovered: land.pageCovered, overPage: land.overPage }))
+  // 「2枚 左右」を押すと、紙面の並べ方が変わる（右の列のボタンは本物）
+  await tapButton('.page-side .lay', '2枚左右')
+  const tapped = { photos: await photos(), side: await side() }
+  const slots = await page.evaluate(() => [0, 1].map((i) => { const r = document.querySelector(`.page-viewport.front [data-photo-slot="${i}"]`).getBoundingClientRect(); return { left: r.left, right: r.right, top: r.top } }))
+  await page.screenshot({ path: `${OUT}/20b-side-layout-tapped.png` })
+  check(
+    '横向き：右の列の「2枚 左右」を押すと、紙面の写真が左右に並び、押したボタンに印が移る',
+    tapped.photos.layout === 2 && tapped.photos.columns === 2 && slots[0].right <= slots[1].left + 0.5 && Math.abs(slots[0].top - slots[1].top) < 1 && tapped.side.lays[1].includes(':on:true') && tapped.side.pressedOk && placed(tapped.side),
+    JSON.stringify({ photos: tapped.photos, slots, lays: tapped.side.lays }),
+  )
+  await tapButton('.page-side .lay', '2枚上下')
+
+  // 下の枠が空いているとき：帯「下の枠に、まだ写真がありません［写真を選ぶ］」が同じ列の上に出て、帯も並べ方も全部見える
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: { ...r.workPhotos, imageIds: ['g-photo1', ''] } })))
+  await ready()
+  await showPhotos()
+  const withBand = await side()
+  await page.screenshot({ path: `${OUT}/20c-side-band.png` })
+  check(
+    '横向き：空いている枠があるときは、帯が並べ方と同じ右の列の上に出て（帯のボタンは高さ 44px 以上）、帯も並べ方も全部見え、どちらも紙面に重ならない',
+    placed(withBand) && withBand.bandInColumn && withBand.band.includes('下の枠に、まだ写真がありません') && withBand.bandButtonH >= 44 && withBand.bandAbove && withBand.lays.length === 6,
+    JSON.stringify(withBand),
+  )
+
+  // 写真を押して選ぶ：「この写真（1枚目）」の道具（差し替え・外す・全体を入れる（切らない））も右の列に出る。スイッチは押すと切り替わる
+  const photoAt = await page.evaluate(() => {
+    const r = document.querySelector('.page-viewport.front [data-photo-slot="0"]').getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })
+  await page.touchscreen.tap(photoAt.x, photoAt.y)
+  await wait(400)
+  const chosen = await side()
+  await page.screenshot({ path: `${OUT}/20d-side-photo.png` })
+  await tapButton('.page-side .photo-sw', '全体を入れる（切らない）')
+  const switched = { checked: await page.evaluate(() => document.querySelector('.page-side .photo-sw')?.getAttribute('aria-checked')), whole: (await photos()).whole?.[0] }
+  check(
+    '横向き：写真を押して選ぶと、「この写真（1枚目）」の道具（差し替え・外す・全体を入れる（切らない））が下の道具ではなく右の列に出て（高さ 44px 以上）、スイッチで切り替えられる',
+    placed(chosen) && chosen.label.join() === 'この写真（1枚目）' && chosen.tools.map((t) => t.split(':')[0]).join() === '差し替え,外す,全体を入れる（切らない）' && chosen.tools[2].includes('switch=false') && chosen.bandInColumn && chosen.bandAbove && switched.checked === 'true' && switched.whole === true,
+    JSON.stringify({ chosen, switched }),
+  )
+  await page.evaluate(() => window.__editor.select(null))
+  await wait(300)
+
+  // 800×360：帯と並べ方・選んだ写真の道具が右の列に全部見え、紙面・ページ送りに重ならない。画面は横にはみ出さない
+  await turnTo(SMALL)
+  await showPhotos()
+  const small = await side()
+  await page.screenshot({ path: `${OUT}/20e-side-800x360.png` })
+  await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
+  await wait(400)
+  const smallChosen = await side()
+  await page.screenshot({ path: `${OUT}/20f-side-800x360-photo.png` })
+  await page.evaluate(() => window.__editor.select(null))
+  await wait(300)
+  check(
+    '800×360 の横向きでも、帯と並べ方（3列×2段）・選んだ写真の道具が右の列に全部見え（高さ 44px 以上）、紙面・帯・ページ送りに重ならず、紙面はページ送りに隠れない（横にはみ出さない）',
+    placed(small) && small.bandInColumn && small.bandAbove && small.rows === 2 && small.cols === 3 && small.oneLine && placed(smallChosen) && smallChosen.tools.length === 3 && smallChosen.bandAbove,
+    JSON.stringify({ small, smallChosen }),
+  )
+
+  // 縦向き：今までどおり、並べ方と選んだ写真の道具は下の道具に出る（右の列は出さない）
+  await turnTo(PORTRAIT)
+  await showPhotos()
+  const portrait = await page.evaluate(() => ({ side: !!document.querySelector('.page-side'), label: document.querySelector('.sel-bar .ctx-label')?.textContent, lays: document.querySelectorAll('.sel-bar .lay').length }))
+  await page.screenshot({ path: `${OUT}/20g-portrait.png` })
+  await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
+  await wait(400)
+  const portraitChosen = await page.evaluate(() => ({ side: !!document.querySelector('.page-side'), label: document.querySelector('.sel-bar .ctx-label')?.textContent, tools: [...document.querySelectorAll('.sel-bar .tb')].map((b) => b.textContent.trim()) }))
+  check(
+    '縦向きは今までどおり：並べ方は下の道具に出て、写真を選ぶと下の道具が「この写真（1枚目）」に替わる（右の列は出さない）',
+    !portrait.side && portrait.label === '並べ方' && portrait.lays === 6 && !portraitChosen.side && portraitChosen.label === 'この写真（1枚目）' && portraitChosen.tools.join() === '差し替え,外す',
+    JSON.stringify({ portrait, portraitChosen }),
+  )
+  await context.close()
+}
+
+/**
+ * スマホで欄を書いている間、紙面のその欄が、上の案内・下の書く欄・キーボードに隠れない（はじめて使う学生の試しで、案内に沿ってサブタイトルを
+ * 書くとき、紙面のサブタイトルの行が案内の下に隠れ、どこに入るのか見えなかった）。縦向き 390×844・横向き 844×390・小さい画面 360×640 で：
+ * - はじめての案内の学籍番号・氏名・サブタイトル（タップする前も、案内が欄を隠さない。書いている間は、書く欄の「完了」も隠さない）
+ * - キーボードを出したとき（書く欄がキーボードの分だけ上がる。CSS の変数 --kb で試す）
+ * - 案内を閉じたあとの表紙の欄と、本文の段落
+ * - 書き終えると、紙面の上下に足した余白はなくなり、ページ全体の表示に戻る
+ * 設定は、ページの中で fetch を差し替えて返す（要求の差し替えは使わない）
+ */
+async function writingVisibleCheck(browser) {
+  const config = JSON.parse(readFileSync(new URL('./config-fixture.json', import.meta.url), 'utf8'))
+  const views = [
+    ['縦向き 390×844', { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, 300],
+    ['横向き 844×390', { width: 844, height: 390, deviceScaleFactor: 2, isMobile: true, hasTouch: true, isLandscape: true }, 0],
+    ['小さい画面 360×640', { width: 360, height: 640, deviceScaleFactor: 2, isMobile: true, hasTouch: true }, 260],
+  ]
+  for (const [name, view, keyboard] of views) {
+    const context = await browser.createBrowserContext()
+    const page = await context.newPage()
+    page.on('pageerror', (e) => console.log('pageerror(writing):', e.message))
+    await page.evaluateOnNewDocument((config) => {
+      const Real = window.WebSocket
+      window.WebSocket = function (url, protocols) {
+        if (String(protocols).includes('vite-hmr')) return { readyState: 0, addEventListener() {}, removeEventListener() {}, send() {}, close() {} }
+        return new Real(url, protocols)
+      }
+      const realFetch = window.fetch.bind(window)
+      window.fetch = (input, init) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+        if (/script\.google(usercontent)?\.com/.test(url)) return Promise.resolve(new Response(JSON.stringify({ ok: true, year: config.fiscalYear, config }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+        return realFetch(input, init)
+      }
+      try {
+        localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+      } catch {}
+    }, config)
+    await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
+    await page.setViewport(view)
+    await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+    const ready = () =>
+      page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
+    await ready()
+    const tag = name.split(' ')[0]
+    const problems = []
+    const seen = []
+    /** 書いている欄の位置と、それを隠しうるもの（案内・書く欄・キーボード kb px）。「完了」が押せるか（案内に隠れていないか） */
+    const geometry = (kb = 0) =>
+      page.evaluate((kb) => {
+        const id = window.__editor.getSnapshot().editingId
+        const el = id && [...document.querySelectorAll(`.page-viewport.front [data-vivliostyle-page-container].is-current [data-block-id="${CSS.escape(id)}"]`)].find((e) => e.getBoundingClientRect().height > 0)
+        const f = el?.getBoundingClientRect()
+        const shown = (sel) => {
+          const e = document.querySelector(sel)
+          const r = e?.getBoundingClientRect()
+          return r && r.width > 0 && r.height > 0 && getComputedStyle(e).visibility !== 'hidden' ? r : null
+        }
+        const hit = (r) => !!r && !!f && r.top < f.bottom - 0.5 && r.bottom > f.top + 0.5 && r.left < f.right && r.right > f.left
+        const stage = document.querySelector('.stage').getBoundingClientRect()
+        const done = document.querySelector('.edit-sheet.open .done')?.getBoundingClientRect()
+        return {
+          id,
+          field: f ? [Math.round(f.top), Math.round(f.bottom)] : null,
+          tip: hit(shown('.guide .g-tip')),
+          sheet: hit(shown('.edit-sheet.open')),
+          inStage: !!f && f.top >= stage.top - 0.5 && f.bottom <= stage.bottom + 0.5 && f.bottom <= innerHeight - kb + 0.5,
+          done: !!done && !!document.elementFromPoint(done.left + done.width / 2, done.top + done.height / 2)?.closest('.edit-sheet .done'),
+        }
+      }, kb)
+    const record = async (what, kb = 0) => {
+      const g = await geometry(kb)
+      seen.push(`${what}:${g.field?.join('-') ?? 'none'}`)
+      if (!g.field || g.tip || g.sheet || !g.inStage || !g.done) problems.push({ what, ...g })
+    }
+    const tapField = async (id) => {
+      const at = await page.evaluate((id) => {
+        const el = [...document.querySelectorAll(`.page-viewport.front [data-vivliostyle-page-container].is-current [data-block-id="${CSS.escape(id)}"]`)].find((e) => e.getBoundingClientRect().width > 0)
+        const r = el.getBoundingClientRect()
+        const t = document.querySelector('.guide .g-tip')?.getBoundingClientRect()
+        const covered = !!t && t.top < r.bottom && t.bottom > r.top && t.left < r.right && t.right > r.left
+        return { x: r.left + Math.min(r.width / 2, 30), y: r.top + r.height / 2, covered }
+      }, id)
+      if (at.covered) problems.push({ what: `${id}（タップする前）`, covered: true })
+      await page.touchscreen.tap(at.x, at.y)
+      await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 10000 }, id).catch(() => problems.push({ what: `${id}（タップしても書く欄が開かない）` }))
+      await wait(500)
+    }
+    /** キーボードを出したとき（iPhone と同じく、見えている所（visualViewport）が低くなり、書く欄がキーボードの分だけ上がる） */
+    const withKeyboard = async (what) => {
+      if (!keyboard) return
+      await page.evaluate((kb) => {
+        Object.defineProperty(window.visualViewport, 'height', { configurable: true, get: () => window.innerHeight - kb })
+        window.visualViewport.dispatchEvent(new Event('resize'))
+      }, keyboard)
+      await wait(500)
+      await record(`${what}（キーボード）`, keyboard)
+      await page.evaluate(() => {
+        delete window.visualViewport.height
+        window.visualViewport.dispatchEvent(new Event('resize'))
+      })
+      await wait(300)
+    }
+    const roomLeft = () => page.evaluate(() => { const s = document.querySelector('.page-scroller'); return s.style.getPropertyValue('--reveal-top') + s.style.getPropertyValue('--reveal-bottom') })
+
+    // はじめての案内：コース →（今年度だけ）Word は「いいえ」→ 学籍番号・氏名・サブタイトル
+    await page.waitForSelector('.guide.step-course .g-opts button')
+    await page.evaluate(() => document.querySelector('.g-opts button').click())
+    await page.waitForSelector('.guide.step-word .g-word-opt.no')
+    await page.evaluate(() => document.querySelector('.g-word-opt.no').click())
+    const steps = [['studentId', 'basic:studentId', '00ZZ0123'], ['name', 'basic:name', '文化　花子'], ['subtitle', 'basic:subtitleInput', '海の王女']]
+    for (const [step, id, text] of steps) {
+      await page.waitForSelector(`.guide.step-${step}`)
+      await ready()
+      await wait(300)
+      await tapField(id)
+      await record(`案内の${step}`)
+      if (step === 'subtitle') {
+        await page.screenshot({ path: `${OUT}/20-writing-${tag}-guide-subtitle.png` })
+        await withKeyboard(`案内の${step}`)
+      }
+      await page.keyboard.type(text)
+      await wait(200)
+      await record(`案内の${step}（書いたあと）`)
+      await page.click('.edit-sheet .done')
+      await wait(300)
+    }
+    await page.waitForSelector('.guide.step-done')
+    await page.evaluate(() => [...document.querySelectorAll('.g-actions button')].find((b) => b.textContent.includes('閉じる')).click())
+    await ready()
+    const afterGuide = { room: await roomLeft(), zoomed: (await page.evaluate(() => window.__editor.getSnapshot().zoomed)) }
+    // 案内を閉じたあと：表紙のサブタイトル・氏名と、本文の最初の段落
+    for (const id of ['basic:subtitleInput', 'basic:name']) {
+      await tapField(id)
+      await record(`あとから${id.replace('basic:', '')}`)
+      if (id === 'basic:subtitleInput') await withKeyboard('あとからsubtitleInput')
+      await page.click('.edit-sheet .done')
+      await ready()
+      await wait(300)
+    }
+    const pid = await page.evaluate(() => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.type === 'paragraph').id)
+    await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), pid)
+    await ready()
+    await wait(300)
+    await tapField(pid)
+    await record('本文の段落')
+    await withKeyboard('本文の段落')
+    await page.screenshot({ path: `${OUT}/20-writing-${tag}-body.png` })
+    await page.click('.edit-sheet .done')
+    await ready()
+    await wait(300)
+    const restored = { room: await roomLeft(), zoomed: await page.evaluate(() => window.__editor.getSnapshot().zoomed) }
+    check(
+      `スマホ（${name}）：書いている欄（案内の学籍番号・氏名・サブタイトル、あとからの表紙の欄、本文の段落。キーボードを出したときも）が、上の案内・下の書く欄に隠れず、「完了」も押せる。書き終えると紙面の余白はなくなり、全体の表示に戻る`,
+      problems.length === 0 && !afterGuide.room && !afterGuide.zoomed && !restored.room && !restored.zoomed,
+      JSON.stringify({ problems, afterGuide, restored, seen }),
+    )
+    await context.close()
+  }
+}
+
+/**
+ * 開くのを速くした（はじめて使う学生の試しで、開くたびに5秒ほど「（初回は数秒かかります）」と出ていた）：
+ * - はじめて開いたとき（この端末に原稿がない）だけ「（初回は数秒かかります）」と出す
+ * - 2回目から（読み込み直したとき）は、最後に見ていたページを、そのページのある部分を組み終えたらすぐ見せ（ほかのページはそのあと組む）、「初回」とは出さない
+ * - 先に見せている間にそのページで書いた文字は、組み終えたあとも残る。先に見せている間にページを送ると、組み終えてから送る
+ * - 組み終えると、ページ数・紙面の情報・チェックの指摘は、まっさらな状態から組んだときと同じ
+ * CPU を遅くして（6倍）、先に見せている間を長くして試す。設定は、ページの中で fetch を差し替えて返す（要求の差し替えは使わない）
+ */
+async function quickOpenCheck(browser) {
+  const config = JSON.parse(readFileSync(new URL('./config-fixture.json', import.meta.url), 'utf8'))
+  const context = await browser.createBrowserContext()
+  const page = await context.newPage()
+  page.on('pageerror', (e) => console.log('pageerror(quick):', e.message))
+  await page.evaluateOnNewDocument((config) => {
+    const Real = window.WebSocket
+    window.WebSocket = function (url, protocols) {
+      if (String(protocols).includes('vite-hmr')) return { readyState: 0, addEventListener() {}, removeEventListener() {}, send() {}, close() {} }
+      return new Real(url, protocols)
+    }
+    const realFetch = window.fetch.bind(window)
+    window.fetch = (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+      if (/script\.google(usercontent)?\.com/.test(url)) return Promise.resolve(new Response(JSON.stringify({ ok: true, year: config.fiscalYear, config }), { status: 200, headers: { 'Content-Type': 'application/json' } }))
+      return realFetch(input, init)
+    }
+    try {
+      localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+    } catch {}
+    // 「紙面を準備しています…」の文字を、出るたびに記録する
+    window.__loadingTexts = []
+    new MutationObserver(() => {
+      const t = document.querySelector('.loading')?.textContent
+      if (t && window.__loadingTexts.at(-1) !== t) window.__loadingTexts.push(t)
+    }).observe(document, { subtree: true, childList: true, characterData: true })
+  }, config)
+  await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
+  await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
+  const ready = () =>
+    page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 120000 })
+  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  await ready()
+  const firstTexts = await page.evaluate(() => window.__loadingTexts)
+  // 見本の原稿にして、本文の3ページ目を見る（最後に見ていたページとして覚える）
+  await page.waitForSelector('.guide.step-course .g-opts button')
+  await page.evaluate(() => document.querySelector('.g-opts button').click())
+  await page.waitForSelector('.guide.step-word .g-word-opt.no')
+  await page.evaluate(() => document.querySelector('.g-word-opt.no').click())
+  await page.waitForSelector('.g-later')
+  await page.evaluate(() => document.querySelector('.g-later').click())
+  await ready()
+  const { setupWriting } = await import('./sampleReport.mjs')
+  await page.evaluate(setupWriting)
+  // 見本の写真を、この端末にも保存する（読み込み直しても写真が出るように）
+  await page.evaluate(async () => {
+    const { putImage } = await import('/src/model/storage.ts')
+    for (const [id, img] of window.__editor.images) {
+      const blob = await (await fetch(img.url)).blob()
+      await putImage({ id, blob, widthPx: img.widthPx, heightPx: img.heightPx })
+    }
+  })
+  await ready()
+  const target = await page.evaluate(() => {
+    const s = window.__editor.getSnapshot()
+    const body = s.layout.kinds.map((k, i) => (k === 'body' ? i : -1)).filter((i) => i >= 0)
+    return body[2]
+  })
+  await page.evaluate((p) => window.__editor.goToPage(p, 'none'), target)
+  await ready()
+  await wait(1500)
+  // 読み込み直す（CPU を 6倍遅くして、先に見せている間を長くする）
+  const cdp = await page.createCDPSession()
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 })
+  await page.reload({ waitUntil: 'domcontentloaded' })
+  await page.waitForFunction(() => performance.getEntriesByType('mark').some((m) => m.name === 'open:shown'), { timeout: 120000 })
+  const early = await page.evaluate(() => {
+    const s = window.__editor.getSnapshot()
+    const marks = Object.fromEntries(performance.getEntriesByType('mark').map((m) => [m.name, Math.round(m.startTime)]))
+    const para = [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container].is-current section.body p[data-block-id]')].find((p) => p.textContent.length > 20)
+    const r = para?.getBoundingClientRect()
+    return { page: s.page, rendering: s.rendering, laidOut: 'open:layout' in marks, pager: document.querySelector('.pager .lbl')?.textContent ?? '', para: para?.dataset.blockId, x: r ? r.left + 30 : 0, y: r ? r.top + r.height / 2 : 0, loading: !!document.querySelector('.loading') }
+  })
+  await page.screenshot({ path: `${OUT}/21-quick-open-early.png` })
+  // 先に見せている間に、そのページの段落をタップして書き、ページ送りも押す（組み終えてから送る）
+  let typed = false
+  if (early.para && !early.laidOut) {
+    await page.touchscreen.tap(early.x, early.y)
+    typed = await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 20000 }, early.para).then(() => true, () => false)
+    if (typed) {
+      await page.keyboard.type('先に見せている間に書いた。')
+      await page.click('.edit-sheet .done')
+    }
+  }
+  // 書く欄を閉じて、ページ送りが出るのを待ってから押す
+  await page.waitForSelector('.pager button[aria-label="次のページ"]', { timeout: 30000 }).catch(() => {})
+  // まだ組み終えていないかを確かめるのと押すのを、ページの中で続けて行う（間に組み終えないように）
+  // 押すときの見ているページ（先に見せている間に書いても、見ているページの番号はずれない）
+  const { stillEarly, pageAtClick } = await page.evaluate(() => {
+    const early = !performance.getEntriesByType('mark').some((m) => m.name === 'open:layout') && !!document.querySelector('.pager button[aria-label="次のページ"]')
+    const pageAtClick = window.__editor.getSnapshot().page
+    if (early) document.querySelector('.pager button[aria-label="次のページ"]').click()
+    return { stillEarly: early, pageAtClick }
+  })
+  await page.waitForFunction(() => performance.getEntriesByType('mark').some((m) => m.name === 'open:place'), { timeout: 120000 })
+  await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
+  await ready()
+  // 送るのを待っていたページ送りは、組み終えてから動く（パソコンが忙しいと遅れるので、決まった時間ではなく、送り終えるまで待つ）
+  if (stillEarly) await page.waitForFunction((to) => window.__editor.getSnapshot().page === to, { timeout: 30000 }, target + 1).catch(() => {})
+  // 送るのは1回だけ（少し待っても、それ以上は送らない）
+  await wait(1000)
+  await ready()
+  const after = await page.evaluate((id) => {
+    const s = window.__editor.getSnapshot()
+    const block = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === id)
+    const text = block?.content.map((n) => n.text ?? '').join('') ?? ''
+    const onPaper = [...document.querySelectorAll(`.page-viewport.front [data-block-id="${id}"]`)].map((e) => e.textContent).join('')
+    return { page: s.page, pageCount: s.pageCount, text: text.includes('先に見せている間に書いた。'), onPaper: onPaper.includes('先に見せている間に書いた'), placeholders: window.__editor.renderer.pageView.pages().filter((p) => p.hasAttribute('data-placeholder-page')).length, texts: window.__loadingTexts }
+  }, early.para)
+  // まっさらな状態から組み直した紙面と比べる（ページ数・紙面の情報・指摘）
+  const sum = () => page.evaluate(() => { const s = window.__editor.getSnapshot(); return JSON.stringify({ n: s.pageCount, layout: s.layout, findings: s.findings.map((f) => `${f.ruleId}|${f.blockId ?? ''}|${f.start ?? ''}`).sort() }) })
+  const shownSum = await sum()
+  await page.evaluate(async () => {
+    window.__editor.renderer.forget()
+    await window.__editor.render()
+    await window.__editor.whenLaidOut()
+  })
+  await ready()
+  const freshSum = await sum()
+  check('はじめて開いたとき（この端末に原稿がない）は「紙面を準備しています…（初回は数秒かかります）」と出る', firstTexts.some((t) => t.includes('初回は数秒かかります')), JSON.stringify(firstTexts))
+  check(
+    '2回目から（読み込み直したとき）は、最後に見ていたページを、全部組み終える前に先に見せ、「初回」とは出さない（ページ送りも、そのページを指す）',
+    early.page === target && !early.laidOut && early.rendering && early.pager.includes(`${target + 1} /`) && !early.loading && !after.texts.some((t) => t.includes('初回')),
+    JSON.stringify({ target, early, texts: after.texts }),
+  )
+  check('先に見せている間にそのページで書いた文字は、組み終えたあとも原稿と紙面に残る', typed && after.text && after.onPaper, JSON.stringify({ typed, after }))
+  check(
+    '先に見せている間に書いても、見ているページの番号はずれない。そのあとページ送りを押すと、組み終えてから次のページへ1回だけ送る。仮のページは残らない',
+    stillEarly && pageAtClick === target && after.page === target + 1 && after.placeholders === 0,
+    JSON.stringify({ stillEarly, pageAtClick, page: after.page, placeholders: after.placeholders }),
+  )
+  check('組み終えた紙面（ページ数・目次の番号などの紙面の情報・チェックの指摘）は、まっさらな状態から組み直したときと同じ', shownSum === freshSum, shownSum === freshSum ? '' : JSON.stringify({ shownSum, freshSum }))
   await context.close()
 }
 

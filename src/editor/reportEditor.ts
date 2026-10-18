@@ -14,7 +14,7 @@ import { OverlayEditor, type OverlayKind, type OverlayPlacement, type OverlayTar
 import { PageStage, TEXT_LEFT, TEXT_W } from './pageStage'
 import { blockPaperKey, fixedTitleNote, markFocusable, PAPER_FOCUSABLE, paperElement, paperKeyOf, paperOrder, rememberTabStop, setTabStop } from './paperFocus'
 import * as ops from './reportOps'
-import { ReportRenderer, type PageEffect } from './reportRenderer'
+import { ReportRenderer, type FirstShow, type PageEffect } from './reportRenderer'
 import { changedPlace, type ChangedPlace, type NoticeBody, type RemovedWhat, type UndoNotice } from './undoNotice'
 
 /**
@@ -278,6 +278,8 @@ export class ReportEditor {
       const placement = id ? this.overlayPlacement(id) : null
       if (placement) this.overlay.moveTo(placement)
       this.shiftFollowing()
+      // スマホ：画面の向きを変えたときなど、書いている欄が隠れたら、見える所へ動かす
+      if (this.overlay.inSheet) this.revealEditing(false)
       this.notify()
     })
 
@@ -395,6 +397,77 @@ export class ReportEditor {
     'data:image/svg+xml,' +
     encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#e4e4e4"/></svg>')
 
+  // ---- 開いたとき（先に見せるページ） ----
+
+  /** 開いてはじめて組むときに、先に見せるページ（renderFirst。組み始めたら null） */
+  private firstPage: number | null = null
+  /**
+   * 開いたとき、見せるページのある部分だけを組み終えて先に見せ、ほかの部分を組んでいるところ（仮の紙面）。
+   * この間は、そのページで書けるが、ほかのページへは移らない（組み終えたら移る：goToPage）。チェックは、紙面の情報を使わないものだけ
+   */
+  private provisional = false
+  /** 先に見せたページ（先に見せなかったときは null。movedSinceFirstShow） */
+  private firstShownPage: number | null = null
+  /** 先に見せている間に、ページを送るよう頼まれた（組み終えてから送る：goToPage） */
+  private turnQueued = false
+
+  /**
+   * 開いてはじめて紙面を組む。page：見せるページ（0 から。前に開いたとき最後に見ていたページ。新しい原稿は表紙）。
+   * 前に開いたときの組み方を覚えていれば（layout/memory.ts）、そのページのある部分を先に組んで、すぐ見せる（ほかの部分は、そのあと組む）。
+   * 前は、報告書の全ページを組み終えるまで何も見えず、スマホでは開くたびに数秒〜十数秒待たせていた。
+   * すべて組み終えたら（目次の番号・ページ数・チェックも正しくなったら）終わる
+   */
+  async renderFirst(page: number): Promise<void> {
+    this.firstPage = Math.max(0, page)
+    await this.render()
+    await this.whenLaidOut()
+  }
+
+  /** 紙面を組み終えるのを待つ（組んでいる途中・先に見せたページのほかを組んでいる途中なら、終わるまで） */
+  whenLaidOut(): Promise<void> {
+    return new Promise((resolve) => {
+      const check = () => {
+        if (this.rendering || this.provisional || !this.layout) return
+        off()
+        resolve()
+      }
+      const off = this.subscribe(check)
+      check()
+    })
+  }
+
+  /** 紙面が見えるようになるのを待つ（見せるページを先に見せたとき・先に見せずに全部組み終えたとき） */
+  whenShown(): Promise<void> {
+    return new Promise((resolve) => {
+      const check = () => {
+        if (!this.layout) return
+        off()
+        resolve()
+      }
+      const off = this.subscribe(check)
+      check()
+    })
+  }
+
+  /** 先に見せたページから、学生がほかのページへ移った（移るよう頼んだ）か、書き始めた・物を選んだか（先に見せなかったときは false） */
+  movedSinceFirstShow(): boolean {
+    return this.firstShownPage !== null && (this.turnQueued || this.page !== this.firstShownPage || !!this.overlay.blockId || this.selection !== null)
+  }
+
+  /** 開いたとき：見せるページのある部分を組み終えた（ほかの部分は、このあと組む）。そのページを先に見せる */
+  private showFirst(rendered: Report, page: number, layout: LayoutInfo): void {
+    this.provisional = true
+    this.layout = layout
+    this.page = page
+    this.firstShownPage = page
+    this.shownReport = rendered
+    markFocusable(this.viewport)
+    this.markPrintSkip()
+    this.runChecks()
+    this.notify()
+    performance.mark('open:shown')
+  }
+
   /** 打つ手が止まったら組み直す（打っている途中の組み直しは急ぎでない：組んでいる間にまた打っても、組み終えた紙面を出す） */
   scheduleRender(delay = RENDER_DELAY_MS): void {
     clearTimeout(this.renderTimer)
@@ -440,6 +513,10 @@ export class ReportEditor {
     const seq = this.changeSeq
     let done = false
     let skipped = false
+    // 開いてはじめて組むとき：見せるページを、そのページのある部分を組み終えたらすぐ見せる（renderFirst）
+    const firstPage = this.firstPage
+    this.firstPage = null
+    const first: FirstShow | undefined = firstPage !== null && !this.layout ? { page: firstPage, onShow: (page, layout) => this.showFirst(rendered, page, layout) } : undefined
     try {
       const result = await this.renderer.renderBack(
         rendered,
@@ -453,28 +530,33 @@ export class ReportEditor {
           },
         },
         () => this.renderUrgent,
+        first,
       )
       done = true
-      if (result.stale || (this.renderUrgent && !result.unchanged)) {
+      // 先に見せた紙面を組み直すことになった（resettle）ときも、もう一方の表示枠で、はじめから組み直す（先に見せた紙面は、組み終えるまで出したまま）
+      if (result.stale || result.resettle || (this.renderUrgent && !result.unchanged)) {
         skipped = true
       } else {
         // ページを送っている途中なら、送り終わってから入れ替える
         if (this.turning) await this.turning
         this.renderMs = result.ms
         this.layout = result.layout
+        this.provisional = false
         this.page = Math.max(0, Math.min(this.page, result.layout.kinds.length - 1))
-        // 表に出ている紙面がすでにこの原稿の紙面なら（unchanged）、入れ替えない
-        const swap = !result.unchanged
+        // 表に出ている紙面がすでにこの原稿の紙面なら（unchanged）、入れ替えない。先に見せた（early）ときは、組んだ表示枠がもう表に出ている
+        const swap = !result.unchanged && !result.early
+        const fresh = !result.unchanged
         // 紙面の欄にフォーカスがあれば、組み直した紙面の同じ欄に移し直す（要素が作り直されて、フォーカスが失われないように）
         const focused = swap ? this.paperFocus() : null
         if (swap) this.renderer.swap(this.page)
+        else if (result.early) this.renderer.show(this.page)
         this.shownReport = rendered
         // 削除したものが出てこない紙面になったら、隠すのをやめる（組み始めたあとに削除したものは、まだ隠しておく。元に戻したものは隠さない）
         const shown = bodyIds(rendered)
         const now = bodyIds(this.report)
         for (const id of this.removed) if (!shown.has(id) || now.has(id)) this.removed.delete(id)
         this.hideRemoved()
-        if (swap) {
+        if (fresh) {
           markFocusable(this.viewport)
           if (focused) this.focusPaper(focused.key, focused.visible)
           this.markPrintSkip()
@@ -528,7 +610,8 @@ export class ReportEditor {
   // ---- セルフチェック ----
 
   private runChecks(): void {
-    const checked = checkReportDetailed(this.report, this.config, this.layout)
+    // 先に見せたページのほかを組んでいる間は、紙面の情報（ページ数など）を使うチェックはしない（組み終えてからする）
+    const checked = checkReportDetailed(this.report, this.config, this.provisional ? null : this.layout)
     // 書いている途中の段落は「空の段落がある」と言わない（閉じても空のままなら言う）
     const writing = this.writingBlankIds()
     this.findings = writing.size ? checked.findings.filter((f) => !(f.ruleId === 'paragraph-empty' && f.blockId && writing.has(f.blockId))) : checked.findings
@@ -623,6 +706,16 @@ export class ReportEditor {
    * turn：隣のページは本のようにめくる（離れたページはふわっと切り替える）／fade：ふわっと切り替える／none：すぐ切り替える
    */
   goToPage(index: number, effect: PageEffect = 'turn'): Promise<void> {
+    // 開いたときに先に見せたページのほかを、まだ組んでいる：組み終えてから移る（まだ組んでいないページは、中が空のため）
+    // 組み終えたときにページを送っている途中（組み終えた紙面に入れ替えたときなど）なら、送り終えてから移る（待っていた送りを捨てない）
+    if (this.provisional) {
+      // 組み終えたときに、覚えていたページへ戻さない（movedSinceFirstShow）
+      this.turnQueued = true
+      return this.whenLaidOut().then(async () => {
+        if (this.turning) await this.turning
+        return this.goToPage(index, effect)
+      })
+    }
     const to = Math.max(0, Math.min(index, this.renderer.pageCount() - 1))
     if (this.turning) return this.turning
     if (to === this.page || to < 0) return Promise.resolve()
@@ -638,6 +731,7 @@ export class ReportEditor {
     // スマホ：拡大したまま移ると、送った先のページの一部（作品写真のページでは白い所）しか見えず、ページ送りと帯も隠れたままだった。
     // ページを替えたら、ページ全体の表示に戻す（指摘へ移って書き始めるときは、書く欄を開くときにまた拡大する）
     if (this.overlay.inSheet && this.stage.zoomed) this.stage.setZoom(false)
+    this.setRevealRoom(0, 0)
     this.scroller.scrollTop = 0
     this.turning = this.renderer.turn(from, to, effect).finally(() => {
       this.turning = null
@@ -664,6 +758,7 @@ export class ReportEditor {
 
   /** 全体（1ページ全体を表示）と拡大（横幅いっぱい）を切り替える */
   setZoom(zoomed: boolean): void {
+    this.setRevealRoom(0, 0)
     this.scroller.scrollTop = 0
     this.stage.setZoom(zoomed)
   }
@@ -690,14 +785,62 @@ export class ReportEditor {
     if (this.overlay.inSheet) this.setZoom(false)
   }
 
-  /** スマホ：書いているブロックが、紙面の見えている部分の上の方に来るようにスクロールする */
-  private revealEditing(): void {
+  /**
+   * スマホ：書いている欄を見せてよい、画面の中の高さの範囲（画面の上からの px）を返す関数（画面の部品が渡す：app/writingArea.ts）。
+   * 上に出ているはじめての案内より下、下から出る書く欄・キーボードより上。field：書いている欄の紙面での位置
+   */
+  private visibleArea: ((field: DOMRect) => { top: number; bottom: number }) | null = null
+
+  setVisibleArea(area: ((field: DOMRect) => { top: number; bottom: number }) | null): void {
+    this.visibleArea = area
+  }
+
+  /** 書いている欄を見せるために、紙面の上・下に足している余白（px。revealEditing） */
+  private revealTop = 0
+  private revealBottom = 0
+
+  /** 紙面の上・下に足す余白を変える（紙面の表示枠の CSS の変数 --reveal-top・--reveal-bottom。index.css） */
+  private setRevealRoom(top: number, bottom: number): void {
+    if (top === this.revealTop && bottom === this.revealBottom) return
+    this.revealTop = top
+    this.revealBottom = bottom
+    for (const [name, px] of [['--reveal-top', top], ['--reveal-bottom', bottom]] as const) {
+      if (px) this.scroller.style.setProperty(name, `${px}px`)
+      else this.scroller.style.removeProperty(name)
+    }
+    this.placeContinueRow()
+  }
+
+  /**
+   * スマホ：書いている欄が、紙面の見えている所（上の案内・下の書く欄・キーボードに隠れていない所）の上の方に来るよう、紙面を動かす。
+   * 前は台の上の端に合わせていたため、はじめての案内でサブタイトルを書くとき、案内の下に隠れて、どこに入るのか見えなかった。
+   * 紙面の上の端・下の端で動かしきれないとき（表紙の上の方の欄など）は、紙面の上（下）に余白を足してずらす（全体の表示に戻す・ページを替えると、なくす）。
+   * force が false なら、欄がもう見えているときは動かさない（書く欄の高さやキーボードが変わったとき。学生が自分で動かした位置を崩さないように）
+   */
+  revealEditing(force = true): void {
     const id = this.overlay.blockId
+    if (!id || !this.overlay.inSheet || !this.stage.zoomed) return
     const view = this.renderer.pageView
-    const fragment = id ? view.fragments(id).find((f) => view.pageIndexOf(f) === this.page) : undefined
+    const fragment = view.fragments(id).find((f) => view.pageIndexOf(f) === this.page)
     if (!fragment) return
-    const top = fragment.getBoundingClientRect().top - this.scroller.getBoundingClientRect().top
-    this.scroller.scrollTop += top - 16
+    const scroller = this.scroller
+    const s = scroller.getBoundingClientRect()
+    const r = fragment.getBoundingClientRect()
+    const area = this.visibleArea?.(r)
+    const top = Math.max(s.top, area?.top ?? s.top)
+    const bottom = Math.max(top, Math.min(s.bottom, area?.bottom ?? s.bottom))
+    if (!force && r.top >= top + 2 && r.bottom <= bottom - 2) return
+    // 欄の上端を、見えている所の上から少し下に（見えている所が低いときは、上下の真ん中あたりに。欄のほうが高いときは、上端に合わせる）
+    const margin = Math.max(2, Math.min(16, (bottom - top - r.height) / 2))
+    // 余白を足さない紙面での、移したいスクロールの位置（負なら、その分だけ紙面の上に余白を足す）
+    const want = scroller.scrollTop - this.revealTop + (r.top - (top + margin))
+    const shift = Math.ceil(Math.max(0, -want))
+    const scrollTop = Math.max(0, want)
+    // 下に動かしきれない分は、紙面の下に余白を足す
+    const natural = scroller.scrollHeight - this.revealTop - this.revealBottom
+    const room = Math.ceil(Math.max(0, scrollTop - (shift + natural - scroller.clientHeight)))
+    this.setRevealRoom(shift, room)
+    scroller.scrollTop = scrollTop
   }
 
   /** いま見えている紙面の各ページの要素（ページ一覧の縮小表示に使う） */
@@ -715,6 +858,7 @@ export class ReportEditor {
       if (page >= 0 && page !== this.page && !this.turning) {
         this.page = page
         this.clearFrozen(Infinity)
+        this.setRevealRoom(0, 0)
         this.scroller.scrollTop = 0
         this.renderer.show(page, 'fade')
         if (this.overlay.inSheet) this.revealEditing()
@@ -930,6 +1074,7 @@ export class ReportEditor {
     if (page >= 0 && page !== this.page && !this.turning) {
       this.page = page
       this.clearFrozen(Infinity)
+      this.setRevealRoom(0, 0)
       this.scroller.scrollTop = 0
       this.renderer.show(page)
     }

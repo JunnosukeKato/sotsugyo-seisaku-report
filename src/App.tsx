@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { currentConfig, findCourse, type YearConfig } from './config'
-import { loadConfig, loadYearConfig, type ConfigSource } from './config/remote'
+import { loadYearConfig, sameConfig, startConfigLoad, type ConfigSource } from './config/remote'
 import { ReportEditor, type EditorSnapshot } from './editor/reportEditor'
 import { preloadGis } from './drive/driveApi'
 import { DriveSync, hasContent, type DriveState, type RemoteCopy, type Resolution } from './drive/driveSync'
@@ -14,7 +14,7 @@ import { BackupDialog, CourseChangeDialog, CourseMenu, ReferencesDialog } from '
 import { ExportDialog } from './app/ExportDialog'
 import { ConflictDialog, IdMismatchDialog, LoginGate, OtherAccountDialog, ReloginDialog, WipeDialog, type DriveControls, type GateState } from './app/DriveUi'
 import { Icon } from './app/icons'
-import { openLastPlace, useRememberPlace, useRememberZoom } from './app/lastPlace'
+import { loadPlace, openLastPlace, useRememberPlace, useRememberZoom } from './app/lastPlace'
 import { Palette } from './app/Palette'
 import { PageBand } from './app/PageBand'
 import { PhoneChrome } from './app/Phone'
@@ -32,6 +32,7 @@ import { useTokenRenewal } from './app/useTokenRenewal'
 import { useAutosave } from './app/useAutosave'
 import { usePanelWidths } from './app/usePanelWidths'
 import { WordImportDialog, WordTodoCard } from './app/WordImport'
+import { useKeepWritingVisible, writingArea } from './app/writingArea'
 import { useWordTodo, wordImportOffered } from './app/useWordTodo'
 import { HelpView } from './help/HelpView'
 import { STUDENT_TOPICS } from './help/helpTopics'
@@ -96,6 +97,21 @@ const idAccepted = (email: string, coverId: string) => {
 
 const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
+/**
+ * 開くまでの時間を測るための印（ブラウザの開発ツールの「パフォーマンス」や、自動の測定 poc-output/phone-speed/ で見る）。
+ * 画面にも原稿にも何も変えない
+ */
+const markOpen = (name: string) => performance.mark(`open:${name}`)
+
+/**
+ * 原稿の年度の設定（公開中の年度と違う原稿を開いたとき）。2回目から（quick）は、このブラウザの控えですぐ。
+ * そうでなければ窓口の返事を待つ。読めなければ控え、それもなければ同梱の初期値（同じ年度のとき。config/remote.ts の loadYearConfig と同じ順）
+ */
+async function yearConfigOf(year: number, load: { cached: YearConfig | null; remote: Promise<YearConfig | null> }, quick: boolean): Promise<YearConfig | null> {
+  if (quick && load.cached) return load.cached
+  return (await load.remote) ?? load.cached ?? (currentConfig.fiscalYear === year ? currentConfig : null)
+}
+
 /** Word から読み込む直前の原稿の控えの名前（「バックアップ」の控えの一覧に出す） */
 const WORD_SNAPSHOT_LABEL = 'Word を読み込む前'
 
@@ -141,6 +157,8 @@ export default function App() {
   const [tourWanted, setTourWanted] = useState(false)
   const [tourOn, setTourOn] = useState(false)
   const [configSource, setConfigSource] = useState<ConfigSource>('remote')
+  // はじめて開いた（この端末に原稿がない）。紙面の準備に数秒かかるので、そう知らせる（2回目からは、先に見せるページがすぐ出る）
+  const [firstOpen, setFirstOpen] = useState(false)
   // 閉じる・読み込み直す直前に、書いている欄のまだ原稿に入っていない文字（変換中など）を原稿に入れてから保存する
   const autosave = useAutosave(() => editorRef.current?.saveEditing())
   const snap = useSyncExternalStore(editor?.subscribe ?? noopSubscribe, editor?.getSnapshot ?? nullSnapshot) as EditorSnapshot | null
@@ -186,8 +204,12 @@ export default function App() {
   // ホイールでページを送る（コースを選ぶ案内・Word で書き始めているかを聞く案内や、画面の上に出る窓が開いている間は送らない）
   useWheelPaging(stageRef, scrollerRef, editor, !dialog && !gate && !driveDialog && !tabLock.locked && !tourOn && guide !== 'course' && guide !== 'word')
   useEffect(() => {
-    if (editor && hasLayout) editor.setSheetHost(narrow ? sheetHostRef.current : null)
+    if (!editor || !hasLayout) return
+    editor.setSheetHost(narrow ? sheetHostRef.current : null)
+    // スマホ：書いている欄を、上の案内・下の書く欄・キーボードに隠れない所に見せる（app/writingArea.ts）
+    editor.setVisibleArea(narrow ? writingArea : null)
   }, [editor, narrow, hasLayout])
+  useKeepWritingVisible(editor, snap?.editingId ?? null, narrow, guide)
   // PC：表示の大きさ（全体・拡大）も覚えて、開いたときに戻す（上の setSheetHost が「全体」にしたあとで戻すため、ここに置く）
   useRememberZoom(editor, snap, placeOpened && !tabLock.locked, narrow)
 
@@ -322,6 +344,43 @@ export default function App() {
     [drive, applyResolution],
   )
 
+  /** 開いたときの準備（原稿を読み、最初の紙面を組み終えるまで）が済んだ */
+  const startedUp = useRef(false)
+
+  /**
+   * 控えの設定で開いたとき（2回目から）：窓口から読んだ設定が控えと違えば、入れ替える（管理ページで直した題目・コースの名前などを、開いている紙面にも出す）。
+   * used：開いたときに使った公開中の年度の設定。year：原稿の年度が公開中の年度と違い、その年度の控えで開いたとき、その窓口の返事と使った設定
+   */
+  const refreshConfig = useCallback(
+    async (ed: ReportEditor, remote: Promise<YearConfig | null>, used: YearConfig, year: { remote: Promise<YearConfig | null>; used: YearConfig } | null) => {
+      const fresh = await remote
+      if (fresh && !sameConfig(fresh, used)) {
+        publishedRef.current = fresh
+        if (configRef.current === used) {
+          configRef.current = fresh
+          setConfig(fresh)
+          ed.setConfig(fresh)
+        }
+        // 管理ページでドライブ保存を止めた（Google の障害など）：まだログインして始めていなければ、ログインせずに書けるようにする
+        if (drive && fresh.driveSave === 'off' && !stoppedRef.current && !entering.current) {
+          stoppedRef.current = true
+          setDriveStopped(true)
+          setGate(null)
+          if (startedUp.current) startGuide(configRef.current, ed.getSnapshot().report, false)
+        }
+      }
+      const freshYear = year ? await year.remote : null
+      if (!year || !freshYear || sameConfig(freshYear, year.used) || configRef.current !== year.used) return
+      // 読めた年度の設定に原稿のコースがない（同梱の初期値しか読めなかったなど）なら、今のまま
+      const courseId = ed.getSnapshot().report.basicInfo.courseId
+      if (courseId && !findCourse(freshYear, courseId) && findCourse(year.used, courseId)) return
+      configRef.current = freshYear
+      setConfig(freshYear)
+      ed.setConfig(freshYear)
+    },
+    [drive, startGuide],
+  )
+
   useEffect(() => {
     if (started.current) return
     started.current = true
@@ -329,18 +388,30 @@ export default function App() {
     if (drive) void preloadGis(DRIVE_CLIENT_ID).catch(() => {})
     void (async () => {
       try {
-        const { config: published, source } = await loadConfig()
+        // 設定は窓口から読み始め（返事には1〜数秒かかる）、待つ間に、この端末の原稿を読む
+        const configLoad = startConfigLoad()
+        const saved = await loadReport()
+        markOpen('report')
+        localAtStart.current = saved
+        // はじめて開いた（この端末に原稿がない）ときだけ、「（初回は数秒かかります）」と出す
+        if (!saved) setFirstOpen(true)
+        // 2回目から（この端末に原稿と、前に読み込んだ設定の控えがある）は、控えの設定ですぐ開き、窓口の返事はあとで確かめる（refreshConfig）。
+        // はじめて・控えがない・控えでドライブ保存を止めていた（Google の障害など）ときは、今までどおり窓口の返事を待つ
+        const quick = !!saved && !!configLoad.cached && configLoad.cached.driveSave !== 'off'
+        const remote = quick ? null : await configLoad.remote
+        const published = quick && configLoad.cached ? configLoad.cached : (remote ?? configLoad.cached ?? currentConfig)
+        const source: ConfigSource = quick || (!remote && configLoad.cached) ? 'cache' : remote ? 'remote' : 'bundled'
+        markOpen('config')
         if (drive && published.driveSave === 'off') {
           stoppedRef.current = true
           setDriveStopped(true)
           setGate(null)
         }
         publishedRef.current = published
-        const saved = await loadReport()
-        localAtStart.current = saved
         // 原稿は、書き始めた年度の設定で開く（新年度を公開しても、前年度の学生の表紙が新年度の題目・教員に変わらないように）
         // ただし、読めた年度の設定に原稿のコースがない（同梱の初期値しか読めなかったなど）なら、コースのある公開中の設定で開く
-        const yearConfig = saved && saved.fiscalYear !== published.fiscalYear ? await loadYearConfig(saved.fiscalYear) : null
+        const yearLoad = saved && saved.fiscalYear !== published.fiscalYear ? startConfigLoad(saved.fiscalYear) : null
+        const yearConfig = saved && yearLoad ? await yearConfigOf(saved.fiscalYear, yearLoad, quick) : null
         const savedCourse = saved?.basicInfo.courseId
         const loaded = yearConfig && !(savedCourse && !findCourse(yearConfig, savedCourse) && findCourse(published, savedCourse)) ? yearConfig : published
         setConfig(loaded)
@@ -358,22 +429,41 @@ export default function App() {
           pickImage: pickImageFile,
         })
         ed.addImages(await allImages())
+        markOpen('images')
         editorRef.current = ed
         setEditor(ed)
         // 開発中だけ、自動テストから操作できるようにする
         if (import.meta.env.DEV) Object.assign(window, { __editor: ed })
-        await ed.render()
-        // 前に開いたとき最後に見ていたページを見せる（新しい原稿は表紙から。はじめての案内が出るときは、案内が表紙に戻す）
-        if (saved) await openLastPlace(ed)
+        // 控えの設定で開いたときは、窓口の返事を待って、変わっていれば入れ替える
+        if (quick) void refreshConfig(ed, configLoad.remote, published, yearLoad && yearConfig === loaded ? { remote: yearLoad.remote, used: loaded } : null)
+        // このタブでログイン済みなら、紙面を組むのと並べて、ドライブの原稿を確かめる（前は、紙面を組み終えてから確かめていた）
+        if (drive && !stoppedRef.current && drive.tokenValid) void enter(ed)
+        // 前に開いたとき最後に見ていたページを、そのページのある部分を組み終えたら先に見せる（新しい原稿は表紙から。はじめての案内が出るときは、案内が表紙に戻す）
+        const laidOut = ed.renderFirst(saved ? (loadPlace()?.page ?? 0) : 0)
+        // はじめて開いた（新しい原稿。ドライブに保存しないとき）：表紙が見えたら、ほかのページを組み終えるのを待たずに、はじめての案内を始める
+        // （ドライブに保存するときは、ログインして、どの原稿で始めるかが決まってから：applyResolution）
+        const guideEarly = !saved && (!drive || stoppedRef.current)
+        if (guideEarly) {
+          await ed.whenShown()
+          startGuide(loaded, report, true)
+        }
+        await laidOut
+        markOpen('layout')
+        // すべて組み終えたら、覚えている欄のあるページへ（ページがずれていたとき。先に見せたページから、学生がまだ動いていなければ）
+        if (saved && !ed.movedSinceFirstShow()) await openLastPlace(ed)
+        markOpen('place')
         setPlaceOpened(true)
-        if (!drive || stoppedRef.current) startGuide(loaded, report, !saved)
-        // 紙面の準備より先にログインが済んでいたら、ここで始める
+        startedUp.current = true
+        if (!drive || stoppedRef.current) {
+          if (!guideEarly) startGuide(loaded, report, !saved)
+        }
+        // 紙面の準備より先にログインが済んでいたら、ここで始める（上で始めていれば、何もしない）
         else if (drive.tokenValid) void enter(ed)
       } catch (e) {
         setLoadError(String(e))
       }
     })()
-  }, [autosave, drive, enter, startGuide])
+  }, [autosave, drive, enter, startGuide, refreshConfig])
 
   // ほかのアプリやタブに切り替えたら、送っていない変更をすぐドライブに送る
   useEffect(() => {
@@ -393,6 +483,8 @@ export default function App() {
     try {
       editor.commitEditing()
       await editor.render()
+      // 開いた直後で、先に見せたページのほかをまだ組んでいるときは、組み終えるまで待つ（全部のページがそろってから PDF にする）
+      await editor.whenLaidOut()
       setDialog({ kind: 'export' })
     } finally {
       setExporting(false)
@@ -686,7 +778,7 @@ export default function App() {
             <UndoBar editor={editor} notice={undoNotice.notice} onClose={undoNotice.close} className="on-stage" />
           </>
         )}
-        {(!snap || (snap.rendering && !snap.layout)) && !loadError && <div className="loading">紙面を準備しています…（初回は数秒かかります）</div>}
+        {(!snap || (snap.rendering && !snap.layout)) && !loadError && <div className="loading">紙面を準備しています…{firstOpen ? '（初回は数秒かかります）' : ''}</div>}
         {loadError && <div className="loading ng">読み込みに失敗しました：{loadError}</div>}
       </main>
 

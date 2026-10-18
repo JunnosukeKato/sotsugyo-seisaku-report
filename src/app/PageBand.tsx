@@ -1,8 +1,10 @@
-import { useLayoutEffect, useRef, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { editables } from '../editor/reportOps'
 import { FIELD_IDS, ABSTRACT_LOCK_TEXT } from '../layout/document'
-import { BAND_SIDE_QUERY, paragraphHint, photoBand, todoBand, type BandTodo } from './bandText'
+import { BAND_SIDE_QUERY, paragraphHint, photoBand, photoToolsAtSide, todoBand, type BandTodo } from './bandText'
+import { SelectionTools } from './Palette'
+import { useBandSide } from './uiShared'
 
 /**
  * スマホ：紙面の中の小さな案内とボタンを、紙面の下の帯に、ふつうの文字の大きさで出す（mockups/v32 ④ 案A）。
@@ -13,7 +15,8 @@ import { BAND_SIDE_QUERY, paragraphHint, photoBand, todoBand, type BandTodo } fr
  * - 作品写真のページに空いている枠：「下の枠に、まだ写真がありません」と「写真を選ぶ」
  * - まだ書いていない欄（ひな形の段落・見出し・表紙の項目など）・写真を入れていない図の枠：いちばん上の所の言葉と「書く」「写真を選ぶ」
  * 帯は紙面の外の部品なので、PDF・印刷には出ない。横向きのスマホでは、紙面の右に出す（紙面の下に出すと、紙面がとても小さくなるため）。
- * 書いている間（下の書く欄）・図や表を選んでいる間・はじめての案内の間は出さない
+ * 書いている間（下の書く欄）・図や表を選んでいる間・はじめての案内の間は出さない。
+ * 横向きの作品写真のページでは、帯と作品写真の道具（並べ方・選んだ写真の道具）を、紙面の右の列に縦に並べる（mockups/v33 案A。SideColumn）
  */
 
 const svg = (children: ReactNode) => (
@@ -96,7 +99,10 @@ function tapPaper(editor: ReportEditor, todo: BandTodo): void {
   el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: r.left + Math.min(r.width / 2, 20), clientY: r.top + r.height / 2 }))
 }
 
-function BandView({ editor, band }: { editor: ReportEditor; band: Band }) {
+/**
+ * 帯の部品。inColumn：横向きの作品写真のページで、紙面の右の列（SideColumn）の中に置く（列が置き場所を決めるので、ここでは置かない）
+ */
+function BandView({ editor, band, inColumn }: { editor: ReportEditor; band: Band; inColumn?: boolean }) {
   const ref = useRef<HTMLElement>(null)
   const stageRef = useRef<HTMLElement | null>(null)
   // 帯を出している間だけ、台に印（data-band）を付けて紙面の中の案内を小さな印にし、帯の分だけ紙面を上に寄せる。帯を消したら元に戻す
@@ -116,7 +122,7 @@ function BandView({ editor, band }: { editor: ReportEditor; band: Band }) {
     const stage = stageRef.current
     if (!el || !stage) return
     stage.dataset.band = band.kind
-    const inset = `${Math.round(place(el, stage))}px`
+    const inset = inColumn ? '0px' : `${Math.round(place(el, stage))}px`
     if (stage.style.getPropertyValue('--inset-band') !== inset) {
       stage.style.setProperty('--inset-band', inset)
       editor.refitPage()
@@ -163,10 +169,75 @@ function BandView({ editor, band }: { editor: ReportEditor; band: Band }) {
   )
 }
 
-/** スマホの紙面の下の帯。hidden：はじめての案内を出している間など */
+/** 紙面と右の列の間（帯を紙面の右に出すときと同じ。index.css）・ページ送りと右の列の間（画面の px） */
+const SIDE_PAGE_GAP = 18
+const SIDE_PAGER_GAP = 12
+/** 右の列のいちばん広い幅（帯を紙面の右に出すときと同じ。index.css） */
+const SIDE_MAX_W = 380
+
+/**
+ * 右の列を置く：紙面の右から 18px、ページ送りより右（ページ送りに重ならないので、列は台の上から下まで使える）。
+ * 幅は画面の右から 10px まで（いちばん広くて 380px）。上下は CSS で決める（台の上下から 10px。index.css の「v33」）
+ */
+function placeSide(col: HTMLElement, stage: HTMLElement): void {
+  const st = stage.getBoundingClientRect()
+  // 紙面の右の端（台の中の位置。紙面の倍率と位置は editor/pageStage.ts が台に書き込む）
+  const pageRight = parseFloat(stage.style.getPropertyValue('--page-left')) + parseFloat(stage.style.getPropertyValue('--page-w'))
+  const pager = document.querySelector('.pager')?.getBoundingClientRect()
+  const left = Math.max(Number.isFinite(pageRight) ? pageRight + SIDE_PAGE_GAP : 0, pager?.width ? pager.right - st.left + SIDE_PAGER_GAP : 0)
+  col.style.left = `${left}px`
+  col.style.width = `${Math.max(0, Math.min(SIDE_MAX_W, st.width - GAP - left))}px`
+  // 中身が列に入りきらない（とても低い画面）ときだけ、列の中を上下に動かせるようにする（ふだんは札の影を切らないよう、動かせるようにしない）
+  col.classList.remove('scroll')
+  col.classList.toggle('scroll', col.scrollHeight > col.clientHeight + 1)
+}
+
+/**
+ * 横向きのスマホの、作品写真のページの右の列（mockups/v33 案A）。上から：帯（空いている枠があるとき）・作品写真の道具。
+ * 道具は下の道具と同じもの（SelectionTools）：何も選んでいないときは「並べ方」（3列×2段）、写真を押して選んでいるときは「この写真」の道具。
+ * 紙面は今の大きさのまま、何にも隠れない（前は、下の並べ方の道具が紙面の大半を隠し、写真を見ながら選べなかった）
+ */
+function SideColumn({ children }: { children: ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null)
+  // 描くたびに置き直す（紙面の大きさ・ページ送りの幅・画面の向きが変わるため）
+  useLayoutEffect(() => {
+    const el = ref.current
+    const stage = el?.closest<HTMLElement>('.stage')
+    if (el && stage) placeSide(el, stage)
+  })
+  // ページ送りの幅だけが変わったとき（文字の書体が届いたときなど）も置き直す
+  useEffect(() => {
+    const el = ref.current
+    const stage = el?.closest<HTMLElement>('.stage')
+    const pager = document.querySelector('.pager')
+    if (!el || !stage || !pager) return
+    const observer = new ResizeObserver(() => placeSide(el, stage))
+    observer.observe(pager)
+    return () => observer.disconnect()
+  }, [])
+  return (
+    <div className="page-side" ref={ref}>
+      {children}
+    </div>
+  )
+}
+
+/**
+ * スマホの紙面の下の帯。hidden：はじめての案内を出している間など。
+ * 横向きの作品写真のページでは、帯と作品写真の道具を、紙面の右の列に縦に並べる（mockups/v33 案A。このときは下の道具に出さない：Phone.tsx）
+ */
 export function PageBand({ editor, snap, hidden }: { editor: ReportEditor; snap: EditorSnapshot; hidden?: boolean }) {
+  const side = useBandSide()
   const kind = snap.layout?.kinds[snap.page]
   const quiet = hidden || !snap.layout || !!snap.editingId || snap.zoomed || (!!snap.selection && kind !== 'photos')
   const band = quiet ? null : bandOf(editor, snap)
+  if (photoToolsAtSide(snap, side)) {
+    return (
+      <SideColumn>
+        {band && <BandView editor={editor} band={band} inColumn />}
+        <SelectionTools editor={editor} snap={snap} phone />
+      </SideColumn>
+    )
+  }
   return band ? <BandView editor={editor} band={band} /> : null
 }

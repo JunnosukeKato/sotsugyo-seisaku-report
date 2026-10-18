@@ -98,7 +98,10 @@ function WholeSwitch({ on, index, onToggle }: { on: boolean; index: number; onTo
 }
 
 interface SelectionToolsProps extends Omit<Props, 'onReferences'> {
-  /** スマホの下の道具（横に1列に並べるので、作品写真を選んでいるときは「この写真」の道具だけを出す） */
+  /**
+   * スマホの下の道具（横に1列に並べるので、作品写真を選んでいるときは「この写真」の道具だけを出す）。
+   * 横向きのスマホの作品写真のページでは、同じ道具を紙面の右の列に出す（mockups/v33 案A。app/PageBand.tsx。並べ方は 3列×2段：index.css の「v33」）
+   */
   phone?: boolean
 }
 
@@ -136,6 +139,7 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
               <button
                 key={a.label}
                 className={`lay${current === a ? ' on' : ''}`}
+                aria-pressed={current === a}
                 title={`${a.label}（写真をつかんで動かすと、見える位置を変えられます）`}
                 onClick={() => editor.setPhotoLayout(a.layout, a.columns)}
               >

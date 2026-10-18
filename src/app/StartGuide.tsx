@@ -3,6 +3,7 @@ import type { YearConfig } from '../config'
 import { findCourse } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { FIELD_IDS } from '../layout/document'
+import { BAND_SIDE_QUERY } from './bandText'
 import { useDialogFocus } from './useDialogFocus'
 import { WordIcon } from './WordImport'
 
@@ -33,6 +34,12 @@ const STEP_LABELS: [GuideStep, string][] = [
 
 /** 選ぶまで、ほかの操作をできないようにする段階（コースを選ぶ・Word で書き始めているか） */
 const isChoiceStep = (step: GuideStep) => step === 'course' || step === 'word'
+
+/** スマホで欄を書いている間、案内と下の書く欄の間に要る高さ（px。紙面の欄1行と、その上下の少しの間） */
+const TYPING_ROOM = 64
+/** 横向きのスマホで、案内を紙面の横に出すときの、紙面との間（px）と、案内の幅の下限（px。これより狭ければ、横には出さない） */
+const SIDE_GAP = 12
+const SIDE_MIN_W = 240
 
 /**
  * コースを選ぶ段階（と、Word で書き始めているかを聞く段階）の間だけ、案内を窓として扱う
@@ -126,6 +133,55 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
 
   // 光を当てる欄。Word で書き始めているかを聞く段階は、どの欄も指さない（画面の真ん中に出し、紙面は一様に暗くする。mockups/v24 ① 案C）
   const spot = step === 'word' ? null : rect
+
+  // スマホで欄を書いている間（下から書く欄が出ている）
+  const typingOnPhone = narrow && !!field && snap.editingId === field
+  // 画面の大きさ・キーボードが変わったら、スマホの案内の置き方を決め直す
+  const [viewportTick, setViewportTick] = useState(0)
+  useEffect(() => {
+    if (!narrow) return
+    const bump = () => setViewportTick((n) => n + 1)
+    window.addEventListener('resize', bump)
+    window.visualViewport?.addEventListener('resize', bump)
+    return () => {
+      window.removeEventListener('resize', bump)
+      window.visualViewport?.removeEventListener('resize', bump)
+    }
+  }, [narrow])
+
+  // スマホの案内の置き方（ふだんは画面の上。コースを選ぶ段階・最後は画面の下：index.css）。
+  // - 欄を書いている間：案内と下の書く欄の間に、紙面の欄を見せる高さがないとき（横向き・小さい画面でキーボードが出ているとき）は、
+  //   書いている間だけ案内を隠す（tucked。書く欄の上に「表紙・〜を書いています」が出ている）。前は、案内が紙面の欄と書く欄の「完了」に重なっていた
+  // - 欄をタップしてもらう間：横向きで、紙面の右（左）に空きがあれば、そこに出す（beside。上に出すと、横向きの小さな紙面の欄を隠していたため）
+  useLayoutEffect(() => {
+    const tip = tipRef.current
+    if (!tip) return
+    tip.classList.remove('beside', 'tucked')
+    tip.style.right = ''
+    tip.style.maxHeight = ''
+    // PC の置き方（下の useLayoutEffect）が決める left・top は、スマホのときだけ戻す
+    if (!narrow) return
+    tip.style.left = ''
+    tip.style.top = ''
+    if (isChoiceStep(step) || step === 'done' || !field) return
+    if (typingOnPhone) {
+      const sheet = document.querySelector('.edit-sheet.open')?.getBoundingClientRect()
+      if (sheet && sheet.height > 0 && sheet.top - tip.getBoundingClientRect().bottom < TYPING_ROOM) tip.classList.add('tucked')
+      return
+    }
+    if (!matchMedia(BAND_SIDE_QUERY).matches) return
+    const page = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current')?.getBoundingClientRect()
+    const stage = document.querySelector('.stage')?.getBoundingClientRect()
+    if (!page || !stage || !page.width) return
+    const right = window.innerWidth - page.right - SIDE_GAP - 8
+    const left = page.left - SIDE_GAP - 8
+    if (Math.max(left, right) < SIDE_MIN_W) return
+    tip.classList.add('beside')
+    tip.style.left = right >= left ? `${page.right + SIDE_GAP}px` : '8px'
+    tip.style.right = right >= left ? '8px' : `${window.innerWidth - page.left + SIDE_GAP}px`
+    tip.style.top = `${stage.top + 8}px`
+    tip.style.maxHeight = `${stage.height - 16}px`
+  }, [spot, step, field, narrow, typingOnPhone, viewportTick])
 
   // 案内の吹き出しを、欄のすぐ下に置く（画面からはみ出さないように）
   useLayoutEffect(() => {
@@ -278,7 +334,6 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
   })()
 
   // スマホで欄を書いている間は、下から出る書く欄が暗くならないよう、紙面を暗くしない
-  const typingOnPhone = narrow && !!field && snap.editingId === field
   return (
     <div className={`guide step-${step}${narrow ? ' narrow' : ''}`}>
       {/* コースを選ぶまで（Word で書き始めているかを答えるまで）は、ほかの操作をできないようにする（指・マウスは g-block、キーボードと読み上げは CourseStepFocus と aria-modal）。

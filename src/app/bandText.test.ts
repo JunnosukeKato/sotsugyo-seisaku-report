@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { STUDENT_TOPICS } from '../help/helpTopics'
-import { forTouch, paragraphHint, photoBand, photoSlotName, todoBand, topicsForTouch } from './bandText'
+import type { LayoutInfo } from '../layout/measure'
+import { forTouch, paragraphHint, photoBand, photoSlotName, photoToolsAtSide, todoBand, topicsForTouch } from './bandText'
 import { PAGE_CONTEXT } from './uiShared'
 
 describe('スマホの紙面の下の帯の言葉（mockups/v32 ④ 案A）', () => {
@@ -71,5 +72,22 @@ describe('スマホの「？ 使い方」の言葉（「クリック」を「タ
   it('変えた項目は「クリック」でも探せる（探す言葉に足す）。変えていない項目はそのまま', () => {
     expect(byId('write').words).toContain('クリック')
     expect(byId('login')).toBe(STUDENT_TOPICS.find((t) => t.id === 'login'))
+  })
+})
+
+describe('横向きのスマホ：作品写真のページの道具を、紙面の右の列に出す（mockups/v33 案A）', () => {
+  const layout = { kinds: ['cover', 'abstract', 'photos'] } as LayoutInfo
+  const at = (page: number, more: { editingId?: string; zoomed?: boolean } = {}) => ({ layout, page, editingId: more.editingId ?? null, zoomed: more.zoomed ?? false })
+
+  it('横向きの作品写真のページだけ、右の列に出す（縦向き・ほかのページは今までどおり下の道具）', () => {
+    expect(photoToolsAtSide(at(2), true)).toBe(true)
+    expect(photoToolsAtSide(at(2), false)).toBe(false)
+    expect(photoToolsAtSide(at(1), true)).toBe(false)
+    expect(photoToolsAtSide({ ...at(2), layout: null }, true)).toBe(false)
+  })
+
+  it('書いている間・拡大している間は、右の列に出さない', () => {
+    expect(photoToolsAtSide(at(2, { editingId: 'p1' }), true)).toBe(false)
+    expect(photoToolsAtSide(at(2, { zoomed: true }), true)).toBe(false)
   })
 })

@@ -2,11 +2,11 @@ import { useRef, useState, type ReactNode } from 'react'
 import type { YearConfig } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { findEditable, type EditableKind } from '../editor/reportOps'
-import { BAND_SIDE_QUERY, forTouch, paragraphHint } from './bandText'
+import { BAND_SIDE_QUERY, forTouch, paragraphHint, photoToolsAtSide } from './bandText'
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
 import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, HelpButton, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
-import { keepFocus, PAGE_CONTEXT, pageName } from './uiShared'
+import { keepFocus, PAGE_CONTEXT, pageName, useBandSide } from './uiShared'
 import { DriveChip, DriveMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
 import { useDialogFocus } from './useDialogFocus'
@@ -230,8 +230,10 @@ function placeUndo(area: HTMLElement): void {
   area.style.bottom = ''
   area.style.right = ''
   const band = document.querySelector<HTMLElement>('.page-band')
-  const side = !!band && matchMedia(BAND_SIDE_QUERY).matches
-  if (band && side) area.style.right = `${Math.max(12, innerWidth - band.getBoundingClientRect().left + UNDO_GAP)}px`
+  // 横向きの作品写真のページの右の列（帯と作品写真の道具。mockups/v33 案A）にも重ねず、列の左に出す
+  const column = document.querySelector<HTMLElement>('.page-side') ?? (band && matchMedia(BAND_SIDE_QUERY).matches ? band : null)
+  const side = !!column
+  if (column) area.style.right = `${Math.max(12, innerWidth - column.getBoundingClientRect().left + UNDO_GAP)}px`
   const a = area.getBoundingClientRect()
   // 書く欄（.edit-sheet.open）を開いている間に出す知らせ（表の行・列を消せないわけ）は、書く欄の上に出す（キーボードに隠れないように）
   const below = [...document.querySelectorAll<HTMLElement>(`.pager, .unzoom, .sel-bar > *, .edit-sheet.open${side ? '' : ', .page-band'}`)]
@@ -280,7 +282,9 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
   }
   const errors = snap.findings.filter((f) => f.severity === 'error').length
   const kind = snap.layout?.kinds[snap.page]
-  const showSelection = !snap.editingId && (snap.selection || kind === 'photos')
+  // 横向きの作品写真のページでは、作品写真の道具は紙面の右の列に出す（mockups/v33 案A。PageBand.tsx）
+  const bandSide = useBandSide()
+  const showSelection = !snap.editingId && (snap.selection || kind === 'photos') && !photoToolsAtSide(snap, bandSide)
   // 削除したあとの「戻す」の知らせ（mockups/v32 ② 案A）。削除した直後の原稿のまま（ほかを変えていない・書き始めていない）ときだけ出る
   // （ほかを変えたあとの「戻す」は、削除ではなく、その変更を戻してしまうため）
   const undo = useUndoNotice(snap)

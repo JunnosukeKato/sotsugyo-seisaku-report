@@ -59,6 +59,23 @@ async function fetchConfig(apiUrl: string | undefined, year: number | null, cach
   return null
 }
 
+/**
+ * 設定を読み込み始める（待たずに返す）。cached：このブラウザの控え（前に読み込んだ設定。なければ null）、
+ * remote：窓口から読んだ設定（読めなければ null。読めたら控えも新しくする）。year を省くと公開中の年度。
+ * 学生用ツールは、2回目からは控えの設定ですぐ開き、窓口の返事はあとで確かめる（窓口の返事には1〜数秒かかり、開くたびに待たせていたため。App.tsx）
+ */
+export function startConfigLoad(year: number | null = null, apiUrl = import.meta.env.VITE_CONFIG_API_URL as string | undefined): { cached: YearConfig | null; remote: Promise<YearConfig | null> } {
+  const key = year ? `${CACHE_KEY}:${year}` : CACHE_KEY
+  // 控えは、窓口の返事で書き換わる前に読む
+  const cached = readCache(key)
+  return { cached, remote: fetchConfig(apiUrl, year, key) }
+}
+
+/** 2つの設定が同じか（窓口から読んだ設定が、控えと変わっていないか） */
+export function sameConfig(a: YearConfig, b: YearConfig): boolean {
+  return JSON.stringify(a) === JSON.stringify(b)
+}
+
 export async function loadConfig(apiUrl = import.meta.env.VITE_CONFIG_API_URL as string | undefined): Promise<{ config: YearConfig; source: ConfigSource }> {
   const remote = await fetchConfig(apiUrl, null, CACHE_KEY)
   if (remote) return { config: remote, source: 'remote' }

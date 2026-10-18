@@ -1,3 +1,4 @@
+import { forgetLayoutMemory } from '../layout/memory'
 import { migrateReport } from './migrate'
 import type { Report } from './types'
 
@@ -173,6 +174,8 @@ export async function listSnapshots(): Promise<Snapshot[]> {
 export async function clearAll(): Promise<void> {
   for (const name of ['report', 'images', 'snapshots']) await promisify((await store(name, 'readwrite')).clear())
   clearLeavingCopy()
+  // 前に開いたときの紙面の組み方（ページ数など。原稿の文字は入っていない）も忘れる
+  forgetLayoutMemory()
 }
 
 /** 報告書で使われていない写真を消す（容量の節約） */

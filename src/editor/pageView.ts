@@ -1,4 +1,5 @@
 import { CoreViewer } from '@vivliostyle/core'
+import { pageKind, type PageKind } from '../layout/measure'
 
 /**
  * 組版エンジン（Vivliostyle）1つ分。報告書の一部（表紙・抄録・目次・本文から後ろ）の HTML 文書を組んで表示する。
@@ -19,6 +20,45 @@ export class PartView {
       { viewportElement: element, window, debug: true },
       { renderAllPages: true, autoResize: false, pixelRatio: 0 },
     )
+  }
+
+  /**
+   * まだ組んでいない（組んでいる途中の）部分の、仮のページ（紙面には置かない。ページの数と種類だけを表す。showPlaceholder）。
+   * 組み終えるまでは、組んでいる途中のページの代わりにこれを数える（組んでいる途中は、ページが1枚ずつ増え、章の終わりの印もまだ付いていないため）
+   */
+  private standIns: HTMLElement[] | null = null
+
+  /** この部分のページ（章の終わりの「次の章の始まり」の代わりのページは除く。仮のページを置いていれば、組み終えるまでは仮のページ） */
+  pageElements(): HTMLElement[] {
+    return this.standIns ?? [...this.element.querySelectorAll<HTMLElement>(`[data-vivliostyle-page-container]:not([${SENTINEL_PAGE_ATTR}])`)]
+  }
+
+  /** この部分のページの種類（表紙・本文など） */
+  pageKinds(): PageKind[] {
+    return this.pageElements().map(pageKind)
+  }
+
+  /**
+   * まだ組んでいない部分に、仮のページ（中は空）を置く（kinds：ページの種類。数は、前に開いたときのページ数）。
+   * はじめて開いたとき、見せるページのある部分を先に組んで見せる間、紙面のページの番号がずれないようにするため（reportRenderer.ts）。
+   * 仮のページは紙面（組版エンジンの表示枠）には入れず、ページの一覧（PageView.pages）にだけ出す。この部分を組み終えたら外す（removePlaceholder）
+   */
+  showPlaceholder(kinds: PageKind[]): void {
+    if (this.html !== null || this.element.querySelector('[data-vivliostyle-page-container]')) return
+    this.standIns = kinds.map((kind) => {
+      const page = document.createElement('div')
+      page.setAttribute('data-vivliostyle-page-container', '')
+      page.setAttribute(PLACEHOLDER_ATTR, '')
+      const section = document.createElement('section')
+      section.className = kind
+      page.append(section)
+      return page
+    })
+  }
+
+  /** 仮のページを外す（この部分を組み終えたとき・この表示枠が裏に回ったとき） */
+  removePlaceholder(): void {
+    this.standIns = null
   }
 
   /** HTML 文書を組版して表示する。かかった時間（ミリ秒）を返す */
@@ -59,11 +99,15 @@ export class PartView {
     if (this.documentUrl) URL.revokeObjectURL(this.documentUrl)
     this.documentUrl = null
     this.html = null
+    this.standIns = null
   }
 }
 
 /** 章を分けて組んだときの、章の終わりの「次の章の始まり」の代わりのページ（表示しない。ページの一覧にも入れない。reportRenderer.ts） */
 export const SENTINEL_PAGE_ATTR = 'data-sentinel-page'
+
+/** まだ組んでいない部分の仮のページ（PartView.showPlaceholder）と、その入れ物の印 */
+export const PLACEHOLDER_ATTR = 'data-placeholder-page'
 
 /**
  * 紙面の表示枠1つ（報告書の全ページ）。表示された紙面は提出 PDF と同じもの。紙面上の位置と、文書データ（ブロック ID ＋文字位置）を対応づける。
@@ -100,8 +144,9 @@ export class PageView {
     while (this.parts.length > Math.max(4, count)) this.parts.splice(this.parts.length - 2, 1)[0].dispose()
   }
 
+  /** ページの一覧（部分の順。まだ組んでいない・組んでいる途中の部分に仮のページを置いていれば、組み終えるまではそれを数える） */
   pages(): HTMLElement[] {
-    return [...this.viewport.querySelectorAll<HTMLElement>(`[data-vivliostyle-page-container]:not([${SENTINEL_PAGE_ATTR}])`)]
+    return this.parts.flatMap((part) => part.pageElements())
   }
 
   /** ブロックの表示要素（ページをまたぐと複数） */

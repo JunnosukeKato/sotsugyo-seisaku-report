@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import type { PageKind } from '../layout/measure'
+import { BAND_SIDE_QUERY } from './bandText'
 
 /** 画面の部品で共有する定数と、画面の幅・キーボード・指の動きを扱うフック */
 
@@ -38,6 +39,21 @@ export function useNarrow(): boolean {
     return () => mq.removeEventListener('change', onChange)
   }, [])
   return narrow
+}
+
+/**
+ * 横向きのスマホほどの形の画面か（帯と、作品写真のページの道具を、紙面の右に出す。bandText.ts の BAND_SIDE_QUERY。mockups/v33 案A）。
+ * 画面の向きを変えると描き直す
+ */
+export function useBandSide(): boolean {
+  const [side, setSide] = useState(() => matchMedia(BAND_SIDE_QUERY).matches)
+  useEffect(() => {
+    const mq = matchMedia(BAND_SIDE_QUERY)
+    const onChange = () => setSide(mq.matches)
+    mq.addEventListener('change', onChange)
+    return () => mq.removeEventListener('change', onChange)
+  }, [])
+  return side
 }
 
 /** スマホのキーボードの高さを CSS 変数 --kb に入れる（書く欄をキーボードのすぐ上に置くため） */

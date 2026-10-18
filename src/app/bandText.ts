@@ -1,3 +1,4 @@
+import type { EditorSnapshot } from '../editor/reportEditor'
 import type { EditableKind } from '../editor/reportOps'
 import type { HelpTopic } from '../help/helpTopics'
 import { photoGrid, shownPhotos } from '../model/photos'
@@ -10,6 +11,15 @@ import type { Report, WorkPhotos } from '../model/types'
 
 /** 帯を紙面の右に出す画面の形（横向きのスマホ。紙面の下に出すと、紙面がとても小さくなるため）。index.css の @media と同じ */
 export const BAND_SIDE_QUERY = '(min-aspect-ratio: 4/3)'
+
+/**
+ * 作品写真のページの道具（並べ方・押して選んだ写真の「差し替え」「外す」「全体を入れる（切らない）」）を、
+ * 下の道具の代わりに、紙面の右の列（帯と同じ列）に出すか（mockups/v33 案A）。
+ * side：帯を紙面の右に出す画面の形（BAND_SIDE_QUERY。横向きのスマホ）。書いている間・拡大している間は、今までどおり下の道具
+ */
+export function photoToolsAtSide(snap: Pick<EditorSnapshot, 'layout' | 'page' | 'editingId' | 'zoomed'>, side: boolean): boolean {
+  return side && snap.layout?.kinds[snap.page] === 'photos' && !snap.editingId && !snap.zoomed
+}
 
 /** 空いている作品写真の枠の呼び方（2枚の並べ方は「下の枠」など、ほかは「3枚目の枠」） */
 export function photoSlotName(photos: Pick<WorkPhotos, 'layout' | 'columns'>, index: number): string {

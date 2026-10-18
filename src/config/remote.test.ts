@@ -13,7 +13,7 @@ vi.stubGlobal('fetch', async (url: string) => {
   return { json: async () => (config ? { ok: true, config } : { ok: false }) }
 })
 
-const { loadConfig, loadYearConfig } = await import('./remote')
+const { loadConfig, loadYearConfig, sameConfig, startConfigLoad } = await import('./remote')
 const API = 'https://example.test/exec'
 
 beforeEach(() => {
@@ -41,6 +41,25 @@ describe('年度の設定を読み込む', () => {
     years.set(2026, { ...currentConfig, fiscalYear: 2026, commonTitle: '' })
     memory.clear()
     expect(await loadConfig(API)).toMatchObject({ source: 'bundled' })
+  })
+
+  it('読み込み始めると、すぐに前の控えを返し、窓口の返事はあとで（読めたら控えを新しくする）。2回目から、控えですぐ開くため', async () => {
+    years.set(2026, { ...currentConfig, fiscalYear: 2026, commonTitle: '前の題目' })
+    await loadConfig(API)
+    years.set(2026, { ...currentConfig, fiscalYear: 2026, commonTitle: '直した題目' })
+    const { cached, remote } = startConfigLoad(null, API)
+    expect(cached?.commonTitle).toBe('前の題目')
+    const fresh = await remote
+    expect(fresh?.commonTitle).toBe('直した題目')
+    expect(sameConfig(cached!, fresh!)).toBe(false)
+    expect(startConfigLoad(null, API).cached?.commonTitle).toBe('直した題目')
+    // 年度を指定したとき（公開中の年度と違う原稿）は、その年度の控え
+    years.set(2025, { ...currentConfig, fiscalYear: 2025, commonTitle: '2025年度の題目' })
+    await loadYearConfig(2025, API)
+    expect(startConfigLoad(2025, API).cached?.commonTitle).toBe('2025年度の題目')
+    // 控えがなければ null（窓口の返事を待つ）
+    memory.clear()
+    expect(startConfigLoad(null, API).cached).toBeNull()
   })
 
   it('読めなければ、前に控えた設定。なければ同梱の初期値（同じ年度のときだけ）、それもなければ null', async () => {
