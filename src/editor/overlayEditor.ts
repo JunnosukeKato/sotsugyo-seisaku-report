@@ -15,8 +15,11 @@ export type OverlayKind = 'paragraph' | 'line' | 'cell'
 export interface OverlayCallbacks {
   /** 文字が変わった（日本語の変換中は呼ばない） */
   onInput(blockId: string, text: string): void
-  /** 編集を終えた（byKey：Enter・Esc で閉じたとき true。ほかの場所をクリックして閉じたときは false） */
-  onCommit(blockId: string, text: string, byKey: boolean): void
+  /**
+   * 編集を終えた（byKey：Enter・Esc で閉じたとき true。ほかの場所をクリックして閉じたときは false）。
+   * frozen：閉じる前の入力欄の見た目を写した、動かない要素（紙面に重ねていたときだけ。使わなければ捨ててよい）
+   */
+  onCommit(blockId: string, text: string, byKey: boolean, frozen: HTMLElement | null): void
   /** Enter で段落を分けた（見出しの Enter は、後ろに段落を作る） */
   onSplit(blockId: string, before: string, after: string): void
   /** 段落の先頭で Backspace を押した（前の段落とつなげる） */
@@ -342,8 +345,32 @@ export class OverlayEditor {
     const text = this.text
     const byKey = this.closingByKey
     this.closingByKey = false
+    const frozen = this.freeze()
     this.close()
-    this.callbacks.onCommit(blockId, text, byKey)
+    this.callbacks.onCommit(blockId, text, byKey, frozen)
+  }
+
+  /**
+   * 紙面に重ねた入力欄の、いまの見た目を写した動かない要素（同じ位置・書体・文字。押せない・読み上げない）。
+   * 書き終えたあと、組み直した紙面が出るまで、前の文字ではなく書いた文字を見せるために使う（reportEditor の freezeEdited）。
+   * 段落を分けた直後の、前の段落の仮の表示（ghost）も一緒に写す。下の欄で書いている（スマホ）・何も書いていないときは null
+   */
+  private freeze(): HTMLElement | null {
+    if (!this.target || this.sheetHost || this.clip.hidden || !this.text.trim()) return null
+    const clip = document.createElement('div')
+    clip.className = 'overlay-clip overlay-frozen'
+    clip.style.cssText = this.clip.style.cssText
+    clip.setAttribute('aria-hidden', 'true')
+    const copy = (from: HTMLElement, text: string) => {
+      const el = document.createElement('div')
+      el.style.cssText = from.style.cssText
+      Object.assign(el.style, GHOST_STYLE)
+      el.textContent = text
+      clip.append(el)
+    }
+    if (!this.ghost.hidden) copy(this.ghost, this.ghost.textContent ?? '')
+    copy(this.element, this.text)
+    return clip
   }
 
   /** 確定せずに閉じる（呼び出し側がデータを処理済みのとき） */

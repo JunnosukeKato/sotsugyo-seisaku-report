@@ -110,6 +110,15 @@ const FIGURE_MAX_MM = 80
 /** 元に戻した所を光らせておく時間（mockups/v32 ② 案A） */
 const UNDO_FLASH_MS = 1500
 
+/** 後ろの文章をずらしていた要素を元に戻す（shiftFollowing） */
+function resetShift(elements: HTMLElement[]): void {
+  for (const t of elements) {
+    t.style.translate = ''
+    t.style.visibility = ''
+    t.style.clipPath = ''
+  }
+}
+
 /** 原稿の抄録・本文にある ID（段落・章・ブロック・図）。削除して消えたものを見つけるため */
 function bodyIds(report: Report): Set<string> {
   const ids = new Set(report.abstract.paragraphs.map((p) => p.id))
@@ -136,6 +145,8 @@ export class ReportEditor {
   private readonly hideStyle: HTMLStyleElement
   /** 削除したものを、組み直すまで紙面で隠す（removed） */
   private readonly removedStyle: HTMLStyleElement
+  /** 書き終えた欄を、組み直すまで紙面で隠す（frozen） */
+  private readonly frozenStyle: HTMLStyleElement
   private caretPos = 0
   /** Enter で段落を分けたときに、前の段落へ自動で付けた「。」（直後の Backspace で元に戻すため） */
   private autoPeriod: { prevId: string; newId: string; original: string } | null = null
@@ -148,6 +159,12 @@ export class ReportEditor {
   private layout: LayoutInfo | null = null
   private rendering = false
   private renderAgain = false
+  /** 組んでいる間に、急ぎの変更（書き終えた・段落を足した・削除・元に戻すなど。打っている途中の組み直しではないもの）があった */
+  private renderUrgent = false
+  /** 原稿を変えた回数（書き終えた欄の仮の表示を、その変更を含む紙面が出たら外すため） */
+  private changeSeq = 0
+  /** 表に出ている紙面の原稿 */
+  private shownReport: Report | null = null
   private renderTimer: number | undefined
   private renderMs = 0
   private pendingOpen: { id: string; caret: number } | null = null
@@ -177,7 +194,8 @@ export class ReportEditor {
     this.renderer = new ReportRenderer(scroller)
     this.hideStyle = document.createElement('style')
     this.removedStyle = document.createElement('style')
-    document.head.append(this.hideStyle, this.removedStyle)
+    this.frozenStyle = document.createElement('style')
+    document.head.append(this.hideStyle, this.removedStyle, this.frozenStyle)
     CSS.highlights.set('issue-error', this.highlights.error)
     CSS.highlights.set('issue-warning', this.highlights.warning)
     CSS.highlights.set('issue-focus', this.highlights.focus)
@@ -188,14 +206,18 @@ export class ReportEditor {
     layer.append(this.marker)
     this.continueRow = new ContinueRow(layer, (id) => this.continueAfter(id))
     // 拡大してスクロールしたら、「＋ ここに続きを書く」も紙面に合わせて動かす
-    scroller.addEventListener('scroll', () => this.placeContinueRow())
+    scroller.addEventListener('scroll', () => {
+      this.placeContinueRow()
+      // 書き終えた欄の仮の表示は、紙面と一緒には動かないので外す
+      this.clearFrozen(Infinity)
+    })
 
     this.overlay = new OverlayEditor(layer, scroller, {
       onInput: (id, text) => {
         this.report = ops.setText(this.report, id, text)
         this.afterChange({ render: 'debounce', save: true })
       },
-      onCommit: (id, text, byKey) => this.onCommitEdit(id, text, byKey),
+      onCommit: (id, text, byKey, frozen) => this.onCommitEdit(id, text, byKey, frozen),
       onSplit: (id, before, after) => {
         // 図・表のタイトル：Enter で、図・表の後ろに新しい段落を作る（mockups/v32 ① 案A）
         const editing = ops.findEditable(this.report, id)?.kind
@@ -251,6 +273,7 @@ export class ReportEditor {
     // 画面の大きさが変わって紙面の倍率・位置が変わったら、入力欄も合わせる
     this.stage = new PageStage(stage, () => {
       this.marker.hidden = true
+      this.clearFrozen(Infinity)
       const id = this.overlay.blockId
       const placement = id ? this.overlayPlacement(id) : null
       if (placement) this.overlay.moveTo(placement)
@@ -372,9 +395,10 @@ export class ReportEditor {
     'data:image/svg+xml,' +
     encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><rect width="10" height="10" fill="#e4e4e4"/></svg>')
 
+  /** 打つ手が止まったら組み直す（打っている途中の組み直しは急ぎでない：組んでいる間にまた打っても、組み終えた紙面を出す） */
   scheduleRender(delay = RENDER_DELAY_MS): void {
     clearTimeout(this.renderTimer)
-    this.renderTimer = window.setTimeout(() => void this.render(), delay)
+    this.renderTimer = window.setTimeout(() => void this.render(false), delay)
   }
 
   /** 補助の指摘を「このままにする（確認済み）」にする（エラーに数えない）。戻すときは unacknowledge */
@@ -394,51 +418,85 @@ export class ReportEditor {
     void this.render()
   }
 
-  async render(): Promise<void> {
+  /**
+   * 原稿を組み直して、表に出す。urgent：急ぎの変更（書き終えた・段落を足した・削除・元に戻すなど）のための組み直し。
+   * 組んでいる間に急ぎの変更があったら、組んでいる紙面は出さずに、すぐ新しい原稿を組む
+   * （途中の状態がちらっと見えないように。書き終えた欄の文字は、組み直した紙面が出るまで仮に表示している：freezeEdited）。
+   * 打っている途中の組み直し（scheduleRender）は急ぎでない：組んでいる間にまた打っても、組み終えた紙面を出す（ページの終わりで、続きのページへ移れるように）
+   */
+  async render(urgent = true): Promise<void> {
     clearTimeout(this.renderTimer)
     if (this.rendering) {
       this.renderAgain = true
+      if (urgent) this.renderUrgent = true
       return
     }
     this.rendering = true
+    this.renderUrgent = false
     this.notify()
     const image = (id: string) => this.images.get(id)
     // 組む原稿（組んでいる間に原稿が変わっても、紙面に出るのはこの原稿）
     const rendered = this.report
-    let swapped = false
+    const seq = this.changeSeq
+    let done = false
+    let skipped = false
     try {
-      const result = await this.renderer.renderBack(rendered, this.config, {
-        imageSrc: (id) => image(id)?.url ?? this.placeholderImage,
-        photoSrc: (id) => image(id)?.url ?? this.placeholderImage,
-        figureSize: (f) => {
-          const img = image(f.imageId)
-          return img ? fitFigureSize(img, FIGURE_MAX_MM) : { widthMm: 60, heightMm: 45 }
+      const result = await this.renderer.renderBack(
+        rendered,
+        this.config,
+        {
+          imageSrc: (id) => image(id)?.url ?? this.placeholderImage,
+          photoSrc: (id) => image(id)?.url ?? this.placeholderImage,
+          figureSize: (f) => {
+            const img = image(f.imageId)
+            return img ? fitFigureSize(img, FIGURE_MAX_MM) : { widthMm: 60, heightMm: 45 }
+          },
         },
-      })
-      // ページを送っている途中なら、送り終わってから入れ替える
-      if (this.turning) await this.turning
-      this.renderMs = result.ms
-      this.layout = result.layout
-      this.page = Math.max(0, Math.min(this.page, result.layout.kinds.length - 1))
-      // 紙面の欄にフォーカスがあれば、組み直した紙面の同じ欄に移し直す（要素が作り直されて、フォーカスが失われないように）
-      const focused = this.paperFocus()
-      this.renderer.swap(this.page)
-      swapped = true
-      // 削除したものが出てこない紙面になったら、隠すのをやめる（組み始めたあとに削除したものは、まだ隠しておく。元に戻したものは隠さない）
-      const shown = bodyIds(rendered)
-      const now = bodyIds(this.report)
-      for (const id of this.removed) if (!shown.has(id) || now.has(id)) this.removed.delete(id)
-      this.hideRemoved()
-      markFocusable(this.viewport)
-      if (focused) this.focusPaper(focused.key, focused.visible)
-      this.markPrintSkip()
+        () => this.renderUrgent,
+      )
+      done = true
+      if (result.stale || (this.renderUrgent && !result.unchanged)) {
+        skipped = true
+      } else {
+        // ページを送っている途中なら、送り終わってから入れ替える
+        if (this.turning) await this.turning
+        this.renderMs = result.ms
+        this.layout = result.layout
+        this.page = Math.max(0, Math.min(this.page, result.layout.kinds.length - 1))
+        // 表に出ている紙面がすでにこの原稿の紙面なら（unchanged）、入れ替えない
+        const swap = !result.unchanged
+        // 紙面の欄にフォーカスがあれば、組み直した紙面の同じ欄に移し直す（要素が作り直されて、フォーカスが失われないように）
+        const focused = swap ? this.paperFocus() : null
+        if (swap) this.renderer.swap(this.page)
+        this.shownReport = rendered
+        // 削除したものが出てこない紙面になったら、隠すのをやめる（組み始めたあとに削除したものは、まだ隠しておく。元に戻したものは隠さない）
+        const shown = bodyIds(rendered)
+        const now = bodyIds(this.report)
+        for (const id of this.removed) if (!shown.has(id) || now.has(id)) this.removed.delete(id)
+        this.hideRemoved()
+        if (swap) {
+          markFocusable(this.viewport)
+          if (focused) this.focusPaper(focused.key, focused.visible)
+          this.markPrintSkip()
+        }
+        // 書き終えた欄の仮の表示を外す（その変更を含む紙面が出た）
+        this.clearFrozen(seq)
+      }
     } finally {
       this.rendering = false
-      // 組めなかったときは、削除したものを隠し続けない（紙面を押せなくならないように）
-      if (!swapped && this.removed.size > 0) {
-        this.removed.clear()
-        this.hideRemoved()
+      // 組めなかったときは、削除したものを隠し続けない（紙面を押せなくならないように）。書き終えた欄の仮の表示も外す
+      if (!done) {
+        if (this.removed.size > 0) {
+          this.removed.clear()
+          this.hideRemoved()
+        }
+        this.clearFrozen(Infinity)
       }
+    }
+    if (skipped) {
+      this.renderAgain = false
+      void this.render()
+      return
     }
     this.markSelection()
     this.runChecks()
@@ -569,6 +627,7 @@ export class ReportEditor {
     if (this.turning) return this.turning
     if (to === this.page || to < 0) return Promise.resolve()
     if (this.overlay.blockId) this.overlay.commit()
+    this.clearFrozen(Infinity)
     this.marker.hidden = true
     this.selection = null
     this.markSelection()
@@ -655,6 +714,7 @@ export class ReportEditor {
       const page = this.renderer.pageView.pageOfOffset(id, this.overlay.caret)
       if (page >= 0 && page !== this.page && !this.turning) {
         this.page = page
+        this.clearFrozen(Infinity)
         this.scroller.scrollTop = 0
         this.renderer.show(page, 'fade')
         if (this.overlay.inSheet) this.revealEditing()
@@ -665,13 +725,24 @@ export class ReportEditor {
     this.shiftFollowing()
   }
 
-  /** 入力欄を閉じて、書いた文字を確定する */
-  private onCommitEdit(id: string, text: string, byKey: boolean): void {
-    this.clearShift()
-    if (this.continuing?.id === id) this.continuing = null
+  /** 入力欄を閉じて、書いた文字を確定する。frozen：閉じる前の入力欄の見た目を写した要素（紙面に重ねる。PC だけ） */
+  private onCommitEdit(id: string, text: string, byKey: boolean, frozen: HTMLElement | null = null): void {
     // サブタイトル：自動で付く前後の決まり文句（「―」「の衣装制作―」など）まで入力していたら取る（表紙で二重にならないように）
     const course = id === FIELD_IDS.subtitleInput ? findCourse(this.config, this.report.basicInfo.courseId) : undefined
-    this.report = ops.setText(this.report, id, course ? subtitleInputOnly(course, text) : text)
+    const committed = ops.setText(this.report, id, course ? subtitleInputOnly(course, text) : text)
+    // 書いていた欄の文字が、表に出ている紙面と違えば、組み直した紙面が出るまで、閉じる前の見た目のまま仮に表示する（freezeEdited）。
+    // 後ろの文章をずらしていれば、それもそのままにする
+    // （段落を分けたばかりで、まだ紙面にない段落も。分けた前の段落の仮の表示も一緒に写してある）
+    const shownText = this.shownReport ? ops.findEditable(this.shownReport, id)?.text : undefined
+    const nextText = ops.findEditable(committed, id)?.text
+    const unrendered = this.renderer.pageView.fragments(id).length === 0
+    if (frozen && nextText !== undefined && (unrendered || nextText !== shownText)) this.freezeEdited(id, frozen, this.hideStyle.textContent ?? '', nextText)
+    else {
+      frozen?.remove()
+      this.clearShift()
+    }
+    if (this.continuing?.id === id) this.continuing = null
+    this.report = committed
     if (this.reportBeforeEdit && JSON.stringify(this.reportBeforeEdit) !== JSON.stringify(this.report)) this.pushHistory(this.reportBeforeEdit)
     this.reportBeforeEdit = null
     this.hideStyle.textContent = ''
@@ -681,6 +752,7 @@ export class ReportEditor {
       // Esc・Enter で書き終えた（PC）：書いていた紙面の欄にフォーカスを戻す（ページ全体に戻ると、どこにいたか分からなくなる）。
       // 欄がまだ紙面にない（分けたばかりの段落など）ときは、組み直してから戻す
       if (!this.focusPaper(blockPaperKey(id), true)) this.refocusKey = blockPaperKey(id)
+      else this.ringFrozen(id)
     }
     this.afterChange({ render: 'now', save: true })
   }
@@ -694,6 +766,8 @@ export class ReportEditor {
    */
   private shiftFollowing(): void {
     this.clearShift()
+    // 書き終えた欄の仮の表示が後ろの文章をずらしていれば、外してから測る（同じ要素を2つの仕組みでずらさないように）
+    this.clearFrozen(Infinity, (f) => f.shift.length === 0)
     const id = this.overlay.blockId
     // 行が増えるのは段落（見出し・表紙の項目などは1行）
     if (!id || this.overlay.inSheet || this.overlay.kind !== 'paragraph') return
@@ -730,12 +804,58 @@ export class ReportEditor {
   }
 
   private clearShift(): void {
-    for (const t of this.shifted) {
-      t.style.translate = ''
-      t.style.visibility = ''
-      t.style.clipPath = ''
-    }
+    resetShift(this.shifted)
     this.shifted = []
+  }
+
+  /**
+   * 書き終えた欄の、閉じる前の見た目の写し（組み直した紙面が出るまで紙面に重ねる）。
+   * id：書いていた欄。text：書き終えた文字。seq：その変更を含む原稿の、変更の回数。shift：ずらしたままにしている後ろの文章。hidden：隠したままにしている欄の CSS
+   */
+  private frozen: { id: string; text: string; element: HTMLElement; seq: number; shift: HTMLElement[]; hidden: string }[] = []
+
+  /**
+   * 書き終えた欄の文字を、組み直した紙面が出るまで、閉じる前の見た目のまま紙面に重ねて見せる（PC）。
+   * 前は、閉じるとすぐ紙面の前の文字が見え、組み直すと（長い原稿では1〜3秒後）書いた文字に変わっていた。
+   * 書いていた欄（と、段落を分けた前の段落）は隠したまま、後ろの文章のずらしもそのままにする。
+   * 組み直した紙面が出たら外す（render の clearFrozen）。ページを送った・画面の大きさが変わった・別の欄を書いて後ろの文章をずらすときも外す
+   */
+  private freezeEdited(id: string, element: HTMLElement, hidden: string, text: string): void {
+    // 書く欄より下に置く（同じ欄をまた書き始めたら、書く欄が上に出る）
+    this.layer.insertBefore(element, this.layer.firstChild)
+    // 隠した欄は、見えないだけで押せるようにしておく（すぐ押し直して続きを書けるように。visibility: hidden だと押せない）
+    hidden = hidden.replaceAll('visibility: hidden !important;', 'opacity: 0 !important;')
+    this.frozen.push({ id, text, element, seq: this.changeSeq + 1, shift: this.shifted, hidden })
+    this.shifted = []
+    this.frozenStyle.textContent = this.frozen.map((f) => f.hidden).join('\n')
+  }
+
+  /**
+   * キーボードで書き終えて、書いていた欄にフォーカスを戻したとき：欄は組み直すまで隠しているので、フォーカスの目印（藍色の枠）を仮の表示に付ける。
+   * フォーカスがほかへ移ったら外す
+   */
+  private ringFrozen(id: string): void {
+    const active = document.activeElement
+    const copy = this.frozen.findLast((f) => f.id === id)?.element.lastElementChild
+    if (!(active instanceof HTMLElement) || !copy || !active.matches(':focus-visible')) return
+    copy.classList.add('focus-ring')
+    active.addEventListener('blur', () => copy.classList.remove('focus-ring'), { once: true })
+  }
+
+  /** 書き終えた欄の仮の表示のうち、変更の回数が upTo までのもの（keep が false を返すもの）を外す */
+  private clearFrozen(upTo: number, keep: (f: ReportEditor['frozen'][number]) => boolean = () => false): void {
+    if (this.frozen.length === 0) return
+    const kept: ReportEditor['frozen'] = []
+    for (const f of this.frozen) {
+      if (f.seq > upTo || keep(f)) {
+        kept.push(f)
+        continue
+      }
+      f.element.remove()
+      resetShift(f.shift)
+    }
+    this.frozen = kept
+    this.frozenStyle.textContent = kept.map((f) => f.hidden).join('\n')
   }
 
   applyFinding(finding: ReportFinding): void {
@@ -809,9 +929,12 @@ export class ReportEditor {
     const page = this.renderer.pageView.pageOfOffset(id, caret)
     if (page >= 0 && page !== this.page && !this.turning) {
       this.page = page
+      this.clearFrozen(Infinity)
       this.scroller.scrollTop = 0
       this.renderer.show(page)
     }
+    // 書き終えたばかりの同じ欄をまた書くときは、仮の表示を外す（書く欄が、組み直す前の紙面の上で開く）
+    this.clearFrozen(Infinity, (f) => f.id !== id)
     const target = this.overlayTarget(id, caret)
     if (!target) return
     if (this.overlay.blockId && this.overlay.blockId !== id) this.overlay.commit()
@@ -1389,6 +1512,9 @@ export class ReportEditor {
 
   private afterChange({ render, save }: { render: 'now' | 'debounce'; save: boolean }): void {
     this.report = { ...this.report, updatedAt: new Date().toISOString() }
+    this.changeSeq += 1
+    // 書き終えた欄の仮の表示は、その欄の文字が変わった（元に戻した・消したなど）ら外す
+    this.clearFrozen(Infinity, (f) => ops.findEditable(this.report, f.id)?.text === f.text)
     if (save) this.callbacks.onChange(this.report)
     // 書いている欄を確定して、続けて原稿を変えるところ（commitForChange）：変えたあとの原稿で1回だけ組み直す
     if (this.holdingRender) {
@@ -1466,6 +1592,7 @@ export class ReportEditor {
     this.undone = null
     this.removed.clear()
     this.hideRemoved()
+    this.clearFrozen(Infinity)
     this.afterChange({ render: 'now', save: true })
   }
 
@@ -1480,6 +1607,8 @@ export class ReportEditor {
   private removeNow(fn: (report: Report) => Report, what: RemovedWhat): void {
     const before = bodyIds(this.report)
     this.update(fn)
+    // 隠した分だけ紙面の後ろの文章が詰まり、書き終えた欄の仮の表示と位置が合わなくなるので外す
+    this.clearFrozen(Infinity)
     const after = bodyIds(this.report)
     const gone = [...before].filter((id) => !after.has(id))
     for (const id of gone) this.removed.add(id)
@@ -2044,6 +2173,8 @@ export class ReportEditor {
     if (!d.moved) {
       d.moved = true
       d.img.classList.add('dragging')
+      // 表の紙面の写真の見え方を、組版エンジンを通さずに変える。この紙面は、あとで使い回さない
+      this.renderer.frontTouched()
     }
     e.preventDefault()
     const p = this.photoDragPosition(d, dx, dy)

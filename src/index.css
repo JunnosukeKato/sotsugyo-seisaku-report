@@ -47,6 +47,11 @@ body.resizing .page-viewport { pointer-events: none; }
 .page-viewport { position: absolute !important; left: 0; top: 0; width: 100% !important; height: auto !important; min-height: 100%; display: block !important; overflow: visible !important; background: transparent !important; font: initial; color: initial; }
 .page-viewport:not(.front) { opacity: 0; pointer-events: none; z-index: 0; }
 .page-viewport.front { z-index: 1; }
+/* 表示枠の中の部分（表紙・抄録・目次・章ごと・残り。組版エンジンごとの枠。editor/pageView.ts）。同じ位置に重ねる。
+   最初の部分だけを流れに置き、表示枠の高さ（拡大したときのスクロールの長さ）を決める（どの部分も紙面1ページ分の高さ）。
+   重なりの順（z-index）は、表示しているページのある部分が上になるよう、editor/reportRenderer.ts が付ける */
+.page-viewport > .paper-part { position: absolute !important; left: 0; top: 0; width: 100% !important; height: auto !important; display: block !important; overflow: visible !important; background: transparent !important; }
+.page-viewport > .paper-part:first-child { position: relative !important; }
 
 /* 1ページずつ表示する：ページを同じ位置に重ね、表示するページ（.is-current）だけを出す。縮小は spread-container で行う
    （組版エンジンもページに transform-origin などを指定するため、めくる軸（左端）は !important で決める） */
@@ -56,6 +61,8 @@ body.resizing .page-viewport { pointer-events: none; }
 /* 組版の間は、寸法を測れるようすべてのページを出しておく（裏側なので見えない） */
 .page-viewport.measuring [data-vivliostyle-page-container],
 .page-viewport [data-vivliostyle-page-container]:is(.is-current, .is-under, .is-under-current, .turn-in) { display: block !important; }
+/* 章ごとに組んだときの、章の終わりの「次の章の始まり」の代わりのページは出さない（印刷・PDF にも。editor/reportRenderer.ts） */
+.page-viewport [data-vivliostyle-page-container][data-sentinel-page] { display: none !important; }
 .page-viewport [data-vivliostyle-page-container].is-current { z-index: 2; }
 .page-viewport [data-vivliostyle-page-container]:is(.is-under, .is-under-current) { z-index: 1; }
 .page-viewport [data-vivliostyle-page-container]:is(.turn-out, .turn-in, .fade-out) { z-index: 3; }
@@ -137,6 +144,10 @@ body.resizing .page-viewport { pointer-events: none; }
   caret-color: var(--accent);
   min-height: 1em;
 }
+/* 書き終えた欄の、閉じる前の見た目の写し（組み直した紙面が出るまで重ねる。editor/overlayEditor.ts の freeze）。文字の組み方は書く欄と同じ */
+.overlay-frozen > div { box-sizing: border-box; text-justify: inter-character; text-autospace: normal; text-spacing-trim: normal; min-height: 1em; }
+/* キーボードで書き終えたとき、隠している欄の代わりに、仮の表示にフォーカスの目印を付ける（紙面の欄の目印と同じ見た目） */
+.overlay-frozen > div.focus-ring { outline: calc(2px / var(--s)) solid var(--accent); outline-offset: calc(3px / var(--s)); }
 /* 書いている段落の左の余白に、細い線を出す（枠は出さない。mockups/v10 案2）。見出しや表のセルなど1行の欄は、カーソルだけ */
 .overlay-editor[data-kind='paragraph']:not(.in-sheet)::before { content: ''; position: absolute; left: -16px; top: 2px; bottom: 2px; width: 3px; border-radius: 2px; background: var(--accent); opacity: 0.55; }
 
@@ -470,6 +481,9 @@ body.resizing .page-viewport { pointer-events: none; }
   .page-scroller { position: static !important; overflow: visible !important; }
   .page-viewport:not(.front) { display: none !important; }
   .page-viewport { position: static !important; min-height: 0 !important; opacity: 1 !important; background: #fff !important; }
+  .page-viewport > .paper-part { position: static !important; }
+  /* 組版エンジンは、ページの枠ごとに「次のページへ」を付ける（最後の枠を除く）。部分ごとに組むと、部分の最後の枠に付かないので、ここで付ける */
+  .page-viewport > .paper-part:not(:last-child) [data-vivliostyle-spread-container] [data-vivliostyle-page-container]:last-child { break-after: page; }
   /* 画面用の余白・縮小が残ると、白紙のページができたり大きさが変わったりする */
   .page-viewport [data-vivliostyle-layout-box],
   .page-viewport [data-vivliostyle-outer-zoom-box],

@@ -1,11 +1,11 @@
 import type { YearConfig } from '../config'
 import type { FigureSize } from '../layout/bodyHtml'
-import { buildReportDocument, COVER_SUBTITLE, fitLineFontPt, OVERFLOW_RATIO, refitLineFontPt, subtitleLine } from '../layout/document'
+import { buildReportParts, COVER_SUBTITLE, fitLineFontPt, OVERFLOW_RATIO, partList, refitLineFontPt, subtitleLine } from '../layout/document'
 import { FONT_SIZE_PT } from '../layout/documentCss'
 import { reviseDeferredGroups, sameSet } from '../layout/figureFloat'
-import { measureLayout, samePageNumbers, type LayoutInfo } from '../layout/measure'
+import { measureLayout, pageKind, samePageNumbers, type LayoutInfo } from '../layout/measure'
 import type { Figure, Report } from '../model/types'
-import { PageView } from './pageView'
+import { PageView, SENTINEL_PAGE_ATTR, type PartView } from './pageView'
 
 export interface ImageSources {
   imageSrc: (imageId: string) => string
@@ -15,11 +15,51 @@ export interface ImageSources {
 
 export type PageEffect = 'turn' | 'fade' | 'none'
 
+/**
+ * 組んだ結果。
+ * - unchanged：表に出ている紙面が、すでにこの原稿の紙面だった（組み直していない。swap しない）
+ * - stale：組んでいる間に原稿がまた変わったので、途中でやめた（裏側の紙面は使えない。swap しない）
+ */
+export interface RenderResult {
+  ms: number
+  layout: LayoutInfo
+  unchanged?: boolean
+  stale?: boolean
+}
+
 /** 組み直しの上限（図の送り方と目次のページ番号が落ち着くまで） */
 const MAX_PASSES = 4
 
 /** ページを送る動きのクラス（終わったら外す） */
 const MOTION_CLASSES = ['is-under', 'is-under-current', 'turn-out', 'turn-in', 'fade-out', 'fade-in']
+
+/** 表示枠の初めの3つの部分（表紙・抄録・目次）の数。そのあとに章ごとの部分、最後に本文の残りから後ろ（layout/document.ts の partList） */
+const FRONT_PARTS = 3
+
+/**
+ * 紙面を組んだときの状態（目次のページ番号・次のページへ送った図・表紙のサブタイトルの大きさ・章を分けて組んだか）。
+ * これと原稿から、組む HTML が決まる
+ */
+interface LayoutState {
+  toc: Record<string, number>
+  deferred: Set<string>
+  subtitle: { line: string; pt: number }
+  split: boolean
+}
+
+interface Buffer {
+  element: HTMLElement
+  view: PageView
+  /** この表示枠の紙面を組んだときの状態と、測った紙面の情報（組み終えて落ち着いた紙面のときだけ。途中でやめた・組めなかったときは null） */
+  state: LayoutState | null
+  layout: LayoutInfo | null
+}
+
+/** 落ち着いた紙面の状態を覚えておく数（元に戻したときに、前と同じ組み方からすぐ始めるため） */
+const STATE_CACHE_SIZE = 20
+
+/** これまでに読み込んだ文字（書体の、文字の範囲ごとに分かれたファイルは、一度読み込めば残る） */
+const loadedChars = new Set<string>()
 
 /**
  * 報告書全体を組版し、紙面を1ページずつ表示する。
@@ -30,22 +70,34 @@ const MOTION_CLASSES = ['is-under', 'is-under-current', 'turn-out', 'turn-in', '
  * 目次のページ番号は組版した結果から読み取るため、番号が変わったときだけもう一度組み直す。
  * 段落のすぐ下に入りきらない図は次のページの上へ送る（figureFloat.ts）。送る図が変わったときも組み直す。
  * 表紙のサブタイトルが枠に入らないときも、文字を小さくして組み直す（文字の幅は書体によって違うため、組んだ紙面で測る）。
+ *
+ * 速くするため（組み直しは長い原稿では数秒かかっていた）：
+ * - 表紙・抄録・目次・本文の章ごと・残りを、別々に組む（layout/document.ts の buildReportParts）。表示枠に組んである部分と同じ HTML なら組み直さない
+ *   （段落を書いたときはその章だけ、目次のページ番号が変わったときは目次だけを組み直す）。
+ *   章ごとに組んだページのページ番号は、組んだあとで、本文の1ページ目から数えた通しの番号に直す（numberPages）。
+ *   章の中身が章の終わりを越えて次のページへはみ出したときは（送った図など）、本文をまとめて組み直す（分けずに組んだときと同じ紙面にするため）
+ * - 表に出ている紙面が、すでにその原稿の紙面なら、何もしない（unchanged）
+ * - 裏側に残っている、ひとつ前の紙面が、その原稿の紙面なら（削除してすぐ元に戻したなど）、組まずにそのまま使う
+ * - 前に組んで落ち着いた原稿なら、そのときの状態（目次の番号・送る図・サブタイトルの大きさ）から始める（組み直しの回数が減る）
+ * 分けて組んでも、組み直しの判断（目次・図の送り方・サブタイトル）は全体を組んだときと同じで、出来上がる紙面も同じ。
  */
 export class ReportRenderer {
-  private readonly buffers: [{ element: HTMLElement; view: PageView }, { element: HTMLElement; view: PageView }]
+  private readonly buffers: [Buffer, Buffer]
   private frontIndex = 0
   private tocPageNumbers: Record<string, number> = {}
   /** 前に組んだときに次のページへ送った図のまとまり（たいていそのままでよいので、次もここから始める） */
   private deferredGroups = new Set<string>()
   /** 前に組んだときの表紙のサブタイトル（1行全体）と文字の大きさ。サブタイトルが変わらなければ、次もこの大きさで組む */
   private coverSubtitle: { line: string; pt: number } | null = null
+  /** 組んで落ち着いた原稿（状態によらない部分の HTML）と、そのときの状態 */
+  private readonly settled = new Map<string, LayoutState>()
 
   constructor(container: HTMLElement) {
-    const make = () => {
+    const make = (): Buffer => {
       const element = document.createElement('div')
       element.className = 'page-viewport'
       container.append(element)
-      return { element, view: new PageView(element) }
+      return { element, view: new PageView(element), state: null, layout: null }
     }
     this.buffers = [make(), make()]
     this.buffers[0].element.classList.add('front')
@@ -61,31 +113,87 @@ export class ReportRenderer {
     return this.buffers[this.frontIndex].element
   }
 
-  /** 見えていない側で組版し、紙面の情報を測る（まだ表には出さない） */
-  async renderBack(report: Report, config: YearConfig, sources: ImageSources): Promise<{ ms: number; layout: LayoutInfo }> {
+  /** 覚えている組み方をすべて忘れる（次は、まっさらな状態から全体を組む。出来上がりの確かめ（e2e）で、まっさらな状態から組んだ紙面と比べるときに使う） */
+  forget(): void {
+    this.tocPageNumbers = {}
+    this.deferredGroups = new Set()
+    this.coverSubtitle = null
+    this.settled.clear()
+    for (const b of this.buffers) {
+      b.state = null
+      b.layout = null
+      for (const part of b.view.parts) part.html = null
+    }
+  }
+
+  /**
+   * 表に出ている紙面に、組版エンジンのほかに手を加えた（作品写真をつかんで動かしたなど）。
+   * この紙面は使い回さず、次にこの表示枠で組むときは組み直す
+   */
+  frontTouched(): void {
+    const front = this.buffers[this.frontIndex]
+    front.state = null
+    for (const part of front.view.parts) part.html = null
+  }
+
+  /**
+   * 見えていない側で組版し、紙面の情報を測る（まだ表には出さない）。
+   * stale：組んでいる途中で原稿がまた変わったか（変わっていたら、組み直しの回の区切りでやめる）
+   */
+  async renderBack(report: Report, config: YearConfig, sources: ImageSources, stale: () => boolean = () => false): Promise<RenderResult> {
+    const front = this.buffers[this.frontIndex]
     const back = this.buffers[1 - this.frontIndex]
+    const groupIds = new Set(report.body.flatMap((c) => c.blocks).filter((b) => b.type === 'figureRow').map((b) => b.id))
+    const line = subtitleLine(report, config)
+    const build = (toc: Record<string, number>, deferred: ReadonlySet<string>, pt: number, split: boolean) =>
+      partList(buildReportParts(report, config, { ...sources, tocPageNumbers: toc, deferredGroups: deferred, coverSubtitlePt: pt }, split))
+    const docsOf = (s: LayoutState) => build(s.toc, s.deferred, s.subtitle.pt, s.split)
+    const adopt = (s: LayoutState) => {
+      this.tocPageNumbers = s.toc
+      this.deferredGroups = s.deferred
+      this.coverSubtitle = s.subtitle
+    }
+    // 表に出ている紙面が、すでにこの原稿の紙面なら、組み直さない（書く欄を開いて何も変えずに閉じた、など）
+    if (front.state && front.layout && sameDocs(front.view, docsOf(front.state))) {
+      adopt(front.state)
+      return { ms: 0, layout: front.layout, unchanged: true }
+    }
+    // 組む原稿の、状態によらない部分（覚えた状態を探す手がかり。どの部分にも同じ CSS が付くので、body から後ろだけ）
+    const key = build({}, new Set(), 0, true)
+      .map((d) => d.slice(d.indexOf('<body>')))
+      .join('\n')
+    // 裏側に残っている紙面（ひとつ前の紙面）がこの原稿の紙面なら、そのときの状態から始める（組まずに済む。削除してすぐ元に戻したなど）。
+    // そうでなくても、前に組んで落ち着いた原稿なら、そのときの状態から始める（目次の番号・送る図が初めから合っていて、組み直しの回数が減る）
+    const known = back.state && sameDocs(back.view, docsOf(back.state)) ? back.state : this.settled.get(key)
+    if (known) adopt(known)
+
+    let deferred = new Set([...this.deferredGroups].filter((id) => groupIds.has(id)))
+    // 表紙のサブタイトルの文字の大きさ：はじめは字数から見積もり、組んだ紙面で枠に入るかを測って直す（入りきる大きさまで小さく）
+    let subtitlePt = this.coverSubtitle?.line === line ? this.coverSubtitle.pt : fitLineFontPt(line, COVER_SUBTITLE)
+    let subtitleTooBig = Infinity
+    // 章を分けて組むか（章の中身がはみ出したら、この組み直しの間は分けない）
+    let split = known?.split ?? true
+    let docs = build(this.tocPageNumbers, deferred, subtitlePt, split)
+
+    back.state = null
+    back.layout = null
     back.element.classList.add('measuring')
     try {
-      const groupIds = new Set(report.body.flatMap((c) => c.blocks).filter((b) => b.type === 'figureRow').map((b) => b.id))
-      let deferred = new Set([...this.deferredGroups].filter((id) => groupIds.has(id)))
-      // 表紙のサブタイトルの文字の大きさ：はじめは字数から見積もり、組んだ紙面で枠に入るかを測って直す（入りきる大きさまで小さく）
-      const line = subtitleLine(report, config)
-      let subtitlePt = this.coverSubtitle?.line === line ? this.coverSubtitle.pt : fitLineFontPt(line, COVER_SUBTITLE)
-      let subtitleTooBig = Infinity
-      const build = () =>
-        buildReportDocument(report, config, { ...sources, tocPageNumbers: this.tocPageNumbers, deferredGroups: deferred, coverSubtitlePt: subtitlePt })
-      // 文字の範囲ごとに分かれたフォントを、組版の前に読み込んでおく（後から読み込まれると改行位置がずれる）
-      const text = build().replace(/<[^>]+>/g, '') + '0123456789'
-      await Promise.all([
-        document.fonts.load(`${FONT_SIZE_PT}pt "BIZ UDMincho"`, text),
-        document.fonts.load(`${FONT_SIZE_PT}pt "BIZ UDPGothic"`, text),
-      ])
+      // 文字の範囲ごとに分かれたフォントを、組版の前に読み込んでおく（後から読み込まれると改行位置がずれる）。読み込み済みの文字は読み込まない
+      await loadFonts(docs.join(''))
       let ms = 0
       let layout: LayoutInfo
       const blocked = new Set<string>()
       let fallback = false
       for (let pass = 1; ; pass++) {
-        ms += await back.view.render(build())
+        // 変わった部分だけを組む
+        for (;;) {
+          ms += await renderParts(back.view, docs)
+          // 章の中身が、章の終わりを越えて次のページへはみ出した：本文をまとめて組み直す
+          if (!split || chaptersFit(back.view)) break
+          split = false
+          docs = build(this.tocPageNumbers, deferred, subtitlePt, split)
+        }
         layout = measureLayout(back.view.pages(), report.body)
         const tocChanged = !samePageNumbers(layout.tocPageNumbers, this.tocPageNumbers)
         if (tocChanged) this.tocPageNumbers = layout.tocPageNumbers
@@ -98,16 +206,34 @@ export class ReportRenderer {
         const ratio = layout.coverSubtitle?.ratio ?? 0
         if (ratio > OVERFLOW_RATIO) subtitleTooBig = Math.min(subtitleTooBig, subtitlePt)
         const nextPt = refitLineFontPt(subtitlePt, ratio, COVER_SUBTITLE, subtitleTooBig)
-        if ((sameSet(next, deferred) && !tocChanged && nextPt === subtitlePt) || pass >= MAX_PASSES + 2) break
+        const settled = sameSet(next, deferred) && !tocChanged && nextPt === subtitlePt
+        if (settled || pass >= MAX_PASSES + 2) {
+          if (settled) {
+            back.state = { toc: this.tocPageNumbers, deferred, subtitle: { line, pt: subtitlePt }, split }
+            back.layout = layout
+            this.remember(key, back.state)
+          }
+          break
+        }
+        // 組んでいる間に原稿が変わったら、この原稿の組み直しはここでやめる（すぐ新しい原稿を組む）
+        if (stale()) return { ms, layout, stale: true }
         deferred = next
         subtitlePt = nextPt
+        docs = build(this.tocPageNumbers, deferred, subtitlePt, split)
       }
+      numberPages(back.view)
       this.deferredGroups = deferred
       this.coverSubtitle = { line, pt: subtitlePt }
       return { ms, layout }
     } finally {
       back.element.classList.remove('measuring')
     }
+  }
+
+  private remember(key: string, state: LayoutState): void {
+    this.settled.delete(key)
+    this.settled.set(key, state)
+    if (this.settled.size > STATE_CACHE_SIZE) this.settled.delete(this.settled.keys().next().value!)
   }
 
   /** 組み終えた裏側を表に出し、page ページ目（0 から）を見せる */
@@ -141,6 +267,7 @@ export class ReportRenderer {
       p.classList.remove(...MOTION_CLASSES)
       p.classList.toggle('is-current', i === page)
     })
+    stackParts(view)
   }
 
   /**
@@ -172,6 +299,7 @@ export class ReportRenderer {
       b.classList.add('turn-in')
       moving = b
     }
+    stackParts(view)
     return new Promise((resolve) => {
       let finished = false
       const finish = () => {
@@ -188,6 +316,87 @@ export class ReportRenderer {
       moving.addEventListener('animationend', onEnd)
       setTimeout(finish, 1500)
     })
+  }
+}
+
+/** 表示枠に組んである部分が、すべて docs と同じか */
+function sameDocs(view: PageView, docs: string[]): boolean {
+  return view.parts.length === docs.length && docs.every((d, i) => view.parts[i].html === d)
+}
+
+/** 表示枠の部分を docs の数にそろえ、組んである文書と違う部分だけを組む。かかった時間（ミリ秒）を返す */
+async function renderParts(view: PageView, docs: string[]): Promise<number> {
+  view.setPartCount(docs.length)
+  let ms = 0
+  for (const [i, doc] of docs.entries()) {
+    const part = view.parts[i]
+    if (part.html === doc) continue
+    ms += await part.render(doc)
+    if (i >= FRONT_PARTS && i < docs.length - 1) markSentinel(part)
+  }
+  return ms
+}
+
+/** 章ごとの部分の最後のページ（章の終わりの「次の章の始まり」の代わり）に印を付ける（表示しない・ページの一覧に入れない） */
+function markSentinel(part: PartView): void {
+  const pages = part.element.querySelectorAll<HTMLElement>('[data-vivliostyle-page-container]')
+  const last = pages[pages.length - 1]
+  if (last?.querySelector('[data-sentinel]')) last.setAttribute(SENTINEL_PAGE_ATTR, '')
+}
+
+/**
+ * 章ごとの部分が、章の中だけで収まっているか：章の終わりの目印（.flow-end）のあるページのすぐ次が、「次の章の始まり」の代わりだけのページになっている。
+ * 収まっていない（送った図などが、次のページへはみ出した）ときは、本文全体を組んだときと紙面が変わりうる
+ * （本文全体では、はみ出したものは次の章の最初のページに載る）
+ */
+function chaptersFit(view: PageView): boolean {
+  return view.parts.slice(FRONT_PARTS, -1).every((part) => {
+    const pages = [...part.element.querySelectorAll<HTMLElement>('[data-vivliostyle-page-container]')]
+    const end = pages.findIndex((p) => p.querySelector('.flow-end'))
+    const sentinel = pages[end + 1]
+    return end >= 0 && pages.length === end + 2 && sentinel?.hasAttribute(SENTINEL_PAGE_ATTR) && !sentinel.querySelector('[data-block-id], figure, .figure-group, .data-table, p, h2, li')
+  })
+}
+
+/**
+ * 本文・引用参考文献のページのページ番号を、本文の1ページ目から数えた通しの番号にする
+ * （章ごとに組んだ部分は、それぞれ1から数えている。番号の欄の大きさと位置は番号によらず同じなので、文字だけを直せば、全体を組んだときと同じ紙面になる）
+ */
+function numberPages(view: PageView): void {
+  const pages = view.pages()
+  const kinds = pages.map(pageKind)
+  const bodyStart = kinds.indexOf('body')
+  if (bodyStart < 0) return
+  pages.forEach((page, i) => {
+    if (kinds[i] !== 'body' && kinds[i] !== 'references') return
+    const counter = page.querySelector('[data-vivliostyle-page-margin-box="bottom-center"] [data-vivliostyle-page-counter]')
+    const n = String(i - bodyStart + 1)
+    if (counter && counter.textContent !== n) counter.textContent = n
+  })
+}
+
+/** 組む文書の文字のうち、まだ読み込んでいない文字の書体を読み込む */
+async function loadFonts(html: string): Promise<void> {
+  const text = html.replace(/<[^>]+>/g, '') + '0123456789'
+  const fresh = [...new Set(text)].filter((c) => !loadedChars.has(c)).join('')
+  if (!fresh) return
+  await Promise.all([document.fonts.load(`${FONT_SIZE_PT}pt "BIZ UDMincho"`, fresh), document.fonts.load(`${FONT_SIZE_PT}pt "BIZ UDPGothic"`, fresh)])
+  for (const c of fresh) loadedChars.add(c)
+}
+
+/**
+ * ページの重なりの順（z-index）を、部分（組版エンジンごとの枠）にも付ける。
+ * ページの重なりの順は、同じ部分の中でしか効かない（部分ごとに別の重なりの単位になる）ため、
+ * めくっているページ・表示しているページ・下に見えるページのある部分を、その順に上へ出す
+ */
+function stackParts(view: PageView): void {
+  for (const part of view.parts) {
+    const pages = [...part.element.querySelectorAll<HTMLElement>('[data-vivliostyle-page-container]')]
+    const level = Math.max(
+      0,
+      ...pages.map((p) => (p.matches('.turn-out, .turn-in, .fade-out') ? 3 : p.classList.contains('is-current') ? 2 : p.matches('.is-under, .is-under-current') ? 1 : 0)),
+    )
+    part.element.style.zIndex = String(level)
   }
 }
 

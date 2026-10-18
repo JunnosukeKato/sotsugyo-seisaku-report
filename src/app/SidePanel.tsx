@@ -97,19 +97,29 @@ export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; sna
   const names = kinds.map((k) => (k === 'body' ? `${SHORT_NAMES.body} ${++body}` : SHORT_NAMES[k]))
   const errorPages = new Set(snap.findings.filter((f) => f.severity === 'error').map((f) => editor.pageOfFinding(f)))
 
-  // 組み直すたびに、紙面のページを複製して縮小表示する
+  // 組み直すたびに、紙面のページを複製して縮小表示する。
+  // 組み直した紙面を先に描いてから作る（長い原稿では、ページを複製して縮めるのにも時間がかかり、紙面が出るのを待たせていたため）
   useEffect(() => {
-    const boxes = ref.current?.querySelectorAll<HTMLElement>('.mini')
-    const pages = editor.pageElements()
-    boxes?.forEach((box, i) => {
-      const page = pages[i]
-      if (!page) return box.replaceChildren()
-      const clone = page.cloneNode(true) as HTMLElement
-      clone.className = 'mini-page'
-      clone.removeAttribute('id')
-      for (const el of clone.querySelectorAll('[id]')) el.removeAttribute('id')
-      box.replaceChildren(clone)
+    let timer = 0
+    const frame = requestAnimationFrame(() => {
+      timer = window.setTimeout(() => {
+        const boxes = ref.current?.querySelectorAll<HTMLElement>('.mini')
+        const pages = editor.pageElements()
+        boxes?.forEach((box, i) => {
+          const page = pages[i]
+          if (!page) return box.replaceChildren()
+          const clone = page.cloneNode(true) as HTMLElement
+          clone.className = 'mini-page'
+          clone.removeAttribute('id')
+          for (const el of clone.querySelectorAll('[id]')) el.removeAttribute('id')
+          box.replaceChildren(clone)
+        })
+      })
     })
+    return () => {
+      cancelAnimationFrame(frame)
+      clearTimeout(timer)
+    }
   }, [editor, snap.layout])
 
   // 見ているページの見本が、一覧の中で見えるようにする

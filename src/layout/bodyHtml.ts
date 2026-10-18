@@ -172,9 +172,23 @@ export function chapterAnchor(chapterId: string): string {
 
 /** 本文（大見出し以下）の HTML。報告書全体の文書にも、本文だけの文書にも使う */
 export function bodyContentHtml(chapters: Chapter[], options: BodyRenderOptions): string {
+  return chapterHtmls(chapters, options).join('\n')
+}
+
+/** 章ごとの HTML（図・表の番号は本文全体で振る）。つなぐと bodyContentHtml と同じ */
+export function chapterHtmls(chapters: Chapter[], options: BodyRenderOptions): string[] {
   const numbers = numberFiguresAndTables(chapters)
   const tableIds = new Set(chapters.flatMap((c) => c.blocks).filter((b) => b.type === 'table').map((b) => b.id))
-  return chapters.map((c, i) => renderChapter(c, i, numbers, tableIds, options)).join('\n')
+  return chapters.map((c, i) => renderChapter(c, i, numbers, tableIds, options))
+}
+
+/**
+ * 章を分けて組むとき、章の終わりに置く「次の章の始まり」の代わり（改ページして始まる大見出し。番号と題は次の章と同じ。
+ * 書く欄の印（data-block-id）や目次の行き先（id）は付けない）。
+ * 本文全体を組んだときと同じく、章の終わりの直後が改ページになるようにする（reportRenderer.ts。代わりの見出しのページは表示しない）
+ */
+export function chapterSentinelHtml(chapter: Chapter, index: number): string {
+  return `<h1 class="chapter" data-sentinel=""><span class="num">${escapeHtml(chapterLabel(index))}</span><span>${escapeHtml(chapter.title)}</span></h1>`
 }
 
 /** 本文ページだけの HTML 文書（組版エンジンに渡す）を作る */

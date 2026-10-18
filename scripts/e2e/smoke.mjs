@@ -36,6 +36,56 @@ const savedPdf = async (name) => {
   const text = readFileSync(`${DOWNLOADS}/${name}`, 'latin1')
   return { files: readdirSync(DOWNLOADS), pages: (text.match(/\/Type\s*\/Page[^s]/g) ?? []).length, head: text.slice(0, 5) }
 }
+/**
+ * 組み直しを速くする仕組み（表紙・抄録・目次・章ごとに分けて組む、変わらない部分や前の紙面の使い回し、ページ番号の付け直し）で
+ * 表に出ている紙面が、同じ状態（目次の番号・次のページへ送る図・サブタイトルの大きさ）で報告書全体を1つの文書として組んだ紙面と同じか。
+ * ページごとに、各要素の位置と大きさ（ページの中の mm）・文字数と、ページ番号を比べる
+ */
+const paperMatchesWhole = (page) =>
+  page.evaluate(async () => {
+    const ed = window.__editor
+    const r = ed.renderer
+    const { buildReportDocument } = await import('/src/layout/document.ts')
+    const { PartView } = await import('/src/editor/pageView.ts')
+    const { fitFigureSize } = await import('/src/model/images.ts')
+    const image = (id) => ed.images.get(id)
+    const html = buildReportDocument(ed.getSnapshot().report, ed.config, {
+      imageSrc: (id) => image(id)?.url ?? ed.placeholderImage,
+      photoSrc: (id) => image(id)?.url ?? ed.placeholderImage,
+      figureSize: (f) => (image(f.imageId) ? fitFigureSize(image(f.imageId), 80) : { widthMm: 60, heightMm: 45 }),
+      tocPageNumbers: r.tocPageNumbers,
+      deferredGroups: r.deferredGroups,
+      coverSubtitlePt: r.coverSubtitle?.pt,
+    })
+    const mm = (v) => Math.round(v * 10) / 10
+    const geometry = (pages) =>
+      pages.map((p) => {
+        const box = p.getBoundingClientRect()
+        const at = (b) => [mm(((b.top - box.top) / box.height) * 297), mm(((b.left - box.left) / box.height) * 297), mm(((b.bottom - box.top) / box.height) * 297), mm(((b.right - box.left) / box.height) * 297)]
+        const items = [...p.querySelectorAll('[data-block-id], figure, .figure-group, .data-table, h1, h2, p, li, [data-photo-slot]')].map((el) => [el.tagName, el.getAttribute('data-block-id') ?? el.getAttribute('data-group-id') ?? '', ...at(el.getBoundingClientRect()), (el.textContent ?? '').length])
+        return { number: p.querySelector('[data-vivliostyle-page-margin-box="bottom-center"]')?.textContent ?? '', items }
+      })
+    const front = r.viewport
+    front.classList.add('measuring')
+    const shown = geometry(r.pageView.pages())
+    front.classList.remove('measuring')
+    // 全体を1つの文書として組む（表の紙面と同じ台の上に、見えないように置く）
+    const box = document.createElement('div')
+    box.className = 'page-viewport measuring'
+    box.inert = true
+    front.parentElement.append(box)
+    const part = document.createElement('div')
+    part.className = 'paper-part'
+    box.append(part)
+    try {
+      await new PartView(part).render(html)
+      const whole = geometry([...box.querySelectorAll('[data-vivliostyle-page-container]')])
+      const diff = shown.findIndex((s, i) => JSON.stringify(s) !== JSON.stringify(whole[i]))
+      return { same: JSON.stringify(shown) === JSON.stringify(whole), pages: `${shown.length}/${whole.length}`, firstDiffPage: diff }
+    } finally {
+      box.remove()
+    }
+  })
 const results = []
 const check = (name, ok, detail = '') => {
   results.push({ name, ok, detail })
@@ -941,6 +991,9 @@ await withEdge(async (browser) => {
   const movedBack = await page.evaluate((id) => ({ page: window.__editor.getSnapshot().page, at: window.__editor.pageOfBlock(id), flash: !!document.querySelector(`.page-viewport.front .undo-flash[data-block-id="${id}"]`) }), doomed)
   check('ほかのページで元に戻す（Ctrl+Z）と、戻した段落のページへ移って光る', JSON.stringify(await bodyIds()) === JSON.stringify(idsBefore) && movedBack.page === movedBack.at && movedBack.page > 0 && movedBack.flash, JSON.stringify(movedBack))
   s = await snap()
+  // 組み直しを速くする仕組み（分けて組む・使い回す）で組んだ紙面が、報告書全体を1つの文書として組んだ紙面と同じ（いくつも操作したあと）
+  const parity = await paperMatchesWhole(page)
+  check('いくつも操作したあとの紙面が、報告書全体を1つの文書として組んだ紙面と同じ（分けて組む・使い回す仕組みで、紙面が変わらない）', parity.same, JSON.stringify(parity))
 
   // ---- PDF に書き出す（学生が「PDFに保存」を選んだときと同じ印刷処理） ----
   await page.pdf({ path: `${OUT}/report.pdf`, preferCSSPageSize: true, printBackground: true })
@@ -1736,6 +1789,24 @@ async function photoWholeCheck(browser) {
   await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: { layout: 2, columns: 1, imageIds: ['g-photo1', 'g-mood'] } })))
   await pause(500)
   await ready()
+  // 見本の原稿（章・図・表あり）でも、分けて組んだ紙面が、報告書全体を1つの文書として組んだ紙面と同じ。
+  // 段落に書き足して閉じたとき（その章だけ組み直す）、元に戻したとき（前の紙面を使い回す）も同じ
+  const parityBefore = await paperMatchesWhole(page)
+  await page.evaluate(() => window.__editor.openWhenReady('p9', 0))
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p9', { timeout: 30000 })
+  await page.keyboard.type('照明の下で、袖の刺繍の光り方を何度も確かめた。')
+  await page.keyboard.press('Escape')
+  await page.waitForFunction(() => !window.__editor.getSnapshot().editingId, { timeout: 30000 })
+  await ready()
+  const parityEdited = await paperMatchesWhole(page)
+  await page.evaluate(() => window.__editor.undo())
+  await ready()
+  const parityUndone = await paperMatchesWhole(page)
+  check(
+    '見本の原稿の紙面が、報告書全体を1つの文書として組んだ紙面と同じ（はじめ・段落に書き足して閉じたあと・元に戻したあと）',
+    parityBefore.same && parityEdited.same && parityUndone.same,
+    JSON.stringify({ parityBefore, parityEdited, parityUndone }),
+  )
   await page.evaluate(() => window.__editor.goToArea('photos'))
   await ready()
   const slotState = (i) =>

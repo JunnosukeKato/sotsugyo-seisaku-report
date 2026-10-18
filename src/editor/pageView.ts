@@ -1,23 +1,22 @@
 import { CoreViewer } from '@vivliostyle/core'
 
 /**
- * 組版エンジン（Vivliostyle）で紙面を表示する。
- * 表示された紙面は提出 PDF と同じもの。紙面上の位置と、文書データ（ブロック ID ＋文字位置）を対応づける。
- *
- * 紙面の文字は元の文字列と1文字ずつ対応している（句読点の詰めのために差し込まれる要素は文字を持たない）ため、
- * ブロック内のテキストノードを順にたどれば文字位置が求まる。段落がページをまたぐと、同じ ID の要素が複数できる。
+ * 組版エンジン（Vivliostyle）1つ分。報告書の一部（表紙・抄録・目次・本文から後ろ）の HTML 文書を組んで表示する。
+ * 組んである文書（html）を覚えておき、同じ文書なら組み直さずに使い回す（reportRenderer.ts）。
  */
-export class PageView {
-  readonly viewport: HTMLElement
+export class PartView {
+  readonly element: HTMLElement
   private readonly viewer: CoreViewer
   private documentUrl: string | null = null
+  /** いま組んである文書（まだ組んでいない・組めなかったときは null） */
+  html: string | null = null
 
-  constructor(viewport: HTMLElement) {
-    this.viewport = viewport
+  constructor(element: HTMLElement) {
+    this.element = element
     // - debug: true … 印刷用の printHTML と同じ使い方。すべてのページを組んで画面に残す
     // - pixelRatio: 0 … 画面を拡大して組む仕組みを止め、画面と印刷（PDF）を同じ条件で組む（プレビュー＝提出 PDF）
     this.viewer = new CoreViewer(
-      { viewportElement: viewport, window, debug: true },
+      { viewportElement: element, window, debug: true },
       { renderAllPages: true, autoResize: false, pixelRatio: 0 },
     )
   }
@@ -25,6 +24,8 @@ export class PageView {
   /** HTML 文書を組版して表示する。かかった時間（ミリ秒）を返す */
   render(html: string): Promise<number> {
     const started = performance.now()
+    // 組んでいる途中で失敗したときに、組めていない紙面を使い回さないよう、先に忘れておく
+    this.html = null
     // 組版エンジンは処理の区切りごとに console.debug へ記録を出し、大量になると遅くなるため、組版の間だけ止める
     const consoleDebug = console.debug
     console.debug = () => {}
@@ -37,6 +38,7 @@ export class PageView {
       const onState = () => {
         if (this.viewer.readyState !== 'complete') return
         done()
+        this.html = html
         resolve(performance.now() - started)
       }
       const onError = (payload: { content?: { error?: unknown; messages?: unknown } }) => {
@@ -51,8 +53,55 @@ export class PageView {
     })
   }
 
+  /** 使わなくなった（章が減った）：表示枠から外し、組んだ文書の URL を解放する */
+  dispose(): void {
+    this.element.remove()
+    if (this.documentUrl) URL.revokeObjectURL(this.documentUrl)
+    this.documentUrl = null
+    this.html = null
+  }
+}
+
+/** 章を分けて組んだときの、章の終わりの「次の章の始まり」の代わりのページ（表示しない。ページの一覧にも入れない。reportRenderer.ts） */
+export const SENTINEL_PAGE_ATTR = 'data-sentinel-page'
+
+/**
+ * 紙面の表示枠1つ（報告書の全ページ）。表示された紙面は提出 PDF と同じもの。紙面上の位置と、文書データ（ブロック ID ＋文字位置）を対応づける。
+ *
+ * 表紙・抄録・目次・本文の各章は、それぞれ改ページで始まり、互いの組み方に影響しないため、
+ * 別々の組版エンジン（PartView）で組み、表示枠の中に順に並べる（変わった部分だけ組み直せるように。layout/document.ts の buildReportParts）。
+ * 部分の数は章の数で変わる（setPartCount）。ページの一覧（pages）は、表示枠の中のページを報告書の順に並べたもの。
+ *
+ * 紙面の文字は元の文字列と1文字ずつ対応している（句読点の詰めのために差し込まれる要素は文字を持たない）ため、
+ * ブロック内のテキストノードを順にたどれば文字位置が求まる。段落がページをまたぐと、同じ ID の要素が複数できる。
+ */
+export class PageView {
+  readonly viewport: HTMLElement
+  /** 部分（表示枠の中に並べた順。初めの3つは表紙・抄録・目次、最後は本文の残りから後ろ、その間は章ごと） */
+  readonly parts: PartView[] = []
+
+  constructor(viewport: HTMLElement) {
+    this.viewport = viewport
+    for (const name of ['cover', 'abstract', 'toc', 'tail']) this.parts.push(this.makePart(name, null))
+  }
+
+  private makePart(name: string, before: Element | null): PartView {
+    const element = document.createElement('div')
+    element.className = 'paper-part'
+    element.dataset.part = name
+    this.viewport.insertBefore(element, before)
+    return new PartView(element)
+  }
+
+  /** 部分の数を count（4 以上）にする。章ごとの部分を、最後の部分の前で足す・外す */
+  setPartCount(count: number): void {
+    const tail = this.parts[this.parts.length - 1]
+    while (this.parts.length < count) this.parts.splice(this.parts.length - 1, 0, this.makePart('chapter', tail.element))
+    while (this.parts.length > Math.max(4, count)) this.parts.splice(this.parts.length - 2, 1)[0].dispose()
+  }
+
   pages(): HTMLElement[] {
-    return [...this.viewport.querySelectorAll<HTMLElement>('[data-vivliostyle-page-container]')]
+    return [...this.viewport.querySelectorAll<HTMLElement>(`[data-vivliostyle-page-container]:not([${SENTINEL_PAGE_ATTR}])`)]
   }
 
   /** ブロックの表示要素（ページをまたぐと複数） */

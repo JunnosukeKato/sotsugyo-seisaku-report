@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { currentConfig } from '../config'
 import { createReport } from '../model/newReport'
-import { ABSTRACT_SUBTITLE, abstractHtml, abstractRowFontPt, buildReportDocument, COVER_SUBTITLE, coverHtml, fitLineFontPt, formatReference, refitLineFontPt, subtitleLine, textUnits, yearDigits } from './document'
+import { ABSTRACT_SUBTITLE, abstractHtml, abstractRowFontPt, buildReportDocument, buildReportParts, COVER_SUBTITLE, coverHtml, fitLineFontPt, formatReference, partList, refitLineFontPt, subtitleLine, textUnits, yearDigits } from './document'
 import { documentCss } from './documentCss'
 
 describe('抄録の見出し（学籍番号・氏名と指導教員を1行に）', () => {
@@ -136,5 +136,54 @@ describe('作品写真の「全体を入れる（切らない）」（mockups/v3
   it('組版の CSS：切り抜くのは object-fit: cover、全体を入れるのは contain（画面と PDF で同じ）', () => {
     expect(documentCss).toContain('.photos .slot img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }')
     expect(documentCss).toMatch(/\.photos \.slot\.whole img \{ object-fit: contain;/)
+  })
+})
+
+describe('報告書を部分ごと（表紙・抄録・目次・章ごと・残り）に分けて組む（組み直しを速くするため。editor/reportRenderer.ts）', () => {
+  const options = { imageSrc: (id: string) => `img/${id}`, photoSrc: (id: string) => `photo/${id}`, figureSize: () => ({ widthMm: 60, heightMm: 45 }) }
+  const p = (id: string, text: string) => ({ type: 'paragraph' as const, id, content: [{ type: 'text' as const, text }] })
+  const report = {
+    ...createReport(currentConfig),
+    body: [
+      { id: 'c1', title: '企画', blocks: [p('p1', '一つ目の章。')] },
+      { id: 'c2', title: '制作', blocks: [p('p2', '二つ目の章。')] },
+      { id: 'c3', title: 'まとめ', blocks: [p('p3', '三つ目の章。')] },
+    ],
+  }
+  const bodyOf = (doc: string) => doc.slice(doc.indexOf('<body>') + 7, doc.lastIndexOf('</body>') - 1)
+
+  it('部分は、表紙・抄録・目次・最後の章を除く章ごと・残り（最後の章と引用参考文献・作品写真）。どれも全体と同じ CSS', () => {
+    const parts = buildReportParts(report, currentConfig, options)
+    expect(partList(parts)).toHaveLength(3 + 2 + 1)
+    const whole = buildReportDocument(report, currentConfig, options)
+    const head = whole.slice(0, whole.indexOf('<body>'))
+    for (const doc of partList(parts)) expect(doc.startsWith(head)).toBe(true)
+  })
+
+  it('章ごとの部分は、章の終わりのすぐ後ろに、次の章の始まりの代わり（改ページする大見出し。書く欄の印や目次の行き先はない）を置く', () => {
+    const [first] = buildReportParts(report, currentConfig, options).chapters
+    expect(first).toContain('data-block-id="p1"')
+    expect(first).not.toContain('data-block-id="p2"')
+    expect(first).toMatch(/<div class="flow-end"><\/div>\n<h1 class="chapter" data-sentinel=""><span class="num">Ⅱ．<\/span><span>制作<\/span><\/h1>\n<\/section>/)
+    expect(first.match(/data-sentinel/g)).toHaveLength(1)
+  })
+
+  it('分けないとき（章が1つ、または splitChapters が false）は、残りの部分が本文全体と引用参考文献・作品写真で、全体の文書の本文から後ろと同じ', () => {
+    const whole = bodyOf(buildReportDocument(report, currentConfig, options))
+    const parts = buildReportParts(report, currentConfig, options, false)
+    expect(parts.chapters).toEqual([])
+    expect(whole.endsWith(bodyOf(parts.tail))).toBe(true)
+    const one = { ...report, body: report.body.slice(0, 1) }
+    expect(buildReportParts(one, currentConfig, options).chapters).toEqual([])
+  })
+
+  it('全体の文書の本文は、表紙・抄録・目次と章ごとの HTML を順につないだもの（分けて組んでも、中身は同じ）', () => {
+    const whole = bodyOf(buildReportDocument(report, currentConfig, options))
+    const parts = buildReportParts(report, currentConfig, options)
+    const strip = (doc: string) => bodyOf(doc).replace(/\n<h1 class="chapter" data-sentinel="">.*?<\/h1>\n<\/section>$/, '\n</section>')
+    const front = [parts.cover, parts.abstract, parts.toc].map(bodyOf).join('\n')
+    const chapters = parts.chapters.map((d) => strip(d).replace(/^<section class="body">\n/, '').replace(/\n<\/section>$/, ''))
+    const tail = bodyOf(parts.tail).replace(/^<section class="body">\n/, '')
+    expect(`${front}\n<section class="body">\n${[...chapters, tail].join('\n')}`).toBe(whole)
   })
 })

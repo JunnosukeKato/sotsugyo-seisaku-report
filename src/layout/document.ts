@@ -1,7 +1,7 @@
 import { findCourse, type YearConfig } from '../config'
 import type { Reference, Report } from '../model/types'
 import { photoGrid, shownPhotos } from '../model/photos'
-import { bodyContentHtml, chapterLabel, escapeHtml, subheadingLabel, type BodyRenderOptions } from './bodyHtml'
+import { bodyContentHtml, chapterHtmls, chapterLabel, chapterSentinelHtml, escapeHtml, subheadingLabel, type BodyRenderOptions } from './bodyHtml'
 import { documentCss } from './documentCss'
 
 /**
@@ -290,7 +290,8 @@ function photosHtml(report: Report, options: DocumentRenderOptions): string {
   return `<section class="photos grid-${grid.columns}x${grid.rows}">${slots}</section>`
 }
 
-export function buildReportDocument(report: Report, config: YearConfig, options: DocumentRenderOptions): string {
+/** HTML 文書の形（中身 body のまわり。報告書全体でも、一部だけでも同じ） */
+function documentHtml(config: YearConfig, body: string): string {
   return `<!doctype html>
 <html lang="ja">
 <head>
@@ -299,14 +300,63 @@ export function buildReportDocument(report: Report, config: YearConfig, options:
 <style>${documentCss}</style>
 </head>
 <body>
-${coverHtml(report, config, options)}
-${abstractHtml(report, config)}
-${tocHtml(report, options.tocPageNumbers ?? {})}
-<section class="body">
+${body}
+</body>
+</html>`
+}
+
+/** 本文から後ろ（本文・引用参考文献・作品写真）。ページ番号は本文の1ページ目を「1」とし、引用参考文献まで続ける */
+function mainHtml(report: Report, options: DocumentRenderOptions): string {
+  return `<section class="body">
 ${bodyContentHtml(report.body, options)}
 </section>
 ${referencesHtml(report)}
-${photosHtml(report, options)}
-</body>
-</html>`
+${photosHtml(report, options)}`
+}
+
+export function buildReportDocument(report: Report, config: YearConfig, options: DocumentRenderOptions): string {
+  return documentHtml(
+    config,
+    `${coverHtml(report, config, options)}
+${abstractHtml(report, config)}
+${tocHtml(report, options.tocPageNumbers ?? {})}
+${mainHtml(report, options)}`,
+  )
+}
+
+/**
+ * 報告書を分けて組むときの部分（表示枠の中に、この順に並べる：表紙・抄録・目次・章ごと・残り）。
+ * 表紙・抄録・目次・本文の各章は、それぞれ改ページで始まり、前の部分の組み方に影響されない。
+ * 分けて組むと、変わった部分だけを組み直せる（段落を書いたときはその章だけ、目次のページ番号が変わったときは目次だけ、
+ * 表紙のサブタイトルの大きさを直すときは表紙だけ）。
+ * - chapters：章ごとの文書（最後の章を除く）。章の終わりには「次の章の始まり」の代わりを置き、本文全体を組んだときと同じく、
+ *   章の終わりの直後を改ページにする（chapterSentinelHtml）。ページ番号は、組んだあとで本文から通しの番号に直す（reportRenderer.ts）
+ * - tail：最後の章・引用参考文献・作品写真（分けない。本文の最後のページの図を次のページへ送るとき、次が何のページかで送り方が変わるため）。
+ *   splitChapters が false のときは、本文全体と引用参考文献・作品写真（chapters は空）
+ */
+export interface ReportParts {
+  cover: string
+  abstract: string
+  toc: string
+  chapters: string[]
+  tail: string
+}
+
+/** 報告書を部分ごとの HTML 文書にする（それぞれ、buildReportDocument の同じ部分と同じ中身・同じ CSS） */
+export function buildReportParts(report: Report, config: YearConfig, options: DocumentRenderOptions, splitChapters = true): ReportParts {
+  const chapters = chapterHtmls(report.body, options)
+  const split = splitChapters && chapters.length > 1
+  const section = (inner: string) => `<section class="body">\n${inner}\n</section>`
+  return {
+    cover: documentHtml(config, coverHtml(report, config, options)),
+    abstract: documentHtml(config, abstractHtml(report, config)),
+    toc: documentHtml(config, tocHtml(report, options.tocPageNumbers ?? {})),
+    chapters: split ? chapters.slice(0, -1).map((html, i) => documentHtml(config, section(`${html}\n${chapterSentinelHtml(report.body[i + 1], i + 1)}`))) : [],
+    tail: split ? documentHtml(config, `${section(chapters[chapters.length - 1])}\n${referencesHtml(report)}\n${photosHtml(report, options)}`) : documentHtml(config, mainHtml(report, options)),
+  }
+}
+
+/** 部分の文書を、表示枠に並べる順に */
+export function partList(parts: ReportParts): string[] {
+  return [parts.cover, parts.abstract, parts.toc, ...parts.chapters, parts.tail]
 }

@@ -34,8 +34,10 @@ const minVisibleHeight = (page, sel) =>
  * 削除の知らせ（.undo-toast）の位置：ページ送り・「ページ全体に戻す」・選んでいる物の道具・紙面の下の帯のうち、知らせに重なっているもの（なければ空）。
  * shown：知らせが出ている、above：重なっていない道具・帯のうち、知らせより下にあるもの
  */
-const undoPlacement = (page) =>
-  page.evaluate(() => {
+const undoPlacement = async (page) => {
+  // 知らせは下から少し動いて出てくる（0.2秒）。出終わってから位置を測る（組み直しが速くなり、出ている途中に測ってしまうことがあったため）
+  await page.waitForFunction(() => !document.querySelector('.undo-toast')?.getAnimations().some((a) => a.playState === 'running'), { timeout: 5000 })
+  return page.evaluate(() => {
     const toast = document.querySelector('.undo-toast')?.getBoundingClientRect()
     if (!toast) return { shown: false }
     const parts = ['.pager', '.unzoom', '.sel-bar > *', '.page-band'].flatMap((sel) => [...document.querySelectorAll(sel)].map((el) => ({ sel, r: el.getBoundingClientRect() }))).filter(({ r }) => r.height > 0)
@@ -48,6 +50,7 @@ const undoPlacement = (page) =>
       buttonH: Math.round(document.querySelector('.undo-toast button')?.getBoundingClientRect().height ?? 0),
     }
   })
+}
 
 await withEdge(async (browser) => {
   const context = await browser.createBrowserContext()

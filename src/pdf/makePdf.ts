@@ -91,8 +91,10 @@ export async function makePdf(
   try {
     const composeStarted = performance.now()
     renderer ??= new ReportRenderer(paper)
-    const { layout } = await renderer.renderBack(report, config, sources)
-    renderer.swap(0)
+    const { layout, unchanged } = await renderer.renderBack(report, config, sources)
+    // 表に出ている紙面がすでにこの原稿の紙面なら（同じ原稿をもう一度）、入れ替えない
+    if (unchanged) renderer.show(0)
+    else renderer.swap(0)
     const pages = renderer.pageView.pages()
     // 抄録を書き始めるまでは、抄録のページを PDF に入れない（学生用ツールと同じ）
     const skip = report.abstract.started === false
