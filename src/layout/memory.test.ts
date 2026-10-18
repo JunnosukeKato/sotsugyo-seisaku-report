@@ -63,7 +63,14 @@ describe('開いたときに、先に組んで見せる部分', () => {
     expect(firstShowPlan(changed, memory(), 5)).toEqual({ part: 3, kinds: memory().parts.map((p) => p.kinds) })
   })
 
-  it('見せるページのある部分か、その前の部分が変わっていたら（ページの位置が決まらない）、先には見せない。ページが範囲の外でも見せない', () => {
+  it('見せるページのある部分だけが変わっていても、その前の部分が同じなら、その部分を先に組む（見せるページは、覚えたページ数で探す）', () => {
+    const changed = [...docs.slice(0, 3), '<body>1章（書いて、すぐ閉じた）</body>', docs[4]]
+    expect(firstShowPlan(changed, memory(), 4)).toEqual({ part: 3, kinds: memory().parts.map((p) => p.kinds) })
+    // 覚えたページ数より後ろのページは、その部分にあるか分からないので、先には見せない
+    expect(firstShowPlan(changed, memory(), 6)).toBeNull()
+  })
+
+  it('見せるページの前の部分が変わっていたら（ページの位置が決まらない）、先には見せない。ページが範囲の外でも見せない', () => {
     const changed = ['<body>表紙（名前を書いた）</body>', ...docs.slice(1)]
     expect(firstShowPlan(changed, memory(), 5)).toBeNull()
     expect(firstShowPlan(docs, memory(), 9)).toBeNull()

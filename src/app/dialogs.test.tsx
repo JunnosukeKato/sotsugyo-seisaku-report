@@ -41,6 +41,22 @@ const backup = (driveStopped?: boolean) =>
     <BackupDialog snapshots={[]} driveStopped={driveStopped} onSaveBackup={noop} onRestoreFile={noop} onRestoreSnapshot={noop} onStartOver={noop} onClose={noop} />,
   )
 
+describe('バックアップ・作り直すの窓（mockups/v34 案A）', () => {
+  it('窓の名前は「バックアップ・作り直す」。「最初から作り直す」は、いちばん下に区切って出し、「いまの原稿は自動の控えに残ります」と書く。「閉じる」はその下の行', () => {
+    const html = backup()
+    expect(html).toContain('aria-label="バックアップ・作り直す"')
+    expect(html).toContain('<h2>バックアップ・作り直す</h2>')
+    const section = html.indexOf('class="start-over"')
+    expect(section).toBeGreaterThan(html.indexOf('自動の控え（'))
+    expect(html.slice(section)).toMatch(/<h3[^>]*>最初から作り直す（新しく始める）<\/h3>/)
+    expect(html.slice(section)).toContain('<p>いまの原稿は自動の控えに残ります</p>')
+    expect(html.slice(section)).toMatch(/<button class="danger"><svg[^]*<\/svg>最初から作り直す<\/button>/)
+    // 「閉じる」は、区切りのあとの行（「最初から作り直す」と同じ行には並べない）
+    expect(html.indexOf('class="row-buttons close-row"')).toBeGreaterThan(html.indexOf('</section>', section))
+    expect(html.slice(html.indexOf('close-row'))).toContain('>閉じる</button>')
+  })
+})
+
 describe('バックアップと復元の窓', () => {
   it('ドライブ保存を止めていないとき（既定）は、ドライブにも保存されると説明する', () => {
     expect(backup()).toContain('Google ドライブにも保存されます')

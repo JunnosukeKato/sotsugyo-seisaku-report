@@ -4,6 +4,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:f
 import { resolve } from 'node:path'
 import { withEdge } from '../poc/edge.mjs'
 import { stubConfig } from './configStub.mjs'
+import { firstTimeV3Phone } from './firstTimeV3.mjs'
+import { editorFixesV3Phone } from './editorFixesV3.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -408,9 +410,19 @@ await withEdge(async (browser) => {
 
   // ---- 指差し確認（スマホは4か所。mockups/v27 案A）：案内を「あとで」にした学生は、次に開いたときに出る ----
   check('案内を「あとで」で閉じた直後は、指差し確認を出さない', !(await page.$('.tour')))
+  // 書いている途中に（同じタブで）読み込み直したときは出さない（はじめて使う学生の試し（3回目）：Word から読み込んで書いている途中に読み込み直すと、急に出ていた）
+  await page.reload({ waitUntil: 'networkidle0' })
+  await ready()
+  await wait(1500)
+  check('書いている途中に読み込み直したときは、指差し確認を出さない（次に開いたときに出す）', !(await page.$('.tour')))
+  // 次に開いたとき（このタブで開いた印を消して、開き直したのと同じにする）
+  await page.evaluate(() => sessionStorage.removeItem('sotsugyo-seisaku-report-opened'))
   await page.reload({ waitUntil: 'networkidle0' })
   await ready()
   const phoneTour = await page.waitForSelector('.tour .tour-tip', { timeout: 20000 }).then(() => true, () => false)
+  // 出したら、すぐこの端末に覚える（見終える前に読み込み直しても、また初めから出さない）
+  const tourStored = await page.evaluate(() => localStorage.getItem('sotsugyo-seisaku-report-tour'))
+  check('指差し確認を出したら、見終える前でも、出したことをこの端末に覚える', phoneTour && tourStored === 'shown', String(tourStored))
   const tourTitles = []
   for (let i = 0; phoneTour && i < 6; i++) {
     const st = await page.evaluate(() => {
@@ -439,6 +451,15 @@ await withEdge(async (browser) => {
   await wait(300)
   check('使い方から指差し確認をもう一度見られ、「とばす」で終わる', phoneReplay && !(await page.$('.tour')) && !(await page.$('.help-sheet')))
   check('指差し確認の「とばす」「次へ」は、見た目も高さ 44px 以上', tourButtonsH.skip >= 44 && tourButtonsH.next >= 44, JSON.stringify(tourButtonsH))
+  // 一度出した（見終えずに閉じた・読み込み直した）指差し確認は、次に開いても出さない（1回だけ）
+  await page.evaluate(() => {
+    localStorage.setItem('sotsugyo-seisaku-report-tour', 'shown')
+    sessionStorage.removeItem('sotsugyo-seisaku-report-opened')
+  })
+  await page.reload({ waitUntil: 'networkidle0' })
+  await ready()
+  await wait(1500)
+  check('一度出した指差し確認は、見終えていなくても、次に開いたときに出さない', !(await page.$('.tour')))
   await page.evaluate(() => window.__editor.goToPage(0, 'none'))
   await ready()
 
@@ -478,6 +499,12 @@ await withEdge(async (browser) => {
 
   // 横向き：作品写真のページの並べ方と、選んだ写真の道具を、紙面の右の列に出す（mockups/v33 案A）
   await sideToolsCheck(browser)
+
+  // はじめて使う学生の試し（3回目）：メニューの「バックアップ・作り直す」と、その窓（mockups/v34 案A。scripts/e2e/firstTimeV3.mjs）
+  await firstTimeV3Phone(browser, check)
+
+  // はじめて使う学生の試し（3回目：スマホ）で見つかった、紙面と書く欄まわりの直し（開いた直後に書く・ページ送り・準備中の表示など。scripts/e2e/editorFixesV3.mjs）
+  await editorFixesV3Phone(browser, check)
 })
 
 /**
@@ -1718,7 +1745,7 @@ async function writingVisibleCheck(browser) {
  * 開くのを速くした（はじめて使う学生の試しで、開くたびに5秒ほど「（初回は数秒かかります）」と出ていた）：
  * - はじめて開いたとき（この端末に原稿がない）だけ「（初回は数秒かかります）」と出す
  * - 2回目から（読み込み直したとき）は、最後に見ていたページを、そのページのある部分を組み終えたらすぐ見せ（ほかのページはそのあと組む）、「初回」とは出さない
- * - 先に見せている間にそのページで書いた文字は、組み終えたあとも残る。先に見せている間にページを送ると、組み終えてから送る
+ * - 先に見せている間にそのページで書いた文字は、組み終えたあとも残る。先に見せている間にページを送ると、移る先のページを組み終えたら送る
  * - 組み終えると、ページ数・紙面の情報・チェックの指摘は、まっさらな状態から組んだときと同じ
  * CPU を遅くして（6倍）、先に見せている間を長くして試す。設定は、ページの中で fetch を差し替えて返す（要求の差し替えは使わない）
  */
@@ -1849,7 +1876,7 @@ async function quickOpenCheck(browser) {
   )
   check('先に見せている間にそのページで書いた文字は、組み終えたあとも原稿と紙面に残る', typed && after.text && after.onPaper, JSON.stringify({ typed, after }))
   check(
-    '先に見せている間に書いても、見ているページの番号はずれない。そのあとページ送りを押すと、組み終えてから次のページへ1回だけ送る。仮のページは残らない',
+    '先に見せている間に書いても、見ているページの番号はずれない。そのあとページ送りを押すと、次のページを組み終えたら（すべて組み終えるのを待たずに）、次のページへ1回だけ送る。仮のページは残らない',
     stillEarly && pageAtClick === target && after.page === target + 1 && after.placeholders === 0,
     JSON.stringify({ stillEarly, pageAtClick, page: after.page, placeholders: after.placeholders }),
   )

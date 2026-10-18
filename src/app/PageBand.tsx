@@ -149,9 +149,9 @@ function BandView({ editor, band, inColumn }: { editor: ReportEditor; band: Band
           sub: null,
           button: '写真を選ぶ',
           run: () => {
-            // 紙面の空いている枠を押したときと同じ（写真を選ぶ画面を開く）
+            // 紙面の空いている枠を押したときと同じ（写真を選ぶ画面を開く。何枚かまとめて選べる）
             editor.select({ kind: 'photos' })
-            void editor.setPhoto(band.index)
+            void editor.addPhotos(band.index)
           },
         }
       : { text: band.text, sub: band.sub, button: band.button, run: () => tapPaper(editor, band.todo) }

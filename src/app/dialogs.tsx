@@ -5,6 +5,7 @@ import { formatReference, halfDigits, yearDigits } from '../layout/document'
 import { referenceFilled, referencesChanged } from '../model/references'
 import type { Snapshot } from '../model/storage'
 import type { Reference, Report } from '../model/types'
+import { Icon } from './icons'
 import { useDialogFocus } from './useDialogFocus'
 
 /**
@@ -78,7 +79,7 @@ export function CourseChangeDialog({ courseName, onReplace, onNameOnly, onClose 
     <Modal title="コースを変えますか？" onClose={onClose}>
       <p className="lead">
         「{courseName}」コースに変えます。「コース名だけ変える」なら、いま書いている本文はそのまま残ります。
-        「下書きを入れ替える」は、本文を、そのコースのひな形（章立てと、書くことの説明）に入れ替えます（いまの本文は「自動の控え」に残すので、あとで「バックアップ」から戻せます）。
+        「下書きを入れ替える」は、本文を、そのコースのひな形（章立てと、書くことの説明）に入れ替えます（いまの本文は「自動の控え」に残すので、あとで「バックアップ・作り直す」から戻せます）。
       </p>
       <p className="muted">表紙の学籍番号・氏名・サブタイトル、抄録、引用・参考文献、作品写真は、どちらでもそのまま残ります。</p>
       <div className="row-buttons">
@@ -250,7 +251,25 @@ export function ReferencesDialog({ report, onSave, onClose }: { report: Report; 
   )
 }
 
-// ---- バックアップと復元 ----
+// ---- バックアップ・作り直す（mockups/v34 案A） ----
+// 右の欄（スマホはメニュー）の「バックアップ・作り直す」から開く。「最初から作り直す」は、いちばん下に区切って出し、
+// すぐ横に「いまの原稿は自動の控えに残ります」と書く（新しく始めたい学生が、やり方を見つけられなかったため）。「閉じる」は、その下の行に
+
+/** 窓とボタンの名前（右の欄・スマホのメニュー・使い方の説明でそろえる） */
+export const BACKUP_TITLE = 'バックアップ・作り直す'
+
+/**
+ * 右の欄・スマホのメニューのボタンの名前。ふだんは1行。右の欄を狭くした・「手順書」も並ぶときは、はみ出さずに「・」の後ろで2行になる（index.css）
+ */
+export function BackupLabel() {
+  return (
+    <span className="backup-label">
+      バックアップ・
+      <wbr />
+      作り直す
+    </span>
+  )
+}
 
 export function BackupDialog({
   snapshots,
@@ -271,8 +290,9 @@ export function BackupDialog({
   onClose: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
+  const startOverId = useId()
   return (
-    <Modal title="バックアップと復元" onClose={onClose}>
+    <Modal title={BACKUP_TITLE} onClose={onClose} className="backup-modal">
       <p className="lead">
         {driveStopped
           ? '原稿は、書くたびに（書くのをやめて約1秒後に）このブラウザの中へ自動で保存されます。いまはドライブへの保存を止めているため（学科の判断）、原稿はこの端末にだけ保存されます。バックアップファイルは、念のための控えとして、ときどき保存しておくと安心です。'
@@ -316,10 +336,16 @@ export function BackupDialog({
           ))}
         </ul>
       )}
-      <div className="row-buttons">
-        <button className="danger" onClick={onStartOver}>
-          最初から作り直す
-        </button>
+      <section className="start-over" aria-labelledby={startOverId}>
+        <h3 id={startOverId}>最初から作り直す（新しく始める）</h3>
+        <div className="start-over-row">
+          <p>いまの原稿は自動の控えに残ります</p>
+          <button className="danger" onClick={onStartOver}>
+            {Icon.restart}最初から作り直す
+          </button>
+        </div>
+      </section>
+      <div className="row-buttons close-row">
         <span className="spacer" />
         <button onClick={onClose}>閉じる</button>
       </div>

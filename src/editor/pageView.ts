@@ -149,6 +149,23 @@ export class PageView {
     return this.parts.flatMap((part) => part.pageElements())
   }
 
+  /**
+   * i 番目の部分を、もう一方の表示枠（other）の j 番目の部分と入れ替える（要素ごと移す。組み直さない）。
+   * 組み直すとき、表に出ている紙面に同じ文書の部分があれば、組まずにそれを使うため（reportRenderer.ts の swap）。
+   * 開いたあと、はじめて書いたときに、もう一方の表示枠が空のため、報告書の全部を組み直していた（スマホでは十数秒）
+   */
+  exchangePart(i: number, other: PageView, j: number): void {
+    const mine = this.parts[i]
+    const theirs = other.parts[j]
+    if (!mine || !theirs || mine === theirs) return
+    const mark = document.createComment('')
+    mine.element.replaceWith(mark)
+    theirs.element.replaceWith(mine.element)
+    mark.replaceWith(theirs.element)
+    this.parts[i] = theirs
+    other.parts[j] = mine
+  }
+
   /** ブロックの表示要素（ページをまたぐと複数） */
   fragments(blockId: string): HTMLElement[] {
     return [...this.viewport.querySelectorAll<HTMLElement>(`[data-block-id="${CSS.escape(blockId)}"]`)]

@@ -10,6 +10,17 @@ export function findCourse(config: YearConfig, courseId: string): Course | undef
   return config.courses.find((course) => course.id === courseId)
 }
 
+/**
+ * 文の中に書いてあるコースの名前から、コースを探す（Word の表紙・抄録など。長い名前から。見つからなければ null）。
+ * 全角・半角と空白の違いは見ない。提出前チェック（check/wordParts.ts の findCourseId）と、学生用ツールの「Word から読み込む」で使う
+ */
+export function courseIdInText(lines: string[], config: YearConfig): string | null {
+  const comparable = (s: string) => s.normalize('NFKC').replace(/[\s　]/g, '')
+  const all = comparable(lines.join(''))
+  const courses = [...config.courses].sort((a, b) => b.name.length - a.name.length)
+  return courses.find((c) => c.name && all.includes(comparable(c.name)))?.id ?? null
+}
+
 /** コースごとの指定形式に学生の入力を当てはめてサブタイトルを作る */
 export function renderSubtitle(course: Course, input: string): string {
   return course.subtitleTemplate.replace('{input}', input.trim())

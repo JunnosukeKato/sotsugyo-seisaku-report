@@ -21,7 +21,9 @@ export interface WordTodo {
   snapshotAt: string | null
   /** 「図1へ」から順に見た図の数（すべて見たら済み） */
   figuresSeen: number
-  /** 写したあとに表紙のページを開いた */
+  /** 写したあとに表紙のページを開いた（開いただけでは済みにしない。「確かめた」を押すと coverChecked） */
+  coverSeen: boolean
+  /** 表紙を見て、学生が「確かめた」を押した */
   coverChecked: boolean
 }
 
@@ -31,7 +33,7 @@ function readTodo(): WordTodo | null {
   try {
     const raw = localStorage.getItem(TODO_KEY)
     const t = raw ? (JSON.parse(raw) as Partial<WordTodo>) : null
-    return t && typeof t.at === 'string' ? { at: t.at, snapshotAt: t.snapshotAt ?? null, figuresSeen: t.figuresSeen ?? 0, coverChecked: !!t.coverChecked } : null
+    return t && typeof t.at === 'string' ? { at: t.at, snapshotAt: t.snapshotAt ?? null, figuresSeen: t.figuresSeen ?? 0, coverSeen: !!t.coverSeen || !!t.coverChecked, coverChecked: !!t.coverChecked } : null
   } catch {
     return null
   }
@@ -48,7 +50,8 @@ function writeTodo(todo: WordTodo | null): void {
 
 /**
  * 「つぎにすること」の中身と、変えるための関数。
- * 写したあと、ページを移って表紙を出したら、「表紙を確かめる」を済みにする（写した直後に表紙が出ていただけでは済みにしない）
+ * 写したあと、ページを移って表紙を出したら、「表紙を確かめる」のボタンを「確かめた」にする（写した直後に表紙が出ていただけでは変えない）。
+ * 済みにするのは、学生が「確かめた」を押したとき（前は、表紙のページを開いただけで済みにしていたため、コースの違いなどを見ずに済みになっていた）
  */
 export function useWordTodo(snap: EditorSnapshot | null): { todo: WordTodo | null; update: (todo: WordTodo | null) => void } {
   const [todo, setTodo] = useState<WordTodo | null>(readTodo)
@@ -62,7 +65,7 @@ export function useWordTodo(snap: EditorSnapshot | null): { todo: WordTodo | nul
   useEffect(() => {
     const prev = prevPage.current
     prevPage.current = page
-    if (todo && !todo.coverChecked && onCover && prev !== null && prev !== page) update({ ...todo, coverChecked: true })
+    if (todo && !todo.coverSeen && onCover && prev !== null && prev !== page) update({ ...todo, coverSeen: true })
   }, [page, onCover, todo, update])
   return { todo, update }
 }

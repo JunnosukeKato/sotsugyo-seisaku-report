@@ -7,6 +7,8 @@ import { join, resolve } from 'node:path'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { withEdge } from '../poc/edge.mjs'
 import { stubConfig } from './configStub.mjs'
+import { firstTimeV3Pc, firstTimeV3Word } from './firstTimeV3.mjs'
+import { editorFixesV3Pc } from './editorFixesV3.mjs'
 import { setupWriting } from './sampleReport.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
@@ -145,8 +147,8 @@ await withEdge(async (browser) => {
   check('コースを選ぶと、そのコースの下書きが本文に入り、「いいえ」で学籍番号の入力が始まる', !!s.report.basicInfo.courseId && s.report.body.length > 0 && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'paragraph' && b.hint), s.report.basicInfo.courseId)
   const noticeText = () => page.evaluate(() => document.querySelector('.side .notice')?.textContent ?? '')
   check('右の欄に、自分のコースのお知らせが出る', (await noticeText()).includes('映画・舞台衣装デザイナー コースからのお知らせ') && (await noticeText()).includes('衣装コースへのお知らせ'), await noticeText())
-  // 「？ 使い方」のボタン（右の欄の「バックアップ」の横。mockups/v27 案A。印刷用の手引きの PDF は、使い方の一覧のいちばん下から開く）
-  check('右の欄の「バックアップ」の横に「？ 使い方」のボタンがある', await page.evaluate(() => [...document.querySelectorAll('.side .links .link-btn')].map((b) => b.textContent.trim()).join(',').includes('バックアップ,使い方')))
+  // 「？ 使い方」のボタン（右の欄の「バックアップ・作り直す」の横。mockups/v27 案A・v34 案A。印刷用の手引きの PDF は、使い方の一覧のいちばん下から開く）
+  check('右の欄の「バックアップ・作り直す」の横に「？ 使い方」のボタンがある', await page.evaluate(() => [...document.querySelectorAll('.side .links .link-btn')].map((b) => b.textContent.trim()).join(',').includes('バックアップ・作り直す,使い方')))
   await page.keyboard.type('00ZZ0123')
   await page.keyboard.press('Enter')
   await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:name', { timeout: 30000 })
@@ -1752,6 +1754,13 @@ await withEdge(async (browser) => {
 
   // ---- 作品写真の「全体を入れる（切らない）」（mockups/v32 ③ 案A） ----
   await photoWholeCheck(browser)
+
+  // ---- はじめて使う学生の試し（3回目：Word から移す学生・パソコン）で見つかったこと（scripts/e2e/firstTimeV3.mjs） ----
+  await firstTimeV3Pc(browser, check)
+  await firstTimeV3Word(browser, check)
+
+  // ---- はじめて使う学生の試し（3回目：パソコン）で見つかった、紙面と書く欄まわりの直し（scripts/e2e/editorFixesV3.mjs） ----
+  await editorFixesV3Pc(browser, check)
 })
 
 /**
@@ -2101,8 +2110,8 @@ async function wordImportCheck(browser) {
   }))
   await page.screenshot({ path: `${OUT}/word-confirm.png` })
   check(
-    '本文と表紙の Word を読み取ると、写す前に、組み立ての一覧・数・表紙の項目・図の小さな画像・控えに残すことを見せる',
-    shown.chapters > 0 && shown.rows >= shown.chapters && shown.counts['大見出し'] > 0 && shown.cover.length === 3 && shown.figures === shown.counts['図'] && shown.loaded > 0 && shown.keep.includes('自動の控え'),
+    '本文と表紙の Word を読み取ると、写す前に、組み立ての一覧・数・表紙の項目（コース・学籍番号・氏名・サブタイトル）・図の小さな画像・控えに残すことを見せる',
+    shown.chapters > 0 && shown.rows >= shown.chapters && shown.counts['大見出し'] > 0 && shown.cover.length === 4 && shown.figures === shown.counts['図'] && shown.loaded > 0 && shown.keep.includes('自動の控え'),
     JSON.stringify(shown),
   )
   check('確かめる窓は、上（選んだファイル）から読み上げる。ファイル名は英数字の書体で出す（「_」が見えるように）', shown.focus === 'word-picked' && shown.font.startsWith('"Segoe UI"'), `${shown.focus} / ${shown.font}`)
@@ -2146,7 +2155,7 @@ async function wordImportCheck(browser) {
     await ready()
   }
 
-  // 「図1へ」で、図1を選んで見せる。表紙のページを開くと「表紙を確かめる」が済みになる
+  // 「図1へ」で、図1を選んで見せる。表紙のページを開いて「確かめた」を押すと「表紙を確かめる」が済みになる（開いただけでは済みにしない）
   if (after.figures > 0) {
     await clickButton('.side .word-todo .go', '図1へ')
     await pause(700)
@@ -2157,8 +2166,12 @@ async function wordImportCheck(browser) {
   await page.evaluate(() => window.__editor.goToPage(0, 'none'))
   await pause(300)
   await ready()
-  const coverDone = await page.evaluate(() => [...document.querySelectorAll('.side .word-todo li')].find((li) => li.textContent.includes('表紙を確かめる'))?.className)
-  check('表紙のページを開くと、「表紙を確かめる」に ✓ が付く', coverDone === 'done', coverDone)
+  const coverItem = () => page.evaluate(() => { const li = [...document.querySelectorAll('.side .word-todo li')].find((x) => x.textContent.includes('表紙を確かめる')); return { cls: li?.className, button: li?.querySelector('button')?.textContent ?? '' } })
+  const coverOpened = await coverItem()
+  await page.evaluate(() => [...document.querySelectorAll('.side .word-todo li button')].find((b) => b.textContent === '確かめた')?.click())
+  await pause(300)
+  const coverDone = await coverItem()
+  check('表紙のページを開くと「表紙を確かめる」のボタンが「確かめた」になり、押すと ✓ が付く（開いただけでは付かない）', coverOpened.cls !== 'done' && coverOpened.button === '確かめた' && coverDone.cls === 'done', JSON.stringify({ coverOpened, coverDone }))
   check('Word から読み込んだあと（案内を終えていない）は、指差し確認を出さない', !(await page.$('.tour')))
   // 閉じるまで残る（読み込み直しても）。読み込み直すと指差し確認が出るので、見たことにしておく（指差し確認は上の確かめで見る）
   await page.evaluate(() => localStorage.setItem('sotsugyo-seisaku-report-tour', 'done'))

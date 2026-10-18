@@ -26,7 +26,7 @@ import { SidePanel, PageColumn } from './app/SidePanel'
 import { StartGuide, type GuideStep } from './app/StartGuide'
 import { TabLockedOverlay } from './app/TabLock'
 import { Tour } from './app/Tour'
-import { markTourSeen, tourSeen } from './app/tourMemory'
+import { firstOpenInTab, markTourSeen, markTourShown, tourSeen } from './app/tourMemory'
 import { useTabLock } from './app/useTabLock'
 import { useTokenRenewal } from './app/useTokenRenewal'
 import { useAutosave } from './app/useAutosave'
@@ -112,8 +112,23 @@ async function yearConfigOf(year: number, load: { cached: YearConfig | null; rem
   return (await load.remote) ?? load.cached ?? (currentConfig.fiscalYear === year ? currentConfig : null)
 }
 
-/** Word から読み込む直前の原稿の控えの名前（「バックアップ」の控えの一覧に出す） */
+/** Word から読み込む直前の原稿の控えの名前（「バックアップ・作り直す」の控えの一覧に出す） */
 const WORD_SNAPSHOT_LABEL = 'Word を読み込む前'
+/** コースを変えて「下書きを入れ替える」直前の原稿の控えの名前（どの控えに戻せばよいか分かるように） */
+const REPLACE_SNAPSHOT_LABEL = '下書きを入れ替える前'
+
+/**
+ * 控え・バックアップファイルに戻すとき、コースも変わるなら、確かめる文に足す一言（変わらなければ空）。
+ * 前は、「下書きを入れ替える」でコースを変えたあと「この時点に戻す」を押すと、黙ってコースも前に戻り、
+ * 表紙と抄録（指導教員はコースで決まる）が、違うコースのまま PDF になっていた
+ */
+function courseChangeNote(config: YearConfig, current: Report, restored: Report): string {
+  const to = restored.basicInfo.courseId
+  if (current.basicInfo.courseId === to) return ''
+  if (!to) return '\nコースも、選んでいない状態に戻ります'
+  const name = findCourse(config, to)?.name
+  return name ? `\nコースも「${name}」に戻ります（表紙と抄録の指導教員も、そのコースになります）` : '\nコースも、その控えのときのコースに戻ります'
+}
 
 /** 写真を選ぶ画面を開き、選ばれたファイルを返す（やめたら null） */
 function pickImageFile(): Promise<File | null> {
@@ -123,6 +138,19 @@ function pickImageFile(): Promise<File | null> {
     input.accept = 'image/*'
     input.addEventListener('change', () => resolve(input.files?.[0] ?? null), { once: true })
     input.addEventListener('cancel', () => resolve(null), { once: true })
+    input.click()
+  })
+}
+
+/** 写真を何枚かまとめて選ぶ画面を開き、選ばれたファイルを返す（作品写真の空いている枠。やめたら空） */
+function pickImageFiles(): Promise<File[]> {
+  return new Promise((resolve) => {
+    const input = document.createElement('input')
+    input.type = 'file'
+    input.accept = 'image/*'
+    input.multiple = true
+    input.addEventListener('change', () => resolve([...(input.files ?? [])]), { once: true })
+    input.addEventListener('cancel', () => resolve([]), { once: true })
     input.click()
   })
 }
@@ -216,11 +244,12 @@ export default function App() {
   // はじめて開いたときは、コースを選ぶところから案内する（コースが1つだけなら学籍番号から）。コースを選んでいない原稿も、コースを選ぶ案内を出す。
   // 今年度だけ、コースが決まっている新しい原稿は、Word で書き始めているかを聞くところから。
   // 案内を出さないとき（書き始めている原稿を開いた）は、この端末でまだ見ていなければ、指差し確認を出す
-  // （このツールに指差し確認ができる前に、案内を終えていた学生にも1回。ログインやどの原稿で続けるかが決まってから呼ばれる）
+  // （このツールに指差し確認ができる前に、案内を終えていた学生にも1回。ログインやどの原稿で続けるかが決まってから呼ばれる）。
+  // ただし、このタブで書いている途中に読み込み直したときは出さない（次に開いたときに出す。tourMemory.ts の firstOpenInTab）
   const startGuide = useCallback((cfg: YearConfig, report: Report, isNew: boolean) => {
     if (!findCourse(cfg, report.basicInfo.courseId)) setGuide('course')
     else if (isNew) setGuide(wordImportOffered(cfg) ? 'word' : report.basicInfo.studentId.trim() ? 'name' : 'studentId')
-    else if (!tourSeen()) setTourWanted(true)
+    else if (!tourSeen() && firstOpenInTab()) setTourWanted(true)
   }, [])
 
   /** 学生のアカウントなら、表紙の学籍番号が空のときだけ、メールアドレスの学籍番号を入れる（学生は直せる） */
@@ -384,6 +413,8 @@ export default function App() {
   useEffect(() => {
     if (started.current) return
     started.current = true
+    // このタブで開くのが初めてか（書いている途中に読み込み直したのか）を、読み込んですぐ覚えておく（指差し確認を出すかに使う）
+    firstOpenInTab()
     // ログインのボタンを押したとき（パソコンで許可を延ばすときも）に、すぐ Google の窓を開けるよう、部品と窓の準備を先にしておく
     if (drive) void preloadGis(DRIVE_CLIENT_ID).catch(() => {})
     void (async () => {
@@ -427,6 +458,7 @@ export default function App() {
           onCourseClick: (rect) => setDialog({ kind: 'course', rect }),
           onReferencesClick: () => setDialog({ kind: 'references' }),
           pickImage: pickImageFile,
+          pickImages: pickImageFiles,
         })
         ed.addImages(await allImages())
         markOpen('images')
@@ -592,6 +624,12 @@ export default function App() {
       if (dialog || driveDialog || guide === 'course' || guide === 'word' || isTyping(e.target) || e.altKey) return
       // スマホの下から出る欄など、窓の中で押したキーでは、ページを送らない
       if (e.target instanceof Element && e.target.closest('[aria-modal="true"]')) return
+      // キーを押したままのときは、めくり終えてから次へ（続けて押した分は、押した数だけ送るが、押したままの繰り返しで一気に送らない）
+      const paging = ['ArrowRight', 'PageDown', 'ArrowLeft', 'PageUp'].includes(e.key)
+      if (paging && e.repeat && editor.getSnapshot().turning) {
+        e.preventDefault()
+        return
+      }
       if (e.key === 'ArrowRight' || e.key === 'PageDown') {
         e.preventDefault()
         editor.nextPage()
@@ -616,7 +654,7 @@ export default function App() {
       if (!editor || !snap) return
       try {
         const { report, images, savedAt } = readBackup(await file.text())
-        if (!confirm(`${new Date(savedAt).toLocaleString('ja-JP')} に保存したバックアップで、今の原稿を置き換えますか？\n（今の原稿は自動の控えに残します）`)) return
+        if (!confirm(`${new Date(savedAt).toLocaleString('ja-JP')} に保存したバックアップで、今の原稿を置き換えますか？${courseChangeNote(configRef.current, snap.report, report)}\n（今の原稿は自動の控えに残します）`)) return
         await keepSnapshot(snap.report)
         await Promise.all(images.map(putImage))
         editor.addImages(images)
@@ -645,7 +683,7 @@ export default function App() {
    * 表紙の項目が読み取れず空のままなら、はじめての案内でその項目から案内する。読み取れていれば案内を閉じ、本文の最初のページへ
    */
   const importWord = useCallback(
-    async (result: WordImportResult) => {
+    async (result: WordImportResult, courseId?: string) => {
       if (!editor) return
       // 読み取る部品は、Word を読み取ったときに読み込み済み（使うときに初めて読み込む。WordImport.tsx）
       const { applyWordImport } = await import('./import/wordImport')
@@ -657,8 +695,9 @@ export default function App() {
       await saveSnapshot(before, snapshotAt, true, WORD_SNAPSHOT_LABEL)
       await Promise.all(result.images.map(putImage))
       editor.addImages(result.images)
-      editor.replace(applyWordImport(before, result))
-      setWordTodo({ at: new Date().toISOString(), snapshotAt, figuresSeen: 0, coverChecked: false })
+      // courseId：確認の窓で、表紙の Word のコースを選んだ（本文は読み込む本文のまま、コースの名前を変える）
+      editor.replace(applyWordImport(before, result, courseId ? { courseId, config: configRef.current } : undefined))
+      setWordTodo({ at: new Date().toISOString(), snapshotAt, figuresSeen: 0, coverSeen: false, coverChecked: false })
       setDialog(null)
       const next = firstEmptyCoverStep(editor.getSnapshot().report)
       setGuide(next)
@@ -671,16 +710,23 @@ export default function App() {
     [editor, setWordTodo, narrow],
   )
 
+  /** 引用・参考文献を「反映する」：組み直したら、そのページへ移り、画面の下に知らせる（前は、反映しても何も変わらないように見えた） */
+  const showReferences = useCallback(async (ed: ReportEditor) => {
+    await rendered(ed)
+    if (ed.getSnapshot().report.references.length > 0) ed.goToArea('references')
+    ed.showNotice('引用・参考文献を反映しました')
+  }, [])
+
   /** 「つぎにすること」の「読み込む前の原稿に戻す」：写す前に残した控えに戻す（今の原稿も控えに残す） */
   const restoreBeforeWord = useCallback(async () => {
     const at = wordTodo?.snapshotAt
     if (!editor || !at) return
     const kept = (await listSnapshots()).find((s) => s.savedAt === at)
     if (!kept) {
-      alert(`読み込む前の原稿の控えが見つかりませんでした。「バックアップ」の「自動の控え」から、「${WORD_SNAPSHOT_LABEL}」の控えを選んで戻してください。`)
+      alert(`読み込む前の原稿の控えが見つかりませんでした。「バックアップ・作り直す」の「自動の控え」から、「${WORD_SNAPSHOT_LABEL}」の控えを選んで戻してください。`)
       return
     }
-    if (!confirm('Word から読み込む前の原稿に戻しますか？\n（今の原稿は自動の控えに残します）')) return
+    if (!confirm(`Word から読み込む前の原稿に戻しますか？${courseChangeNote(configRef.current, editor.getSnapshot().report, kept.report)}\n（今の原稿は自動の控えに残します）`)) return
     editor.commitEditing()
     await keepSnapshot(editor.getSnapshot().report)
     editor.replace(kept.report)
@@ -709,6 +755,10 @@ export default function App() {
   const tourSettling = !snap || snap.rendering || snap.turning || !!snap.editingId
   // 出したいとき、出せるようになったら出す（描く途中で合わせる。一度出したら、とばすか見終えるまで出したまま）
   if (tourWanted && !tourOn && !tourBlocked && !tourSettling) setTourOn(true)
+  // 出したら、すぐこの端末に覚える（見終える前に読み込み直しても、また初めから出さない。使い方から、もう一度見られる）
+  useEffect(() => {
+    if (tourOn) markTourShown()
+  }, [tourOn])
   // PC：使い方を閉じたら、右の欄の「？ 使い方」に戻る（キーボードで続けられるように）
   const helpWasOpen = useRef(false)
   useEffect(() => {
@@ -778,7 +828,12 @@ export default function App() {
             <UndoBar editor={editor} notice={undoNotice.notice} onClose={undoNotice.close} className="on-stage" />
           </>
         )}
-        {(!snap || (snap.rendering && !snap.layout)) && !loadError && <div className="loading">紙面を準備しています…{firstOpen ? '（初回は数秒かかります）' : ''}</div>}
+        {/* 紙面の準備中：残りのページの見込みも出す（スマホで十数秒かかるとき、進んでいるのが分かるように）。原稿を丸ごと入れ替えたときも、前の原稿の紙面を見せない */}
+        {(!snap || (snap.rendering && !snap.layout) || snap.replacing) && !loadError && (
+          <div className="loading">
+            紙面を準備しています…{firstOpen ? '（初回は数秒かかります）' : snap?.pagesLeft ? `（あと${snap.pagesLeft}ページほど）` : ''}
+          </div>
+        )}
         {loadError && <div className="loading ng">読み込みに失敗しました：{loadError}</div>}
       </main>
 
@@ -835,7 +890,8 @@ export default function App() {
             setDialog(null)
           }}
           onReplace={async () => {
-            await keepSnapshot(snap.report)
+            // 「この時点に戻す」で探せるよう、名前を付けて残す（戻すと、コースも前のコースに戻ることを、戻すときに知らせる）
+            await saveSnapshot(snap.report, new Date().toISOString(), true, REPLACE_SNAPSHOT_LABEL)
             editor.changeCourseWithTemplate(dialog.courseId)
             setDialog(null)
           }}
@@ -878,7 +934,14 @@ export default function App() {
         <WordImportDialog config={config} report={snap.report} onImport={importWord} onClose={() => setDialog(null)} />
       )}
       {dialog?.kind === 'references' && snap && editor && (
-        <ReferencesDialog report={snap.report} onSave={(references) => editor.update((r) => ({ ...r, references }))} onClose={() => setDialog(null)} />
+        <ReferencesDialog
+          report={snap.report}
+          onSave={(references) => {
+            editor.update((r) => ({ ...r, references }))
+            void showReferences(editor)
+          }}
+          onClose={() => setDialog(null)}
+        />
       )}
       {dialog?.kind === 'export' && snap && editor && <ExportDialog editor={editor} findings={snap.findings} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'backup' && editor && snap && (
@@ -888,7 +951,7 @@ export default function App() {
           onSaveBackup={() => void saveBackup()}
           onRestoreFile={(file) => void restoreFile(file)}
           onRestoreSnapshot={async (s) => {
-            if (!confirm(`${new Date(s.savedAt).toLocaleString('ja-JP')}${s.label ? `（${s.label}）` : ''} の控えに戻しますか？`)) return
+            if (!confirm(`${new Date(s.savedAt).toLocaleString('ja-JP')}${s.label ? `（${s.label}）` : ''} の控えに戻しますか？${courseChangeNote(configRef.current, snap.report, s.report)}`)) return
             await keepSnapshot(snap.report)
             editor.replace(s.report)
             await matchYear(editor, s.report)

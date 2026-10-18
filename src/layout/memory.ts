@@ -78,15 +78,17 @@ export function documentHash(html: string): string {
  * ページ数が分からない部分の、ふつうのページの種類（抄録・目次は1ページ、章ごとは本文1ページ、最後の部分は本文1ページと作品写真）。
  * 組み終えれば正しい数になる（それまでの仮のページの数にだけ使う）
  */
-function usualKinds(index: number, count: number): PageKind[] {
+export function usualKinds(index: number, count: number): PageKind[] {
   return index === 0 ? ['cover'] : index === 1 ? ['abstract'] : index === 2 ? ['toc'] : index === count - 1 ? ['body', 'photos'] : ['body']
 }
 
 /**
  * 開いたときに、先に組んで見せる部分を決める（editor/reportRenderer.ts）。
  * docs：組む部分の文書、memory：前に開いたときに覚えた組み方（なければ null）、page：見せるページ（0 から。全体の通しのページ）。
- * 見せるページのある部分と、その前の部分がすべて、覚えたときと同じ文書なら（ページ数が分かり、見せるページの位置が決まる）、
+ * 見せるページの前の部分がすべて、覚えたときと同じ文書なら（ページ数が分かり、見せるページの位置が決まる）、
  * その部分の番号と、部分ごとのページの種類（まだ組んでいない部分の仮のページに使う。覚えたときと違う部分は、同じ番号の部分のもの・なければふつうの数）を返す。
+ * 見せるページのある部分だけが変わっていても（前に書いて、組み終える前に閉じた・読み込み直した）、その部分の始まりの位置は決まるので、
+ * 覚えたページ数で見せるページを探す（組んだあと、見せるページがその部分の中にあるかを確かめてから見せる：reportRenderer.ts）。
  * 表紙（page が 0）は紙面のいちばん初めなので、覚えていなくても（はじめて開いた・原稿が変わった）位置が決まり、先に見せられる。
  * 決まらなければ null
  */
@@ -97,7 +99,7 @@ export function firstShowPlan(docs: string[], memory: LayoutMemory | null, page:
   let start = 0
   for (let i = 0; i < docs.length; i++) {
     const k = known[i]
-    if (!k) return null
+    if (!k) return page < start + kinds[i].length ? { part: i, kinds } : null
     if (page < start + k.length) return { part: i, kinds }
     start += k.length
   }

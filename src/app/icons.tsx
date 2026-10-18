@@ -76,6 +76,8 @@ export const Icon = {
   undo: svg(<path d="M9 7.5L5 11.5l4 4M5 11.5h9.5a4.5 4.5 0 010 9H12" />),
   handbook: svg(<path d="M4 5.5A1.5 1.5 0 015.5 4H11v16H5.5A1.5 1.5 0 014 18.5zM20 5.5A1.5 1.5 0 0018.5 4H13v16h5.5a1.5 1.5 0 001.5-1.5z" />),
   backup: svg(<path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 17v2.5h14V17" />),
+  // 最初から作り直す（ぐるりと戻る矢印。mockups/v34 案A）
+  restart: svg(<path d="M4.5 12a7.5 7.5 0 1 0 2.3-5.4M4.5 4.8v4.2h4.2" />),
   pdf: svg(<path d="M6 3.5h8l4 4v13H6zM14 3.5v4h4M12 11v6M9.5 14.5L12 17l2.5-2.5" />),
   prev: svg(<path d="M14.5 5l-7 7 7 7" />),
   next: svg(<path d="M9.5 5l7 7-7 7" />),

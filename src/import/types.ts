@@ -59,6 +59,16 @@ export interface WordImportResult {
   body: Chapter[]
   /** 表紙から読み取れた項目（読み取れなかったものは入れない） */
   cover: Partial<Pick<BasicInfo, 'studentId' | 'name' | 'subtitleInput'>>
+  /**
+   * 表紙の Word に書いてあったコース（コースの ID）。表紙を書いていない（ひな形のまま）とき・見つからないときは省く。
+   * 原稿のコースは変えない（違えば、確認の窓で、どちらにするかを学生が選ぶ）
+   */
+  coverCourseId?: string
+  /**
+   * 表紙の Word のサブタイトルが、コースの決まった形（「―〇〇の衣装制作―」など）と合わなかったとき、Word に書いてあった行。
+   * 合うときは省く（確認の窓で、表紙にどう出るかを赤で知らせる）
+   */
+  subtitleOffForm?: string
   /** 写す画像（図・表のセルの画像）。写すときに端末に保存する */
   images: StoredImage[]
   outline: OutlineItem[]

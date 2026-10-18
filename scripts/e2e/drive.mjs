@@ -128,6 +128,8 @@ await withEdge(async (browser) => {
   await pc.page.screenshot({ path: 'poc-output/e2e/drive-saved.png' })
 
   // 読み込み直しても、このタブでログイン済みなら、ボタンを押さずに続けられる
+  // （下の指差し確認は「次に開いたとき」に出るので、このタブで開いた印だけを消して、開き直したのと同じにする。tourMemory.ts の firstOpenInTab）
+  await pc.page.evaluate(() => sessionStorage.removeItem('sotsugyo-seisaku-report-opened'))
   await pc.page.reload({ waitUntil: 'networkidle0' })
   await editorReady(pc.page)
   await gateClosed(pc.page)

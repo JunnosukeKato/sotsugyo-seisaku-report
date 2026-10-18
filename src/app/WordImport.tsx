@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { findCourse, renderSubtitle, type YearConfig } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { deviceName } from '../drive/device'
@@ -134,8 +134,27 @@ const SLOT_TEXT: Record<Slot, { title: string; tag: string; example: string; not
   cover: { title: '表紙の Word', tag: '書いていれば', example: '01_表紙.docx', note: '（学籍番号・氏名・サブタイトルを写します）' },
 }
 
-/** ファイルを選ぶ1行（本文・表紙） */
-function FileRow({ slot, file, error, disabled, onPick, onClear }: { slot: Slot; file?: File; error?: string; disabled: boolean; onPick: (file: File) => void; onClear: () => void }) {
+/**
+ * ファイルを選ぶ1行（本文・表紙）。rejected：選んだが読めない形だったファイルの名前（✓ を付けずに、その名前と理由を出す。
+ * 前は、読める .docx を選んだあとに PDF を選び直すと、前の .docx の名前に ✓ が付いたまま理由が出て、「中身を確かめる」で前のファイルを読んでいた）
+ */
+function FileRow({
+  slot,
+  file,
+  rejected,
+  error,
+  disabled,
+  onPick,
+  onClear,
+}: {
+  slot: Slot
+  file?: File
+  rejected?: string
+  error?: string
+  disabled: boolean
+  onPick: (file: File) => void
+  onClear: () => void
+}) {
   const input = useRef<HTMLInputElement>(null)
   const text = SLOT_TEXT[slot]
   return (
@@ -152,6 +171,10 @@ function FileRow({ slot, file, error, disabled, onPick, onClear }: { slot: Slot;
           <small className="chosen">
             <i>{checkIcon}</i>選んだファイル：<FileName name={file.name} />
           </small>
+        ) : rejected ? (
+          <small className="chosen rejected">
+            選んだファイル：<FileName name={rejected} />
+          </small>
         ) : (
           <small>
             例：<FileName name={text.example} />
@@ -167,7 +190,7 @@ function FileRow({ slot, file, error, disabled, onPick, onClear }: { slot: Slot;
       <div className="acts">
         {/* キーボードでも選べるよう、ふつうのボタンからファイルを選ぶ画面を開く */}
         <button className={slot === 'body' && !file ? 'primary' : ''} disabled={disabled} onClick={() => input.current?.click()}>
-          {file ? '選び直す' : 'ファイルを選ぶ'}
+          {file || rejected ? '選び直す' : 'ファイルを選ぶ'}
         </button>
         {slot === 'cover' && file && (
           <button className="link" disabled={disabled} onClick={onClear}>
@@ -196,19 +219,36 @@ interface DialogProps {
   config: YearConfig
   /** 今の原稿（コースと、読み込むと消える、ツールで書いた本文を知るため） */
   report: Report
-  /** 「読み込む」：控えを残して原稿に写す（終わったら呼んだ側が窓を閉じる。失敗したら投げる） */
-  onImport: (result: WordImportResult) => Promise<void>
+  /**
+   * 「読み込む」：控えを残して原稿に写す（終わったら呼んだ側が窓を閉じる。失敗したら投げる）。
+   * courseId：表紙の Word のコースに変えるとき（確認の窓で学生が選んだとき）、そのコース。result は、そのコースで読み取ったもの
+   */
+  onImport: (result: WordImportResult, courseId?: string) => Promise<void>
   onClose: () => void
 }
+
+/** 読み取った中身と、読み込むと消える、ツールで書いた本文 */
+interface ReadResult {
+  result: WordImportResult
+  lost: LostChapter[]
+}
+
+/**
+ * 表紙の Word のコースが、原稿のコースと違うときに、どちらにするか（mismatch のときは、選ぶまで「読み込む」を押せない）。
+ * word：Word のコースにする（本文は、そのコースで読み取り直したものを写す）／ keep：今のコースのまま
+ */
+type CourseChoice = 'word' | 'keep' | null
 
 /** 「Wordから読み込む」の窓。ファイルを選ぶ → 読み取る → 中身を確かめる → 読み込む */
 export function WordImportDialog({ config, report, onImport, onClose }: DialogProps) {
   const courseId = report.basicInfo.courseId
   const [files, setFiles] = useState<Partial<Record<Slot, File>>>({})
+  /** 選んだが、読めない形だったファイルの名前（その行に、✓ を付けずに出す） */
+  const [rejected, setRejected] = useState<Partial<Record<Slot, string>>>({})
   const [rowErrors, setRowErrors] = useState<Partial<Record<Slot, string>>>({})
-  const [result, setResult] = useState<WordImportResult | null>(null)
-  /** 読み込むと消える、ツールで書いた本文（確認の窓で知らせる） */
-  const [lost, setLost] = useState<LostChapter[]>([])
+  /** 今のコースで読み取った中身（keep）と、表紙の Word のコースで読み取り直した中身（word） */
+  const [reads, setReads] = useState<{ keep?: ReadResult; word?: ReadResult }>({})
+  const [choice, setChoice] = useState<CourseChoice>(null)
   const [busy, setBusy] = useState<'reading' | 'importing' | null>(null)
   const [error, setError] = useState<string | null>(null)
   /** 読み取りの途中で「やめる」（Esc・×）を押したら、その読み取りの結果は使わない */
@@ -218,7 +258,17 @@ export function WordImportDialog({ config, report, onImport, onClose }: DialogPr
     const problem = fileProblem(file)
     setRowErrors((r) => ({ ...r, [slot]: problem ?? undefined }))
     setError(null)
-    if (!problem) setFiles((f) => ({ ...f, [slot]: file }))
+    // 読めない形なら、前に選んだファイルも外す（前のファイルの名前に ✓ を付けたまま、前のファイルを読まないように）
+    setRejected((r) => ({ ...r, [slot]: problem ? file.name : undefined }))
+    setFiles((f) => ({ ...f, [slot]: problem ? undefined : file }))
+  }
+
+  /** 読み取る（forCourse：そのコースのひな形・サブタイトルの形で読む） */
+  const readAs = async (forCourse: string): Promise<ReadResult | null> => {
+    if (!files.body) return null
+    const { readWordFiles, lostByImport } = await loadWordReader()
+    const r = await readWordFiles({ body: files.body, cover: files.cover }, { config, courseId: forCourse })
+    return { result: r, lost: lostByImport(report, r.body) }
   }
 
   const read = async () => {
@@ -227,14 +277,34 @@ export function WordImportDialog({ config, report, onImport, onClose }: DialogPr
     setBusy('reading')
     setError(null)
     try {
-      const { readWordFiles, lostByImport } = await loadWordReader()
-      const r = await readWordFiles({ body: files.body, cover: files.cover }, { config, courseId })
-      if (id === run.current) {
-        setLost(lostByImport(report, r.body))
-        setResult(r)
+      const keep = await readAs(courseId)
+      if (id === run.current && keep) {
+        setChoice(null)
+        setReads({ keep })
       }
     } catch (e) {
       if (id === run.current) setError(readErrorText(e))
+    } finally {
+      if (id === run.current) setBusy(null)
+    }
+  }
+
+  /** コースを選んだ：Word のコースにするなら、そのコースで読み取り直す（まだなら） */
+  const chooseCourse = async (next: Exclude<CourseChoice, null>) => {
+    setChoice(next)
+    setError(null)
+    const wordCourse = reads.keep?.result.coverCourseId
+    if (next !== 'word' || reads.word || !wordCourse) return
+    const id = ++run.current
+    setBusy('reading')
+    try {
+      const word = await readAs(wordCourse)
+      if (id === run.current && word) setReads((r) => ({ ...r, word }))
+    } catch (e) {
+      if (id === run.current) {
+        setChoice(null)
+        setError(readErrorText(e))
+      }
     } finally {
       if (id === run.current) setBusy(null)
     }
@@ -247,19 +317,31 @@ export function WordImportDialog({ config, report, onImport, onClose }: DialogPr
     onClose()
   }
 
-  if (result) {
+  if (reads.keep) {
+    const wordCourse = reads.keep.result.coverCourseId
+    const mismatch = !!wordCourse && wordCourse !== courseId
+    const shown = choice === 'word' && reads.word ? reads.word : reads.keep
+    const result = shown.result
     return (
       <Modal key="confirm" title="Word の中身を確かめてください" className="word-modal" keepOpen={busy === 'importing'} onClose={close}>
         <WordConfirm
           config={config}
-          courseId={courseId}
+          courseId={choice === 'word' && wordCourse ? wordCourse : courseId}
+          currentCourseId={courseId}
+          wordCourseId={mismatch ? wordCourse : undefined}
+          choice={choice}
+          onChoice={(c) => void chooseCourse(c)}
           files={files}
           result={result}
-          lost={lost}
+          lost={shown.lost}
           busy={busy === 'importing'}
+          rereading={busy === 'reading'}
           error={error}
           onBack={() => {
-            setResult(null)
+            run.current++
+            setBusy(null)
+            setReads({})
+            setChoice(null)
             setError(null)
           }}
           onCancel={close}
@@ -267,7 +349,7 @@ export function WordImportDialog({ config, report, onImport, onClose }: DialogPr
             setBusy('importing')
             setError(null)
             try {
-              await onImport(result)
+              await onImport(result, mismatch && choice === 'word' ? wordCourse : undefined)
             } catch (e) {
               // 原稿を入れ替える前に止まったので、原稿はそのまま。この端末の空き容量が足りないときなどに起きる
               setError(`読み込めませんでした（原稿はそのままです）。もう一度「読み込む」を押してください。直らないときは、この端末の空き容量を確かめてください。（くわしく：${e instanceof Error ? e.message : String(e)}）`)
@@ -290,6 +372,7 @@ export function WordImportDialog({ config, report, onImport, onClose }: DialogPr
             key={slot}
             slot={slot}
             file={files[slot]}
+            rejected={rejected[slot]}
             error={rowErrors[slot]}
             disabled={!!busy}
             onPick={(file) => pick(slot, file)}
@@ -381,26 +464,65 @@ function Outline({ outline, untitled, lost }: { outline: OutlineItem[]; untitled
   )
 }
 
+/**
+ * 表紙の Word のコースが、原稿のコースと違うときの、どちらにするかの選択（赤で知らせる。選ぶまで「読み込む」は押せない）。
+ * 前は、表紙の Word に「映画・舞台衣装デザイナー」とあっても、ツールで間違えて選んだコースのまま読み込み、表紙と抄録（指導教員）が
+ * 違うコースで PDF になっていた
+ */
+function CourseChoiceBox({ wordName, currentName, choice, disabled, onChoice }: { wordName: string; currentName: string; choice: CourseChoice; disabled: boolean; onChoice: (c: Exclude<CourseChoice, null>) => void }) {
+  const id = useId()
+  return (
+    <div className="word-course" role="radiogroup" aria-labelledby={id}>
+      <b id={id}>表紙の Word のコースが、いまのツールのコースと違います</b>
+      <p>
+        Word：「{wordName}」コース　／　いまのツール：{currentName ? `「${currentName}」コース` : 'コースをまだ選んでいません'}。表紙と抄録（指導教員）は、ツールのコースで出ます。どちらにしますか？
+      </p>
+      <label>
+        <input type="radio" name={`${id}-course`} checked={choice === 'word'} disabled={disabled} onChange={() => onChoice('word')} />
+        Word のコース（{wordName}）にする
+      </label>
+      <label>
+        <input type="radio" name={`${id}-course`} checked={choice === 'keep'} disabled={disabled} onChange={() => onChoice('keep')} />
+        {currentName ? `いまのコース（${currentName}）のまま` : 'コースは、あとで表紙で選ぶ'}
+      </label>
+    </div>
+  )
+}
+
 /** 写す前の確認（案A：読み取った中身を一覧で見せる） */
 function WordConfirm({
   config,
   courseId,
+  currentCourseId,
+  wordCourseId,
+  choice,
+  onChoice,
   files,
   result,
   lost,
   busy,
+  rereading,
   error,
   onBack,
   onCancel,
   onImport,
 }: {
   config: YearConfig
+  /** 読み込んだあとのコース（Word のコースを選んだら、そのコース） */
   courseId: string
+  /** いまの原稿のコース */
+  currentCourseId: string
+  /** 表紙の Word のコース（いまの原稿のコースと違うときだけ） */
+  wordCourseId?: string
+  choice: CourseChoice
+  onChoice: (c: Exclude<CourseChoice, null>) => void
   files: Partial<Record<Slot, File>>
   result: WordImportResult
   /** 読み込むと消える、ツールで書いた本文 */
   lost: LostChapter[]
   busy: boolean
+  /** Word のコースで読み取り直している */
+  rereading: boolean
   error: string | null
   onBack: () => void
   onCancel: () => void
@@ -416,10 +538,23 @@ function WordConfirm({
   // 本文から写せるものが何もない（表紙の Word を本文に選んだなど）：写すと本文がひな形だけになるので、読み込ませない
   const nothing = !result.outline.some((o) => !o.fromTemplate) && counts.paragraphs === 0 && counts.figures === 0 && counts.tables === 0
   const course = findCourse(config, courseId)
-  const coverRows: [string, string | undefined][] = [
+  const currentName = findCourse(config, currentCourseId)?.name ?? ''
+  const wordName = wordCourseId ? (findCourse(config, wordCourseId)?.name ?? '') : ''
+  // コースが違うのに、まだどちらにするかを選んでいない（選ぶまで「読み込む」は押せない）
+  const unchosen = !!wordCourseId && choice === null
+  // 表紙に出るサブタイトル。Word のサブタイトルがコースの決まった形と合わなければ、決まった形の前後が付いて Word と違う文になるので、赤で知らせる
+  const printedSubtitle = cover.subtitleInput === undefined ? undefined : course ? renderSubtitle(course, cover.subtitleInput) : cover.subtitleInput
+  const subtitleOff = !!result.subtitleOffForm && !!printedSubtitle
+  const coverRows: [string, string | undefined, string?][] = [
+    // コース：Word と違えば、選ぶまで赤く出す。Word にコースがなければ、いまのツールのコースのまま
+    [
+      'コース',
+      wordCourseId ? (choice === 'keep' ? currentName : wordName) : course?.name,
+      unchosen ? 'ng' : !result.coverCourseId && course ? 'keep' : undefined,
+    ],
     ['学籍番号', cover.studentId],
     ['氏名', cover.name],
-    ['サブタイトル', cover.subtitleInput === undefined ? undefined : course ? renderSubtitle(course, cover.subtitleInput) : cover.subtitleInput],
+    ['サブタイトル', printedSubtitle, subtitleOff ? 'ng' : undefined],
   ]
   return (
     <>
@@ -464,6 +599,7 @@ function WordConfirm({
           </div>
         )
       )}
+      {wordCourseId && <CourseChoiceBox wordName={wordName} currentName={currentName} choice={choice} disabled={busy || rereading} onChoice={onChoice} />}
       <div className="word-count" role="group" aria-label="読み取った数">
         <span>
           大見出し<b>{counts.chapters}</b>
@@ -491,14 +627,30 @@ function WordConfirm({
         <section>
           <h3>表紙</h3>
           {files.cover ? (
-            <dl className="word-cover">
-              {coverRows.map(([label, value]) => (
-                <div key={label}>
-                  <dt>{label}</dt>
-                  {value?.trim() ? <dd>{value}</dd> : <dd className="miss">（読み取れませんでした）</dd>}
-                </div>
-              ))}
-            </dl>
+            <>
+              <dl className="word-cover">
+                {coverRows.map(([label, value, mark]) => (
+                  <div key={label}>
+                    <dt>{label}</dt>
+                    {value?.trim() ? (
+                      <dd className={mark}>
+                        {value}
+                        {mark === 'ng' && label === 'コース' && <small>（いまのツールと違います）</small>}
+                        {mark === 'keep' && <small>（Word に見つからないため、いまのまま）</small>}
+                      </dd>
+                    ) : (
+                      <dd className="miss">（読み取れませんでした）</dd>
+                    )}
+                  </div>
+                ))}
+              </dl>
+              {/* Word のサブタイトルが、コースの決まった形と合わない：表紙にどう出るかを知らせ、読み込んだあとで直すように伝える */}
+              {subtitleOff && course && (
+                <p className="word-sub-off">
+                  Word のサブタイトル「{result.subtitleOffForm}」は、このコースの決まった形（{renderSubtitle(course, '〇〇')}）と違うため、表紙には「{printedSubtitle}」と出ます。読み込んだあと、表紙のサブタイトルを確かめて直してください。
+                </p>
+              )}
+            </>
           ) : (
             <p className="word-none">表紙の Word は選んでいません。表紙は、今のツールの表紙のままです。</p>
           )}
@@ -540,9 +692,9 @@ function WordConfirm({
             </strong>
           )}
           {files.cover
-            ? '本文は Word の中身に入れ替わり、表紙の学籍番号・氏名・サブタイトルも Word のものになります（抄録・作品写真・引用・参考文献はそのまま）。'
+            ? `本文は Word の中身に入れ替わり、表紙の学籍番号・氏名・サブタイトル${wordCourseId && choice === 'word' ? '・コース' : ''}も Word のものになります（抄録・作品写真・引用・参考文献はそのまま）。`
             : '本文は Word の中身に入れ替わります（表紙・抄録・作品写真・引用・参考文献はそのまま）。'}
-          元に戻したいときは「読み込む前の原稿に戻す」か「バックアップ」から戻せます。
+          元に戻したいときは「読み込む前の原稿に戻す」か「バックアップ・作り直す」から戻せます。
         </div>
       </div>
       {error && (
@@ -550,12 +702,16 @@ function WordConfirm({
           <WithFileNames text={error} />
         </p>
       )}
+      <div className="word-status" role="status">
+        {rereading && <p className="busy">Word のコースで読み取り直しています…</p>}
+        {unchosen && !nothing && <p className="word-choose">表紙の Word のコースか、いまのコースかを選ぶと、「読み込む」を押せます。</p>}
+      </div>
       <div className="row-buttons">
         <span className="spacer" />
         <button disabled={busy} onClick={onCancel}>
           やめる
         </button>
-        <button className="primary" disabled={busy || nothing} onClick={onImport}>
+        <button className="primary" disabled={busy || nothing || unchosen || rereading} onClick={onImport}>
           {busy ? '読み込んでいます…' : '読み込む'}
         </button>
       </div>
@@ -579,7 +735,7 @@ interface TodoProps {
 
 /**
  * 写したあとの「つぎにすること」（案B）。右の欄（スマホはチェックの欄）の上に、閉じる（×）まで残す。
- * 済んだものに ✓：エラーが0になった・「図1へ」から図を順に見た・表紙のページを開いた
+ * 済んだものに ✓：エラーが0になった・「図1へ」から図を順に見た・表紙を見て「確かめた」を押した（表紙のページを開いただけでは済みにしない）
  */
 export function WordTodoCard({ editor, snap, todo, onUpdate, onClose, onRestore, onPick }: TodoProps) {
   const errors = snap.findings.filter((f) => f.severity === 'error').length
@@ -600,11 +756,13 @@ export function WordTodoCard({ editor, snap, todo, onUpdate, onClose, onRestore,
     await editor.goToPage(page, 'fade')
     editor.select({ kind: 'figure', id: figure.id })
   }
+  // 「表紙へ」：表紙のページへ移るだけ（済みにはしない）。表紙を見て、合っていたら「確かめた」を押して済みにする
   const goCover = () => {
     onPick?.()
-    onUpdate({ ...todo, coverChecked: true })
+    onUpdate({ ...todo, coverSeen: true })
     void editor.goToPage(0, 'fade')
   }
+  const confirmCover = () => onUpdate({ ...todo, coverSeen: true, coverChecked: true })
   const box = (done: boolean) => (
     <i className="box" role="img" aria-label={done ? '済み' : 'まだ'}>
       {done && checkIcon}
@@ -666,10 +824,20 @@ export function WordTodoCard({ editor, snap, todo, onUpdate, onClose, onRestore,
           {box(todo.coverChecked)}
           <div>
             <b>表紙を確かめる</b>
-            <small>{todo.coverChecked ? '表紙のページを開いたので、済みにしました' : 'コース・学籍番号・氏名・サブタイトルが合っているか'}</small>
+            <small>
+              {todo.coverChecked
+                ? '確かめました'
+                : todo.coverSeen
+                  ? 'コース・学籍番号・氏名・サブタイトルが合っていたら「確かめた」を押します'
+                  : 'コース・学籍番号・氏名・サブタイトルが合っているか'}
+            </small>
           </div>
           {todo.coverChecked ? (
             <span />
+          ) : todo.coverSeen ? (
+            <button className="go cover-ok" onClick={confirmCover}>
+              確かめた
+            </button>
           ) : (
             <button className="go" onClick={goCover}>
               表紙へ

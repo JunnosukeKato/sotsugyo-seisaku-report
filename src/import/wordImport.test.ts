@@ -8,7 +8,7 @@ import { createReport } from '../model/newReport'
 import type { Chapter, FigureRowBlock, ParagraphBlock, TableBlock } from '../model/types'
 import type { WordImportResult } from './types'
 import { headingFromText, isPlaceholderOnly, isWriting, parseCaptionLine } from './wordImport'
-import { applyWordImport, lostByImport, readWordFiles, WordImportError } from './wordImport'
+import { applyWordImport, lostByImport, readWordFiles, subtitleFromWord, WordImportError } from './wordImport'
 import { imageInfo, prepareImage } from './wordImages'
 
 // 単体テストはブラウザの外で動くので、XML を読む道具（ブラウザの DOMParser）の代わりを置く
@@ -607,6 +607,71 @@ describe('表紙', () => {
 
   it('表紙に本文のファイルを選んだら知らせる', async () => {
     await expect(read(templateLikeBody(), templateLikeBody())).rejects.toThrow('表紙に選んだ「01_表紙.docx」は、表紙のファイルではないようです')
+  })
+
+  /** 公開中の設定の写し（コースが3つ）で読む。表紙のコースの欄だけを変えた表紙 */
+  const threeCourses = { config: publishedConfig, courseId: publishedConfig.courses.find((c) => c.name.startsWith('スタイリスト'))!.id }
+  const coverOf = (course: string, subtitle = '―シンドバッドの衣装制作―', id = '00ZZ0123', name = '文化　花子') =>
+    makeDocx({
+      body: table([
+        ['２０２６年度'],
+        ['', '研究題目', ''],
+        ['', subtitle, ''],
+        ['', course, 'コース'],
+        ['', '学籍番号　', id],
+        ['', '氏　　名', '：', name],
+      ]),
+    })
+
+  it('表紙に書いたコースを読む（原稿のコースは変えない。違うかどうかは、確認の窓で学生が選ぶ）', async () => {
+    const film = publishedConfig.courses.find((c) => c.name === '映画・舞台衣装デザイナー')!.id
+    const result = await read(templateLikeBody(), coverOf('映画・舞台衣装デザイナー'), threeCourses)
+    expect(result.coverCourseId).toBe(film)
+    expect(result.cover).toEqual({ studentId: '00ZZ0123', name: '文化　花子', subtitleInput: 'シンドバッド' })
+    // 同じコースでも、書いてあれば読む
+    expect((await read(templateLikeBody(), coverOf('スタイリスト・コーディネーター'), threeCourses)).coverCourseId).toBe(threeCourses.courseId)
+    // ひな形のまま（●●●）の表紙は、ひな形のコースが書いてあるだけなので、コースを読まない
+    expect((await read(templateLikeBody(), coverOf('映画・舞台衣装デザイナー', '―●●●●の衣装制作―', '23FA●●●', '●●　●●●'), threeCourses)).coverCourseId).toBeUndefined()
+    // コースの名前がなければ省く
+    expect((await read(templateLikeBody(), coverOf('〇〇〇〇'), threeCourses)).coverCourseId).toBeUndefined()
+    // 表紙を選ばなければ省く
+    expect((await read(templateLikeBody(), undefined, threeCourses)).coverCourseId).toBeUndefined()
+  })
+
+  it('サブタイトルがコースの決まった形と合わないときは、Word の行を知らせ、線を除いた中身を入れる（決まった文句を二重にしない）', async () => {
+    const off = await read(templateLikeBody(), coverOf('映画・舞台衣装デザイナー', '―主人公のスタイリング提案―'))
+    expect(off.cover.subtitleInput).toBe('主人公のスタイリング提案')
+    expect(off.subtitleOffForm).toBe('―主人公のスタイリング提案―')
+    // 合っていれば省く
+    const fits = await read(templateLikeBody(), coverOf('映画・舞台衣装デザイナー', '―シンドバッドの衣装制作―'))
+    expect(fits.subtitleOffForm).toBeUndefined()
+    // 「の衣装制作」まで書いた行を「の制作」のコースで読むと、合わない（そのまま入れて、知らせる）
+    const producer = { config: publishedConfig, courseId: publishedConfig.courses.find((c) => c.subtitleTemplate === '―{input}の制作―')!.id }
+    const other = await read(templateLikeBody(), coverOf('プロデューサー・ジャーナリスト', '―海の王女の衣装制作―'), producer)
+    expect(other.cover.subtitleInput).toBe('海の王女の衣装制作')
+    expect(other.subtitleOffForm).toBe('―海の王女の衣装制作―')
+  })
+
+  it('サブタイトルの行から、入れる部分を取り出す（決まった形の前後は、合っている所だけを取る）', () => {
+    expect(subtitleFromWord('―シンドバッドの衣装制作―', '―{input}の衣装制作―')).toEqual({ input: 'シンドバッド', fits: true })
+    expect(subtitleFromWord('ーシンドバッドの衣装制作ー', '―{input}の衣装制作―')).toEqual({ input: 'シンドバッド', fits: true })
+    expect(subtitleFromWord('―主人公のスタイリング提案―', '―{input}の衣装制作―')).toEqual({ input: '主人公のスタイリング提案', fits: false })
+    expect(subtitleFromWord('―海の王女―', '―{input}―')).toEqual({ input: '海の王女', fits: true })
+    // 決まった文句だけの行（入れる部分がない）は、取らずに残す
+    expect(subtitleFromWord('―の衣装制作―', '―{input}の衣装制作―')).toEqual({ input: 'の衣装制作', fits: false })
+  })
+
+  it('写すときに、表紙の Word のコースに変えられる（本文は読み込んだ本文のまま。抄録をまだ書いていなければ、書き出しの例もそのコースのものに）', async () => {
+    const film = publishedConfig.courses.find((c) => c.name === '映画・舞台衣装デザイナー')!.id
+    const result = await read(templateLikeBody(), coverOf('映画・舞台衣装デザイナー'), { config: publishedConfig, courseId: film })
+    const report = createReport(publishedConfig, threeCourses.courseId)
+    const switched = applyWordImport(report, result, { courseId: film, config: publishedConfig })
+    expect(switched.basicInfo.courseId).toBe(film)
+    expect(switched.body).toBe(result.body)
+    expect(switched.basicInfo.name).toBe('文化　花子')
+    // コースを変えないとき（今のコースのまま・同じコース）は、今までどおり
+    expect(applyWordImport(report, result).basicInfo.courseId).toBe(threeCourses.courseId)
+    expect(applyWordImport(report, result, { courseId: threeCourses.courseId, config: publishedConfig }).abstract).toBe(report.abstract)
   })
 })
 

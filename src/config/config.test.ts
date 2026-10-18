@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { currentConfig, findCourse, renderSubtitle, subtitleInputOnly } from '.'
+import { courseIdInText, currentConfig, findCourse, renderSubtitle, subtitleInputOnly } from '.'
 
 describe('2026年度の設定', () => {
   it('手順書の基準値と一致している', () => {
@@ -58,5 +58,22 @@ describe('subtitleInputOnly（サブタイトルの決まり文句まで入力�
   it('決まり文句だけを入力したとき（取ると何も残らない）は、そのまま', () => {
     expect(subtitleInputOnly(course, 'の衣装制作')).toBe('の衣装制作')
     expect(subtitleInputOnly(course, '')).toBe('')
+  })
+})
+
+describe('文の中のコースの名前から、コースを探す（Word の表紙・抄録）', () => {
+  const config = {
+    ...currentConfig,
+    courses: [
+      { id: 'a', name: '映画・舞台衣装デザイナー', advisors: [], subtitleTemplate: '―{input}の衣装制作―' },
+      { id: 'b', name: 'スタイリスト・コーディネーター', advisors: [], subtitleTemplate: '―{input}の衣装制作―' },
+      { id: 'c', name: '衣装', advisors: [], subtitleTemplate: '―{input}―' },
+    ],
+  }
+  it('全角・半角と空白の違いは見ず、長い名前から探す', () => {
+    expect(courseIdInText(['国際文化学部・国際ファッション文化学科', 'スタイリスト・コーディネーター', 'コース'], config)).toBe('b')
+    expect(courseIdInText(['映画・舞台 衣装デザイナー コース'], config)).toBe('a')
+    expect(courseIdInText(['衣装コース'], config)).toBe('c')
+    expect(courseIdInText(['〇〇コース'], config)).toBeNull()
   })
 })

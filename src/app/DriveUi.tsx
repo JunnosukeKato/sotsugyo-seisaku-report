@@ -356,7 +356,7 @@ export function ConflictDialog({
         <header>
           <h2>{atLogin ? 'この端末とドライブで、原稿が違います' : '別の端末で書いた原稿が、ドライブにあります'}</h2>
         </header>
-        <p className="lead">どちらの原稿で続けますか？　選ばなかった方は「自動の控え」に残るので、あとで戻せます（「バックアップ」から）。</p>
+        <p className="lead">どちらの原稿で続けますか？　選ばなかった方は「自動の控え」に残るので、あとで戻せます（「バックアップ・作り直す」から）。</p>
         <div className="drive-two">
           <div className={remoteNewer ? 'new' : ''}>
             <b>

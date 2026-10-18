@@ -81,6 +81,29 @@ describe('checkReport', () => {
     expect(ids(r)).not.toContain('cover-subtitle-fit')
   })
 
+  it('氏名に数字や「学籍番号」が入っていたらエラー（2行ぶんを氏名の欄に貼り付けたときなど）', () => {
+    const withName = (name: string) => ({ ...cleanReport(), basicInfo: { ...cleanReport().basicInfo, name } })
+    const f = checkReport(withName('文化　花子学籍番号　00ZZ0123'), currentConfig, layout()).find((x) => x.ruleId === 'name-text')
+    expect(f).toMatchObject({ severity: 'error', area: 'cover', blockId: 'basic:name', title: '氏名に数字や「学籍番号」が入っている' })
+    expect(ids(withName('文化　花子１'), layout())).toContain('name-text')
+    expect(ids(withName('文化　花子　学 籍 番 号'), layout())).toContain('name-text')
+    expect(ids(withName('文化　花子'), layout())).not.toContain('name-text')
+  })
+
+  it('表紙の学籍番号・氏名が、欄（下線の幅）からはみ出すときはエラー（組んだ紙面で測った結果から判定する）', () => {
+    const r = cleanReport()
+    const over = layout({ coverFields: { name: { ratio: 1.4, chars: 20, fitChars: 13 }, studentId: { ratio: 0.6, chars: 8, fitChars: 13 } } })
+    const found = checkReport(r, currentConfig, over).filter((x) => x.ruleId === 'cover-field-fit')
+    expect(found).toHaveLength(1)
+    expect(found[0]).toMatchObject({ severity: 'error', area: 'cover', blockId: 'basic:name', title: '表紙の氏名が長く、欄に入りません', start: 0, end: r.basicInfo.name.length })
+    expect(found[0].detail).toContain('今 20字・13字くらいまで入ります')
+    const idOver = layout({ coverFields: { studentId: { ratio: 1.2, chars: 14, fitChars: 11 } } })
+    expect(checkReport(r, currentConfig, idOver).find((x) => x.ruleId === 'cover-field-fit')?.title).toBe('表紙の学籍番号が長く、欄に入りません')
+    // 測った誤差くらいのはみ出し・組版の結果がないときは見ない
+    expect(ids(r, layout({ coverFields: { name: { ratio: 1.001, chars: 5, fitChars: 5 } } }))).not.toContain('cover-field-fit')
+    expect(ids(r)).not.toContain('cover-field-fit')
+  })
+
   it('氏名の姓と名の間が半角の空白なら、全角に直せる', () => {
     const r = { ...cleanReport(), basicInfo: { ...cleanReport().basicInfo, name: '文化 花子' } }
     const f = checkReport(r, currentConfig, layout()).find((x) => x.ruleId === 'name-space')

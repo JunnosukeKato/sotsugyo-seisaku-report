@@ -1,4 +1,4 @@
-import type { YearConfig } from '../config'
+import { courseIdInText, type YearConfig } from '../config'
 import { headingFromText, isPlaceholderOnly } from '../import/wordImport'
 import type { WordBlock } from '../import/wordDocument'
 import type { PartId } from './parts'
@@ -47,11 +47,9 @@ export function sniffWordStrict(blocks: WordBlock[]): Exclude<PartId, 'photo'> |
   return blocks.some((b) => b.type === 'paragraph' && headingFromText(b.text)?.level === 1) ? 'body' : null
 }
 
-/** コース：Word に書いたコースの名前から探す（長い名前から。見つからなければ null） */
+/** コース：Word に書いたコースの名前から探す（長い名前から。見つからなければ null。学生用ツールの「Word から読み込む」と同じ探し方） */
 export function findCourseId(lines: string[], config: YearConfig): string | null {
-  const all = comparable(lines.join(''))
-  const courses = [...config.courses].sort((a, b) => b.name.length - a.name.length)
-  return courses.find((c) => c.name && all.includes(comparable(c.name)))?.id ?? null
+  return courseIdInText(lines, config)
 }
 
 const DASHES = '―－—–\\-‐−─━ー'

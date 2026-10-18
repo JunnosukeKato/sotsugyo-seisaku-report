@@ -211,6 +211,32 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
       guide('name-space', 'warning', '姓と名の間は全角の空白にする', 'cover', { blockId: 'basic:name', start: halfSpace, end, replacement: '　', detail: '半角の空白 → 全角の空白（例：文化　花子）' }),
     )
   }
+  // 氏名に数字や「学籍番号」：学籍番号の欄の文までいっしょに入っている（2行ぶんを氏名の欄に貼り付けたなど）。表紙とファイル名がおかしくなる
+  const nameText = basicInfo.name.normalize('NFKC')
+  if (/[0-9]/.test(nameText) || nameText.replace(/\s/g, '').includes('学籍番号')) {
+    findings.push(
+      guide('name-text', 'error', '氏名に数字や「学籍番号」が入っている', 'cover', {
+        blockId: 'basic:name',
+        start: 0,
+        end: basicInfo.name.length,
+        detail: '氏名の欄には、姓と名だけを入れます（例：文化　花子）。学籍番号は、学籍番号の欄に入れます',
+      }),
+    )
+  }
+  // 学籍番号・氏名が、表紙の欄（下線の幅）からはみ出している（組んだ紙面で測る）
+  for (const [field, label] of [['studentId', '学籍番号'], ['name', '氏名']] as const) {
+    const fit = layout?.coverFields?.[field]
+    const value = basicInfo[field]
+    if (!fit || fit.ratio <= OVERFLOW_RATIO || !value.trim()) continue
+    findings.push(
+      guide('cover-field-fit', 'error', `表紙の${label}が長く、欄に入りません`, 'cover', {
+        blockId: `basic:${field}`,
+        start: 0,
+        end: value.length,
+        detail: `表紙の欄からはみ出します（今 ${fit.chars}字・${fit.fitChars}字くらいまで入ります）。よけいな字や空白が入っていないかを確かめてください`,
+      }),
+    )
+  }
   if (config.studentIdPattern && basicInfo.studentId.trim() && !new RegExp(config.studentIdPattern).test(basicInfo.studentId.trim())) {
     findings.push(guide('student-id-format', 'warning', '学籍番号の形式を確認する', 'cover', { blockId: 'basic:studentId' }))
   }

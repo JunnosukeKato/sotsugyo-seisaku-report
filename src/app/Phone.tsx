@@ -5,6 +5,7 @@ import { findEditable, type EditableKind } from '../editor/reportOps'
 import { BAND_SIDE_QUERY, forTouch, paragraphHint, photoToolsAtSide } from './bandText'
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
+import { BackupLabel } from './dialogs'
 import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, HelpButton, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
 import { keepFocus, PAGE_CONTEXT, pageName, useBandSide } from './uiShared'
 import { DriveChip, DriveMenu, type DriveControls } from './DriveUi'
@@ -179,7 +180,9 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
 
 /** 「追加」の欄：本文のページなら段落・見出し・図・表を足す */
 function AddTools({ editor, snap, onDone, onReferences }: { editor: ReportEditor; snap: EditorSnapshot; onDone: () => void; onReferences: () => void }) {
-  const kind = snap.layout?.kinds[snap.page] ?? 'unknown'
+  // 開いた直後で、まだ紙面が出ていない：どのページかが分からないので「本文のページで足せます」とは言わない（本文のページを開いていた学生が迷っていた）
+  if (!snap.layout) return <p className="sheet-hint">紙面を準備しています。準備ができたら、ここから段落や見出しを足せます。</p>
+  const kind = snap.layout.kinds[snap.page] ?? 'unknown'
   if (kind !== 'body') {
     return (
       <p className="sheet-hint">
@@ -297,7 +300,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
           <div className="sub">{pageName(snap)}</div>
         </div>
         {drive ? <DriveChip drive={drive} compact /> : <SaveChip state={saveState} />}
-        <button className="icon-btn" aria-label="メニュー（手順書・バックアップ・使い方など）" onClick={() => setSheet('menu')}>
+        <button className="icon-btn" aria-label="メニュー（手順書・バックアップ・作り直す・使い方など）" onClick={() => setSheet('menu')}>
           {PhoneIcon.menu}
         </button>
       </header>
@@ -337,7 +340,8 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
           <span className="plus">{PhoneIcon.plus}</span>追加
         </button>
         <button className="nav-check" onClick={() => setSheet('check')}>
-          {PhoneIcon.check}チェック{errors > 0 && <i className="badge">{errors}</i>}
+          {/* 紙面を組み終えるまでは、エラーの数を出さない（ページ数などのチェックが加わって、数が変わるため） */}
+          {PhoneIcon.check}チェック{errors > 0 && !snap.pageChecksPending && <i className="badge">{errors}</i>}
         </button>
         <button className="nav-pdf" onClick={onExport} disabled={exporting}>
           {Icon.pdf}
@@ -389,13 +393,14 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
               </a>
             )}
             <button
-              className="link-btn"
+              className="link-btn backup-btn"
               onClick={() => {
                 close()
                 onBackup()
               }}
             >
-              {Icon.backup}バックアップ
+              {Icon.backup}
+              <BackupLabel />
             </button>
             <HelpButton
               onClick={() => {

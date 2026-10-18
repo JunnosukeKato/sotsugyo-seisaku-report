@@ -62,7 +62,7 @@ body.resizing .page-viewport { pointer-events: none; }
    （組版エンジンもページに transform-origin などを指定するため、めくる軸（左端）は !important で決める） */
 .page-viewport [data-vivliostyle-outer-zoom-box] { position: relative !important; width: var(--page-w) !important; height: var(--page-h) !important; margin: var(--page-top) 0 var(--inset-bottom) var(--page-left) !important; padding: 0 !important; }
 .page-viewport [data-vivliostyle-spread-container] { position: absolute !important; left: 0; top: 0; width: 793.7px !important; height: 1122.52px !important; transform: scale(var(--s)); transform-origin: 0 0; perspective: 2600px; }
-.page-viewport [data-vivliostyle-page-container] { position: absolute !important; left: 0; top: 0; display: none !important; margin: 0 !important; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08), 0 20px 60px rgba(30, 25, 20, 0.16); transform-origin: left center !important; -webkit-backface-visibility: hidden; backface-visibility: hidden; cursor: text; }
+.page-viewport [data-vivliostyle-page-container] { position: absolute !important; left: 0; top: 0; display: none !important; margin: 0 !important; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08), 0 20px 60px rgba(30, 25, 20, 0.16); transform-origin: left center !important; cursor: text; }
 /* 組版の間は、寸法を測れるようすべてのページを出しておく（裏側なので見えない） */
 .page-viewport.measuring [data-vivliostyle-page-container],
 .page-viewport [data-vivliostyle-page-container]:is(.is-current, .is-under, .is-under-current, .turn-in) { display: block !important; }
@@ -1139,3 +1139,53 @@ body.resizing .page-viewport { pointer-events: none; }
   .app.phone .page-side .layouts { gap: 5px; }
   .app.phone .page-side .lay, .app.phone .page-side :is(.tb, .photo-sw) { min-height: 46px; padding-top: 4px; padding-bottom: 4px; }
 }
+
+/* ---- はじめて使う学生の試し（3回目）の直し：紙面と書く欄まわり ---- */
+/* ページの裏側を隠すのは、めくっている間のページだけ（いつも付けておくと、止まっているページの文字が、ぼやけて太く見えていた） */
+.page-viewport [data-vivliostyle-page-container]:is(.turn-out, .turn-in) { -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+/* 開いた直後で、ページ数などのチェックをまだしていない間（app/SidePanel.tsx の CheckBody）：緑の「指摘はありません」ではなく、灰色の小さな字で知らせる */
+.empty.check-pending { color: var(--muted); }
+p.check-pending { margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: var(--muted); }
+/* 段落を分けた前の段落の仮の表示（ghost）と、スマホの紙面の上の見えない写し（mirror）。文字の組み方は書く欄と同じ（editor/overlayEditor.ts） */
+.overlay-ghost, .overlay-mirror { box-sizing: border-box; text-justify: inter-character; text-autospace: normal; text-spacing-trim: normal; min-height: 1em; }
+.overlay-mirror { position: absolute; visibility: hidden; pointer-events: none; transform-origin: 0 0; white-space: pre-wrap; line-break: strict; }
+/* 開いた直後、ほかの部分を組んでいる間にページを送ったとき：めくっているページと、下に見えるページは出す（組み終えたページだけを送る。editor/reportEditor.ts の goToPage） */
+.page-viewport.front.measuring [data-vivliostyle-page-container]:is(.is-under, .is-under-current, .turn-in, .turn-out, .fade-out) { visibility: visible !important; }
+/* ページの一覧：開いた直後で、まだ組んでいないページは、白いページではなく「準備中」と出す（app/SidePanel.tsx の PageThumbs） */
+.mini.preparing { display: grid; place-items: center; background: #f4f2ee; }
+.mini.preparing::after { content: '準備中'; font-size: 10px; letter-spacing: 0.04em; color: var(--muted); }
+
+/* ---- はじめて使う学生の試し（3回目）の直し：バックアップ・作り直す（mockups/v34 案A）、Word の読み込み、PDF の窓 ---- */
+/* 右の欄・スマホのメニューの「バックアップ・作り直す」：名前が長い分、となりの「使い方」より広くする。
+   ふだんは1行。右の欄を狭くしたとき・「手順書」も並ぶときは、はみ出さずに「・」の後ろで2行になる */
+.link-btn.backup-btn { flex: 1.6; }
+.link-btn.backup-btn svg { flex: none; }
+.link-btn.backup-btn .backup-label { min-width: 0; word-break: keep-all; text-align: center; }
+/* 窓のいちばん下の「最初から作り直す」の区切り（すぐ横に「いまの原稿は自動の控えに残ります」）。「閉じる」は、その下の行 */
+.modal .start-over { margin-top: 20px; padding-top: 4px; border-top: 1px solid var(--line); }
+.modal .start-over h3 { margin-top: 14px; }
+.modal .start-over-row { display: flex; align-items: center; gap: 12px; }
+.modal .start-over-row p { flex: 1; margin: 0; font-size: 13px; line-height: 1.7; color: var(--ink); word-break: auto-phrase; }
+.modal .start-over-row button.danger { flex: none; display: inline-flex; align-items: center; gap: 6px; border-color: #e7c3bf; }
+.modal .start-over-row button.danger svg { width: 16px; height: 16px; }
+.modal .close-row { margin-top: 14px; }
+/* 自動の控えの一覧：いちばん下の「この時点に戻す」の押せる範囲（上下 9px 広げてある）が、一覧の下に少しはみ出し、
+   控えが3つでも上下に動かす棒が出ていた。いちばん下のボタンだけ、下に広げる分を一覧の中に収める */
+.modal .snapshots li:last-child button:not(.link)::after { bottom: -6px; }
+/* Word を選ぶ窓：読めない形のファイルを選んだとき、その名前（✓ は付けない） */
+.word-file small.chosen.rejected { color: var(--muted); }
+/* Word の中身を確かめる窓：表紙の Word のコースが、いまのツールのコースと違う（どちらにするかを選ぶ） */
+.word-course { margin: 0 0 14px; padding: 10px 14px 12px; border: 1px solid #e7c3bf; border-radius: 10px; background: var(--error-soft); font-size: 13px; line-height: 1.7; color: var(--ink); }
+.word-course > b { display: block; font-size: 13.5px; color: var(--error); }
+.word-course p { margin: 2px 0 6px; }
+.word-course label { display: flex; align-items: flex-start; gap: 8px; padding: 4px 0; font-weight: 700; cursor: pointer; }
+.word-course input { flex: none; width: 16px; height: 16px; margin: 3px 0 0; accent-color: var(--accent); }
+.word-cover dd.ng { color: var(--error); }
+.word-cover dd small { display: block; font-size: 11.5px; font-weight: 400; }
+.word-cover dd.keep small { color: var(--muted); }
+/* サブタイトルが、コースの決まった形と違う（表紙にどう出るか） */
+.word-sub-off { margin: -6px 0 14px; padding: 8px 12px; border-radius: 8px; background: var(--error-soft); color: var(--error); font-size: 12.5px; line-height: 1.7; }
+.word-status .word-choose { margin: 10px 0 0; font-size: 13px; color: var(--error); }
+/* 提出用の PDF の窓の、警告の一覧（エラーの一覧と同じ形） */
+.warning-list { margin: -6px 0 14px; }
+.warning-list .more button { font-size: 13px; }

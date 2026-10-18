@@ -3,8 +3,8 @@ import type { FigureSize } from '../layout/bodyHtml'
 import { buildReportParts, COVER_SUBTITLE, fitLineFontPt, OVERFLOW_RATIO, partList, refitLineFontPt, subtitleLine } from '../layout/document'
 import { FONT_SIZE_PT } from '../layout/documentCss'
 import { reviseDeferredGroups, sameSet } from '../layout/figureFloat'
-import { measureLayout, pageKind, samePageNumbers, type LayoutInfo } from '../layout/measure'
-import { documentHash, firstShowPlan, loadLayoutMemory, saveLayoutMemory } from '../layout/memory'
+import { measureLayout, pageKind, samePageNumbers, type LayoutInfo, type PageKind } from '../layout/measure'
+import { documentHash, firstShowPlan, loadLayoutMemory, saveLayoutMemory, usualKinds, type LayoutMemory } from '../layout/memory'
 import type { Figure, Report } from '../model/types'
 import { PageView, SENTINEL_PAGE_ATTR, type PartView } from './pageView'
 
@@ -42,6 +42,11 @@ export interface FirstShow {
   page: number
   /** 先に見せた。layout：仮の紙面の情報（ページの種類は、まだ組んでいない部分の仮のページも含めた今の紙面のもの。ほかは前に開いたときのもの） */
   onShow: (page: number, layout: LayoutInfo) => void
+  /**
+   * 部分を1つ組み終えた（はじめて組んでいる間だけ）。pagesLeft：まだ組んでいないページの見込み（「紙面を準備しています…（あと3ページ）」）。
+   * kinds：先に見せたあとなら、今の紙面のページの種類（仮のページが組んだページに替わって、ページ数が変わることがある）
+   */
+  onProgress?: (pagesLeft: number, kinds: PageKind[] | null) => void
 }
 
 /** 前に開いたときの組み方を覚えていないときの、先に見せている間の仮の紙面の情報（ページの種類のほか。組み終えたら正しいものになる） */
@@ -99,6 +104,8 @@ const loadedChars = new Set<string>()
  * - 表に出ている紙面が、すでにその原稿の紙面なら、何もしない（unchanged）
  * - 裏側に残っている、ひとつ前の紙面が、その原稿の紙面なら（削除してすぐ元に戻したなど）、組まずにそのまま使う
  * - 前に組んで落ち着いた原稿なら、そのときの状態（目次の番号・送る図・サブタイトルの大きさ）から始める（組み直しの回数が減る）
+ * - 表に出ている紙面に、組む文書と同じ部分があれば、組まずに借りる（組み終えて入れ替えるときに、その部分の要素を裏から表へ移す：swap）。
+ *   開いたあと、もう一方の表示枠は空なので、前は、はじめて書いたときに報告書の全部を組み直していた（スマホでは十数秒、書いた文字が紙面に出なかった）
  * - 開いたとき（はじめて組むとき）：前に開いたときの組み方（この端末に覚えたもの。layout/memory.ts）から始め、見せるページのある部分を先に組んで、
  *   すぐ表に出す（FirstShow。ほかの部分は、そのあと見えないまま組む）。前は、開くたびに全ページを組み終えるまで何も見えなかった
  * 分けて組んでも、組み直しの判断（目次・図の送り方・サブタイトル）は全体を組んだときと同じで、出来上がる紙面も同じ。
@@ -115,6 +122,10 @@ export class ReportRenderer {
   private readonly settled = new Map<string, LayoutState>()
   /** 前に開いたときに覚えた組み方（layout/memory.ts）を、もう見たか（開いてはじめて組むときだけ使う） */
   private memoryTried = false
+  /** 組み終えた裏側の紙面が、表の表示枠から借りている部分（裏側の部分の番号 → 表の部分）。表と裏を入れ替えるときに、裏へ移す（swap） */
+  private borrow: { back: Buffer; lender: Buffer; parts: Map<number, PartView> } | null = null
+  /** めくっている途中の動きを、すぐ終える（hurryTurn。めくっていなければ null） */
+  private finishTurn: (() => void) | null = null
 
   constructor(container: HTMLElement) {
     const make = (): Buffer => {
@@ -143,6 +154,7 @@ export class ReportRenderer {
     this.deferredGroups = new Set()
     this.coverSubtitle = null
     this.settled.clear()
+    this.borrow = null
     for (const b of this.buffers) {
       b.state = null
       b.layout = null
@@ -210,27 +222,73 @@ export class ReportRenderer {
     const plan = first && !back.view.parts.some((p) => p.html !== null) ? firstShowPlan(docs, memory, first.page) : null
     /** 先に見せた部分（この表示枠は、もう表に出ている。null なら、まだ見せていない） */
     let shownPart: number | null = null
+    /** 表の表示枠から借りる部分（組み上げる紙面の部分の番号 → 表の表示枠の部分。組まずに使い、表と裏を入れ替えるときに裏へ移す：swap） */
+    const borrowed = new Map<number, PartView>()
+    /** 組み上げる紙面の部分（裏側で組んだ部分と、表から借りる部分） */
+    const assembly = () => back.view.parts.map((part, i) => borrowed.get(i) ?? part)
+    /** 組み上げる紙面のページを測る（借りた部分のページも、測る間だけ出しておく。同じ処理の中で戻すので、画面には出ない） */
+    const measure = <T>(fn: (pages: HTMLElement[]) => T): T => {
+      const lend = borrowed.size > 0 && !front.element.classList.contains('measuring')
+      if (lend) front.element.classList.add('measuring')
+      try {
+        return fn(assembly().flatMap((part) => part.pageElements()))
+      } finally {
+        if (lend) front.element.classList.remove('measuring')
+      }
+    }
+    /** 見せるページを先に表に出す（ほかの部分は、このあと見えないまま組む） */
+    const showEarly = (part: number) => {
+      if (!first) return
+      shownPart = part
+      numberPages(back.view.pages())
+      this.bringFront(back)
+      this.setCurrent(back.view, first.page)
+      const kinds = back.view.pages().map(pageKind)
+      first.onShow(first.page, { ...(memory?.layout ?? EMPTY_LAYOUT), kinds, bodyPages: kinds.filter((k) => k === 'body').length })
+    }
+    /** はじめて組んでいる間：部分を1つ組み終えるたびに知らせる。覚えた組み方で先に見せられなかったときは、見せるページの部分までを順に組み終えたら見せる */
+    const onPart = (i: number) => {
+      if (!first) return
+      if (shownPart === null) {
+        const parts = back.view.parts
+        // 見せるページの部分まで、前から順に組み終えている（ページ数が分かり、見せるページの位置が決まる）
+        let start = 0
+        for (let k = 0; k <= i && parts[k]?.html === docs[k]; k++) {
+          const count = parts[k].pageElements().length
+          if (first.page < start + count) {
+            // まだ組んでいない後ろの部分には、仮のページを置く（数は、覚えたもの・ふつうの数。組み終えれば正しい数になる）
+            parts.forEach((part, j) => {
+              if (j > i && part.html === null) part.showPlaceholder(memory?.parts[j]?.kinds ?? usualKinds(j, docs.length))
+            })
+            showEarly(k)
+            break
+          }
+          start += count
+        }
+      }
+      first.onProgress?.(pagesLeft(back, docs, memory), shownPart === null ? null : back.view.pages().map(pageKind))
+    }
 
     back.state = null
     back.layout = null
+    this.borrow = null
     back.element.classList.add('measuring')
     try {
       let ms = 0
+      // 組み始めに、残りのページの見込みを知らせる（「紙面を準備しています…（あと20ページほど）」。部分を組み終えるたびに減る）
+      if (first) first.onProgress?.(pagesLeft(back, docs, memory), null)
       if (first && plan) {
         // まだ組んでいない部分に仮のページを置き（見せるページの番号がずれないように）、見せるページのある部分を先に組む（書体も、その部分の文字を先に読み込む）
         back.view.setPartCount(docs.length)
         back.view.parts.forEach((part, i) => part.showPlaceholder(plan.kinds[i]))
         await loadFonts(docs[plan.part])
         ms += await renderPart(back.view, docs, plan.part)
-        // 組んだページ数が覚えていたとおりなら、すぐ表に出す（違えば、ふだんどおり全部組んでから出す）
-        if (back.view.parts[plan.part].pageElements().length === plan.kinds[plan.part].length) {
-          numberPages(back.view)
-          this.bringFront(back)
-          this.setCurrent(back.view, first.page)
-          shownPart = plan.part
-          const kinds = back.view.pages().map(pageKind)
-          first.onShow(first.page, { ...(memory?.layout ?? EMPTY_LAYOUT), kinds, bodyPages: kinds.filter((k) => k === 'body').length })
-        }
+        // 見せるページが、組んだ部分の中にあれば、すぐ表に出す（その前の部分のページ数は分かっているので、位置は決まる。
+        // 見せる部分が変わっていてページ数が覚えたときと違っても、後ろの部分の仮のページの数がずれるだけ。なければ、前から順に組んでから出す）
+        const start = plan.kinds.slice(0, plan.part).reduce((n, k) => n + k.length, 0)
+        if (first.page - start < back.view.parts[plan.part].pageElements().length) showEarly(plan.part)
+        else back.view.parts.forEach((part) => part.html === null && part.removePlaceholder())
+        first.onProgress?.(pagesLeft(back, docs, memory), shownPart === null ? null : back.view.pages().map(pageKind))
       }
       // 文字の範囲ごとに分かれたフォントを、組版の前に読み込んでおく（後から読み込まれると改行位置がずれる）。読み込み済みの文字は読み込まない
       await loadFonts(docs.join(''))
@@ -238,20 +296,24 @@ export class ReportRenderer {
       const blocked = new Set<string>()
       let fallback = false
       for (let pass = 1; ; pass++) {
-        // 変わった部分だけを組む（先に見せたあとは、原稿が変わったら部分の区切りでやめる：もう一方の表示枠で、新しい原稿を組む）
+        // 変わった部分だけを組む。表の表示枠に同じ文書の部分があれば、組まずに借りる。
+        // 先に見せたあとは、原稿が変わっても途中でやめない（組んだ部分は、次の組み直しで借りるので、むだにならない。
+        // 前は、もう一方の空の表示枠で、はじめから全部を組み直していた）
         for (;;) {
-          ms += await renderParts(back.view, docs, shownPart === null ? undefined : stale)
-          if (shownPart !== null && stale()) return { ms, layout: measureLayout(back.view.pages(), report.body), stale: true, early: true }
+          ms += await this.assemble(back, front, docs, borrowed, first ? onPart : undefined)
+          if (shownPart !== null && stale()) return { ms, layout: measure((pages) => measureLayout(pages, report.body)), stale: true, early: true }
           // 章の中身が、章の終わりを越えて次のページへはみ出した：本文をまとめて組み直す（先に見せた紙面は組み直さず、もう一方の表示枠で）
-          if (!split || chaptersFit(back.view)) break
-          if (shownPart !== null) return { ms, layout: measureLayout(back.view.pages(), report.body), early: true, resettle: true }
+          if (!split || chaptersFit(assembly())) break
+          if (shownPart !== null) return { ms, layout: measure((pages) => measureLayout(pages, report.body)), early: true, resettle: true }
           split = false
           docs = build(this.tocPageNumbers, deferred, subtitlePt, split)
         }
-        layout = measureLayout(back.view.pages(), report.body)
+        // 紙面の情報と、次に送る図を、まとめて測る（借りた部分のページを出して測るのを、1回で済ませる）
+        const measured = measure((pages) => ({ layout: measureLayout(pages, report.body), next: fallback ? deferred : reviseDeferredGroups(pages, report.body, deferred, blocked) }))
+        layout = measured.layout
         const tocChanged = !samePageNumbers(layout.tocPageNumbers, this.tocPageNumbers)
         if (tocChanged) this.tocPageNumbers = layout.tocPageNumbers
-        let next = fallback ? deferred : reviseDeferredGroups(back.view.pages(), report.body, deferred, blocked)
+        let next = measured.next
         // 図の送り方が落ち着かないときは、送るのをやめて段落のすぐ下に置く（ページの下に空白が残るだけで、順番は崩れない）
         if (!fallback && pass >= MAX_PASSES && !sameSet(next, deferred)) {
           fallback = true
@@ -270,7 +332,7 @@ export class ReportRenderer {
             saveLayoutMemory({
               v: 1,
               state: { toc: back.state.toc, deferred: [...deferred], subtitle: { line: documentHash(line), pt: subtitlePt }, split },
-              parts: back.view.parts.map((part, i) => ({ hash: documentHash(docs[i]), kinds: part.pageKinds() })),
+              parts: assembly().map((part, i) => ({ hash: documentHash(docs[i]), kinds: part.pageKinds() })),
               layout,
             })
           }
@@ -289,7 +351,10 @@ export class ReportRenderer {
           return { ms, layout, early: true, resettle: true }
         }
       }
-      numberPages(back.view)
+      // ページ番号を、本文の1ページ目から数えた通しの番号にする。借りた部分のページは、表と裏を入れ替えるときに付け直す（表に出ている紙面の番号を先に変えないように）
+      const lentPages = new Set([...borrowed.values()].flatMap((part) => part.pageElements()))
+      numberPages(assembly().flatMap((part) => part.pageElements()), lentPages)
+      this.borrow = borrowed.size > 0 ? { back, lender: front, parts: new Map(borrowed) } : null
       this.deferredGroups = deferred
       this.coverSubtitle = { line, pt: subtitlePt }
       return { ms, layout, early: shownPart !== null }
@@ -298,15 +363,53 @@ export class ReportRenderer {
     }
   }
 
+  /**
+   * 表示枠の部分を docs の数にそろえ、組んである文書と違う部分だけを組む。かかった時間（ミリ秒）を返す。
+   * 表の表示枠（lender）に同じ文書の部分があれば、組まずに借りる（borrowed に入れる。表と裏を入れ替えるときに移す：swap）。
+   * onPart：部分を1つ組み終えるたびに呼ぶ
+   */
+  private async assemble(back: Buffer, lender: Buffer, docs: string[], borrowed: Map<number, PartView>, onPart?: (i: number) => void): Promise<number> {
+    back.view.setPartCount(docs.length)
+    // 表の表示枠の部分を、組んである文書ごとに（章を足した・消したときは、同じ文書の部分の番号がずれるので、番号ではなく文書で探す）
+    const lendable = new Map<string, PartView>()
+    if (lender !== back) for (const part of lender.view.parts) if (part.html !== null && !lendable.has(part.html)) lendable.set(part.html, part)
+    borrowed.clear()
+    let ms = 0
+    for (let i = 0; i < docs.length; i++) {
+      if (back.view.parts[i].html === docs[i]) continue
+      const lent = lendable.get(docs[i])
+      if (lent) {
+        borrowed.set(i, lent)
+        lendable.delete(docs[i])
+        continue
+      }
+      ms += await renderPart(back.view, docs, i)
+      onPart?.(i)
+    }
+    return ms
+  }
+
   private remember(key: string, state: LayoutState): void {
     this.settled.delete(key)
     this.settled.set(key, state)
     if (this.settled.size > STATE_CACHE_SIZE) this.settled.delete(this.settled.keys().next().value!)
   }
 
-  /** 組み終えた裏側を表に出し、page ページ目（0 から）を見せる */
+  /** 組み終えた裏側を表に出し、page ページ目（0 から）を見せる。表から借りていた部分は、裏側へ移してから入れ替える */
   swap(page: number): void {
     const back = this.buffers[1 - this.frontIndex]
+    const borrow = this.borrow?.back === back ? this.borrow : null
+    this.borrow = null
+    if (borrow) {
+      for (const [i, part] of borrow.parts) {
+        const j = borrow.lender.view.parts.indexOf(part)
+        if (j >= 0) back.view.exchangePart(i, borrow.lender.view, j)
+      }
+      // 部分を入れ替えた表示枠は、ひとつ前の紙面そのままではなくなった（その紙面の状態は使い回さない）
+      borrow.lender.state = null
+      borrow.lender.layout = null
+      numberPages(back.view.pages())
+    }
     this.setCurrent(back.view, page)
     this.bringFront(back)
   }
@@ -326,6 +429,11 @@ export class ReportRenderer {
 
   pageCount(): number {
     return this.pageView.pages().length
+  }
+
+  /** めくっている途中なら、その動きをすぐ終える（続けてページ送りを押したとき。押した数だけ送るため：editor の goToPage） */
+  hurryTurn(): void {
+    this.finishTurn?.()
   }
 
   /** 表の紙面で page ページ目を見せる（動きなし。fade なら、ふわっと出す） */
@@ -381,10 +489,12 @@ export class ReportRenderer {
       const finish = () => {
         if (finished) return
         finished = true
+        if (this.finishTurn === finish) this.finishTurn = null
         moving.removeEventListener('animationend', onEnd)
         this.setCurrent(view, to)
         resolve()
       }
+      this.finishTurn = finish
       // ページの影（::after）の動きの終わりも届くため、ページ本体の動きの終わりだけを見る
       const onEnd = (e: AnimationEvent) => {
         if (e.target === moving && !e.pseudoElement) finish()
@@ -400,15 +510,13 @@ function sameDocs(view: PageView, docs: string[]): boolean {
   return view.parts.length === docs.length && docs.every((d, i) => view.parts[i].html === d)
 }
 
-/** 表示枠の部分を docs の数にそろえ、組んである文書と違う部分だけを組む。かかった時間（ミリ秒）を返す。stop が true を返したら、部分の区切りでやめる */
-async function renderParts(view: PageView, docs: string[], stop?: () => boolean): Promise<number> {
-  view.setPartCount(docs.length)
-  let ms = 0
-  for (let i = 0; i < docs.length; i++) {
-    if (stop?.()) break
-    ms += await renderPart(view, docs, i)
-  }
-  return ms
+/** まだ組んでいないページの見込み（仮のページを置いた部分は仮のページの数、置いていない部分は覚えた数・ふつうの数） */
+function pagesLeft(back: Buffer, docs: string[], memory: LayoutMemory | null): number {
+  return back.view.parts.reduce((n, part, i) => {
+    if (part.html === docs[i]) return n
+    const standIns = part.html === null ? part.pageElements().length : 0
+    return n + (standIns || memory?.parts[i]?.kinds.length || usualKinds(i, docs.length).length)
+  }, 0)
 }
 
 /** i 番目の部分を、組んである文書と違えば組む（表示枠の部分の数は、docs の数にそろえてあること） */
@@ -434,8 +542,8 @@ function markSentinel(part: PartView): void {
  * 収まっていない（送った図などが、次のページへはみ出した）ときは、本文全体を組んだときと紙面が変わりうる
  * （本文全体では、はみ出したものは次の章の最初のページに載る）
  */
-function chaptersFit(view: PageView): boolean {
-  return view.parts.slice(FRONT_PARTS, -1).every((part) => {
+function chaptersFit(parts: PartView[]): boolean {
+  return parts.slice(FRONT_PARTS, -1).every((part) => {
     const pages = [...part.element.querySelectorAll<HTMLElement>('[data-vivliostyle-page-container]')]
     const end = pages.findIndex((p) => p.querySelector('.flow-end'))
     const sentinel = pages[end + 1]
@@ -445,15 +553,15 @@ function chaptersFit(view: PageView): boolean {
 
 /**
  * 本文・引用参考文献のページのページ番号を、本文の1ページ目から数えた通しの番号にする
- * （章ごとに組んだ部分は、それぞれ1から数えている。番号の欄の大きさと位置は番号によらず同じなので、文字だけを直せば、全体を組んだときと同じ紙面になる）
+ * （章ごとに組んだ部分は、それぞれ1から数えている。番号の欄の大きさと位置は番号によらず同じなので、文字だけを直せば、全体を組んだときと同じ紙面になる）。
+ * pages：紙面の全ページ（順に）。skip のページは直さない（表に出ている紙面から借りた部分。表と裏を入れ替えるときに直す）
  */
-function numberPages(view: PageView): void {
-  const pages = view.pages()
+function numberPages(pages: HTMLElement[], skip: ReadonlySet<HTMLElement> = new Set()): void {
   const kinds = pages.map(pageKind)
   const bodyStart = kinds.indexOf('body')
   if (bodyStart < 0) return
   pages.forEach((page, i) => {
-    if (kinds[i] !== 'body' && kinds[i] !== 'references') return
+    if ((kinds[i] !== 'body' && kinds[i] !== 'references') || skip.has(page)) return
     const counter = page.querySelector('[data-vivliostyle-page-margin-box="bottom-center"] [data-vivliostyle-page-counter]')
     const n = String(i - bodyStart + 1)
     if (counter && counter.textContent !== n) counter.textContent = n

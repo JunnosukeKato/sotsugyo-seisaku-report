@@ -1,8 +1,8 @@
-import { findCourse, type YearConfig } from '../config'
-import { newId, normalizeParagraph, numbering, textToContent, type Numbering } from '../editor/reportOps'
+import { courseIdInText, findCourse, type YearConfig } from '../config'
+import { newId, normalizeParagraph, numbering, setCourse, textToContent, type Numbering } from '../editor/reportOps'
 import { chapterLabel, subheadingLabel } from '../layout/bodyHtml'
 import type { StoredImage } from '../model/storage'
-import { bodyFromTemplate, courseTemplate, emptyParagraph } from '../model/template'
+import { abstractEmpty, abstractHint, bodyFromTemplate, courseTemplate, emptyParagraph } from '../model/template'
 import type { BodyBlock, Chapter, ParagraphBlock, Report, TableBlock, TableRow } from '../model/types'
 import type { FigurePreview, ImportProblem, OutlineItem, TablePreview, WordFiles, WordImportResult } from './types'
 import { documentContext, readDocument, type ImageRef, type TextBox, type WordBlock, type WordTable } from './wordDocument'
@@ -658,25 +658,45 @@ function findName(rows: string[][]): string | undefined {
 /** サブタイトルの前後の線（―）。長音の「ー」で打つ学生もいるが、名前の中の「ー」と分けるため、「ー」は端の1字だけを線とみなす */
 const DASHES = '―－—–\\-‐−─━'
 
-/** サブタイトル（―…の衣装制作― の行）から、学生が入れる部分（{input}）を取り出す */
-function findSubtitle(rows: string[][], template: string): string | undefined {
-  const edge = new RegExp(`^(?:[${DASHES}]{1,3}|ー)|(?:[${DASHES}]{1,3}|ー)$`, 'g')
-  const [prefix, suffix] = template.replace(edge, '').split('{input}').map((s) => s.trim())
+/** サブタイトルの行の、前後の線（「―」「ー」など） */
+const SUBTITLE_EDGE = () => new RegExp(`^(?:[${DASHES}]{1,3}|ー)|(?:[${DASHES}]{1,3}|ー)$`, 'g')
+
+/** 表紙の、サブタイトルの行（前後が線（―）の行。ひな形のまま（●●●）の行は除く） */
+function findSubtitleLine(rows: string[][]): string | undefined {
   for (const row of rows) {
     const line = row.join('').trim()
     if (line.length > 80 || !new RegExp(`^[${DASHES}ー].*[${DASHES}ー]$`).test(line)) continue
-    const inner = line.replace(edge, '').trim()
-    if (!inner) continue
-    let input = inner
-    if (suffix !== undefined && inner.startsWith(prefix) && inner.endsWith(suffix) && inner.length > prefix.length + suffix.length)
-      input = inner.slice(prefix.length, inner.length - suffix.length)
-    input = input.trim()
-    if (input && !hasPlaceholder(input)) return input
+    const inner = line.replace(SUBTITLE_EDGE(), '').trim()
+    if (inner && !hasPlaceholder(inner)) return line
   }
   return undefined
 }
 
-function readCover(pkg: WordPackage, config: YearConfig, courseId: string, problems: ImportProblem[]): WordImportResult['cover'] {
+/**
+ * Word のサブタイトルの行（「―シンドバッドの衣装制作―」）から、学生が入れる部分（{input}。「シンドバッド」）を取り出す。
+ * コースの決まった形（template。「―{input}の衣装制作―」）の前と後ろは、合っている所だけを取る（合わない所は、そのまま残す）。
+ * fits：前後とも決まった形に合っていたか（合わなければ、表紙には決まった形の前後が付いて、Word と違う文になる）
+ */
+export function subtitleFromWord(line: string, template: string): { input: string; fits: boolean } {
+  const [prefix = '', suffix = ''] = template.replace(SUBTITLE_EDGE(), '').split('{input}').map((s) => s.trim())
+  let input = line.trim().replace(SUBTITLE_EDGE(), '').trim()
+  const head = !!prefix && input.startsWith(prefix) && input.length > prefix.length
+  if (head) input = input.slice(prefix.length)
+  const tail = !!suffix && input.endsWith(suffix) && input.length > suffix.length
+  if (tail) input = input.slice(0, input.length - suffix.length)
+  return { input: input.trim(), fits: (!prefix || head) && (!suffix || tail) }
+}
+
+/** 表紙の Word から読み取れたもの */
+interface CoverRead {
+  cover: WordImportResult['cover']
+  /** 表紙に書いてあったコース（表紙を書いていない（ひな形のまま）とき・見つからないときは省く） */
+  courseId?: string
+  /** サブタイトルが、コースの決まった形と合わなかった：Word に書いてあった行 */
+  subtitleOffForm?: string
+}
+
+function readCover(pkg: WordPackage, config: YearConfig, courseId: string, problems: ImportProblem[]): CoverRead {
   const blocks = readDocument(pkg.document, documentContext(pkg.styles, pkg.numbering))
   const rows = coverRows(blocks)
   const all = comparable(rows.flat().join(''))
@@ -688,14 +708,22 @@ function readCover(pkg: WordPackage, config: YearConfig, courseId: string, probl
   const cover: WordImportResult['cover'] = {}
   const studentId = findStudentId(rows)
   const name = findName(rows)
-  const subtitleInput = findSubtitle(rows, template)
+  const subtitleLine = findSubtitleLine(rows)
+  const subtitle = subtitleLine ? subtitleFromWord(subtitleLine, template) : null
+  const subtitleInput = subtitle?.input
   if (studentId) cover.studentId = studentId
   if (name) cover.name = name
   if (subtitleInput) cover.subtitleInput = subtitleInput
   const missing = [studentId ? '' : '学籍番号', name ? '' : '氏名', subtitleInput ? '' : 'サブタイトル'].filter(Boolean)
   if (missing.length > 0)
     problems.push({ message: `表紙の${missing.join('・')}を読み取れませんでした`, detail: '読み込んだあと、ツールの表紙で入力してください。', where: '表紙' })
-  return cover
+  const read: CoverRead = { cover }
+  // コース：表紙を書いているときだけ見る（ひな形のままの表紙には、ひな形のコース（映画・舞台衣装デザイナー）が書いてあるため）
+  const written = !!(studentId || name || subtitleInput)
+  const found = written ? courseIdInText(rows.flat(), config) : null
+  if (found) read.courseId = found
+  if (subtitleLine && subtitleInput && subtitle && !subtitle.fits) read.subtitleOffForm = subtitleLine
+  return read
 }
 
 // ---- 読み取り ----
@@ -1001,7 +1029,8 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
       detail: 'ひな形のまま（「〇〇〇〇」「～～～」）のようです。読み込むと、本文はツールのひな形になります。',
     })
 
-  const cover = coverPkg ? readCover(coverPkg, config, courseId, problems) : {}
+  const coverRead = coverPkg ? readCover(coverPkg, config, courseId, problems) : null
+  const cover = coverRead?.cover ?? {}
   problems.sort((a, b) => (problemOrder.get(a) ?? 1e9) - (problemOrder.get(b) ?? 1e9))
 
   const outline: OutlineItem[] = []
@@ -1028,6 +1057,8 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
   return {
     body,
     cover,
+    ...(coverRead?.courseId ? { coverCourseId: coverRead.courseId } : {}),
+    ...(coverRead?.subtitleOffForm ? { subtitleOffForm: coverRead.subtitleOffForm } : {}),
     images: images.filter((img) => usedImages.has(img.id)),
     outline,
     figures,
@@ -1051,16 +1082,22 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
 export async function readCoverFile(file: File, context: { config: YearConfig; courseId: string }): Promise<{ cover: WordImportResult['cover']; problems: ImportProblem[] }> {
   const problems: ImportProblem[] = []
   const pkg = await openWordFile(file, '表紙')
-  return { cover: readCover(pkg, context.config, context.courseId, problems), problems }
+  return { cover: readCover(pkg, context.config, context.courseId, problems).cover, problems }
 }
 
 /**
  * 読み取った中身を原稿に写す：本文を入れ替え、表紙の読み取れた項目（学籍番号・氏名・サブタイトル）を入れる。
- * 抄録・作品写真・引用参考文献はそのまま。画像の保存は呼ぶ側が行う（result.images を putImage する）
+ * 抄録・作品写真・引用参考文献はそのまま。画像の保存は呼ぶ側が行う（result.images を putImage する）。
+ * course：表紙の Word のコースに変える（確認の窓で、学生が Word のコースを選んだとき）。本文は読み込んだ本文のまま、
+ * コースの名前だけを変える（「コース名だけ変える」と同じ。抄録をまだ書いていなければ、書き出しの例もそのコースのものにする。
+ * 読み込む本文は、そのコースで読み取り直したもの）
  */
-export function applyWordImport(report: Report, result: WordImportResult): Report {
+export function applyWordImport(report: Report, result: WordImportResult, course?: { courseId: string; config: YearConfig }): Report {
   const cover = Object.fromEntries(Object.entries(result.cover).filter(([, v]) => typeof v === 'string' && v.trim() !== ''))
-  return { ...report, body: result.body, basicInfo: { ...report.basicInfo, ...cover } }
+  const imported: Report = { ...report, body: result.body, basicInfo: { ...report.basicInfo, ...cover } }
+  if (!course || course.courseId === report.basicInfo.courseId) return imported
+  const renamed = setCourse(imported, course.courseId)
+  return abstractEmpty(renamed) ? { ...renamed, abstract: { ...renamed.abstract, paragraphs: [emptyParagraph(abstractHint(course.config, course.courseId))] } } : renamed
 }
 
 /** Word を読み込むと消える、ツールで書いた本文（大見出しごと） */

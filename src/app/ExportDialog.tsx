@@ -126,9 +126,59 @@ interface Props {
   onBuilt?: (pdf: BuiltPdf) => void
 }
 
+/** 警告の一覧で、はじめに見せる数（多いときは「ほか◯件」で開く） */
+const WARNINGS_SHOWN = 5
+
+/**
+ * 提出前の確かめで出す警告の一覧（エラーの一覧と同じ形。押すと、その場所へ移る）。
+ * 前は「警告が10件あります」とだけ出て、何の警告かが分からなかった
+ */
+function WarningList({ warnings, editor, onClose }: { warnings: ReportFinding[]; editor: ReportEditor; onClose: () => void }) {
+  const [all, setAll] = useState(false)
+  const shown = all ? warnings : warnings.slice(0, WARNINGS_SHOWN)
+  return (
+    <ul className="error-list warning-list">
+      {shown.map((f, i) => (
+        <li key={i}>
+          <button
+            className="link"
+            onClick={() => {
+              onClose()
+              editor.goToFinding(f)
+            }}
+          >
+            {AREA_LABELS[f.area]}：{f.title}
+          </button>
+          {f.detail && <span className="detail">（{f.detail}）</span>}
+        </li>
+      ))}
+      {!all && warnings.length > WARNINGS_SHOWN && (
+        <li className="more">
+          <button className="link" onClick={() => setAll(true)}>
+            ほか{warnings.length - WARNINGS_SHOWN}件
+          </button>
+        </li>
+      )}
+    </ul>
+  )
+}
+
+/**
+ * 下書きの PDF に入れるページ。作品写真をまだ1枚も入れていなければ、空の作品写真のページは入れない
+ * （提出用の PDF は、作品写真がないとエラーで書き出せないので、いつも写真が入っている）
+ */
+function draftPages(editor: ReportEditor): HTMLElement[] {
+  const pages = editor.pageElements()
+  const { report, layout } = editor.getSnapshot()
+  const photos = report.workPhotos.imageIds.slice(0, report.workPhotos.layout).filter(Boolean)
+  if (photos.length > 0 || !layout) return pages
+  return pages.filter((_, i) => layout.kinds[i] !== 'photos')
+}
+
 export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
   const errors = findings.filter((f) => f.severity === 'error')
-  const warnings = findings.length - errors.length
+  const warningList = findings.filter((f) => f.severity !== 'error')
+  const warnings = warningList.length
   const [checked, setChecked] = useState<boolean[]>(SELF_CHECKS.map(() => false))
   const allChecked = checked.every(Boolean)
   const [phase, setPhase] = useState<Phase>({ kind: 'start' })
@@ -165,11 +215,16 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
     const title = document.title
     document.title = draft ? `${editor.pdfTitle}_下書き` : editor.pdfTitle
     document.documentElement.classList.toggle('print-draft', draft)
+    // 下書き：作品写真がまだなければ、空の作品写真のページは印刷しない（印刷が終わったら戻す）
+    const kept = draft ? new Set(draftPages(editor)) : null
+    const skipped = kept ? editor.pageElements().filter((p) => !kept.has(p) && !p.classList.contains('print-skip')) : []
+    for (const p of skipped) p.classList.add('print-skip')
     window.addEventListener(
       'afterprint',
       () => {
         document.title = title
         document.documentElement.classList.remove('print-draft')
+        for (const p of skipped) p.classList.remove('print-skip')
       },
       { once: true },
     )
@@ -185,7 +240,8 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
     abort.current = controller
     releaseUrls()
     setThumbs([])
-    const pages = editor.pageElements()
+    // 下書きは、作品写真がまだなければ、空の作品写真のページを入れない
+    const pages = draft ? draftPages(editor) : editor.pageElements()
     setPhase({ kind: 'build', draft, total: pages.filter((p) => !p.classList.contains('print-skip')).length })
     try {
       const pdf = await buildPdf(pages, {
@@ -379,6 +435,7 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
       <p className="lead">
         エラーはありません{warnings > 0 ? `（警告が${warnings}件あります。内容を確認してください）` : ''}。最後に、次のことを確認してください。
       </p>
+      {warnings > 0 && <WarningList warnings={warningList} editor={editor} onClose={onClose} />}
       {editor.getSnapshot().report.abstract.started === false && (
         <p className="note">抄録はまだ書いていないため、このPDFには抄録のページは入りません（先生の許可が出たら、抄録のページの「先生の許可が出た」を押して書き始めます）。</p>
       )}

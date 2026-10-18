@@ -5,12 +5,13 @@ import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import type { PageKind } from '../layout/measure'
 import { Icon } from './icons'
 import { AREA_LABELS, AREA_ORDER, daysUntil, formatDeadline } from './labels'
+import { BackupLabel } from './dialogs'
 import { DriveChipMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
 import { WordImportLink } from './WordImport'
 
 /**
- * 右の欄。上から：名前・保存のようす・締切・手順書とバックアップと「？ 使い方」（今年度だけ「Word で書いた分を読み込む」）／
+ * 右の欄。上から：名前・保存のようす・締切・手順書と「バックアップ・作り直す」と「？ 使い方」（今年度だけ「Word で書いた分を読み込む」）／
  * Word から写したあとの「つぎにすること」（今年度だけ）／学科からのお知らせ／ページ一覧／セルフチェック／PDFの書き出し
  */
 
@@ -107,7 +108,10 @@ export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; sna
         const pages = editor.pageElements()
         boxes?.forEach((box, i) => {
           const page = pages[i]
-          if (!page) return box.replaceChildren()
+          // 開いた直後で、まだ組んでいないページ（仮のページ）は、白いページではなく「準備中」と出す（index.css の .mini.preparing）
+          const preparing = !!page?.hasAttribute('data-placeholder-page')
+          box.classList.toggle('preparing', preparing)
+          if (!page || preparing) return box.replaceChildren()
           const clone = page.cloneNode(true) as HTMLElement
           clone.className = 'mini-page'
           clone.removeAttribute('id')
@@ -259,7 +263,7 @@ export function SourceNotice() {
 }
 
 /**
- * 「？ 使い方」のボタン（mockups/v27 案A）。PC は右の欄の「バックアップ」の横（押すと右の欄が使い方に替わる）、
+ * 「？ 使い方」のボタン（mockups/v27 案A）。PC は右の欄の「バックアップ・作り直す」の横（押すと右の欄が使い方に替わる）、
  * スマホはメニューの中（押すと画面いっぱいの使い方の欄）。印刷用の手引き（PDF）は、使い方の一覧のいちばん下から開く
  */
 export function HelpButton({ onClick }: { onClick: () => void }) {
@@ -306,8 +310,12 @@ export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEdit
         <Meter label="図の枚数" value={`${figures}枚（目安 ${figureMax}枚まで）`} ok={figures <= figureMax} ratio={figures / figureMax} />
       </div>
       <div ref={listRef}>
+      {/* 開いた直後で、紙面を組み終えていない間は、ページ数などのチェックをまだしていない（「指摘はありません」とは言わない） */}
+      {snap.pageChecksPending && findings.length > 0 && <p className="check-pending">ページ数などのチェックは、紙面の準備ができてからします。</p>}
       {findings.length > 0 && <SeverityLegend />}
-      {findings.length === 0 ? (
+      {findings.length === 0 && snap.pageChecksPending ? (
+        <div className="empty check-pending">確かめています…</div>
+      ) : findings.length === 0 ? (
         <div className="empty">✓ 指摘はありません。PDFを書き出せます。</div>
       ) : (
         AREA_ORDER.map((area) => {
@@ -352,6 +360,8 @@ export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEdit
 /** エラーと警告の件数 */
 export function Tally({ snap }: { snap: EditorSnapshot }) {
   const errors = snap.findings.filter((f) => f.severity === 'error').length
+  // 紙面を組み終えるまでは、件数を出さない（ページ数などのチェックが加わって、数が変わるため）
+  if (snap.pageChecksPending) return <span className="tally">確かめています…</span>
   return (
     <span className="tally">
       <b className="e">{errors}</b> エラー　<b className="w">{snap.findings.length - errors}</b> 警告
@@ -383,8 +393,10 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
               {Icon.handbook}手順書
             </a>
           )}
-          <button className="link-btn" onClick={onBackup}>
-            {Icon.backup}バックアップ
+          {/* バックアップと「最初から作り直す」の窓（mockups/v34 案A。名前が長い分、となりの「使い方」より広い） */}
+          <button className="link-btn backup-btn" onClick={onBackup}>
+            {Icon.backup}
+            <BackupLabel />
           </button>
           <HelpButton onClick={onHelp} />
         </div>
@@ -417,7 +429,7 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
           {Icon.pdf}
           {exporting ? '確かめています…' : 'PDFを書き出す'}
         </button>
-        <p>{errors > 0 ? `エラーが${errors}件あります。0にしてから書き出しましょう` : '提出用のPDFを書き出せます'}</p>
+        <p>{errors > 0 ? `エラーが${errors}件あります。0にしてから書き出しましょう` : snap.pageChecksPending ? '紙面を確かめています…' : '提出用のPDFを書き出せます'}</p>
         <SourceNotice />
       </footer>
     </aside>

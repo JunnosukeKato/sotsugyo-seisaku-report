@@ -103,7 +103,10 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
       let el: HTMLElement | null | undefined = null
       if (field) {
         if (!narrow && editor.getSnapshot().editingId === field) el = document.querySelector<HTMLElement>('.overlay-clip:not([hidden]) .overlay-editor')
-        el ??= [...document.querySelectorAll<HTMLElement>(`.page-viewport.front [data-block-id="${CSS.escape(field)}"]`)].find((e) => e.getBoundingClientRect().width > 0)
+        // 表示しているページの欄だけ（開いた直後は、ほかのページも組んでいる途中で、見えないページの欄にも大きさがあるため）
+        el ??= [...document.querySelectorAll<HTMLElement>(`.page-viewport.front [data-block-id="${CSS.escape(field)}"]`)].find(
+          (e) => e.getBoundingClientRect().width > 0 && !!e.closest('[data-vivliostyle-page-container]')?.classList.contains('is-current'),
+        )
       }
       const r = el?.getBoundingClientRect()
       const next = r && r.width > 0 ? r : null
@@ -117,6 +120,14 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
     measure()
     return () => cancelAnimationFrame(frame)
   }, [editor, field, narrow])
+
+  // 案内する欄の位置を、しばらく待っても見つけられなかった（このときは、枠なしで吹き出しを出す）
+  const [waitedStep, setWaitedStep] = useState<GuideStep | null>(null)
+  useEffect(() => {
+    const timer = window.setTimeout(() => setWaitedStep(step), 2000)
+    return () => clearTimeout(timer)
+  }, [step])
+  const waitedLong = waitedStep === step
 
   // 表紙を表示する。PC は案内する欄の入力欄を開く（スマホは、タップしたときにキーボードが出るよう、学生にタップしてもらう）
   useEffect(() => {
@@ -333,6 +344,11 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
     }
   })()
 
+  // 案内する欄の位置がまだ分からない（開いた直後で、紙面がまだ出ていない）間は、光の枠も吹き出しも出さない。
+  // 前は、位置が分かる前の枠が画面の左上に一瞬出ていた（はじめて使う学生の試し（3回目））。
+  // しばらく待っても見つからなければ（紙面に欄がないなど）、枠なしで吹き出しを出す（コースを選ぶ段階で、何もできなくならないように）
+  if (field && step !== 'word' && !rect && !waitedLong) return <div className={`guide step-${step}${narrow ? ' narrow' : ''}`}>{isChoiceStep(step) && <div className="g-block" />}</div>
+
   // スマホで欄を書いている間は、下から出る書く欄が暗くならないよう、紙面を暗くしない
   return (
     <div className={`guide step-${step}${narrow ? ' narrow' : ''}`}>
@@ -340,10 +356,11 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
           段階が変わったら、新しい段階の見出しに移す（key） */}
       {isChoiceStep(step) && <div className="g-block" />}
       {isChoiceStep(step) && <CourseStepFocus key={step} tip={tipRef} />}
+      {/* 光の枠と、暗くするだけの幕は、別の要素にする（key）。同じ要素を使い回すと、幕の位置（画面の左上）から枠が動いてくるように見えていた */}
       {typingOnPhone ? null : spot ? (
-        <div className="g-spot" style={{ left: spot.left - pad, top: spot.top - pad, width: spot.width + pad * 2, height: spot.height + pad * 2 }} />
+        <div key="spot" className="g-spot" style={{ left: spot.left - pad, top: spot.top - pad, width: spot.width + pad * 2, height: spot.height + pad * 2 }} />
       ) : (
-        <div className="g-dim" />
+        <div key="dim" className="g-dim" />
       )}
       {/* 案内の中を押しても入力欄から文字のカーソルが外れないようにする（外れると次の段階へ進み、案内が動いてしまう） */}
       <div

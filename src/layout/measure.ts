@@ -38,7 +38,18 @@ export interface LayoutInfo {
    * chars は入力した部分の字数、fitChars はこの大きさで入りそうな字数（はみ出したときの知らせに使う）
    */
   coverSubtitle?: { fontPt: number; ratio: number; chars: number; fitChars: number }
+  /**
+   * 表紙の学籍番号・氏名の欄：文字が、欄の下線（枠）の幅に入っているか。ratio が 1 をこえるとはみ出している。
+   * chars は入力した字数、fitChars は入りそうな字数（はみ出したときの知らせに使う）。文字のない欄は入れない
+   */
+  coverFields?: Partial<Record<CoverField, { ratio: number; chars: number; fitChars: number }>>
 }
+
+/** 表紙の1行の欄（大きさを変えずに組む欄。サブタイトルは、入るまで文字を小さくするので別に測る） */
+export type CoverField = 'studentId' | 'name'
+
+/** 表紙の欄と、その欄の下線（この幅に入っていればよい） */
+const COVER_FIELD_RULES: Record<CoverField, string> = { studentId: '.cover .rule.id-rule', name: '.cover .rule.name-rule' }
 
 /** 本文の領域（A4 の上下の余白 25mm を除く） */
 const CONTENT_TOP_MM = 25
@@ -90,6 +101,31 @@ function measureCoverSubtitle(pages: HTMLElement[], kinds: PageKind[]): LayoutIn
   }
 }
 
+/**
+ * 表紙の学籍番号・氏名が、欄の下線の幅に入っているか（LayoutInfo.coverFields）。
+ * 欄は折り返さない（1行）ので、2行ぶんを貼り付けたときなどは、枠の外まで1行で伸びる。下線の左右の端と、文字の左右の端を比べる
+ */
+function measureCoverFields(pages: HTMLElement[], kinds: PageKind[]): LayoutInfo['coverFields'] {
+  const page = pages[kinds.indexOf('cover')]
+  if (!page) return undefined
+  const fields: NonNullable<LayoutInfo['coverFields']> = {}
+  for (const field of Object.keys(COVER_FIELD_RULES) as CoverField[]) {
+    const value = page.querySelector<HTMLElement>(`[data-block-id="basic:${field}"]`)
+    const rule = page.querySelector<HTMLElement>(COVER_FIELD_RULES[field])?.getBoundingClientRect()
+    const text = value?.textContent ?? ''
+    if (!value || !rule || !rule.width || !text.trim()) continue
+    const range = document.createRange()
+    range.selectNodeContents(value)
+    const r = range.getBoundingClientRect()
+    if (!r.width) continue
+    const ratio = Math.max(r.right - rule.left, rule.right - r.left) / rule.width
+    const room = rule.right - Math.max(r.left, rule.left)
+    const chars = [...text].length
+    fields[field] = { ratio, chars, fitChars: Math.max(0, Math.floor((chars * room) / r.width)) }
+  }
+  return fields
+}
+
 export function measureLayout(pages: HTMLElement[], chapters: Chapter[]): LayoutInfo {
   const kinds = pages.map(pageKind)
   const bodyStart = kinds.indexOf('body')
@@ -122,6 +158,7 @@ export function measureLayout(pages: HTMLElement[], chapters: Chapter[]): Layout
       }),
     ),
     coverSubtitle: measureCoverSubtitle(pages, kinds),
+    coverFields: measureCoverFields(pages, kinds),
   }
 }
 

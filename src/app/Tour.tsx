@@ -69,7 +69,7 @@ const PHONE_STEPS = (drive: boolean): Step[] => [
     targets: first('.p-top .chip'),
     sides: ['below'],
   },
-  { title: 'メニュー', text: '手順書・バックアップ・？使い方は、ここです。', targets: first('.p-top .icon-btn'), sides: ['below'] },
+  { title: 'メニュー', text: '手順書・「バックアップ・作り直す」・？使い方は、ここです。', targets: first('.p-top .icon-btn'), sides: ['below'] },
 ]
 
 /** 要素を囲む範囲（見つからなければ null） */
