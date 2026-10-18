@@ -71,9 +71,18 @@ export function checkReportDetailed(report: Report, config: YearConfig, layout?:
 }
 
 /**
+ * 見出しの初めに手で書いた番号（「（1）」「1.」「1．」「①」「ⅰ．」「Ⅰ．」「i.」「一、」「第1章」など）。
+ * 見出しの番号（Ⅰ．ⅰ．）はツールが自動で付けるため、目次と PDF で「ⅰ．（1）素材」と二重になる。
+ * 「3.5mm」のような数は番号にしない（「.」のすぐ後ろが数字のとき）。番号の後ろの空白も含める（「直す」で一緒に取る）
+ */
+export const HEADING_NUMBER =
+  /^[\s　]*(?:[（(](?:[0-9０-９]{1,3}|[一二三四五六七八九十]{1,3}|[ⅰ-ⅻⅠ-Ⅻ]|[ivxIVX]{1,4}|[a-zA-Zａ-ｚＡ-Ｚ])[）)]|[①-⑳⑴-⒇❶-❿]|[0-9０-９]{1,3}(?:[.．\-－][0-9０-９]{1,3})*(?:[.．](?![0-9０-９])|[、,，)）]|[\s　]+)|[ⅰ-ⅻⅠ-Ⅻ](?:[.．、,，]|[\s　]+)?|[一二三四五六七八九十]{1,3}[、．.]|[ivxIVX]{1,4}[.．)）]|第[0-9０-９一二三四五六七八九十]{1,3}[章節項])[\s　]*/
+
+/**
  * ツールで書いているときだけの指摘（ツールの入力欄や、ツールが自動で入れる（図n）から起きること。提出前チェックの Word の確かめには出さない）。
  * - サブタイトルに、自動で付く前後の決まり文句まで入力している（表紙で「――海の王女の衣装制作―の衣装制作―」と二重になる）
  * - 同じ段落に、同じ図表への参照が2つある（「図を入れる」で自動で入った（表1）と、手で書いた「表1」など）
+ * - 見出しに番号を手で書いている（自動で付く「ⅰ．」と二重になる。HEADING_NUMBER）
  */
 export function toolFindings(report: Report, config: YearConfig): ReportFinding[] {
   const findings: ReportFinding[] = []
@@ -128,6 +137,28 @@ export function toolFindings(report: Report, config: YearConfig): ReportFinding[
         key: `duplicate-ref|${block.id}|${targetId}`,
       })
     }
+  }
+
+  // 見出しに手で書いた番号：「直す」で取る（番号は自動で付く）。番号のように見えるだけの見出しなら「このままにする」
+  for (const e of editables(report)) {
+    if (e.kind !== 'chapter' && e.kind !== 'subheading') continue
+    const m = HEADING_NUMBER.exec(e.text)
+    const number = m?.[0].trim()
+    if (!m || !number) continue
+    const name = e.kind === 'chapter' ? '大見出し' : '小見出し'
+    findings.push({
+      ruleId: 'heading-number',
+      severity: 'warning',
+      source: 'supplementary',
+      title: `${name}に番号を手で書いている`,
+      detail: `${name}の番号（${e.kind === 'chapter' ? 'Ⅰ．' : 'ⅰ．'}）は自動で付くので、目次と PDF で二重になります。「直す」で「${number}」を取ります`,
+      area: 'body',
+      blockId: e.id,
+      start: 0,
+      end: m[0].length,
+      replacement: '',
+      key: `heading-number|${e.id}|${number}`,
+    })
   }
   return findings
 }
@@ -245,7 +276,8 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     }
   }
 
-  // 書き忘れ：まだ何も書いていない段落（ひな形の「書くことの説明」だけが残っている段落）
+  // 書き忘れ：まだ何も書いていない段落（ひな形の「書くことの説明」だけが残っている段落）。
+  // 説明のない空の段落（Enter を押して何も書かなかったときなどに残るもの）は、「直す」でその段落を消せる（replacement は目印。消すのは編集の中核）
   for (const block of report.body.flatMap((c) => c.blocks)) {
     if (block.type === 'paragraph' && !contentToText(block.content, num).trim()) {
       findings.push({
@@ -253,9 +285,10 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
         severity: 'warning',
         source: 'supplementary',
         title: block.hint ? 'まだ書いていない段落がある' : '空の段落がある',
-        detail: block.hint,
+        detail: block.hint ?? '「直す」で、この空の段落を消します',
         area: 'body',
         blockId: block.id,
+        ...(block.hint ? {} : { replacement: '' }),
       })
     }
   }

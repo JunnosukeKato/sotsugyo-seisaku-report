@@ -24,6 +24,30 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? `  (${detail})` : ''}`)
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+/** 見えているボタンなどの、見た目の高さ（px。いちばん低いもの。見えているものがなければ 0） */
+const minVisibleHeight = (page, sel) =>
+  page.evaluate((sel) => {
+    const hs = [...document.querySelectorAll(sel)].map((el) => el.getBoundingClientRect().height).filter((h) => h > 0)
+    return hs.length ? Math.round(Math.min(...hs) * 10) / 10 : 0
+  }, sel)
+/**
+ * 削除の知らせ（.undo-toast）の位置：ページ送り・「ページ全体に戻す」・選んでいる物の道具・紙面の下の帯のうち、知らせに重なっているもの（なければ空）。
+ * shown：知らせが出ている、above：重なっていない道具・帯のうち、知らせより下にあるもの
+ */
+const undoPlacement = (page) =>
+  page.evaluate(() => {
+    const toast = document.querySelector('.undo-toast')?.getBoundingClientRect()
+    if (!toast) return { shown: false }
+    const parts = ['.pager', '.unzoom', '.sel-bar > *', '.page-band'].flatMap((sel) => [...document.querySelectorAll(sel)].map((el) => ({ sel, r: el.getBoundingClientRect() }))).filter(({ r }) => r.height > 0)
+    const hit = (r) => r.top < toast.bottom - 0.5 && r.bottom > toast.top + 0.5 && r.left < toast.right - 0.5 && r.right > toast.left + 0.5
+    return {
+      shown: true,
+      covers: parts.filter(({ r }) => hit(r)).map(({ sel }) => sel),
+      below: parts.filter(({ r }) => r.top >= toast.bottom - 0.5).map(({ sel }) => sel),
+      inside: toast.top >= 0 && toast.bottom <= innerHeight && toast.left >= 0 && toast.right <= innerWidth,
+      buttonH: Math.round(document.querySelector('.undo-toast button')?.getBoundingClientRect().height ?? 0),
+    }
+  })
 
 await withEdge(async (browser) => {
   const context = await browser.createBrowserContext()
@@ -228,7 +252,14 @@ await withEdge(async (browser) => {
     return { text: area?.textContent ?? '', role: area?.getAttribute('role'), hitH: r ? r.height - parseFloat(a.top) - parseFloat(a.bottom) : 0, line: line ? getComputedStyle(line).animationDuration : null }
   })
   const tableGone = !(await snap()).report.body.flatMap((c) => c.blocks).some((b) => b.id === tableId)
+  const undoAt = await undoPlacement(page)
   await shot('7b-undo-notice')
+  // 知らせは、ページ送り（と紙面の下の帯・下の道具）の上に出す（前はページ送りに重なり、出ている15秒の間、ページを送れなかった）。［戻す］は見た目も高さ 44px 以上
+  check(
+    'スマホ：削除の知らせは、ページ送り・紙面の下の帯・下の道具に重ならず、その上に出る（［戻す］は見た目も高さ 44px 以上）',
+    undoAt.shown && undoAt.covers.length === 0 && undoAt.below.includes('.pager') && undoAt.inside && undoAt.buttonH >= 44,
+    JSON.stringify(undoAt),
+  )
   check('選んだ表を削除すると、画面の下に「表を削除しました［戻す］」が出る（読み上げにも伝わる・残りの時間の線は15秒）', tableGone && toast.text.includes('表を削除しました') && toast.role === 'status' && toast.line === '15s', JSON.stringify(toast))
   check('知らせの「戻す」は、押せる範囲が高さ 44px 以上', toast.hitH >= 44, `${toast.hitH}px`)
   await wait(7000)
@@ -281,11 +312,10 @@ await withEdge(async (browser) => {
     const b = document.querySelector('.continue-row')
     const r = b.getBoundingClientRect()
     const t = document.querySelector(`.page-viewport.front .data-table[data-table-id="${id}"]`).getBoundingClientRect()
-    const a = getComputedStyle(b, '::after')
-    return { shown: !b.hidden && r.height > 0, below: r.top >= t.bottom && r.top - t.bottom < 30, inside: r.left >= 0 && r.right <= innerWidth, hitH: r.height - parseFloat(a.top) - parseFloat(a.bottom), x: r.left + 60, y: r.top + r.height / 2 }
+    return { shown: !b.hidden && r.height > 0, below: r.top >= t.bottom && r.top - t.bottom < 30, inside: r.left >= 0 && r.right <= innerWidth, h: Math.round(r.height), x: r.left + 60, y: r.top + r.height / 2 }
   }, tableId)
   await shot('7d-continue-row')
-  check('スマホでも、表の下が空いていれば、表を選ぶと、表のすぐ下に「＋ ここに続きを書く」が出る（押せる範囲は高さ 44px 以上）', phoneRow.shown && phoneRow.below && phoneRow.inside && phoneRow.hitH >= 44, JSON.stringify(phoneRow))
+  check('スマホでも、表の下が空いていれば、表を選ぶと、表のすぐ下に「＋ ここに続きを書く」が出る（見た目も高さ 44px 以上）', phoneRow.shown && phoneRow.below && phoneRow.inside && phoneRow.h >= 44, JSON.stringify(phoneRow))
   await page.touchscreen.tap(phoneRow.x, phoneRow.y)
   await wait(300)
   const contOpen = await page.evaluate((id) => {
@@ -401,9 +431,11 @@ await withEdge(async (browser) => {
   await page.waitForSelector('.help-action')
   await page.click('.help-action')
   const phoneReplay = await page.waitForSelector('.tour .tour-tip', { timeout: 15000 }).then(() => true, () => false)
+  const tourButtonsH = { skip: await minVisibleHeight(page, '.tour-acts .skip'), next: await minVisibleHeight(page, '.tour-acts .next') }
   await page.click('.tour-acts .skip')
   await wait(300)
   check('使い方から指差し確認をもう一度見られ、「とばす」で終わる', phoneReplay && !(await page.$('.tour')) && !(await page.$('.help-sheet')))
+  check('指差し確認の「とばす」「次へ」は、見た目も高さ 44px 以上', tourButtonsH.skip >= 44 && tourButtonsH.next >= 44, JSON.stringify(tourButtonsH))
   await page.evaluate(() => window.__editor.goToPage(0, 'none'))
   await ready()
 
@@ -431,6 +463,9 @@ await withEdge(async (browser) => {
 
   // 紙面の下の帯（紙面の中の小さな案内を、ふつうの文字の大きさで出す）と、高さ 44px のボタン（mockups/v32 ④ 案A）
   await bandCheck(browser)
+
+  // はじめて使う学生の試し（v32 のあと）で見つかったこと（横向きの「＋」・表のタイトル・表の行を消せないとき・抄録を書き始めたあとの［戻す］）
+  await firstTimeFixesPhone(browser)
 })
 
 /**
@@ -438,7 +473,11 @@ await withEdge(async (browser) => {
  * - 紙面の中の小さな案内とボタン（抄録の「先生の許可が出た」・作品写真の空いている枠・まだ書いていない欄）を、紙面の下の帯に、ふつうの文字の大きさで出す。紙面には小さな印だけ
  * - 横向きでは、帯は紙面の右（紙面が小さくなりすぎない）
  * - 小さいボタン（「直す」「完了」「あとで入力する」「＋引用・参考文献を入れる」・ページ送り・「ページ全体に戻す」）は高さ 44px 以上
- * - 縦向きでも横向きでも、画面が横にはみ出さない
+ * - 残りの小さいボタン（書く欄の道具・案内の「本文へ進む」・引用・参考文献の窓のボタン）も、見た目の高さ 44px 以上（v32 の直し。
+ *   削除の知らせの［戻す］・「＋ ここに続きを書く」・「とばす」は上の流れの中で、PDF の窓は iphoneShareCheck で確かめる）
+ * - 縦向きでも横向きでも、画面が横にはみ出さない。横向きでは抄録の印を「→」に
+ * - 拡大したままほかのページへ移ると、ページ全体の表示に戻る。削除の知らせは、ページ送り・帯・下の道具に重ならない
+ * - 紙面の仮の文字は「タップ」。生地見本の画像を入れた表のセルには、仮の文字を出さない
  */
 async function bandCheck(browser) {
   const context = await browser.createBrowserContext()
@@ -511,10 +550,23 @@ async function bandCheck(browser) {
   await wait(300)
   const laterH = await height('.guide .g-later')
   const duringGuide = await band()
-  await page.evaluate(() => document.querySelector('.guide .g-later').click())
+  check('案内の「あとで入力する（案内を閉じる）」は高さ 44px 以上。案内の間は、紙面の下の帯を出さない', laterH >= 44 && !duringGuide.shown, JSON.stringify({ laterH, duringGuide }))
+  // 案内の最後（「表紙ができました」）まで進む（学籍番号・氏名・サブタイトルの欄を開いて閉じる）。「本文へ進む」「閉じる」は見た目も高さ 44px 以上
+  for (const id of ['basic:studentId', 'basic:name', 'basic:subtitleInput']) {
+    await page.evaluate((id) => window.__editor.openEditor(id, 0), id)
+    await wait(300)
+    await page.evaluate(() => window.__editor.finishEditing())
+    await wait(300)
+  }
+  const doneStep = await page.waitForSelector('.guide .g-actions button', { timeout: 10000 }).then(() => true, () => false)
+  const doneButtons = await page.evaluate(() => [...document.querySelectorAll('.guide .g-actions button')].map((b) => b.textContent.trim()))
+  const doneH = await minVisibleHeight(page, '.guide .g-actions button')
+  await page.screenshot({ path: `${OUT}/11b-guide-done.png` })
+  check('案内の最後の「本文へ進む」「閉じる」は、見た目も高さ 44px 以上', doneStep && doneButtons.join(',') === '本文へ進む,閉じる' && doneH >= 44, JSON.stringify({ doneButtons, doneH }))
+  if (doneStep) await page.evaluate(() => [...document.querySelectorAll('.guide .g-actions button')].find((b) => b.textContent.includes('閉じる')).click())
+  else await page.evaluate(() => document.querySelector('.guide .g-later')?.click())
   await page.evaluate(() => window.__editor.finishEditing())
   await ready()
-  check('案内の「あとで入力する（案内を閉じる）」は高さ 44px 以上。案内の間は、紙面の下の帯を出さない', laterH >= 44 && !duringGuide.shown, JSON.stringify({ laterH, duringGuide }))
 
   // 見本の原稿：抄録はまだ（先生の許可が出る前）・作品写真は2枚（上下）で下の枠が空いている・本文に「見頃」（指摘の「直す」が出る）
   await page.evaluate(setupWriting)
@@ -533,10 +585,17 @@ async function bandCheck(browser) {
   // 抄録：説明と「先生の許可が出た（抄録を書き始める）」は帯に（ふつうの文字の大きさ・高さ 44px のボタン）。紙面の欄は「↓」の印だけ
   await showKind('abstract')
   const abs = await band()
+  /** 抄録の印の向き（紙面の印と帯の印。CSS の回転の行列。回していなければ matrix(1, 0, 0, 1, …)、→ は matrix(0, -1, 1, 0, …)） */
+  const markTurn = () =>
+    page.evaluate(() => ({
+      paper: getComputedStyle(document.querySelector('.page-viewport.front .abstract-lock'), '::after').transform,
+      band: getComputedStyle(document.querySelector('.page-band .mk svg')).transform,
+    }))
   const lock = await page.evaluate(() => {
     const el = document.querySelector('.page-viewport.front .abstract-lock')
     return { childrenHidden: [...el.children].every((c) => getComputedStyle(c).display === 'none'), mark: getComputedStyle(el, '::after').content !== 'none', h: Math.round(el.getBoundingClientRect().height) }
   })
+  const portraitTurn = await markTurn()
   await page.screenshot({ path: `${OUT}/12-band-abstract.png` })
   check(
     '抄録：「先生の許可が出た（抄録を書き始める）」と説明は、紙面の下の帯にふつうの文字（13px 以上）で出て、ボタンは高さ 44px 以上。紙面には「↓」の印だけ',
@@ -549,6 +608,48 @@ async function bandCheck(browser) {
   const printed = await page.evaluate(() => ({ band: getComputedStyle(document.querySelector('.page-band')).display, mark: getComputedStyle(document.querySelector('.page-viewport.front .abstract-lock'), '::after').content }))
   await page.emulateMediaType(null)
   check('印刷（PDF）には、帯も紙面の印も出さない', printed.band === 'none' && printed.mark === 'none', JSON.stringify(printed))
+
+  // スマホの紙面の仮の文字は「クリック」ではなく「タップ」（PC は「クリック」のまま。smoke.mjs）。画像（生地見本）を入れた表のセルには、仮の文字も「＋」の印も出さない
+  const placeholderTexts = () =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container].is-current :is([data-placeholder]:empty, [data-photo-slot]:empty, .figure-slot)')]
+        .map((el) => getComputedStyle(el, '::before').content)
+        .filter((c) => c !== 'none' && c !== '""'),
+    )
+  // 表紙のサブタイトルと氏名を空にして（仮の文字が出る）確かめ、元に戻す
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, subtitleInput: '', name: '' } })))
+  await ready()
+  await page.evaluate(() => window.__editor.goToPage(0, 'none'))
+  await ready()
+  await wait(300)
+  const coverWords = await placeholderTexts()
+  // 表紙の題目（研究題目。学科で決まっていて書けない）をタップすると、画面の下にわけを知らせる（近くの欄は開かない。呼び方は紙面の見出しと同じ）
+  const titleAt = await page.evaluate(() => {
+    const r = document.querySelector('.page-viewport.front section.cover .el.title').getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })
+  await page.touchscreen.tap(titleAt.x, titleAt.y)
+  await wait(300)
+  const titleTap = await page.evaluate(() => ({ notice: document.querySelector('.undo-area')?.textContent ?? '', editing: window.__editor.getSnapshot().editingId }))
+  check('表紙の題目をタップすると「制作題目は、学科で決まっています（変えられません）」と画面の下に知らせる（書く欄は開かない）', titleTap.notice === '制作題目は、学科で決まっています（変えられません）' && !titleTap.editing, JSON.stringify(titleTap))
+  await page.evaluate(() => window.__editor.undo())
+  await ready()
+  const tablePage = await page.evaluate(() => window.__editor.pageElements().findIndex((p) => p.querySelector('.data-table[data-table-id="t1"]')))
+  await page.evaluate((i) => window.__editor.goToPage(i, 'none'), tablePage)
+  await ready()
+  await wait(300)
+  const swatch = await page.evaluate(() => {
+    const cells = [...document.querySelectorAll('.page-viewport.front .data-table[data-table-id="t1"] [data-cell-id]')].filter((c) => c.querySelector('img'))
+    const marks = cells.flatMap((c) => [...c.querySelectorAll('[data-block-id]:empty')].flatMap((el) => [getComputedStyle(el, '::before').content, getComputedStyle(el, '::after').content]))
+    return { cells: cells.length, marks: [...new Set(marks)], band: document.querySelector('.page-band')?.textContent ?? '' }
+  })
+  await page.screenshot({ path: `${OUT}/12b-swatch-cells.png` })
+  check(
+    'スマホの紙面の仮の文字は「タップして入力」など（「クリック」と出さない）',
+    coverWords.length > 0 && coverWords.some((w) => w.includes('タップ')) && !coverWords.some((w) => w.includes('クリック')),
+    JSON.stringify(coverWords),
+  )
+  check('生地見本の画像を入れた表のセルには、仮の文字（「（タップして入力）」）も「＋」の印も出さず、帯でも空いている所にしない', swatch.cells > 0 && swatch.marks.every((m) => m === 'none') && !swatch.band.includes('表のセル'), JSON.stringify(swatch))
 
   // 作品写真：空いている枠は「＋」の印だけ。帯に「下の枠に、まだ写真がありません」と「写真を選ぶ」。並べ方の道具とも重ならない
   await showKind('photos')
@@ -602,6 +703,10 @@ async function bandCheck(browser) {
     JSON.stringify({ fields, fieldMark, writing }),
   )
   check('書く欄の「完了」は高さ 44px 以上', writing.done >= 44, `${writing.done}px`)
+  const toolsH = await minVisibleHeight(page, '.edit-sheet .es-tools button')
+  const toolNames = await page.evaluate(() => [...document.querySelectorAll('.edit-sheet .es-tools button')].map((b) => b.textContent.trim()))
+  await page.screenshot({ path: `${OUT}/15b-sheet-tools-44.png` })
+  check('書く欄の道具（図を入れる・表を入れる・削除・戻すなど）は、見た目も高さ 44px 以上', toolsH >= 44 && ['図を入れる', '表を入れる', '削除', '戻す'].every((n) => toolNames.includes(n)), JSON.stringify({ toolsH, toolNames }))
   await page.click('.edit-sheet .done')
   await ready()
 
@@ -610,15 +715,36 @@ async function bandCheck(browser) {
   await page.evaluate(() => window.__editor.setZoom(true))
   await wait(300)
   const unzoomH = await height('.unzoom')
-  await page.evaluate(() => window.__editor.setZoom(false))
-  await wait(300)
+  // 拡大したまま、ページ一覧からほかのページ（作品写真）へ移ると、ページ全体の表示に戻り、ページ送りと帯が出る
+  // （前は拡大したままで、作品写真のページは白い所しか見えず、ページ送りと帯も隠れたままだった）
+  await page.click('.p-nav button:nth-child(1)')
+  await page.waitForSelector('.sheet .thumb-list .t')
+  await page.evaluate(() => document.querySelectorAll('.sheet .thumb-list .t')[window.__editor.getSnapshot().layout.kinds.indexOf('photos')].click())
+  await ready()
+  await wait(500)
+  const movedZoomed = await page.evaluate(() => {
+    const s = window.__editor.getSnapshot()
+    const pageEl = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current').getBoundingClientRect()
+    return { kind: s.layout.kinds[s.page], zoomed: s.zoomed, pager: !!document.querySelector('.pager'), band: !!document.querySelector('.page-band'), wholePage: pageEl.top >= 0 && pageEl.bottom <= innerHeight }
+  })
+  await page.screenshot({ path: `${OUT}/16a-moved-after-zoom.png` })
+  check('スマホ：拡大したままほかのページへ移ると、ページ全体の表示に戻り、ページ送りと帯が出る', movedZoomed.kind === 'photos' && !movedZoomed.zoomed && movedZoomed.pager && movedZoomed.band && movedZoomed.wholePage, JSON.stringify(movedZoomed))
   await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfBlock('p1'), 'none'))
   await ready()
   await page.click('.p-nav .add')
   await page.waitForSelector('.sheet .add-refs')
   const refsH = await height('.sheet .add-refs')
-  await page.click('.sheet-close')
+  // 「＋引用・参考文献を入れる」の窓：ボタン（「削除」「＋ 書籍を追加」「やめる」「反映する」など）と種類の選択は、見た目も高さ 44px 以上
+  await page.click('.sheet .add-refs')
+  await page.waitForSelector('.modal .row-buttons')
+  await page.evaluate(() => [...document.querySelectorAll('.modal button')].find((b) => b.textContent.includes('書籍を追加')).click())
   await wait(300)
+  const refsDialog = await page.evaluate(() => [...document.querySelectorAll('.modal button, .modal select')].map((b) => `${b.textContent.trim().slice(0, 8)}:${Math.round(b.getBoundingClientRect().height)}`))
+  const refsDialogH = await minVisibleHeight(page, '.modal button, .modal select')
+  await page.screenshot({ path: `${OUT}/16b-refs-dialog-44.png` })
+  await page.evaluate(() => [...document.querySelectorAll('.modal .row-buttons button')].find((b) => b.textContent === 'やめる').click())
+  await wait(300)
+  check('引用・参考文献の窓のボタン（削除・＋書籍を追加・やめる・反映するなど）と種類の選択は、見た目も高さ 44px 以上', refsDialogH >= 44 && refsDialog.length >= 6, JSON.stringify(refsDialog))
   await page.evaluate(() => [...document.querySelectorAll('.p-nav button')].find((b) => b.textContent.includes('チェック')).click())
   await page.waitForSelector('.sheet .issue .fix')
   await wait(300)
@@ -640,9 +766,29 @@ async function bandCheck(browser) {
     land.shown && land.rightOfPage && land.inside && land.minFont >= 13 && land.buttonH >= 44 && land.pageW >= 140 && !land.scrollX,
     JSON.stringify(land),
   )
+  // 横向きでは帯が紙面の右なので、抄録の印は「→」（縦向きは「↓」）。紙面の印も帯の印も
+  const landTurn = await markTurn()
+  const turned = (m) => /^matrix\(\s*0(\.0+)?,\s*-1,\s*1,\s*0(\.0+)?,/.test(m)
+  const upright = (m) => m === 'none' || /^matrix\(\s*1,\s*0,\s*0,\s*1,/.test(m)
+  check('抄録の印（紙面・帯）は、縦向きは「↓」、帯が紙面の右に出る横向きは「→」', upright(portraitTurn.paper) && upright(portraitTurn.band) && turned(landTurn.paper) && turned(landTurn.band), JSON.stringify({ portraitTurn, landTurn }))
   await showKind('photos')
   const landPhoto = await band()
   check('横向き：作品写真の帯も紙面の右で、画面の中に収まり、下の道具に重ならない', landPhoto.shown && landPhoto.rightOfPage && landPhoto.inside && !landPhoto.overlapsBar && !landPhoto.scrollX, JSON.stringify(landPhoto))
+  // 横向き：作品写真を外したときの知らせも、ページ送り・下の道具・紙面の右の帯に重ならない（戻すと写真も戻る）
+  await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
+  await wait(300)
+  await page.evaluate(() => [...document.querySelectorAll('.sel-bar .tb')].find((b) => b.textContent.includes('外す')).click())
+  await ready()
+  await wait(400)
+  const landUndo = await undoPlacement(page)
+  await page.screenshot({ path: `${OUT}/17b-undo-landscape.png` })
+  await page.click('.undo-toast button')
+  await ready()
+  await wait(300)
+  const photoBack = await page.evaluate(() => window.__editor.getSnapshot().report.workPhotos.imageIds[0])
+  check('横向き：作品写真を外したときの知らせは、ページ送り・下の道具・紙面の右の帯に重ならない（［戻す］で戻る）', landUndo.shown && landUndo.covers.length === 0 && landUndo.inside && landUndo.buttonH >= 44 && photoBack === 'g-photo1', JSON.stringify({ landUndo, photoBack }))
+  await page.evaluate(() => window.__editor.select(null))
+  await wait(300)
   await page.setViewport(PORTRAIT)
   await wait(800)
   await ready()
@@ -724,12 +870,20 @@ async function iphoneShareCheck(browser) {
   await page.click('.p-nav .nav-pdf')
   await page.waitForSelector('.modal .draft-box .pdf-draft')
   check('iPhone：エラーが残っているときのボタンは「下書きの PDF を作る」（保存は、できたあとに押す）', (await page.$eval('.modal .draft-box .pdf-draft', (b) => b.textContent)) === '下書きの PDF を作る')
+  // 「直しに戻る」・「うまくいかないとき：印刷の画面から保存」も、見た目の高さ 44px 以上
+  const pdfStartH = { back: await minVisibleHeight(page, '.modal .row-buttons button'), print: await minVisibleHeight(page, '.modal .draft-box .pdf-fallback') }
+  const backLabel = await page.$eval('.modal .row-buttons button.primary', (b) => b.textContent)
+  await page.screenshot({ path: `${OUT}/10b-pdf-start-44.png` })
+  check('PDF の窓の「直しに戻る」「うまくいかないとき：印刷の画面から保存」は、見た目も高さ 44px 以上', backLabel === '直しに戻る' && pdfStartH.back >= 44 && pdfStartH.print >= 44, JSON.stringify(pdfStartH))
   await page.tap('.modal .draft-box .pdf-draft')
   await page.waitForSelector('.modal .pdf-save', { timeout: 120000 })
   await wait(300)
   const made = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, save: document.querySelector('.modal .pdf-save')?.textContent, thumbs: document.querySelectorAll('.modal .pdf-thumbs img').length, shares: window.__shares.length }))
   await page.screenshot({ path: `${OUT}/11-pdf-share.png` })
   check('iPhone：できたら「下書きの PDF ができました」と大きな「保存する」を出す（まだ保存しない・共有の画面も開かない）', made.title === '下書きの PDF ができました' && made.save === '保存する' && made.thumbs > 0 && made.shares === 0 && readdirSync(downloads).length === 0, JSON.stringify(made))
+  // 文字のリンクの「PDF を開く」と「閉じる」も、見た目の高さ 44px 以上（前は「PDF を開く」が高さ 12px ほどだった）
+  const pdfDoneH = { open: await minVisibleHeight(page, '.modal .row-buttons .pdf-fallback'), close: await minVisibleHeight(page, '.modal .row-buttons button:not(.pdf-fallback)') }
+  check('できたあとの「PDF を開く」（文字のリンク）と「閉じる」は、見た目も高さ 44px 以上', pdfDoneH.open >= 44 && pdfDoneH.close >= 44, JSON.stringify(pdfDoneH))
   await page.tap('.modal .pdf-save')
   await wait(300)
   const cancelled = await page.evaluate(() => ({ save: document.querySelector('.modal .pdf-save')?.textContent, shares: [...window.__shares] }))
@@ -833,6 +987,163 @@ async function phoneWordCheck(browser) {
       check('「図1へ」（表紙へ）を押すと、チェックの欄を閉じて紙面のその場所へ移る', !s.sheet, JSON.stringify(s))
     }
   }
+  await context.close()
+}
+
+/**
+ * はじめて使う学生の試し（v32 のあと）で見つかったこと（スマホ）：
+ * - 横向き（紙面の幅が 160px ほど）で、空の段落の「＋」の印をタップすると、その段落が開く（前は、上の見出し「まとめ」の途中が開いていた）
+ * - 表のタイトルをタップすると、まず表を選び、下に「この表」の「削除」が出る（書く欄には表を消す道具がない）。もう一度タップでタイトルを書く
+ * - 2行の表で「行を消す」を押すと、わけと、表ごと消す方法が画面の下に出る（前は何も起きなかった）
+ * - 抄録の「先生の許可が出た」のあと、画面の下に「抄録を書き始めました［戻す］」が出て、［戻す］で書き始める前に戻る
+ */
+async function firstTimeFixesPhone(browser) {
+  const context = await browser.createBrowserContext()
+  const page = await context.newPage()
+  await noHotReload(page)
+  await stubConfig(page)
+  page.on('pageerror', (e) => console.log('pageerror(firsttime):', e.message))
+  await page.evaluateOnNewDocument(() => {
+    try {
+      localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+    } catch {}
+  })
+  const PORTRAIT = { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
+  const LANDSCAPE = { width: 844, height: 390, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
+  await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
+  await page.setViewport(PORTRAIT)
+  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  const ready = () =>
+    page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
+  await ready()
+  // はじめての案内は「あとで入力する」で閉じる
+  await page.waitForSelector('.guide.step-course .g-opts button')
+  await page.evaluate(() => document.querySelector('.g-opts button').click())
+  await page.waitForSelector('.guide.step-word .g-word-opt.no')
+  await page.evaluate(() => document.querySelector('.g-word-opt.no').click())
+  await page.waitForSelector('.guide .g-later')
+  await page.evaluate(() => document.querySelector('.guide .g-later').click())
+  await page.evaluate(() => window.__editor.finishEditing())
+  await ready()
+  // 見本の原稿：「まとめ」のすぐ下に、ひな形の説明のある空の段落。最後に2行・1列の表。抄録はまだ（先生の許可が出る前）
+  const { setupWriting } = await import('./sampleReport.mjs')
+  await page.evaluate(setupWriting)
+  await page.evaluate(() =>
+    window.__editor.update((r) => ({
+      ...r,
+      basicInfo: { ...r.basicInfo, studentId: '00ZZ0123' },
+      abstract: { ...r.abstract, started: false },
+      body: r.body.map((c) =>
+        c.id === 'c3'
+          ? {
+              ...c,
+              blocks: [
+                { type: 'paragraph', id: 'pE', content: [{ type: 'text', text: '' }], hint: '完成した作品を振り返り、できたこと・課題を書く' },
+                ...c.blocks,
+                { type: 'paragraph', id: 'pT', content: [{ type: 'text', text: '糸の色を' }, { type: 'ref', targetId: 'tM', withParens: false }, { type: 'text', text: 'にまとめる。' }] },
+                { type: 'table', id: 'tM', caption: '糸', widths: 'equal', rows: [{ id: 'tr1', cells: [{ id: 'tc1', text: '色', imageId: null }] }, { id: 'tr2', cells: [{ id: 'tc2', text: '金', imageId: null }] }] },
+              ],
+            }
+          : c,
+      ),
+    })),
+  )
+  await wait(500)
+  await ready()
+  const showBlock = async (id) => {
+    await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), id)
+    await ready()
+    await wait(400)
+  }
+  const snap = () => page.evaluate(() => { const s = window.__editor.getSnapshot(); return { editingId: s.editingId, editingKind: s.editingKind, selection: s.selection, started: s.report.abstract.started } })
+
+  // 横向き：空の段落の「＋」の印をタップすると、その段落が開く（上の見出しではなく）
+  await page.setViewport(LANDSCAPE)
+  await wait(800)
+  await ready()
+  await showBlock('pE')
+  const mark = await page.evaluate(() => {
+    const p = document.querySelector('.page-viewport.front [data-block-id="pE"]')
+    const r = p.getBoundingClientRect()
+    const after = getComputedStyle(p, '::after')
+    const pageW = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current').getBoundingClientRect().width
+    // 印は段落の始め（左端、1行目の高さの真ん中）
+    const line = parseFloat(getComputedStyle(p).lineHeight) * (r.width / p.offsetWidth || 1)
+    return { x: r.left + 4, y: r.top + Math.max(2, line / 2), marked: after.content !== 'none' && after.content !== 'normal', pageW: Math.round(pageW) }
+  })
+  await page.touchscreen.tap(mark.x, mark.y)
+  await page.waitForFunction(() => !!window.__editor.getSnapshot().editingId, { timeout: 20000 }).catch(() => {})
+  await wait(300)
+  const landTap = await snap()
+  await page.screenshot({ path: `${OUT}/18-land-plus-tap.png` })
+  check('横向き（紙面の幅 160px ほど）で、空の段落の「＋」の印をタップすると、その段落が開く（上の見出しが開かない）', mark.marked && landTap.editingId === 'pE', JSON.stringify({ mark, landTap }))
+  await page.evaluate(() => window.__editor.finishEditing())
+  await ready()
+  await page.setViewport(PORTRAIT)
+  await wait(800)
+  await ready()
+
+  // 表のタイトルをタップ：まず表を選び、下に「この表」の「削除」が出る。もう一度タップすると、タイトルを書く
+  await showBlock('tM')
+  const captionAt = () => page.evaluate(() => { const r = document.querySelector('.page-viewport.front [data-block-id="tM"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  let at = await captionAt()
+  await page.touchscreen.tap(at.x, at.y)
+  await wait(500)
+  const selected = { ...(await snap()), bar: await page.evaluate(() => [...document.querySelectorAll('.sel-bar .tb, .sel-bar .ctx-label')].map((b) => b.textContent.trim())) }
+  await page.screenshot({ path: `${OUT}/18b-table-title-tap.png` })
+  check('スマホ：表のタイトルをタップすると、表を選び、下に「この表」の「削除」が出る（書く欄は開かない）', selected.selection?.kind === 'table' && selected.selection.id === 'tM' && !selected.editingId && selected.bar.includes('この表') && selected.bar.includes('削除'), JSON.stringify(selected))
+  at = await captionAt()
+  await page.touchscreen.tap(at.x, at.y)
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'tM', { timeout: 20000 }).catch(() => {})
+  check('選んでいる表のタイトルをもう一度タップすると、タイトルを書ける', (await snap()).editingKind === 'tableCaption')
+  await page.evaluate(() => window.__editor.finishEditing())
+  await ready()
+
+  // 2行の表のセルを書いているときに「行を消す」：わけと、表ごと消す方法（閉じてからタイトルをタップ→「この表」の「削除」）が画面の下に出る
+  await showBlock('tc2')
+  const cellAt = await page.evaluate(() => { const r = document.querySelector('.page-viewport.front [data-cell-id="tc2"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  await page.touchscreen.tap(cellAt.x, cellAt.y)
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'tc2', { timeout: 20000 })
+  await wait(300)
+  await page.evaluate(() => [...document.querySelectorAll('.edit-sheet .es-tools button')].find((b) => b.textContent.includes('行を消す')).click())
+  await wait(300)
+  const rowNote = {
+    ...(await page.evaluate(() => {
+      const toast = document.querySelector('.undo-toast')
+      const t = toast?.getBoundingClientRect()
+      const sheet = document.querySelector('.edit-sheet.open')?.getBoundingClientRect()
+      return { text: toast?.textContent ?? '', aboveSheet: !!t && !!sheet && t.bottom <= sheet.top + 0.5 && t.top >= 0 }
+    })),
+    ...(await snap()),
+  }
+  await page.screenshot({ path: `${OUT}/18c-table-row-note.png` })
+  check(
+    'スマホ：2行の表で「行を消す」を押すと、わけと表ごと消す方法（「完了」で閉じてタイトルをタップ→「この表」の「削除」）が書く欄の上に出る（書く欄はそのまま）',
+    rowNote.text.includes('見出しの行ともう1行が要ります') && rowNote.text.includes('表のタイトルをタップし') && rowNote.text.includes('「この表」の「削除」') && rowNote.editingId === 'tc2' && rowNote.aboveSheet,
+    JSON.stringify(rowNote),
+  )
+  await page.evaluate(() => window.__editor.finishEditing())
+  await ready()
+
+  // 抄録の帯の「先生の許可が出た」：画面の下に「抄録を書き始めました［戻す］」。［戻す］で、書き始める前に戻る
+  await page.evaluate(() => window.__editor.goToPage(window.__editor.getSnapshot().layout.kinds.indexOf('abstract'), 'none'))
+  await ready()
+  await wait(400)
+  await page.tap('.page-band button')
+  await page.waitForFunction(() => window.__editor.getSnapshot().report.abstract.started === true, { timeout: 20000 })
+  await ready()
+  await wait(300)
+  const startNote = await page.evaluate(() => ({ text: document.querySelector('.undo-toast')?.textContent ?? '', button: !!document.querySelector('.undo-toast button'), sheet: !!document.querySelector('.edit-sheet.open') }))
+  await page.screenshot({ path: `${OUT}/18d-abstract-started.png` })
+  await page.tap('.undo-toast button')
+  await ready()
+  await wait(300)
+  const back = { ...(await snap()), text: await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? ''), band: await page.evaluate(() => document.querySelector('.page-band button')?.textContent ?? '') }
+  check(
+    'スマホ：「先生の許可が出た」のあと、画面の下に「抄録を書き始めました［戻す］」が出て、［戻す］で書き始める前に戻る',
+    startNote.text.includes('抄録を書き始めました') && startNote.button && !startNote.sheet && back.started === false && back.text.includes('抄録を書き始める前に戻しました') && back.band.includes('先生の許可が出た'),
+    JSON.stringify({ startNote, back }),
+  )
   await context.close()
 }
 

@@ -11,6 +11,7 @@
  * 組み直すと紙面の要素は作り直されるため、付けた要素には「何の欄か」（data-paper-key）を書いておき、
  * フォーカスしていた欄は、新しい紙面の同じ印の要素に移し直す。
  * 目印（藍色の枠）は index.css。キーボードで移ったときだけ出す（:focus-visible）。
+ * 押しても書けない表紙の題目（研究題目）には、マウスを重ねると理由を出す（title）。
  */
 
 const KEY_ATTR = 'data-paper-key'
@@ -24,6 +25,14 @@ const FIELD_NAMES: Record<string, string> = {
   'basic:name': '氏名',
   'basic:subtitleInput': 'サブタイトル',
   'basic:course': 'コース',
+}
+
+/**
+ * 表紙の題目（押しても書けない）にマウスを重ねたとき・押したときに出す言葉。
+ * label：表紙の題目の見出し（年度の設定の「制作題目」など。紙面と同じ呼び方にする）
+ */
+export function fixedTitleNote(label: string): string {
+  return `${label.trim() || '題目'}は、学科で決まっています（変えられません）`
 }
 
 /** 「図1.」「表2.」の番号から、「図1」「表2」 */
@@ -97,6 +106,9 @@ export function markFocusable(viewport: HTMLElement): void {
   // 「先生の許可が出た（抄録を書き始める）」は、書いてある文がそのまま名前になる
   for (const el of viewport.querySelectorAll<HTMLElement>('[data-abstract-start]')) mark(el, 'abstract-start')
   for (const el of viewport.querySelectorAll<HTMLElement>('section.references')) mark(el, 'references', { label: `引用・参考文献：${contentOf(el).replace(/^引用・参考文献\s*/, '')}` })
+  // 表紙の題目（研究題目）は学科で決まっていて、押しても書けない。理由が分かるよう、PC ではマウスを重ねると理由を出す
+  // （押したときは、PC・スマホとも画面の下に同じ言葉を知らせる。reportEditor の onClick）
+  for (const el of viewport.querySelectorAll<HTMLElement>('section.cover .el.title')) el.title = fixedTitleNote(el.closest('section.cover')?.querySelector('.el.label')?.textContent ?? '')
 }
 
 /** 紙面の欄の「何の欄か」（Tab で止まる要素でなければ null） */

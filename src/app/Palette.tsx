@@ -57,7 +57,7 @@ function TableMenu({ editor, disabled }: { editor: ReportEditor; disabled: boole
   const [open, setOpen] = useState(false)
   return (
     <div className="menu-wrap">
-      <Tool label="表を入れる" icon={Icon.table} title="書いている位置に「（表n）」が入り、この段落のすぐ下に表が入ります" disabled={disabled} onClick={() => setOpen(!open)} />
+      <Tool label="表を入れる" icon={Icon.table} title="書いている文の終わりに「（表n）」が入り、この段落のすぐ下に表が入ります" disabled={disabled} onClick={() => setOpen(!open)} />
       {open && !disabled && (
         <div className="side-menu" onMouseLeave={() => setOpen(false)}>
           <div className="side-menu-title">どの表を入れますか</div>
@@ -287,7 +287,7 @@ export function Palette({ editor, snap, onReferences }: Props) {
             <Tool
               label="図を入れる"
               icon={Icon.figure}
-              title="書いている位置に「（図n）」が入り、この段落のすぐ下に図が入ります"
+              title="書いている文の終わりに「（図n）」が入り、この段落のすぐ下に図が入ります"
               disabled={!writing}
               onClick={() => void editor.addFigure()}
             />

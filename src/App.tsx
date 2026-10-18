@@ -14,7 +14,7 @@ import { BackupDialog, CourseChangeDialog, CourseMenu, ReferencesDialog } from '
 import { ExportDialog } from './app/ExportDialog'
 import { ConflictDialog, IdMismatchDialog, LoginGate, OtherAccountDialog, ReloginDialog, WipeDialog, type DriveControls, type GateState } from './app/DriveUi'
 import { Icon } from './app/icons'
-import { openLastPlace, useRememberPlace } from './app/lastPlace'
+import { openLastPlace, useRememberPlace, useRememberZoom } from './app/lastPlace'
 import { Palette } from './app/Palette'
 import { PageBand } from './app/PageBand'
 import { PhoneChrome } from './app/Phone'
@@ -185,6 +185,8 @@ export default function App() {
   useEffect(() => {
     if (editor && hasLayout) editor.setSheetHost(narrow ? sheetHostRef.current : null)
   }, [editor, narrow, hasLayout])
+  // PC：表示の大きさ（全体・拡大）も覚えて、開いたときに戻す（上の setSheetHost が「全体」にしたあとで戻すため、ここに置く）
+  useRememberZoom(editor, snap, placeOpened && !tabLock.locked, narrow)
 
   // はじめて開いたときは、コースを選ぶところから案内する（コースが1つだけなら学籍番号から）。コースを選んでいない原稿も、コースを選ぶ案内を出す。
   // 今年度だけ、コースが決まっている新しい原稿は、Word で書き始めているかを聞くところから。

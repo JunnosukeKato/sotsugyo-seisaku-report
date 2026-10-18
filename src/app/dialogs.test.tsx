@@ -1,8 +1,17 @@
 import { renderToStaticMarkup } from 'react-dom/server'
 import { describe, expect, it } from 'vitest'
-import { BackupDialog } from './dialogs'
+import { BackupDialog, CourseChangeDialog } from './dialogs'
 
 const noop = () => {}
+
+describe('本文を書き始めてからコースを変えるときの窓', () => {
+  it('濃いボタン（開いたときに移るボタン）は、本文を残す「コース名だけ変える」。「下書きを入れ替える」は目立たせない', () => {
+    const html = renderToStaticMarkup(<CourseChangeDialog courseName="映画・舞台衣装デザイナー" onReplace={noop} onNameOnly={noop} onClose={noop} />)
+    expect(html).toMatch(/<button[^>]*class="primary course-keep"[^>]*data-autofocus="true"[^>]*>コース名だけ変える<\/button>/)
+    expect(html).toMatch(/<button class="course-replace">下書きを入れ替える<\/button>/)
+    expect(html.match(/class="primary/g)).toHaveLength(1)
+  })
+})
 const backup = (driveStopped?: boolean) =>
   renderToStaticMarkup(
     <BackupDialog snapshots={[]} driveStopped={driveStopped} onSaveBackup={noop} onRestoreFile={noop} onRestoreSnapshot={noop} onStartOver={noop} onClose={noop} />,

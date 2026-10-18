@@ -52,6 +52,16 @@ describe('言葉で探す：項目を探す', () => {
     for (const q of ['最初から', 'やり直', '新しく']) expect(ids(searchTopics(STUDENT_TOPICS, q).hits)[0], q).toBe('restart')
   })
 
+  it('作品写真の「全体を入れる（切らない）」は、「全体」「切らない」「写真 切れる」で探すと、作品写真の項目が先に出る（「切れる」だけでも出る）', () => {
+    for (const q of ['全体', '切らない', '写真 切れる']) {
+      const { hits } = searchTopics(STUDENT_TOPICS, q)
+      expect(ids(hits)[0], q).toBe('photos')
+      expect(hits[0].line.text, q).toContain('全体を入れる（切らない）')
+    }
+    // 「切れる」だけでは、ログインの許可が切れる項目と並ぶ（どちらも出す）
+    expect(ids(searchTopics(STUDENT_TOPICS, '切れる').hits)).toContain('photos')
+  })
+
   it('どこにも入っていない言葉では、何も出ない', () => {
     expect(searchTopics(STUDENT_TOPICS, 'ラーメン').hits).toEqual([])
   })

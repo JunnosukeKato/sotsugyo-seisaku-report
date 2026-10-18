@@ -68,6 +68,14 @@ export function todoBand(todo: BandTodo, rest: number): { text: string; sub: str
   return { text: `${name}が、まだ空いています`, sub: more, button: '書く' }
 }
 
+/**
+ * スマホ（指で押す）の画面に出す言葉：「クリック」を「タップ」にする（PC の言葉はそのまま）。
+ * 紙面の中の仮の文字（「（クリックして入力）」など）は、index.css の「v32 の直し」で、スマホのときだけ同じように替える
+ */
+export function forTouch(text: string): string {
+  return text.replace(/クリック/g, 'タップ')
+}
+
 /** ひな形の段落（抄録・本文）の「ここに何を書くか」（なければ undefined） */
 export function paragraphHint(report: Report, id: string): string | undefined {
   const block = [...report.abstract.paragraphs, ...report.body.flatMap((c) => c.blocks)].find((b) => b.id === id)

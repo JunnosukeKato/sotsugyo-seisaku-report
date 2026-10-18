@@ -15,9 +15,16 @@ const TEXT_LEFT = 132.3
 const TEXT_W = 566.9
 /** 本文の領域の下端（ページの高さに対する割合。A4 の下の余白 25mm） */
 const CONTENT_BOTTOM = (297 - 25) / 297
-/** 行の高さと、図・表との間（画面の px。図を選んだときの枠より下に出す） */
+/** 行の高さと、図・表との間（画面の px。図を選んだときの枠より下に出す）。スマホの行の高さは 44px（index.css。rowHeight で測る） */
 const ROW_H = 30
 const GAP = 12
+
+/** 行の高さ（画面の px）。行の CSS の高さ（PC 30px・スマホ 44px）を読む。隠していても読める。行がなければ ROW_H */
+function rowHeight(doc: Document): number {
+  const row = doc.querySelector<HTMLElement>('.continue-row')
+  const h = row ? parseFloat(getComputedStyle(row).height) : NaN
+  return Number.isFinite(h) && h > 0 ? h : ROW_H
+}
 
 const PLUS =
   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>'
@@ -84,7 +91,7 @@ export class ContinueRow {
 export function endsPageWithRoom(page: HTMLElement, el: HTMLElement): boolean {
   const p = page.getBoundingClientRect()
   const bottom = el.getBoundingClientRect().bottom
-  if (p.top + p.height * CONTENT_BOTTOM - bottom < GAP + ROW_H) return false
+  if (p.top + p.height * CONTENT_BOTTOM - bottom < GAP + rowHeight(page.ownerDocument)) return false
   for (const section of page.querySelectorAll('section')) {
     const range = document.createRange()
     range.selectNodeContents(section)

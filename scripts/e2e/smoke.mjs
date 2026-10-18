@@ -362,10 +362,30 @@ await withEdge(async (browser) => {
   await ready()
   const lockShown = await page.evaluate(() => !!document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current [data-abstract-start]'))
   check('抄録は、はじめは案内と「先生の許可が出た」ボタンだけで、字数のチェックは出ない', lockShown && s.findings.some((f) => f.ruleId === 'abstract-not-started') && !s.findings.some((f) => f.ruleId === 'abstract-length'))
-  const startBox = await page.evaluate(() => { const r = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current [data-abstract-start]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  const startBoxOf = () => page.evaluate(() => { const r = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current [data-abstract-start]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  const startBox = await startBoxOf()
   await page.mouse.click(startBox.x, startBox.y)
+  await page.waitForFunction(() => window.__editor.getSnapshot().report.abstract.started === true, { timeout: 30000 })
+  await ready()
+  // 押すと、画面の下に「抄録を書き始めました［戻す］」が出る（書く欄は開かない。開くと知らせが隠れるため）。［戻す］で書き始める前に戻る
+  const startToast = await page.evaluate(() => ({ text: document.querySelector('.undo-toast')?.textContent ?? '', button: !!document.querySelector('.undo-toast button'), editing: window.__editor.getSnapshot().editingId }))
+  check('「先生の許可が出た」を押すと、抄録を書き始められ、画面の下に「抄録を書き始めました［戻す］」が出る', (await snap()).report.abstract.started === true && startToast.text.includes('抄録を書き始めました') && startToast.button && !startToast.editing, JSON.stringify(startToast))
+  await page.click('.undo-toast button')
+  await ready()
+  await pause0(200)
+  const unstarted = await page.evaluate(() => ({
+    started: window.__editor.getSnapshot().report.abstract.started,
+    lock: !!document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current [data-abstract-start]'),
+    text: document.querySelector('.undo-toast')?.textContent ?? '',
+  }))
+  check('知らせの［戻す］で、書き始める前（案内と「先生の許可が出た」だけ）に戻り、「抄録を書き始める前に戻しました」と出る', unstarted.started === false && unstarted.lock && unstarted.text.includes('抄録を書き始める前に戻しました'), JSON.stringify(unstarted))
+  // もう一度押して書き始め、抄録の段落を押して書く
+  const startBox2 = await startBoxOf()
+  await page.mouse.click(startBox2.x, startBox2.y)
+  await page.waitForFunction(() => window.__editor.getSnapshot().report.abstract.started === true, { timeout: 30000 })
+  await ready()
+  await clickBlock(abstractId)
   await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 30000 }, abstractId)
-  check('「先生の許可が出た」を押すと、抄録を書き始められる', (await snap()).report.abstract.started === true)
   const sentence = '本制作報告書は、卒業イベントにおいて筆者が制作した衣装についてである。'
   await typeAndCommit(sentence.repeat(19), 'Escape')
   s = await snap()
@@ -465,12 +485,56 @@ await withEdge(async (browser) => {
     await page.evaluate(() => [...document.querySelectorAll('.popover button')].find((b) => !b.classList.contains('on')).click())
     await page.waitForSelector('.modal')
     const asked = await page.evaluate(() => document.querySelector('.modal h2')?.textContent ?? '')
+    // 濃いボタン（開いたときに移るボタン）は、本文を残す「コース名だけ変える」（書いた本文が消える「下書きを入れ替える」は目立たせない）
+    const courseButtons = await page.evaluate(() => ({ primary: [...document.querySelectorAll('.modal button.primary')].map((b) => b.textContent), focused: document.activeElement?.textContent ?? '' }))
     await page.evaluate(() => [...document.querySelectorAll('.modal button')].find((b) => b.textContent.includes('コース名だけ変える')).click())
     await ready()
     s = await snap()
     const kept = s.report.body.flatMap((c) => c.blocks).some((b) => b.id === firstParagraph)
     check('本文を書き始めてからコースを変えると確かめ、「コース名だけ変える」なら本文を残す', asked.includes('コースを変えますか') && s.report.basicInfo.courseId !== before && kept, asked)
+    check('コースを変える窓の濃いボタン（Enter で押されるボタン）は「コース名だけ変える」', courseButtons.primary.join(',') === 'コース名だけ変える' && courseButtons.focused === 'コース名だけ変える', JSON.stringify(courseButtons))
+    // 「下書きを入れ替える」を選ぶと、画面の下に「下書きを入れ替えました［戻す］」が出て、［戻す］で本文もコースも元に戻る
+    const keptCourse = s.report.basicInfo.courseId
+    await clickBlock('basic:course')
+    await page.waitForSelector('.popover button')
+    await page.evaluate(() => [...document.querySelectorAll('.popover button')].find((b) => !b.classList.contains('on')).click())
+    await page.waitForSelector('.modal')
+    await page.evaluate(() => [...document.querySelectorAll('.modal button')].find((b) => b.textContent.includes('下書きを入れ替える')).click())
+    await page.waitForFunction(() => !document.querySelector('.modal'), { timeout: 10000 })
+    await ready()
+    s = await snap()
+    const replaced = { course: s.report.basicInfo.courseId !== keptCourse, gone: !s.report.body.flatMap((c) => c.blocks).some((b) => b.id === firstParagraph) }
+    const replacedNotice = await page.evaluate(() => document.querySelector('.stage .undo-area .undo-toast')?.textContent ?? '')
+    await page.screenshot({ path: `${OUT}/course-replaced-undo.png` })
+    await page.click('.stage .undo-area .undo-toast button').catch(() => {})
+    await ready()
+    await new Promise((r) => setTimeout(r, 300))
+    s = await snap()
+    const restoredDraft = { course: s.report.basicInfo.courseId === keptCourse, body: s.report.body.flatMap((c) => c.blocks).some((b) => b.id === firstParagraph), notice: await page.evaluate(() => document.querySelector('.stage .undo-area')?.textContent ?? '') }
+    check(
+      '「下書きを入れ替える」のあと、画面の下に「下書きを入れ替えました［戻す］」が出て、［戻す］で本文とコースが元に戻る（「下書きを戻しました」）',
+      replaced.course && replaced.gone && replacedNotice === '下書きを入れ替えました戻す' && restoredDraft.course && restoredDraft.body && restoredDraft.notice === '下書きを戻しました',
+      JSON.stringify({ replaced, replacedNotice, restoredDraft }),
+    )
   }
+
+  // ---- 表紙の題目（研究題目。学科で決まっていて、書けない）：マウスを重ねると理由が出て、押すと画面の下に同じ言葉を知らせる（何も開かない）。
+  //      呼び方は紙面の見出しと同じ（設定の「制作題目」） ----
+  await page.evaluate(() => window.__editor.goToPage(0, 'none'))
+  await ready()
+  const titleAt = await page.evaluate(() => {
+    const el = document.querySelector('.page-viewport.front section.cover .el.title')
+    const r = el.getBoundingClientRect()
+    return { label: document.querySelector('.page-viewport.front section.cover .el.label')?.textContent ?? '', tip: el.title, cursor: getComputedStyle(el).cursor, x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })
+  await page.mouse.click(titleAt.x, titleAt.y)
+  await pause(300)
+  const titleClick = await page.evaluate(() => ({ notice: document.querySelector('.stage .undo-area')?.textContent ?? '', editing: window.__editor.getSnapshot().editingId }))
+  check(
+    '表紙の題目：マウスを重ねると「制作題目は、学科で決まっています（変えられません）」（見出しと同じ呼び方）と出て、押すと画面の下に同じ言葉を知らせる（書く欄は開かない）',
+    titleAt.label === '制作題目' && titleAt.tip === '制作題目は、学科で決まっています（変えられません）' && titleAt.cursor === 'help' && titleClick.notice === titleAt.tip && !titleClick.editing,
+    JSON.stringify({ titleAt, titleClick }),
+  )
 
   // ---- 図を入れる ----
   const png = await page.evaluate(async () => {
@@ -627,6 +691,29 @@ await withEdge(async (browser) => {
   check('表のセルに画像を入れられる（紙面のセルに画像が出る）', cellImg)
   await page.keyboard.press('Escape')
   await ready()
+  // 画像（生地見本など）を入れたセルは、文字が空でも仮の文字（「（クリックして入力）」）を出さない。画像のない空のセルは、PC では「クリック」のまま
+  {
+    const now = await tableNow()
+    const [imageCell, plainCell] = [now.rows[2].cells[1].id, now.rows[2].cells[2].id]
+    await page.evaluate(
+      (tid, cid, img) =>
+        window.__editor.update((r) => ({ ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === tid ? { ...b, rows: b.rows.map((row) => ({ ...row, cells: row.cells.map((cell) => (cell.id === cid ? { ...cell, imageId: img } : cell)) })) } : b)) })) })),
+      tableBlock.id,
+      imageCell,
+      now.rows[1].cells[0].imageId,
+    )
+    await ready()
+    const marks = await page.evaluate((a, b) => {
+      const mark = (id) => {
+        const el = document.querySelector(`.page-viewport.front [data-cell-id="${id}"] [data-block-id]`)
+        return el ? getComputedStyle(el, '::before').content : null
+      }
+      return { image: mark(a), plain: mark(b) }
+    }, imageCell, plainCell)
+    check('画像を入れた表のセルには、文字が空でも仮の文字を出さない（画像のない空のセルは、PC では「（クリックして入力）」のまま）', marks.image === 'none' && marks.plain === '"（クリックして入力）"', JSON.stringify(marks))
+    await page.evaluate(() => window.__editor.undo())
+    await ready()
+  }
   // 図のタイトルをクリックして Enter：その図の下に段落ができる（段落を足すボタンはない）
   const figId = (await snap()).report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow').figures[0].id
   const blocksBefore = (await snap()).report.body.flatMap((c) => c.blocks).length
@@ -729,13 +816,23 @@ await withEdge(async (browser) => {
 
   // ---- 自動保存：読み込み直しても残っている ----
   await new Promise((r) => setTimeout(r, 1500))
+  // 表示の大きさ（拡大）も、読み込み直したあとに戻る（この端末に「全体」か「拡大」かだけを覚える）
+  await page.click('.zoom button:last-child')
+  await pause(300)
   const pageBeforeReload = (await snap()).page
   await page.reload({ waitUntil: 'networkidle0' })
   await ready()
+  await page.waitForFunction(() => window.__editor.getSnapshot().zoomed, { timeout: 5000 }).catch(() => {})
   s = await snap()
   check('読み込み直しても原稿が残っている（自動保存）', s.report.basicInfo.name === '文化　花子' && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'figureRow'))
   // 最後に見ていたページは、この端末に覚えておく（ページの番号と欄の ID だけ）
   check('読み込み直すと、表紙ではなく、最後に見ていたページ（作品写真）が開く', pageBeforeReload > 0 && s.page === pageBeforeReload && s.layout.kinds[s.page] === 'photos', `${pageBeforeReload} → ${s.page}`)
+  const zoomAfter = await page.evaluate(() => ({ zoomed: window.__editor.getSnapshot().zoomed, pressed: document.querySelector('.zoom button:last-child')?.getAttribute('aria-pressed'), stored: localStorage.getItem('sotsugyo-seisaku-report-zoom') }))
+  check('PC：読み込み直すと、表示の大きさ（「拡大」）も戻る（覚えるのは「全体」か「拡大」かだけ）', zoomAfter.zoomed && zoomAfter.pressed === 'true' && zoomAfter.stored === 'zoom', JSON.stringify(zoomAfter))
+  await page.click('.zoom button:first-child')
+  await pause(300)
+  const zoomFit = { stored: await page.evaluate(() => localStorage.getItem('sotsugyo-seisaku-report-zoom')), zoomed: (await snap()).zoomed }
+  check('PC：「全体」に戻すと、それも覚える', zoomFit.stored === 'fit' && !zoomFit.zoomed, JSON.stringify(zoomFit))
   const imgLoaded = await page.evaluate(() => { const img = document.querySelector('.page-viewport.front figure img'); return img?.src.startsWith('blob:') && img.naturalWidth > 0 })
   check('読み込み直しても写真が残っている', imgLoaded)
 
@@ -1048,6 +1145,209 @@ await withEdge(async (browser) => {
     return res
   })
   check('章の終わりの図がページの下に入りきらないときは、はみ出さずに次のページの上へ送る', overflow.bottom <= 272 && overflow.top <= 26, JSON.stringify(overflow))
+
+  // ---- はじめて使う学生の試し（v32 のあと）で見つかったこと ----
+  // （ここで本文を入れ替えて確かめ、終わったら元の原稿に戻す。後ろの確かめ（PDF の「やめる」など）が、元の長さの原稿で動くように）
+  {
+    const savedReport = await page.evaluate(() => window.__editor.getSnapshot().report)
+    const setBody = async () => {
+      await page.evaluate(() => {
+        const t = (text) => ({ type: 'text', text })
+        const body = [
+          {
+            id: 'fc1',
+            title: '制作過程',
+            blocks: [
+              { type: 'paragraph', id: 'fpA', content: [t('最初に生地の色を確かめ、汚れや傷がないかを見た。次に型紙を写した。')] },
+              { type: 'paragraph', id: 'fpB', content: [t('次の段落である。')] },
+              { type: 'paragraph', id: 'fpH', content: [t('')], hint: '工夫した点を書く' },
+              { type: 'subheading', id: 'fsN', title: '（1）素材' },
+            ],
+          },
+          { id: 'fc2', title: 'まとめ', blocks: [{ type: 'paragraph', id: 'fpZ', content: [t('まとめた。')] }] },
+        ]
+        window.__editor.update((r) => ({ ...r, body }))
+      })
+      await ready()
+    }
+    await setBody()
+    const textOf = (b) => (b.type === 'subheading' ? `【${b.title}】` : b.type === 'paragraph' ? b.content.map((n) => (n.type === 'ref' ? '(ref)' : n.text)).join('') : `[${b.type}]`)
+    const blocksOf = async (chapterId) => (await snap()).report.body.find((c) => c.id === chapterId).blocks
+    const ctrlEnd = async () => {
+      await page.keyboard.down('Control')
+      await page.keyboard.press('End')
+      await page.keyboard.up('Control')
+    }
+
+    // 段落を分けて書き、すぐ「小見出し」を押して、すぐ打つ：見出しの文字は消えず、書いていた段落の後ろに入る（前は、組み直すまでの1秒ほどの間に打った文字が消え、見出しが段落の前に入っていた）
+    await clickBlock('fpA')
+    await ctrlEnd()
+    await page.keyboard.press('Enter')
+    await page.keyboard.type('分けた段落に書いた。')
+    await clickPaletteButton('小見出し')
+    await page.keyboard.type('すぐ打った見出し')
+    const openedAt = await page.evaluate(() => ({ editing: window.__editor.getSnapshot().editingKind, rendering: window.__editor.getSnapshot().rendering }))
+    await page.keyboard.press('Escape')
+    await ready()
+    let fc1 = (await blocksOf('fc1')).map(textOf)
+    check(
+      '段落を分けて書き、すぐ「小見出し」を押してすぐ打っても、見出しの文字は消えず、書いていた段落の後ろに入る（組み直すのを待たずに書く欄が開く）',
+      JSON.stringify(fc1.slice(0, 4)) === JSON.stringify(['最初に生地の色を確かめ、汚れや傷がないかを見た。次に型紙を写した。', '分けた段落に書いた。', '【すぐ打った見出し】', '次の段落である。']) && openedAt.editing === 'subheading',
+      JSON.stringify({ fc1, openedAt }),
+    )
+
+    // 何も書いていない段落で「小見出し」：その段落を見出しに置き換える（空の段落を残さない）
+    await clickBlock('fpB')
+    await ctrlEnd()
+    await page.keyboard.press('Enter')
+    await clickPaletteButton('小見出し')
+    await page.keyboard.type('置き換えた見出し')
+    await page.keyboard.press('Escape')
+    await ready()
+    fc1 = (await blocksOf('fc1')).map(textOf)
+    check('何も書いていない段落で「小見出し」を押すと、その段落が見出しになる（空の段落が残らない）', JSON.stringify(fc1.slice(3, 6)) === JSON.stringify(['次の段落である。', '【置き換えた見出し】', '']) && fc1.length === 7, JSON.stringify(fc1))
+
+    // ひな形の説明のある空の段落：開いて何も書かずに閉じても、説明は消えない
+    await clickBlock('fpH')
+    await waitEditing(() => window.__editor.getSnapshot().editingId === 'fpH')
+    await page.keyboard.press('Escape')
+    await ready()
+    const kept = await page.evaluate(() => ({
+      hint: window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === 'fpH')?.hint,
+      placeholder: document.querySelector('.page-viewport.front [data-block-id="fpH"]')?.dataset.placeholder ?? '',
+    }))
+    check('ひな形の説明のある空の段落を開いて、何も書かずに閉じても、説明（「ここに書くこと」）は消えない', kept.hint === '工夫した点を書く' && kept.placeholder.includes('工夫した点を書く'), JSON.stringify(kept))
+
+    // 小見出しに手で書いた「（1）」：警告と「直す」（番号の「ⅰ．」は自動で付く）
+    const headingFix = await page.evaluate(() => {
+      const li = [...document.querySelectorAll('.side .issue')].find((x) => x.textContent.includes('小見出しに番号を手で書いている'))
+      const fix = li?.querySelector('.fix')
+      fix?.click()
+      return { shown: !!li, warning: !!li?.classList.contains('warning'), fix: !!fix }
+    })
+    await ready()
+    const fixedTitle = (await blocksOf('fc1')).find((b) => b.id === 'fsN')?.title
+    check('小見出しに手で書いた「（1）」は警告になり、「直す」で取れる', headingFix.shown && headingFix.warning && headingFix.fix && fixedTitle === '素材', JSON.stringify({ headingFix, fixedTitle }))
+
+    // Enter を押して何も書かずに閉じた空の段落：「空の段落がある」の「直す」で消せる（「段落を削除しました［戻す］」が出る）
+    await clickBlock('fpZ')
+    await ctrlEnd()
+    await page.keyboard.press('Enter')
+    await page.keyboard.press('Escape')
+    await ready()
+    const emptyCount = (await blocksOf('fc2')).length
+    const emptyFix = await page.evaluate(() => {
+      const li = [...document.querySelectorAll('.side .issue')].find((x) => x.textContent.includes('空の段落がある'))
+      const fix = li?.querySelector('.fix')
+      fix?.click()
+      return { shown: !!li, fix: !!fix }
+    })
+    await ready()
+    const afterEmpty = { blocks: (await blocksOf('fc2')).map(textOf), toast: await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? '') }
+    check('何も書かずに残った空の段落は「空の段落がある」の「直す」で消せ、「段落を削除しました［戻す］」が出る', emptyCount === 2 && emptyFix.shown && emptyFix.fix && JSON.stringify(afterEmpty.blocks) === JSON.stringify(['まとめた。']) && afterEmpty.toast.includes('段落を削除しました'), JSON.stringify({ emptyCount, emptyFix, afterEmpty }))
+
+    // 文の途中で「図を入れる」：（図n）はカーソルの位置ではなく、その文の終わり（「。」の前）に入る
+    await page.evaluate(() => window.__editor.openWhenReady('fpA', 8))
+    await waitEditing(() => window.__editor.getSnapshot().editingId === 'fpA')
+    const [figChooser] = await Promise.all([page.waitForFileChooser(), clickPaletteButton('図を入れる')])
+    await figChooser.accept([pngPath])
+    await waitEditing(() => window.__editor.getSnapshot().editingKind === 'figureCaption')
+    await page.keyboard.type('生地')
+    await page.keyboard.press('Escape')
+    await ready()
+    const fpAText = (await blocksOf('fc1')).find((b) => b.id === 'fpA').content.map((n) => (n.type === 'ref' ? '（図）' : n.text)).join('')
+    check('文の途中で「図を入れる」を押すと、（図n）はその文の終わり（「。」の前）に入る（「確かめ（図1）、汚れや…」にしない）', fpAText === '最初に生地の色を確かめ、汚れや傷がないかを見た（図）。次に型紙を写した。', fpAText)
+
+    // 何も書いていない段落で「表を入れる」：「（表n）。」だけの段落を作らず、その段落の位置に表が入る。本文で参照していないことはチェックで知らせる
+    await clickBlock('fpZ')
+    await ctrlEnd()
+    await page.keyboard.press('Enter')
+    await clickPaletteButton('表を入れる')
+    await page.evaluate(() => [...document.querySelectorAll('.palette .side-menu button')].find((b) => b.textContent.includes('空の表')).click())
+    await waitEditing(() => window.__editor.getSnapshot().editingKind === 'tableCaption')
+    await page.keyboard.type('使用した糸')
+    await ready()
+    s = await snap()
+    const fc2 = s.report.body.find((c) => c.id === 'fc2').blocks
+    const tableId = fc2.find((b) => b.type === 'table')?.id
+    check('何も書いていない段落で「表を入れる」と、「（表n）。」だけの段落は作らず、その段落の位置に表が入る（参照していないことはチェックで知らせる）', JSON.stringify(fc2.map(textOf)) === JSON.stringify(['まとめた。', '[table]']) && s.findings.some((f) => f.ruleId === 'table-unreferenced' && f.blockId === tableId), JSON.stringify(fc2.map(textOf)))
+    await page.keyboard.press('Escape')
+    await ready()
+
+    // 表のセルを書いている間も、表の下が空いていれば「＋ ここに続きを書く」が出る（前は、セルを書くと消えた）
+    const cellId = fc2.find((b) => b.type === 'table').rows[1].cells[0].id
+    await clickBlock(cellId)
+    await waitEditing((id) => window.__editor.getSnapshot().editingId === id, cellId)
+    await pause0(300)
+    const rowWhileCell = await page.evaluate(() => { const b = document.querySelector('.continue-row'); return !!b && !b.hidden && b.getBoundingClientRect().height > 0 })
+    check('表のセルを書いている間も、表の下が空いていれば「＋ ここに続きを書く」が出る', rowWhileCell)
+
+    // 消せない行・列を「行を消す」「列を消す」で押したとき：わけと、表ごと消す方法を画面の下に知らせる（セルは書いたまま）。
+    // まず書いているセルの列を消して1列にし（その列のセルはなくなるので、表を選んだ状態になる）、残ったセルを書く
+    await clickPaletteButton('列を消す')
+    await ready()
+    const leftCell = (await snap()).report.body.find((c) => c.id === 'fc2').blocks.find((b) => b.type === 'table').rows[1].cells[0].id
+    await clickBlock(leftCell)
+    await waitEditing((id) => window.__editor.getSnapshot().editingId === id, leftCell)
+    await clickPaletteButton('列を消す')
+    await pause0(200)
+    const colNote = await page.evaluate(() => ({ text: document.querySelector('.undo-toast')?.textContent ?? '', editing: window.__editor.getSnapshot().editingKind, cols: window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.type === 'table' && b.id.startsWith('t-'))?.rows[0].cells.length }))
+    await clickPaletteButton('行を消す')
+    await pause0(200)
+    const rowNote = await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? '')
+    check(
+      '1列の表で「列を消す」、2行の表で「行を消す」を押すと、わけと表ごと消す方法（左の「この表」の「削除」）が画面の下に出る（セルは書いたまま）',
+      colNote.text.includes('表には1列以上が要ります') && colNote.text.includes('「この表」の「削除」') && colNote.editing === 'tableCell' && colNote.cols === 1 && rowNote.includes('見出しの行ともう1行が要ります'),
+      JSON.stringify({ colNote, rowNote }),
+    )
+    await page.keyboard.press('Escape')
+    await ready()
+
+    // 拡大して見えていない所（ページの下の方）を元に戻したときは、そこまで動かし終えてから光らせる（前は、動かしている間に光が消えていた）
+    await page.evaluate(() => {
+      const t = (text) => ({ type: 'text', text })
+      const long = '袖の形を何度も試し、動きやすさと見た目のつり合いを確かめた。'.repeat(5)
+      const blocks = Array.from({ length: 9 }, (_, i) => ({ type: 'paragraph', id: `uf${i}`, content: [t(long)] }))
+      window.__editor.update((r) => ({ ...r, body: [{ id: 'uc1', title: '制作過程', blocks }] }))
+    })
+    await ready()
+    await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfBlock('uf0'), 'none'))
+    await ready()
+    const lowId = await page.evaluate(() => {
+      const ed = window.__editor
+      const first = ed.pageOfBlock('uf0')
+      return ['uf8', 'uf7', 'uf6', 'uf5', 'uf4'].find((id) => ed.pageOfBlock(id) === first && ed.pageOfBlock(id, 1e9) === first)
+    })
+    await page.evaluate(() => window.__editor.setZoom(true))
+    await pause0(300)
+    await page.evaluate((id) => window.__editor.removeBlock(id), lowId)
+    await ready()
+    await page.evaluate(() => {
+      document.querySelector('.page-scroller').scrollTop = 0
+    })
+    await pause0(300)
+    await page.evaluate(() => {
+      window.__flashSeen = null
+      const scroller = document.querySelector('.page-scroller')
+      const obs = new MutationObserver(() => {
+        const el = document.querySelector('.page-viewport.front .undo-flash')
+        if (!el || window.__flashSeen) return
+        const r = el.getBoundingClientRect()
+        const s = scroller.getBoundingClientRect()
+        window.__flashSeen = { inView: r.top >= s.top - 1 && r.bottom <= s.bottom + 1, top: Math.round(r.top), bottom: Math.round(r.bottom), scrollerTop: Math.round(s.top), scrollerBottom: Math.round(s.bottom), scrollTop: Math.round(scroller.scrollTop) }
+        obs.disconnect()
+      })
+      obs.observe(scroller, { subtree: true, attributes: true, attributeFilter: ['class'] })
+    })
+    await page.evaluate(() => window.__editor.undo())
+    await page.waitForFunction(() => !!window.__flashSeen, { timeout: 30000 }).catch(() => {})
+    const flashSeen = await page.evaluate(() => window.__flashSeen)
+    check('拡大していて、元に戻した段落がページの下の方（見えていない所）にあるときは、そこへ動かし終えてから光らせる（光ったときには見えている）', !!lowId && !!flashSeen?.inView, JSON.stringify({ lowId, flashSeen }))
+    await page.evaluate(() => window.__editor.setZoom(false))
+    await ready()
+    await page.evaluate((r) => window.__editor.update(() => r), savedReport)
+    await ready()
+  }
 
   // ---- 左右の欄の境目をつかんで、幅を変える（ダブルクリックで元の幅） ----
   const colWidth = (sel) => page.evaluate((sel) => Math.round(document.querySelector(sel).getBoundingClientRect().width), sel)

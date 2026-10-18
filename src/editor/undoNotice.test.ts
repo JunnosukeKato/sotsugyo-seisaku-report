@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { demoReport } from '../model/demoReport'
 import type { Report } from '../model/types'
 import * as ops from './reportOps'
-import { changedPlace, noticeText } from './undoNotice'
+import { changedPlace, noticeText, undoable } from './undoNotice'
 
 describe('削除の知らせの言葉（mockups/v32 ② 案A）', () => {
   it('削除したものごとに「〜を削除しました」、戻したら「〜を戻しました」。作品写真は「外しました」', () => {
@@ -12,6 +12,11 @@ describe('削除の知らせの言葉（mockups/v32 ② 案A）', () => {
     expect(noticeText({ kind: 'removed', what: '作品写真' })).toBe('作品写真を外しました')
     expect(noticeText({ kind: 'restored', what: '段落' })).toBe('段落を戻しました')
     expect(noticeText({ kind: 'restored', what: '作品写真' })).toBe('作品写真を戻しました')
+  })
+
+  it('コースを変えて下書きを入れ替えたときは「下書きを入れ替えました」、戻したら「下書きを戻しました」', () => {
+    expect(noticeText({ kind: 'removed', what: '下書き' })).toBe('下書きを入れ替えました')
+    expect(noticeText({ kind: 'restored', what: '下書き' })).toBe('下書きを戻しました')
   })
 })
 
@@ -61,5 +66,23 @@ describe('元に戻して変わった所（そこへ移って光らせる）', (
   it('紙面に見える所が変わらなければ（「このままにする」を戻しただけ）null', () => {
     expect(changedPlace({ ...r, acknowledged: ['x'] }, r)).toBeNull()
     expect(changedPlace(r, r)).toBeNull()
+  })
+})
+
+describe('抄録を書き始めた知らせ・戻すもののない知らせ', () => {
+  it('「抄録を書き始めました」は［戻す］を出し、戻したら「抄録を書き始める前に戻しました」。わけを伝える知らせは、その言葉だけ', () => {
+    expect(noticeText({ kind: 'started' })).toBe('抄録を書き始めました')
+    expect(undoable({ kind: 'started' })).toBe(true)
+    expect(noticeText({ kind: 'unstarted' })).toBe('抄録を書き始める前に戻しました')
+    expect(undoable({ kind: 'unstarted' })).toBe(false)
+    expect(noticeText({ kind: 'info', text: '表には1列以上が要ります。' })).toBe('表には1列以上が要ります。')
+    expect(undoable({ kind: 'info', text: '' })).toBe(false)
+    expect(undoable({ kind: 'removed', what: '段落' })).toBe(true)
+  })
+
+  it('抄録を書き始めたのを戻すと、抄録のページへ移る', () => {
+    const locked: Report = { ...demoReport(), abstract: { ...demoReport().abstract, started: false } }
+    const started: Report = { ...locked, abstract: { ...locked.abstract, started: true } }
+    expect(changedPlace(started, locked)).toEqual({ kind: 'area', area: 'abstract' })
   })
 })

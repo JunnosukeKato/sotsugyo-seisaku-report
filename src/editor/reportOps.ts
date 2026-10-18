@@ -113,9 +113,13 @@ export function withPeriod(text: string): string {
   return /[、，,]$/.test(t) ? `${t.slice(0, -1)}。` : `${t}。`
 }
 
-function paragraph(id: string, text: string, num?: Numbering): ParagraphBlock {
+/**
+ * 段落を作る。hint：ひな形の「ここに何を書くか」（書き換えても持ち続ける。空の段落を開いて、何も書かずに閉じたときに、
+ * 説明が消えていたため。説明が出るのは空のときだけなので、書いてある段落では見えない）
+ */
+function paragraph(id: string, text: string, num?: Numbering, hint?: string): ParagraphBlock {
   const normalized = normalizeParagraph(text)
-  return { type: 'paragraph', id, content: num ? textToContent(normalized, num) : [{ type: 'text', text: normalized }] }
+  return { type: 'paragraph', id, content: num ? textToContent(normalized, num) : [{ type: 'text', text: normalized }], ...(hint ? { hint } : {}) }
 }
 
 // ---- 編集できる文字列の一覧 ----
@@ -171,13 +175,14 @@ export function setText(report: Report, id: string, text: string): Report {
     return { ...report, basicInfo }
   }
   if (report.abstract.paragraphs.some((p) => p.id === id)) {
-    return { ...report, abstract: { paragraphs: report.abstract.paragraphs.map((p) => (p.id === id ? paragraph(id, text) : p)) } }
+    // 抄録を書き始めたか（started）は、そのまま残す
+    return { ...report, abstract: { ...report.abstract, paragraphs: report.abstract.paragraphs.map((p) => (p.id === id ? paragraph(id, text, undefined, p.hint) : p)) } }
   }
   const num = numbering(report)
   const withChapter = { ...report, body: report.body.map((c) => (c.id === id ? { ...c, title: text.replace(/[\r\n]/g, '') } : c)) }
   return mapBody(withChapter, (b): BodyBlock => {
     if (b.type === 'subheading' && b.id === id) return { ...b, title: text.replace(/[\r\n]/g, '') }
-    if (b.type === 'paragraph' && b.id === id) return paragraph(id, text, num)
+    if (b.type === 'paragraph' && b.id === id) return paragraph(id, text, num, b.hint)
     if (b.type === 'table' && b.id === id) return { ...b, caption: text.replace(/[\r\n]/g, '') }
     if (b.type === 'table' && b.rows.some((r) => r.cells.some((c) => c.id === id))) return setCellText(b, id, text.trim())
     if (b.type === 'figureRow' && b.figures.some((f) => f.id === id))
@@ -199,8 +204,8 @@ export function split(report: Report, id: string, before: string, after: string)
   const ai = abstract.findIndex((p) => p.id === id)
   if (ai >= 0) {
     const paragraphs = [...abstract]
-    paragraphs.splice(ai, 1, paragraph(id, withPeriod(before)), paragraph(created, after))
-    return { report: { ...report, abstract: { paragraphs } }, newId: created }
+    paragraphs.splice(ai, 1, paragraph(id, withPeriod(before), undefined, abstract[ai].hint), paragraph(created, after))
+    return { report: { ...report, abstract: { ...report.abstract, paragraphs } }, newId: created }
   }
   const num = numbering(report)
   if (report.body.some((c) => c.id === id)) {
@@ -223,8 +228,8 @@ export function split(report: Report, id: string, before: string, after: string)
     const labels = attached.flatMap((a) => (a.type === 'figureRow' ? a.figures.map((f) => `図${num.numbers.get(f.id)}`) : [`表${num.numbers.get(a.id)}`]))
     const keepWithBefore = attached.length > 0 && !labels.some((l) => after.includes(l))
     const blocks = [...chapter.blocks]
-    // 分けた前の段落の終わりに「。」がなければ付ける
-    const first = paragraph(b.id, withPeriod(before), num)
+    // 分けた前の段落の終わりに「。」がなければ付ける（ひな形の説明は、前の段落に残す）
+    const first = paragraph(b.id, withPeriod(before), num, b.hint)
     if (keepWithBefore) blocks.splice(i, end - i, first, ...attached, paragraph(created, after, num))
     else blocks.splice(i, 1, first, paragraph(created, after, num))
     return { report: { ...report, body: report.body.map((c) => (c === chapter ? { ...c, blocks } : c)) }, newId: created }
@@ -254,8 +259,8 @@ export function mergeBackward(report: Report, id: string, text: string): { repor
     const prev = abstract[ai - 1]
     const prevText = contentToText(prev.content, num)
     const paragraphs = [...abstract]
-    paragraphs.splice(ai - 1, 2, paragraph(prev.id, prevText + text))
-    return { report: { ...report, abstract: { paragraphs } }, targetId: prev.id, caret: prevText.length }
+    paragraphs.splice(ai - 1, 2, paragraph(prev.id, prevText + text, undefined, prev.hint))
+    return { report: { ...report, abstract: { ...report.abstract, paragraphs } }, targetId: prev.id, caret: prevText.length }
   }
   if (ai === 0) return null
   for (const c of report.body) {
@@ -265,7 +270,7 @@ export function mergeBackward(report: Report, id: string, text: string): { repor
     if (prev.type !== 'paragraph') return null
     const prevText = contentToText(prev.content, num)
     const blocks = [...c.blocks]
-    blocks.splice(i - 1, 2, paragraph(prev.id, prevText + text, num))
+    blocks.splice(i - 1, 2, paragraph(prev.id, prevText + text, num, prev.hint))
     return { report: { ...report, body: report.body.map((x) => (x === c ? { ...c, blocks } : x)) }, targetId: prev.id, caret: prevText.length }
   }
   return null
@@ -276,12 +281,12 @@ export function replaceWithParagraphs(report: Report, id: string, texts: string[
   const ids = texts.map((_, i) => (i === 0 ? id : newId('p')))
   const lastId = ids[ids.length - 1]
   if (report.abstract.paragraphs.some((p) => p.id === id)) {
-    const paragraphs = report.abstract.paragraphs.flatMap((p) => (p.id === id ? texts.map((t, i) => paragraph(ids[i], t)) : [p]))
-    return { report: { ...report, abstract: { paragraphs } }, lastId }
+    const paragraphs = report.abstract.paragraphs.flatMap((p) => (p.id === id ? texts.map((t, i) => paragraph(ids[i], t, undefined, i === 0 ? p.hint : undefined)) : [p]))
+    return { report: { ...report, abstract: { ...report.abstract, paragraphs } }, lastId }
   }
   const num = numbering(report)
   return {
-    report: mapBody(report, (b) => (b.id === id && b.type === 'paragraph' ? texts.map((t, i) => paragraph(ids[i], t, num)) : b)),
+    report: mapBody(report, (b) => (b.id === id && b.type === 'paragraph' ? texts.map((t, i) => paragraph(ids[i], t, num, i === 0 ? b.hint : undefined)) : b)),
     lastId,
   }
 }
@@ -329,6 +334,30 @@ export function insertAfter(report: Report, afterId: string | null, block: BodyB
   }
 }
 
+/** 本文の章・ブロック（図の ID・表のセルの ID でもよい）か（段落などを足す位置の目印になるか） */
+export function inBody(report: Report, id: string): boolean {
+  return report.body.some((c) => c.id === id || blockIndex(c, id) >= 0)
+}
+
+/** 本文の段落に、まだ何も書いていない（文字も図表の参照もない）か */
+export function paragraphEmpty(report: Report, id: string): boolean {
+  const p = findParagraph(report, id)
+  return !!p && !contentToText(p.content, numbering(report)).trim()
+}
+
+/**
+ * 何も書いていない、ひな形の説明もない段落か（Enter を押して何も書かなかったときなどにできる段落）。
+ * 小見出し・図・表をそこで入れるときは、その段落と置き換える（空の段落を残さない）。セルフチェックの「直す」でも消せる
+ */
+export function isBlankParagraph(report: Report, id: string): boolean {
+  return paragraphEmpty(report, id) && !findParagraph(report, id)?.hint
+}
+
+/** 本文のブロック id を、block に置き換える（同じ位置に入る） */
+export function replaceBlock(report: Report, id: string, block: BodyBlock): Report {
+  return mapBody(report, (b) => (b.id === id ? block : b))
+}
+
 /** 大見出し（章）を指定した章の後ろに追加する */
 export function insertChapterAfter(report: Report, afterId: string | null, chapter: Chapter): Report {
   const i = afterId ? report.body.findIndex((c) => c.id === afterId || blockIndex(c, afterId) >= 0) : -1
@@ -361,7 +390,7 @@ export function removeChapter(report: Report, id: string): Report {
   return { ...report, body: report.body.filter((c) => c.id !== id) }
 }
 
-// ---- 図を入れる（書いている位置に（図n）を入れ、段落の下に図を置く） ----
+// ---- 図を入れる（書いている文の終わりに（図n）を入れ、段落の下に図を置く） ----
 
 /** 段落を探す（本文） */
 function findParagraph(report: Report, id: string): ParagraphBlock | undefined {
@@ -373,16 +402,20 @@ function findParagraph(report: Report, id: string): ParagraphBlock | undefined {
 }
 
 /**
- * 段落の文字位置 offset（いまの番号での表示の文字数）に、図表への参照「（図n）」を入れる。
- * 文末の「。」の直後なら「〜（図n）。」となるよう「。」の前に入れる（手順書の書き方）。
- * 「。」のない段落の終わりなら、後ろに「。」を付ける
+ * 段落の文字位置 offset（いまの番号での表示の文字数。書いているカーソルの位置）のある文の終わりに、図表への参照「（図n）」を入れる。
+ * 「〜（図n）。」となるよう、文末の「。」の前に入れる（手順書の書き方）。
+ * - 文末の「。」の直後なら、その文（「。」の前）に入れる
+ * - 文の途中なら、その文の「。」の前に入れる（前はカーソルの位置に入れていたため、「確かめ（図2）、汚れや…」と文の途中に入っていた）
+ * - 後ろに「。」がなければ段落の終わりに入れ、後ろに「。」を付ける
  */
 export function insertRef(report: Report, paragraphId: string, offset: number, targetId: string): Report {
   const paragraph = findParagraph(report, paragraphId)
   if (!paragraph) return report
   const num = numbering(report)
   const full = contentToText(paragraph.content, num)
-  const at = Math.max(0, Math.min(offset, full.length)) - (full[Math.min(offset, full.length) - 1] === '。' ? 1 : 0)
+  const caret = Math.max(0, Math.min(offset, full.length))
+  const period = full.indexOf('。', caret)
+  const at = full[caret - 1] === '。' ? caret - 1 : period >= 0 ? period : full.length
   const ref: InlineNode = { type: 'ref', targetId, withParens: true }
   const content: InlineNode[] = []
   let pos = 0

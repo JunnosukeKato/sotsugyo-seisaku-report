@@ -2,7 +2,7 @@ import { useRef, useState, type ReactNode } from 'react'
 import type { YearConfig } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { findEditable, type EditableKind } from '../editor/reportOps'
-import { paragraphHint } from './bandText'
+import { BAND_SIDE_QUERY, forTouch, paragraphHint } from './bandText'
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
 import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, HelpButton, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
@@ -177,7 +177,7 @@ function AddTools({ editor, snap, onDone, onReferences }: { editor: ReportEditor
   if (kind !== 'body') {
     return (
       <p className="sheet-hint">
-        {kind === 'cover' || kind === 'abstract' || kind === 'photos' ? `${PAGE_CONTEXT[kind].name}：${PAGE_CONTEXT[kind].hint.replace('\n', '')}。` : ''}
+        {kind === 'cover' || kind === 'abstract' || kind === 'photos' ? `${PAGE_CONTEXT[kind].name}：${forTouch(PAGE_CONTEXT[kind].hint.replace('\n', ''))}。` : ''}
         段落や図は、本文のページで足せます。
       </p>
     )
@@ -210,6 +210,31 @@ function AddTools({ editor, snap, onDone, onReferences }: { editor: ReportEditor
       )}
     </>
   )
+}
+
+/** 削除の知らせと、その下の道具・帯との間（画面の px） */
+const UNDO_GAP = 8
+
+/**
+ * 削除の「戻す」の知らせの位置（UndoBar の place）。画面の下の道具（ページ送り・「ページ全体に戻す」・選んでいる物の道具）と、
+ * 紙面の下の帯に重ねず、そのいちばん上のものの上に出す（前は知らせがページ送りに重なり、出ている15秒の間、ページを送れなかった）。
+ * 横向きで帯が紙面の右にあるときは、帯には重ねず、帯の左に出す
+ */
+function placeUndo(area: HTMLElement): void {
+  area.style.bottom = ''
+  area.style.right = ''
+  const band = document.querySelector<HTMLElement>('.page-band')
+  const side = !!band && matchMedia(BAND_SIDE_QUERY).matches
+  if (band && side) area.style.right = `${Math.max(12, innerWidth - band.getBoundingClientRect().left + UNDO_GAP)}px`
+  const a = area.getBoundingClientRect()
+  // 書く欄（.edit-sheet.open）を開いている間に出す知らせ（表の行・列を消せないわけ）は、書く欄の上に出す（キーボードに隠れないように）
+  const below = [...document.querySelectorAll<HTMLElement>(`.pager, .unzoom, .sel-bar > *, .edit-sheet.open${side ? '' : ', .page-band'}`)]
+    .map((e) => e.getBoundingClientRect())
+    .filter((r) => r.height > 0 && r.left < a.right && r.right > a.left)
+  if (!below.length) return
+  // CSS で決めた位置（下のタブのすぐ上）から、いちばん上の道具・帯の上まで上げる
+  const lift = a.bottom - (Math.min(...below.map((r) => r.top)) - UNDO_GAP)
+  if (lift > 0) area.style.bottom = `${parseFloat(getComputedStyle(area).bottom) + lift}px`
 }
 
 interface Props {
@@ -287,12 +312,12 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
       )}
 
       {showSelection && (
-        // 知らせが出ている間は、知らせに重ならないよう、少し上に出す（作品写真を外したあとの並べ方）
-        <div className={`sel-bar${undo.notice ? ' above-undo' : ''}`}>
+        <div className="sel-bar">
           <SelectionTools editor={editor} snap={snap} phone />
         </div>
       )}
-      <UndoBar editor={editor} notice={undo.notice} onClose={undo.close} />
+      {/* 知らせは、ページ送り・選んでいる物の道具・紙面の下の帯の上に出す（どれにも重ねない） */}
+      <UndoBar editor={editor} notice={undo.notice} onClose={undo.close} place={placeUndo} />
 
       <nav className="p-nav">
         <button onClick={() => setSheet('pages')}>

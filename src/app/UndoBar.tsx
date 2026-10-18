@@ -1,23 +1,43 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReportEditor } from '../editor/reportEditor'
-import { noticeText, type UndoNotice } from '../editor/undoNotice'
+import { noticeText, undoable, type UndoNotice } from '../editor/undoNotice'
 import { Icon } from './icons'
 
-/** 削除の知らせを出しておく時間（15秒か、次の操作をするまで） */
+/** 削除の知らせを出しておく時間（15秒か、次の操作をするまで）。「抄録を書き始めました［戻す］」も同じ */
 const REMOVED_MS = 15000
 /** 「〜を戻しました」を出しておく時間 */
 const RESTORED_MS = 3000
+/** 戻すもののない短い知らせ（表の行・列を消せないわけなど）を出しておく時間（読み終えられるように、少し長め） */
+const INFO_MS = 8000
 
 /**
  * 削除したあと、画面の下に「段落を削除しました［戻す］」を出す（mockups/v32 ② 案A。スマホは前から mockups/v23 ⑦ 案A で出していたもの）。
- * PC は紙面の台の下の真ん中、スマホは下のタブの上（ページ送りに重ねる）に出す。
+ * PC は紙面の台の下の真ん中、スマホは下のタブの上（ページ送り・選んでいる物の道具・紙面の下の帯に重ねず、その上）に出す。
  * - 15秒か、次の操作（書く・足す・ほかを削除するなど）をするまで出し、下の細い線で残りの時間を示す
  * - マウスを重ねている間・キーボードで知らせの中に移っている間は、時間を止める
  * - 「戻す」で元に戻すと「✓ 段落を戻しました」を少しの間出す（戻した所へ移って光らせるのは、編集の中核）
+ * - 抄録を書き始めたとき（「抄録を書き始めました［戻す］」）と、表の行・列を消せないとき（わけだけ。8秒）も、ここに出す
  * 読み上げにも伝わるよう、いつも置いておく枠（role="status"）の中に、知らせを出し入れする。
- * onClose：出しておく時間が過ぎた（useUndoNotice の close）
+ * onClose：出しておく時間が過ぎた（useUndoNotice の close）。
+ * place：知らせを出すたびに（画面が描き直されるたびに）、知らせの枠の位置を決める（スマホ：ページ送りや帯に重ねない。Phone.tsx）
  */
-export function UndoBar({ editor, notice, onClose, className }: { editor: ReportEditor; notice: UndoNotice | null; onClose: (id: number) => void; className?: string }) {
+export function UndoBar({
+  editor,
+  notice,
+  onClose,
+  className,
+  place,
+}: {
+  editor: ReportEditor
+  notice: UndoNotice | null
+  onClose: (id: number) => void
+  className?: string
+  place?: (area: HTMLElement) => void
+}) {
+  const areaRef = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    if (areaRef.current && notice) place?.(areaRef.current)
+  })
   // 時間を止めている知らせ（マウスを重ねている・中に移っている。知らせが替わったら、止めるのもやめる）
   const [holding, setHolding] = useState<number | null>(null)
   const held = !!notice && holding === notice.id
@@ -25,7 +45,7 @@ export function UndoBar({ editor, notice, onClose, className }: { editor: Report
   const left = useRef<{ id: number; ms: number }>({ id: 0, ms: 0 })
   useEffect(() => {
     if (!notice) return
-    if (left.current.id !== notice.id) left.current = { id: notice.id, ms: notice.kind === 'removed' ? REMOVED_MS : RESTORED_MS }
+    if (left.current.id !== notice.id) left.current = { id: notice.id, ms: undoable(notice) ? REMOVED_MS : notice.kind === 'info' ? INFO_MS : RESTORED_MS }
     if (held) return
     const state = left.current
     const since = Date.now()
@@ -35,10 +55,10 @@ export function UndoBar({ editor, notice, onClose, className }: { editor: Report
       state.ms = Math.max(0, state.ms - (Date.now() - since))
     }
   }, [notice, held, onClose])
-  // 止めるのは「戻す」のある知らせだけ（「戻しました」は、押す物がないので、マウスが乗っていても少しの間で消す）
-  const hold = (on: boolean) => notice?.kind === 'removed' && setHolding(on ? notice.id : null)
+  // 止めるのは「戻す」のある知らせと、わけを伝える知らせだけ（「戻しました」は、押す物がないので、マウスが乗っていても少しの間で消す）
+  const hold = (on: boolean) => !!notice && (undoable(notice) || notice.kind === 'info') && setHolding(on ? notice.id : null)
   return (
-    <div className={`undo-area${className ? ` ${className}` : ''}`} role="status">
+    <div className={`undo-area${className ? ` ${className}` : ''}`} role="status" ref={areaRef}>
       {notice && (
         <div
           key={notice.id}
@@ -48,7 +68,7 @@ export function UndoBar({ editor, notice, onClose, className }: { editor: Report
           onPointerEnter={(e) => e.pointerType === 'mouse' && hold(true)}
           onPointerLeave={(e) => e.pointerType === 'mouse' && hold(false)}
         >
-          {notice.kind === 'removed' ? (
+          {undoable(notice) ? (
             <>
               <span>{noticeText(notice)}</span>
               <button onClick={() => editor.undo()}>
@@ -59,6 +79,9 @@ export function UndoBar({ editor, notice, onClose, className }: { editor: Report
                 <span style={{ animationDuration: `${REMOVED_MS}ms` }} />
               </span>
             </>
+          ) : notice.kind === 'info' ? (
+            // 戻すもののない知らせ（表の行・列を消せないわけなど）：言葉だけ
+            <span className="undo-info">{noticeText(notice)}</span>
           ) : (
             <span className="undo-done">
               {Icon.check}

@@ -9,9 +9,9 @@
 /** A4 の大きさ（CSS の px） */
 export const PAGE_W = 793.7
 export const PAGE_H = 1122.52
-/** 本文の版面（左の余白 35mm・右の余白 25mm の内側） */
-const TEXT_LEFT = 132.3
-const TEXT_W = 566.9
+/** 本文の版面（左の余白 35mm・右の余白 25mm の内側。足したばかりの欄を、紙面に出る前に仮に置くときにも使う：reportEditor.ts） */
+export const TEXT_LEFT = 132.3
+export const TEXT_W = 566.9
 const MAX_ZOOM = 1.4
 
 export class PageStage {

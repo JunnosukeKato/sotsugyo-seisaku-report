@@ -8,21 +8,40 @@ import type { BodyBlock, Report } from '../model/types'
  * ここは原稿のデータだけを見る（紙面の要素は reportEditor.ts が探す）
  */
 
-/** 削除したもの（知らせの言葉に使う） */
-export type RemovedWhat = '段落' | '小見出し' | '大見出し（章）' | '図' | '表' | '改ページ' | '作品写真'
+/** 削除したもの（知らせの言葉に使う）。下書き：コースを変えて、本文の下書きをそのコースのひな形に入れ替えた */
+export type RemovedWhat = '段落' | '小見出し' | '大見出し（章）' | '図' | '表' | '改ページ' | '作品写真' | '下書き'
 
-/** 画面の下に出す知らせ。removed：削除した（［戻す］を出す）／restored：戻した */
-export interface UndoNotice {
-  kind: 'removed' | 'restored'
-  what: RemovedWhat
-  /** 知らせごとに変わる番号（出しておく時間を、知らせごとに数え直すため） */
-  id: number
+/**
+ * 画面の下に出す知らせの中身。
+ * - removed：削除した（［戻す］を出す）／restored：戻した
+ * - started：抄録を書き始めた（「先生の許可が出た」を押した。［戻す］を出す）／unstarted：戻して、書き始める前に戻った
+ * - info：戻すもののない、短い知らせ（表の行・列を消せないわけなど。text）
+ */
+export type NoticeBody = { kind: 'removed' | 'restored'; what: RemovedWhat } | { kind: 'started' | 'unstarted' } | { kind: 'info'; text: string }
+
+/** 画面の下に出す知らせ。id：知らせごとに変わる番号（出しておく時間を、知らせごとに数え直すため） */
+export type UndoNotice = NoticeBody & { id: number }
+
+/** ［戻す］を出す知らせか（削除した・抄録を書き始めた） */
+export function undoable(notice: NoticeBody): boolean {
+  return notice.kind === 'removed' || notice.kind === 'started'
 }
 
-/** 知らせの言葉。作品写真は「外す」なので「外しました」 */
-export function noticeText(notice: Pick<UndoNotice, 'kind' | 'what'>): string {
-  if (notice.kind === 'restored') return `${notice.what}を戻しました`
-  return notice.what === '作品写真' ? '作品写真を外しました' : `${notice.what}を削除しました`
+/** 知らせの言葉。作品写真は「外す」なので「外しました」、下書きは「入れ替えました」 */
+export function noticeText(notice: NoticeBody): string {
+  switch (notice.kind) {
+    case 'restored':
+      return `${notice.what}を戻しました`
+    case 'removed':
+      if (notice.what === '下書き') return '下書きを入れ替えました'
+      return notice.what === '作品写真' ? '作品写真を外しました' : `${notice.what}を削除しました`
+    case 'started':
+      return '抄録を書き始めました'
+    case 'unstarted':
+      return '抄録を書き始める前に戻しました'
+    case 'info':
+      return notice.text
+  }
 }
 
 /** 元に戻して変わった所（紙面で光らせるもの） */

@@ -7,7 +7,8 @@ import { BAND_SIDE_QUERY, paragraphHint, photoBand, todoBand, type BandTodo } fr
 /**
  * スマホ：紙面の中の小さな案内とボタンを、紙面の下の帯に、ふつうの文字の大きさで出す（mockups/v32 ④ 案A）。
  * 紙面は画面の幅に合わせて縮めているので、紙面の中の案内（「（クリックして写真を選ぶ）」・抄録の「先生の許可が出た」など）は
- * 6px ほどになり、指で広げることもできなかった。紙面には小さな印（↓・＋）だけを残す（印の見た目は index.css の「v32 ④」）。
+ * 6px ほどになり、指で広げることもできなかった。紙面には小さな印（↓・＋）だけを残す（印の見た目は index.css の「v32 ④」。
+ * 抄録の ↓ は、帯が紙面の右に出る横向きでは → にする）。
  * - 抄録を書き始める前：抄録の説明と「先生の許可が出た（抄録を書き始める）」
  * - 作品写真のページに空いている枠：「下の枠に、まだ写真がありません」と「写真を選ぶ」
  * - まだ書いていない欄（ひな形の段落・見出し・表紙の項目など）・写真を入れていない図の枠：いちばん上の所の言葉と「書く」「写真を選ぶ」
@@ -48,6 +49,8 @@ function bandOf(editor: ReportEditor, snap: EditorSnapshot): Band | null {
   const kinds = new Map(editables(snap.report).map((e) => [e.id, e.kind]))
   const todos = [...page.querySelectorAll<HTMLElement>('figure[data-empty-figure], [data-block-id][data-placeholder]:empty')].flatMap((el): BandTodo[] => {
     if (el.tagName === 'FIGURE') return el.dataset.figureId ? [{ kind: 'figure', id: el.dataset.figureId }] : []
+    // 画像（生地見本など）を入れた表のセルは、文字がなくても空いている所にしない（紙面にも仮の文字を出さない。index.css）
+    if (el.closest('[data-cell-id]')?.querySelector('img')) return []
     const id = el.dataset.blockId!
     if (id === FIELD_IDS.course) return [{ kind: 'course', id }]
     const editable = kinds.get(id)
@@ -124,7 +127,8 @@ function BandView({ editor, band }: { editor: ReportEditor; band: Band }) {
     return (
       <section className="page-band" aria-label="このページの案内" ref={ref}>
         <div className="t">
-          <span className="mk">{Mark.down}</span>
+          {/* 紙面の印と同じ向きの矢印（縦向きは ↓、帯が紙面の右に出る横向きは →。向きは index.css） */}
+          <span className="mk mk-dir">{Mark.down}</span>
           <span>{ABSTRACT_LOCK_TEXT.title}</span>
         </div>
         <p>{ABSTRACT_LOCK_TEXT.note}</p>

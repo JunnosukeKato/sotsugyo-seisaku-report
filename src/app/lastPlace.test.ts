@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { loadPlace, pageToOpen, placeOf, savePlace } from './lastPlace'
+import { loadPlace, loadZoom, pageToOpen, placeOf, savePlace, saveZoom } from './lastPlace'
 
 // 画面のない環境なので、ブラウザの保存場所（localStorage）は簡単な偽物を置く
 const memory = new Map<string, string>()
@@ -30,6 +30,21 @@ describe('最後に見ていたページを覚える', () => {
     expect(loadPlace()).toBeNull()
     memory.set('sotsugyo-seisaku-report-place', '壊れた')
     expect(loadPlace()).toBeNull()
+  })
+})
+
+describe('PC の表示の大きさ（全体・拡大）を覚える', () => {
+  beforeEach(() => memory.clear())
+
+  it('覚えるのは「全体」か「拡大」かだけ。覚えていなければ・読めなければ「全体」', () => {
+    expect(loadZoom()).toBe(false)
+    saveZoom(true)
+    expect([...memory.values()]).toEqual(['zoom'])
+    expect(loadZoom()).toBe(true)
+    saveZoom(false)
+    expect(loadZoom()).toBe(false)
+    memory.set('sotsugyo-seisaku-report-zoom', '壊れた')
+    expect(loadZoom()).toBe(false)
   })
 })
 

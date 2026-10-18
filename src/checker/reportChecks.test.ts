@@ -276,3 +276,55 @@ describe('図表の番号の二重（ツールで書いているときだけの�
     expect(ruleIds).not.toContain('subtitle-fixed-text')
   })
 })
+
+describe('見出しに手で書いた番号（自動で付く「ⅰ．」と二重になる。ツールで書いているときだけの指摘）', () => {
+  const finding = (r: Report, id: string) => checkReportDetailed(r, currentConfig, layout()).findings.find((x) => x.ruleId === 'heading-number' && x.blockId === id)
+
+  it('小見出し・大見出しの初めの「（1）」「1.」「①」「ⅰ．」「Ⅰ．」「第1章」などを警告し、「直す」で取る（後ろの空白も）', () => {
+    for (const [title, rest] of [
+      ['（1）担当衣装のキャラクター', '担当衣装のキャラクター'],
+      ['(2) デザイン説明', 'デザイン説明'],
+      ['1. 使用素材', '使用素材'],
+      ['１．使用素材', '使用素材'],
+      ['1.2 使用素材', '使用素材'],
+      ['①使用素材', '使用素材'],
+      ['ⅰ．使用素材', '使用素材'],
+      ['ii) 使用素材', '使用素材'],
+      ['一、使用素材', '使用素材'],
+    ]) {
+      const r = ops.setText(cleanReport(), 's1', title)
+      const f = finding(r, 's1')
+      expect(f, title).toMatchObject({ severity: 'warning', source: 'supplementary', area: 'body', start: 0, replacement: '', title: '小見出しに番号を手で書いている' })
+      expect(applyFix(title, { ...f!, start: f!.start!, end: f!.end! })).toBe(rest)
+    }
+    const chapter = finding(ops.setText(cleanReport(), 'c1', '第1章　企画・立案'), 'c1')
+    expect(chapter).toMatchObject({ title: '大見出しに番号を手で書いている', end: 4 })
+    expect(chapter?.detail).toContain('「直す」で「第1章」を取ります')
+    expect(finding(ops.setText(cleanReport(), 'c1', 'Ⅰ．企画・立案'), 'c1')?.detail).toContain('（Ⅰ．）は自動で付く')
+  })
+
+  it('番号ではない数・語の初めは指摘しない（「3.5mm」「100円」「2026年」「CAD」など）', () => {
+    for (const title of ['3.5mm のパイピング', '100円ショップの素材', '2026年の公演', '（CAD）で型紙を作る', '1日目の工程', 'Vivid な配色', '使用素材（1）']) {
+      expect(finding(ops.setText(cleanReport(), 's1', title), 's1'), title).toBeUndefined()
+    }
+  })
+
+  it('確認済みにできる。提出前チェック（checkReport を直接使う）には出さない', () => {
+    const r = ops.setText(cleanReport(), 's1', '（1）担当衣装のキャラクター')
+    const f = finding(r, 's1')!
+    expect(finding({ ...r, acknowledged: [f.key!] }, 's1')).toBeUndefined()
+    expect(checkReport(r, currentConfig, layout()).some((x) => x.ruleId === 'heading-number')).toBe(false)
+  })
+})
+
+describe('空の段落（Enter を押して何も書かなかったときなどに残るもの）', () => {
+  it('ひな形の説明のない空の段落は「直す」（replacement）が付き、説明のある段落には付かない', () => {
+    let r = ops.insertAfter(cleanReport(), 'p4', { type: 'paragraph', id: 'pe', content: [{ type: 'text', text: '' }] })
+    r = ops.insertAfter(r, 'pe', { type: 'paragraph', id: 'ph', content: [{ type: 'text', text: '' }], hint: '工夫した点を書く' })
+    const found = checkReport(r, currentConfig, layout()).filter((f) => f.ruleId === 'paragraph-empty')
+    expect(found.find((f) => f.blockId === 'pe')).toMatchObject({ title: '空の段落がある', replacement: '', detail: '「直す」で、この空の段落を消します' })
+    const hinted = found.find((f) => f.blockId === 'ph')
+    expect(hinted).toMatchObject({ title: 'まだ書いていない段落がある', detail: '工夫した点を書く' })
+    expect(hinted?.replacement).toBeUndefined()
+  })
+})

@@ -69,21 +69,25 @@ export function CourseMenu({ config, rect, current, onSelect, onClose }: { confi
 }
 
 // ---- 本文を書き始めてからコースを変えるとき ----
+// 書いた本文が消える「下書きを入れ替える」は目立たせず、本文を残す「コース名だけ変える」を濃いボタンにして、開いたときもそこに移す
+// （Enter でうっかり入れ替えないように）。入れ替えたあとは、画面の下に「下書きを入れ替えました［戻す］」が出る
 
 export function CourseChangeDialog({ courseName, onReplace, onNameOnly, onClose }: { courseName: string; onReplace: () => void; onNameOnly: () => void; onClose: () => void }) {
   return (
     <Modal title="コースを変えますか？" onClose={onClose}>
       <p className="lead">
-        「{courseName}」コースに変えると、本文の下書きを、そのコースのひな形（章立てと、書くことの説明）に入れ替えます。
-        いま書いている本文は「自動の控え」に残すので、あとで「バックアップ」から戻せます。
+        「{courseName}」コースに変えます。「コース名だけ変える」なら、いま書いている本文はそのまま残ります。
+        「下書きを入れ替える」は、本文を、そのコースのひな形（章立てと、書くことの説明）に入れ替えます（いまの本文は「自動の控え」に残すので、あとで「バックアップ」から戻せます）。
       </p>
-      <p className="muted">表紙の学籍番号・氏名・サブタイトル、抄録、引用・参考文献、作品写真はそのまま残ります。</p>
+      <p className="muted">表紙の学籍番号・氏名・サブタイトル、抄録、引用・参考文献、作品写真は、どちらでもそのまま残ります。</p>
       <div className="row-buttons">
         <button onClick={onClose}>やめる</button>
         <span className="spacer" />
-        <button onClick={onNameOnly}>コース名だけ変える</button>
-        <button className="primary" onClick={onReplace}>
+        <button className="course-replace" onClick={onReplace}>
           下書きを入れ替える
+        </button>
+        <button className="primary course-keep" data-autofocus onClick={onNameOnly}>
+          コース名だけ変える
         </button>
       </div>
     </Modal>

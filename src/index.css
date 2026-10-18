@@ -393,15 +393,15 @@ body.resizing .page-viewport { pointer-events: none; }
 .sel-bar .layouts { display: flex; padding: 0; }
 .sel-bar .lay { padding: 6px 10px; border-color: var(--line); }
 .sel-bar .lay.on { border-color: var(--accent); }
-/* 削除したあとの「戻す」の知らせ（ページ送りと同じ高さに重ねて出す。mockups/v23 ⑦ 案A）。
-   枠（role="status"）はいつも置いておき、中の知らせだけを出し入れする。知らせが出ている間、選んでいる物の道具は、その上に出す */
+/* 削除したあとの「戻す」の知らせ（mockups/v23 ⑦ 案A）。
+   枠（role="status"）はいつも置いておき、中の知らせだけを出し入れする。ここでは下のタブのすぐ上に置き、知らせを出すたびに、
+   ページ送り・選んでいる物の道具・紙面の下の帯の上まで上げる（重ねない。app/Phone.tsx の placeUndo） */
 .undo-area { position: fixed; z-index: 35; left: 12px; right: 12px; bottom: calc(62px + 12px); pointer-events: none; }
 .undo-toast { display: flex; align-items: center; gap: 10px; padding: 10px 10px 10px 16px; border-radius: 12px; background: #2b2e36; color: #fff; font-size: 13.5px; box-shadow: 0 10px 28px rgba(20, 20, 30, 0.3); pointer-events: auto; animation: sheet-up 0.2s ease; }
 .undo-toast button { position: relative; flex: none; margin-left: auto; display: flex; align-items: center; gap: 5px; border: 0; border-radius: 8px; padding: 8px 14px; background: #fff; color: var(--accent); font-size: 13.5px; font-weight: 700; }
 .undo-toast button svg { width: 17px; height: 17px; }
 /* 押せる範囲は、高さ 44px ほどまで広げる（知らせの上下の余白の中） */
 .undo-toast button::after { content: ''; position: absolute; inset: -6px -6px; }
-.sel-bar.above-undo { bottom: calc(62px + 12px + 53px + 9px); }
 @media (prefers-reduced-motion: reduce) { .undo-toast { animation: none; } }
 @media print { .undo-area { display: none !important; } }
 
@@ -928,8 +928,8 @@ body.resizing .page-viewport { pointer-events: none; }
 .app.phone .es-head .done { min-height: 44px; padding: 0 20px; }
 .app.phone .add-refs, .app.phone .g-later { display: inline-flex; align-items: center; min-height: 44px; }
 .app.phone .unzoom { min-height: 44px; }
-/* ページ送りが高くなった分（高さ 52px）、選んでいる物の道具を少し上に（重ならないように。知らせが出ている間の位置は、そのまま） */
-.app.phone .sel-bar:not(.above-undo) { bottom: calc(62px + 12px + 52px + 8px); }
+/* ページ送りが高くなった分（高さ 52px）、選んでいる物の道具を少し上に（重ならないように。削除の知らせは、さらにその上に出す） */
+.app.phone .sel-bar { bottom: calc(62px + 12px + 52px + 8px); }
 
 /* 紙面の下の帯（app/PageBand.tsx）：紙面の中の小さな案内とボタンを、ふつうの文字の大きさで出す。PDF・印刷には出さない */
 /* 幅の広い縦向きの画面（タブレット）では、帯を広げすぎない（真ん中に置く） */
@@ -983,8 +983,8 @@ body.resizing .page-viewport { pointer-events: none; }
 .continue-row svg { width: 15px; height: 15px; flex: none; }
 .continue-row:hover { border-color: var(--accent); background: var(--accent-soft); }
 .continue-row:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-/* スマホ：押せる範囲は、高さ 44px ほどまで広げる（見た目の高さはそのまま） */
-.app.phone .continue-row::after { content: ''; position: absolute; inset: -7px 0; }
+/* スマホ：見た目の高さも 44px にする（下が空いているかは、この高さで測る。editor/continueRow.ts） */
+.app.phone .continue-row { height: 44px; font-size: 13.5px; }
 @media print { .continue-row { display: none !important; } }
 
 /* ---- v32 ② 削除の「戻す」の知らせを PC にも出し、15秒か次の操作まで出す（mockups/v32 ② 案A。部品は app/UndoBar.tsx） ---- */
@@ -1010,3 +1010,37 @@ body.resizing .page-viewport { pointer-events: none; }
   .page-viewport .undo-flash { animation: none; }
 }
 @media print { .page-viewport .undo-flash { background: none !important; box-shadow: none !important; } }
+
+/* ---- v32 の直し（はじめての学生の試し・画面）。ほとんどはスマホの並べ方（.app.phone）だけ（最後の2つ：画像を入れた表のセル・表紙の題目は PC にも） ---- */
+/* 小さいボタン（残り）も、見た目の高さを 44px 以上に（「v32 ④」と同じ）：書く欄の道具（図を入れる・表を入れる・削除・戻すなど）・
+   案内の「本文へ進む」「閉じる」・指差し確認の「とばす」「次へ」・窓の中のボタン（PDF の「直しに戻る」・引用・参考文献の「削除」「反映する」など）・
+   窓の下の文字のリンク（「PDF を開く」・「うまくいかないとき：印刷の画面から保存」）・削除の知らせの［戻す］ */
+.app.phone .es-tools button { height: 44px; }
+.app.phone .g-actions button { min-height: 44px; }
+.app.phone .tour-acts .skip { min-height: 44px; padding: 0 10px; }
+.app.phone .tour-acts .next { min-height: 44px; }
+.app.phone .modal button:not(.link):not(.pdf-fallback), .app.phone .modal .ref-head select { min-height: 44px; }
+.app.phone .modal .row-buttons :is(button.link, button.pdf-fallback) { display: inline-flex; align-items: center; min-height: 44px; }
+.app.phone .modal .draft-box button.pdf-fallback { display: flex; align-items: center; min-height: 44px; margin-top: 4px; }
+.app.phone .undo-toast { box-sizing: border-box; min-height: 56px; padding-top: 6px; padding-bottom: 6px; }
+.app.phone .undo-toast button { min-height: 44px; }
+/* 横向きのスマホ：帯は紙面の右なので、抄録の印（紙面の中）と帯の印を「→」にする（縦向きは「↓」のまま。app/bandText.ts の BAND_SIDE_QUERY と同じ形の画面） */
+@media screen and (min-aspect-ratio: 4/3) {
+  .app.phone .stage[data-band='abstract'] .page-viewport .abstract-lock::after { transform: translate(-50%, -50%) rotate(-90deg); }
+  .app.phone .page-band .mk-dir svg { transform: rotate(-90deg); }
+}
+/* スマホ（指で押す）：紙面の仮の文字の「クリック」を「タップ」に（紙面の組み方は PC と同じなので、文字の入れ替えだけ。PDF・印刷には出ない） */
+@media screen {
+  .app.phone .page-viewport [data-placeholder='（クリックして入力）']:empty::before { content: '（タップして入力）'; }
+  .app.phone .page-viewport [data-placeholder='（クリックして文章を入力）']:empty::before { content: '（タップして文章を入力）'; }
+  .app.phone .page-viewport [data-placeholder='（クリックして抄録を入力）']:empty::before { content: '（タップして抄録を入力）'; }
+  .app.phone .page-viewport [data-photo-slot]:empty::before, .app.phone .page-viewport .figure-slot::before { content: '（タップして写真を選ぶ）'; }
+}
+/* 画像（生地見本など）を入れた表のセルには、文字が空でも仮の文字（「（クリックして入力）」）と「＋」の印を出さない（PC・スマホとも。画面だけ） */
+.page-viewport [data-cell-id]:has(img) [data-block-id]:empty::before, .page-viewport [data-cell-id]:has(img) [data-block-id]:empty::after { content: none !important; }
+/* 表紙の題目（研究題目。学科で決まっていて、押しても書けない）：マウスを重ねると理由の小さな説明が出て、押すと画面の下に知らせる（editor/paperFocus.ts・reportEditor.ts） */
+.page-viewport section.cover .el.title { cursor: help; }
+
+/* ---- はじめて使う学生の試し（v32 のあと）の直し：戻すもののない短い知らせ（表の行・列を消せないわけなど。app/UndoBar.tsx の .undo-info） ---- */
+/* 2〜3行になることがあるので、行の間を少し空けて読みやすくする */
+.undo-toast .undo-info { line-height: 1.55; padding: 2px 6px 2px 0; }

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { paragraphHint, photoBand, photoSlotName, todoBand } from './bandText'
+import { forTouch, paragraphHint, photoBand, photoSlotName, todoBand } from './bandText'
+import { PAGE_CONTEXT } from './uiShared'
 
 describe('スマホの紙面の下の帯の言葉（mockups/v32 ④ 案A）', () => {
   it('作品写真の空いている枠：2枚の並べ方は「下の枠」「右の枠」、ほかは「3枚目の枠」と呼ぶ', () => {
@@ -22,6 +23,19 @@ describe('スマホの紙面の下の帯の言葉（mockups/v32 ④ 案A）', ()
     expect(todoBand({ kind: 'field', id: 'f1', editable: 'figureCaption' }, 0).text).toBe('図のタイトルが、まだ空いています')
     expect(todoBand({ kind: 'figure', id: 'f1' }, 1)).toEqual({ text: '図の枠に、まだ写真がありません', sub: 'このページで、ほかに1か所（＋の印）', button: '写真を選ぶ' })
     expect(todoBand({ kind: 'course', id: 'basic:course' }, 0).button).toBe('選ぶ')
+  })
+})
+
+describe('スマホの言葉：「クリック」ではなく「タップ」', () => {
+  it('「クリック」を「タップ」にし、ほかの言葉はそのまま', () => {
+    expect(forTouch('枠をクリックして選ぶ')).toBe('枠をタップして選ぶ')
+    expect(forTouch('（クリックして入力）・クリック')).toBe('（タップして入力）・タップ')
+    expect(forTouch('Enter で段落を分ける')).toBe('Enter で段落を分ける')
+  })
+
+  it('ページの種類ごとのひとこと（スマホの「追加」の欄にも出す）は、スマホでは「クリック」が残らない', () => {
+    for (const { hint } of Object.values(PAGE_CONTEXT)) expect(forTouch(hint)).not.toContain('クリック')
+    expect(forTouch(PAGE_CONTEXT.photos.hint.replace('\n', ''))).toBe('枠をタップして選ぶ')
   })
 })
 

@@ -354,3 +354,105 @@ describe('図表の番号を手で書いていたとき（二重にしない）'
     expect(refs(fixed, 'pa')).toEqual([{ type: 'ref', targetId: 't1', withParens: false }])
   })
 })
+
+describe('ひな形の説明（hint）と、抄録を書き始めたか（started）を保つ', () => {
+  const withHint = (): Report => ({
+    ...demoReport(),
+    abstract: { ...demoReport().abstract, started: true },
+    body: [{ id: 'c1', title: '企画', blocks: [{ type: 'paragraph', id: 'ph', content: [{ type: 'text', text: '' }], hint: '制作の目的を書く' }] }],
+  })
+  const hintOf = (r: Report, id: string) => r.body.flatMap((c) => c.blocks).find((b) => b.id === id && b.type === 'paragraph')
+  const hint = (r: Report, id: string) => {
+    const b = hintOf(r, id)
+    return b?.type === 'paragraph' ? b.hint : undefined
+  }
+
+  it('空の段落を開いて、何も書かずに閉じても（空のまま確定しても）、説明は消えない。書いて消したときも戻る', () => {
+    expect(hint(ops.setText(withHint(), 'ph', ''), 'ph')).toBe('制作の目的を書く')
+    const written = ops.setText(withHint(), 'ph', '目的を書いた。')
+    expect(hint(ops.setText(written, 'ph', ''), 'ph')).toBe('制作の目的を書く')
+  })
+
+  it('Enter で分けたときは、前の段落に説明を残す（新しい段落には付けない）', () => {
+    const { report: r, newId } = ops.split(withHint(), 'ph', '', '')
+    expect(hint(r, 'ph')).toBe('制作の目的を書く')
+    expect(hint(r, newId)).toBeUndefined()
+  })
+
+  it('抄録の段落を書き換えても・分けても・つなげても、書き始めたこと（started）は消えない', () => {
+    const r = withHint()
+    expect(ops.setText(r, 'a3', '学んだ。').abstract.started).toBe(true)
+    const splitted = ops.split(r, 'a3', '学んだ。', '次。')
+    expect(splitted.report.abstract.started).toBe(true)
+    expect(ops.mergeBackward(splitted.report, splitted.newId, '次。')?.report.abstract.started).toBe(true)
+    expect(ops.replaceWithParagraphs(r, 'a3', ['一。', '二。']).report.abstract.started).toBe(true)
+  })
+})
+
+describe('図・表の参照は、カーソルのある文の終わりに入れる', () => {
+  const base = (text: string): Report => ({
+    ...demoReport(),
+    body: [{ id: 'c1', title: '企画', blocks: [{ type: 'paragraph', id: 'pa', content: [{ type: 'text', text }] }] }],
+  })
+  const ref = (text: string, offset: number) => {
+    let r = ops.insertRef(base(text), 'pa', offset, 'f1')
+    r = ops.addFigureBelow(r, 'pa', { id: 'f1', imageId: 'i', caption: '' })
+    return ops.findEditable(r, 'pa')?.text
+  }
+
+  it('文の途中で入れると、その文の「。」の前に入る（「確かめ（図1）、汚れや…」にしない）', () => {
+    expect(ref('生地の色を確かめ、汚れや傷がないかを見た。次に裁断した。', 8)).toBe('生地の色を確かめ、汚れや傷がないかを見た（図1）。次に裁断した。')
+    expect(ref('生地の色を確かめ、汚れや傷がないかを見た。次に裁断した。', 24)).toBe('生地の色を確かめ、汚れや傷がないかを見た。次に裁断した（図1）。')
+  })
+
+  it('文末の「。」の直後なら、その文に。後ろに「。」がなければ段落の終わりに入れ、「。」を付ける', () => {
+    expect(ref('袖を大きくした。帯を巻いた。', 8)).toBe('袖を大きくした（図1）。帯を巻いた。')
+    expect(ref('袖を大きくした。帯を巻いた', 10)).toBe('袖を大きくした。帯を巻いた（図1）。')
+  })
+
+  it('段落に手で書いた「図1」があれば、自動の（図1）は足さずにつなげる（前と同じ）', () => {
+    let r = ops.insertRef(base('デザイン画を図1に示す。生地も選んだ。'), 'pa', 3, 'f1')
+    r = ops.addFigureBelow(r, 'pa', { id: 'f1', imageId: 'i', caption: '' })
+    r = ops.linkWrittenRef(r, 'pa', 'f1') ?? r
+    expect(ops.findEditable(r, 'pa')?.text).toBe('デザイン画を図1に示す。生地も選んだ。')
+  })
+})
+
+describe('空の段落と置き換える（小見出し・図・表を、何も書いていない段落で入れたとき）', () => {
+  const base = (): Report => ({
+    ...demoReport(),
+    body: [
+      {
+        id: 'c1',
+        title: '企画',
+        blocks: [
+          { type: 'paragraph', id: 'pa', content: [{ type: 'text', text: '袖を大きくした。' }] },
+          { type: 'paragraph', id: 'pe', content: [{ type: 'text', text: '' }] },
+          { type: 'paragraph', id: 'ph', content: [{ type: 'text', text: '' }], hint: '工夫した点を書く' },
+        ],
+      },
+    ],
+  })
+
+  it('何も書いていない・説明もない段落だけが置き換えの対象（説明のある段落・書いてある段落は対象にしない）', () => {
+    expect(ops.isBlankParagraph(base(), 'pe')).toBe(true)
+    expect(ops.isBlankParagraph(base(), 'ph')).toBe(false)
+    expect(ops.paragraphEmpty(base(), 'ph')).toBe(true)
+    expect(ops.isBlankParagraph(base(), 'pa')).toBe(false)
+  })
+
+  it('置き換えると同じ位置に入り、空の段落は残らない', () => {
+    const r = ops.replaceBlock(base(), 'pe', { type: 'subheading', id: 's9', title: '' })
+    expect(r.body[0].blocks.map((b) => b.id)).toEqual(['pa', 's9', 'ph'])
+  })
+
+  it('本文の章・ブロック・図・表のセルは、足す位置の目印になる（抄録・表紙はならない）', () => {
+    const r = demoReport()
+    expect(ops.inBody(r, 'c1')).toBe(true)
+    expect(ops.inBody(r, 'p1')).toBe(true)
+    expect(ops.inBody(r, 'f1')).toBe(true)
+    expect(ops.inBody(r, 'm2:usage')).toBe(true)
+    expect(ops.inBody(r, 'a1')).toBe(false)
+    expect(ops.inBody(r, 'basic:name')).toBe(false)
+  })
+})
