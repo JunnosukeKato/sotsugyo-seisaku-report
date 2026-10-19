@@ -3,6 +3,7 @@ import { loadConfig, loadYearConfig } from '../config/remote'
 import { ReportRenderer, type ImageSources } from '../editor/reportRenderer'
 import { fitFigureSize } from '../model/images'
 import { allImages, loadReport, type StoredImage } from '../model/storage'
+import { submissionTitle } from '../model/fileName'
 import type { Report } from '../model/types'
 import { pagesToPdf, type CapturedPage, type PagesToPdfOptions, type PagesToPdfResult } from './pagesToPdf'
 import { demoSample, longSample } from './samples'
@@ -51,10 +52,9 @@ export async function loadManuscript(kind: SourceKind): Promise<Manuscript> {
 }
 
 /** PDF のファイル名のもと（学生用ツールの「PDFを書き出す」と同じ形） */
-export function pdfTitle({ report, config }: Manuscript, draft: boolean): string {
+export function pdfTitle({ report, config }: Manuscript): string {
   const { studentId, name } = report.basicInfo
-  const base = [String(config.fiscalYear), config.reportName, studentId.trim(), name.replace(/[\s　]/g, '')].filter(Boolean).join('_')
-  return draft ? `${base}_下書き` : base
+  return submissionTitle(studentId, name, config.reportName)
 }
 
 export interface MakePdfResult extends PagesToPdfResult {
@@ -100,7 +100,7 @@ export async function makePdf(
     const skip = report.abstract.started === false
     pages.forEach((page, i) => page.classList.toggle('print-skip', skip && layout.kinds[i] === 'abstract'))
     const composeMs = performance.now() - composeStarted
-    const title = pdfTitle(manuscript, !!pdfOptions.draft)
+    const title = pdfTitle(manuscript)
     onProgress?.({ step: 'capture', done: 0, total: pages.filter((p) => !p.classList.contains('print-skip')).length })
     const result = await pagesToPdf(pages, {
       ...pdfOptions,

@@ -18,6 +18,13 @@ describe('削除の知らせの言葉（mockups/v32 ② 案A）', () => {
     expect(noticeText({ kind: 'removed', what: '下書き' })).toBe('下書きを入れ替えました')
     expect(noticeText({ kind: 'restored', what: '下書き' })).toBe('下書きを戻しました')
   })
+
+  it('紙面で選んだ範囲を消した・切り取ったとき（大見出しを残したときは、そう添える）', () => {
+    expect(noticeText({ kind: 'removed', what: '選んだ文' })).toBe('選んだ文を削除しました')
+    expect(noticeText({ kind: 'removed', what: '切り取り', note: '（大見出しは残しました）' })).toBe('切り取りました（大見出しは残しました）')
+    expect(noticeText({ kind: 'restored', what: '選んだ文' })).toBe('選んだ文を戻しました')
+    expect(noticeText({ kind: 'restored', what: '切り取り' })).toBe('切り取る前に戻しました')
+  })
 })
 
 describe('元に戻して変わった所（そこへ移って光らせる）', () => {

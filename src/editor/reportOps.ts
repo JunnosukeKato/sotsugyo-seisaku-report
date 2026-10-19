@@ -78,23 +78,51 @@ export function contentToText(content: InlineNode[], num: Numbering): string {
     .join('')
 }
 
-/** 文字列中の「（図1）」「図1」などを、存在する図表へのリンクに戻す。存在しない番号は文字のまま残す */
-export function textToContent(text: string, num: Numbering): InlineNode[] {
-  const nodes: InlineNode[] = []
-  let last = 0
+/** 文字列中の、存在する図表の番号（「（図1）」「図1」など）。位置と、つながる図表 */
+function refMatches(text: string, num: Numbering): { start: number; end: number; targetId: string; withParens: boolean }[] {
+  const found: { start: number; end: number; targetId: string; withParens: boolean }[] = []
   // 括弧なしの「図1」は、「設計図1枚」のような語の一部を拾わないよう、直前が漢字でないときだけ
   const re = /[（(]([図表])\s*(\d+)[）)]|(?<![㐀-鿿々])([図表])(\d+)/g
   for (const m of text.matchAll(re)) {
     const kind = m[1] ?? m[3]
     const n = Number(m[2] ?? m[4])
     const targetId = (kind === '表' ? num.tableByNumber : num.figureByNumber).get(n)
-    if (!targetId) continue
-    if (m.index > last) nodes.push({ type: 'text', text: text.slice(last, m.index) })
-    nodes.push({ type: 'ref', targetId, withParens: m[1] !== undefined })
-    last = m.index + m[0].length
+    if (targetId) found.push({ start: m.index, end: m.index + m[0].length, targetId, withParens: m[1] !== undefined })
+  }
+  return found
+}
+
+/** 文字列中の「（図1）」「図1」などを、存在する図表へのリンクに戻す。存在しない番号は文字のまま残す */
+export function textToContent(text: string, num: Numbering): InlineNode[] {
+  const nodes: InlineNode[] = []
+  let last = 0
+  for (const m of refMatches(text, num)) {
+    if (m.start > last) nodes.push({ type: 'text', text: text.slice(last, m.start) })
+    nodes.push({ type: 'ref', targetId: m.targetId, withParens: m.withParens })
+    last = m.end
   }
   if (last < text.length) nodes.push({ type: 'text', text: text.slice(last) })
   return nodes.length ? nodes : [{ type: 'text', text: '' }]
+}
+
+/**
+ * 段落の文字列の中で、確定すると図表へのリンクになる所（紙面で「（図1）」を折り返さないまとまりにする所）の位置 [始め, 終わり]。
+ * 書く欄を紙面と同じ組み方で書くときに使う（overlayEditor.ts）
+ */
+export function refRanges(text: string, num: Numbering): [number, number][] {
+  return refMatches(text, num).map((m) => [m.start, m.end])
+}
+
+/** 段落の中身（contentToText にした文字列）の中で、図表へのリンクの位置 [始め, 終わり]（いま紙面で「（図1）」を折り返さない所） */
+export function contentRefRanges(content: InlineNode[], num: Numbering): [number, number][] {
+  const ranges: [number, number][] = []
+  let at = 0
+  for (const node of content) {
+    const length = contentToText([node], num).length
+    if (node.type === 'ref') ranges.push([at, at + length])
+    at += length
+  }
+  return ranges
 }
 
 /** 段落の書き出しの1字下げは自動で付くため、入力された先頭の空白と改行は取り除く */
@@ -575,7 +603,7 @@ export function removeTable(report: Report, tableId: string): Report {
 }
 
 /** 並んだ文字の部分を1つにまとめる（参照を抜いたあとなど）。空になったら空の文字を1つ置く */
-function mergeTexts(content: InlineNode[]): InlineNode[] {
+export function mergeTexts(content: InlineNode[]): InlineNode[] {
   const merged: InlineNode[] = []
   for (const n of content) {
     const last = merged[merged.length - 1]
@@ -600,7 +628,7 @@ export function parenthetical(content: InlineNode[], index: number): boolean {
  * 本文から、消した図・表への参照を除く。添えてあるだけの「（図n）」は括弧ごと消し、
  * 文の中で使っている参照は「図?」（「（図?）」）の文字にして残す（kind：図か表か。消したあとは番号から分からないため）
  */
-function withoutRefsTo(report: Report, targetId: string, kind: '図' | '表'): Report {
+export function withoutRefsTo(report: Report, targetId: string, kind: '図' | '表'): Report {
   return mapBody(report, (b) => {
     if (b.type !== 'paragraph' || !b.content.some((n) => n.type === 'ref' && n.targetId === targetId)) return b
     const content = b.content.flatMap((n, i): InlineNode[] => {

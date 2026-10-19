@@ -1,25 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
+import type { YearConfig } from '../config'
+import { exportNote, type ProgressRow } from '../checker/progress'
 import type { ReportFinding } from '../checker/reportChecks'
 import { deviceName } from '../drive/device'
-import type { ReportEditor } from '../editor/reportEditor'
+import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { buildPdf, downloadPdf, saveMode, sharePdf, sizeText, thumbnail, type BuiltPdf } from '../pdf/exportPdf'
+import { skippedPages } from '../pdf/exportPages'
+import { checkSummary, goToTarget } from './checkSummary'
 import { Modal } from './dialogs'
 import { Icon } from './icons'
 import { AREA_LABELS } from './labels'
 
 /**
  * 「PDFを書き出す」の窓（mockups/v28 案C「窓の中で、できたページを見せる」）。
- * 3つを確かめる → PDF をツールの中で作る（進み具合と、できたページの小さな絵が1枚ずつ並ぶ）→ できた。
+ * PDF をツールの中で作る（進み具合と、できたページの小さな絵が1枚ずつ並ぶ）→ できた。
  * パソコン・Android は、できたらそのまま「ダウンロード」に保存する。iPhone・iPad は「保存する」を押して、共有の画面から保存する。
- * 「下書き」の透かし入りの PDF も同じ流れで作る（ファイル名に _下書き）。エラーが残っているときの窓と、エラーが0件の窓（mockups/v35 ⑤ 案A）の両方から出せる。
- * 作れなかったとき・うまくいかないときのために、今までの印刷の画面から保存する道も残す（窓の左下と、下書きの欄の小さなリンク）
+ * PDF は1つだけ（依頼者の判断 2026-10-19）：前の「下書きの PDF」（透かし入り）と、提出用の PDF の前の3つの確かめ（チェック欄）はなくした。
+ * 直すところ・まだのところが残っているときは、右の欄と同じ言葉で一覧にし（押すと、その場所へ）、提出の前に直すよう伝える。そのまま書き出すこともできる。
+ * 作れなかったとき・うまくいかないときのために、今までの印刷の画面から保存する道も残す（窓の左下）
  */
-
-const SELF_CHECKS = [
-  'タイトル（サブタイトルを含む）は、以前提出した申告書と同じにした',
-  '作品写真は、自分で撮影した写真だけを使った',
-  '指導教員に内容を見てもらい、了承を得た',
-]
 
 /** 印刷の画面での PDF の保存のしかた（端末とブラウザによって、印刷の画面が違う） */
 function PrintSteps() {
@@ -86,9 +85,9 @@ function PrintGuide({ fileName }: { fileName: string }) {
 }
 
 /** 保存するファイルの名前と、保存する場所（または、ページの数と大きさ） */
-function FileBox({ fileName, note, draft }: { fileName: string; note: string; draft?: boolean }) {
+function FileBox({ fileName, note }: { fileName: string; note: string }) {
   return (
-    <div className={`pdf-file${draft ? ' draft' : ''}`}>
+    <div className="pdf-file">
       {Icon.pdf}
       <div>
         <b className="fn">{fileName}</b>
@@ -99,9 +98,9 @@ function FileBox({ fileName, note, draft }: { fileName: string; note: string; dr
 }
 
 /** できたページの小さな絵（できていないページは空の枠、いま作っているページは枠を光らせる） */
-function Thumbs({ urls, total, draft }: { urls: string[]; total: number; draft: boolean }) {
+function Thumbs({ urls, total }: { urls: string[]; total: number }) {
   return (
-    <div className={`pdf-thumbs${draft ? ' draft' : ''}`} aria-hidden="true">
+    <div className="pdf-thumbs" aria-hidden="true">
       {Array.from({ length: total }, (_, i) => (
         <figure key={i}>
           {urls[i] ? <img src={urls[i]} alt="" /> : <span className={`tile${i === urls.length ? ' now' : ''}`} />}
@@ -114,48 +113,56 @@ function Thumbs({ urls, total, draft }: { urls: string[]; total: number; draft: 
 
 type Phase =
   | { kind: 'start' }
-  | { kind: 'build'; draft: boolean; total: number }
+  | { kind: 'build'; total: number }
   | { kind: 'done'; pdf: BuiltPdf; saved: '' | 'shared' | 'fallback' }
-  | { kind: 'error'; draft: boolean; message: string }
+  | { kind: 'error'; message: string }
 
 interface Props {
   editor: ReportEditor
-  findings: ReportFinding[]
+  snap: EditorSnapshot
+  config: YearConfig
   onClose: () => void
-  /** PDF ができたとき（あとで先生のドライブに送るときに、作り直さずに使うための入り口） */
+  /** 「PDF を保存する（作る）」を押したとき（押した処理の中で呼ぶ。ドライブの許可が切れそうなら延ばしておく。app/usePdfCopy.ts） */
+  onStart?: () => void
+  /** PDF ができたとき（作り直さずに、同じ PDF の控えを先生のドライブのフォルダに送る。app/usePdfCopy.ts） */
   onBuilt?: (pdf: BuiltPdf) => void
 }
 
-/** 要確認の一覧で、はじめに見せる数（多いときは「ほか◯件」で開く） */
-const WARNINGS_SHOWN = 5
+/** 直すところの一覧で、はじめに見せる数（多いときは「ほか◯件」で開く） */
+const FIXES_SHOWN = 5
 
 /**
- * 提出前の確かめで出す要確認の一覧（エラーの一覧と同じ形。押すと、その場所へ移る）。
- * 前は「警告が10件あります」とだけ出て、何の指摘かが分からなかった（「警告」は 2026-10-19 に「要確認」に言い換えた）
+ * 残っている直すところの一覧（右の欄の「直すところ」と同じ指摘。エラーを先に、要確認はその後に「（要確認）」を付けて）。
+ * 押すと、その場所へ移る。前は、要確認が「警告が10件あります」とだけ出て、何の指摘かが分からなかった（多いときは5件と「ほか◯件」）
  */
-function WarningList({ warnings, editor, onClose }: { warnings: ReportFinding[]; editor: ReportEditor; onClose: () => void }) {
+function FixList({ fixes, editor, onClose }: { fixes: ReportFinding[]; editor: ReportEditor; onClose: () => void }) {
   const [all, setAll] = useState(false)
-  const shown = all ? warnings : warnings.slice(0, WARNINGS_SHOWN)
+  const sorted = [...fixes.filter((f) => f.severity === 'error'), ...fixes.filter((f) => f.severity !== 'error')]
+  const shown = all ? sorted : sorted.slice(0, FIXES_SHOWN)
   return (
-    <ul className="error-list warning-list">
-      {shown.map((f, i) => (
-        <li key={i}>
-          <button
-            className="link"
-            onClick={() => {
-              onClose()
-              editor.goToFinding(f)
-            }}
-          >
-            {AREA_LABELS[f.area]}：{f.title}
-          </button>
-          {f.detail && <span className="detail">（{f.detail}）</span>}
-        </li>
-      ))}
-      {!all && warnings.length > WARNINGS_SHOWN && (
+    <ul className="error-list fix-list">
+      {shown.map((f, i) => {
+        const warning = f.severity !== 'error'
+        const detail = warning ? (f.detail ? `要確認。${f.detail}` : '要確認') : f.detail
+        return (
+          <li key={i} className={warning ? 'warning' : undefined}>
+            <button
+              className="link"
+              onClick={() => {
+                onClose()
+                void editor.goToFinding(f)
+              }}
+            >
+              {AREA_LABELS[f.area]}：{f.title}
+            </button>
+            {detail && <span className="detail">（{detail}）</span>}
+          </li>
+        )
+      })}
+      {!all && sorted.length > FIXES_SHOWN && (
         <li className="more">
           <button className="link" onClick={() => setAll(true)}>
-            ほか{warnings.length - WARNINGS_SHOWN}件
+            ほか{sorted.length - FIXES_SHOWN}件
           </button>
         </li>
       )}
@@ -163,24 +170,41 @@ function WarningList({ warnings, editor, onClose }: { warnings: ReportFinding[];
   )
 }
 
-/**
- * 下書きの PDF に入れるページ。作品写真をまだ1枚も入れていなければ、空の作品写真のページは入れない
- * （提出用の PDF は、作品写真がないとエラーで書き出せないので、いつも写真が入っている）
- */
-function draftPages(editor: ReportEditor): HTMLElement[] {
-  const pages = editor.pageElements()
-  const { report, layout } = editor.getSnapshot()
-  const photos = report.workPhotos.imageIds.slice(0, report.workPhotos.layout).filter(Boolean)
-  if (photos.length > 0 || !layout) return pages
-  return pages.filter((_, i) => layout.kinds[i] !== 'photos')
+/** まだのところの一覧（右の欄の「まだのところ」の、まだの行。例：「本文のページ：3 / 4ページ あと1」）。押すと、その場所へ移る */
+function NotYetList({ rows, editor, onClose }: { rows: ProgressRow[]; editor: ReportEditor; onClose: () => void }) {
+  return (
+    <ul className="error-list notyet-list">
+      {rows.map((row) => {
+        const text = `${row.label}：${row.value}${row.strong ?? ''}`
+        const target = row.target
+        return (
+          <li key={row.id}>
+            {target ? (
+              <button
+                className="link"
+                onClick={() => {
+                  onClose()
+                  goToTarget(editor, target)
+                }}
+              >
+                {text}
+              </button>
+            ) : (
+              text
+            )}
+          </li>
+        )
+      })}
+    </ul>
+  )
 }
 
-export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
-  const errors = findings.filter((f) => f.severity === 'error')
-  const warningList = findings.filter((f) => f.severity !== 'error')
-  const warnings = warningList.length
-  const [checked, setChecked] = useState<boolean[]>(SELF_CHECKS.map(() => false))
-  const allChecked = checked.every(Boolean)
+export function ExportDialog({ editor, snap, config, onClose, onStart, onBuilt }: Props) {
+  // 残っている直すところ（書いた文の間違い。要確認も含む）と、まだのところ（まだの行。抄録の「先生の許可のあと」は数えない）。右の欄と同じ分け方
+  const { rows, fixes } = checkSummary(snap, config)
+  const notYet = rows.filter((r) => r.state === 'todo')
+  const left = fixes.length > 0 || notYet.length > 0
+  const abstractWaiting = snap.report.abstract.started === false
   const [phase, setPhase] = useState<Phase>({ kind: 'start' })
   /** できたページの小さな絵（URL） */
   const [thumbs, setThumbs] = useState<string[]>([])
@@ -191,7 +215,15 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
   /** 使い終えたら解放する URL（小さな絵・PDF） */
   const urls = useRef<string[]>([])
   const pdfUrls = useRef<string[]>([])
-  const fileName = (draft: boolean) => `${editor.pdfTitle}${draft ? '_下書き' : ''}.pdf`
+  const fileName = `${editor.pdfTitle}.pdf`
+
+  /** PDF に入れるページ（作品写真がまだなければ、空の作品写真のページを入れない。pdf/exportPages.ts） */
+  const pagesToExport = () => {
+    const pages = editor.pageElements()
+    const { report, layout } = editor.getSnapshot()
+    const skipped = new Set(skippedPages(pages, report, layout))
+    return pages.filter((p) => !skipped.has(p))
+  }
 
   const releaseUrls = () => {
     for (const url of urls.current) URL.revokeObjectURL(url)
@@ -210,20 +242,18 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
     [],
   )
 
-  /** draft：下書き（どのページにも「下書き」の透かしを入れる。エラーが残っていても出せる。提出には使えない） */
-  const print = (draft = false) => {
+  /** 印刷の画面から保存する（作れなかったとき・うまくいかないとき） */
+  const print = () => {
     const title = document.title
-    document.title = draft ? `${editor.pdfTitle}_下書き` : editor.pdfTitle
-    document.documentElement.classList.toggle('print-draft', draft)
-    // 下書き：作品写真がまだなければ、空の作品写真のページは印刷しない（印刷が終わったら戻す）
-    const kept = draft ? new Set(draftPages(editor)) : null
-    const skipped = kept ? editor.pageElements().filter((p) => !kept.has(p) && !p.classList.contains('print-skip')) : []
+    document.title = editor.pdfTitle
+    // 作品写真がまだなければ、空の作品写真のページは印刷しない（印刷が終わったら戻す）
+    const kept = new Set(pagesToExport())
+    const skipped = editor.pageElements().filter((p) => !kept.has(p) && !p.classList.contains('print-skip'))
     for (const p of skipped) p.classList.add('print-skip')
     window.addEventListener(
       'afterprint',
       () => {
         document.title = title
-        document.documentElement.classList.remove('print-draft')
         for (const p of skipped) p.classList.remove('print-skip')
       },
       { once: true },
@@ -234,19 +264,17 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
   }
 
   /** PDF を作る。できたら、パソコン・Android はそのまま保存する */
-  const build = async (draft: boolean) => {
+  const build = async () => {
     abort.current?.abort()
     const controller = new AbortController()
     abort.current = controller
     releaseUrls()
     setThumbs([])
-    // 下書きは、作品写真がまだなければ、空の作品写真のページを入れない
-    const pages = draft ? draftPages(editor) : editor.pageElements()
-    setPhase({ kind: 'build', draft, total: pages.filter((p) => !p.classList.contains('print-skip')).length })
+    const pages = pagesToExport()
+    setPhase({ kind: 'build', total: pages.filter((p) => !p.classList.contains('print-skip')).length })
     try {
       const pdf = await buildPdf(pages, {
-        title: draft ? `${editor.pdfTitle}_下書き` : editor.pdfTitle,
-        draft,
+        title: editor.pdfTitle,
         signal: controller.signal,
         onPage: async ({ canvas }) => {
           const url = await thumbnail(canvas)
@@ -262,13 +290,20 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
       pdfUrls.current.push(pdf.url)
       if (controller.signal.aborted) return
       setPhase({ kind: 'done', pdf, saved: '' })
-      onBuilt?.(pdf)
       if (mode === 'download') downloadPdf(pdf)
+      // 保存を始めてから、先生のフォルダへの控えを送る（送るのは後ろで。保存・共有を待たせない）
+      onBuilt?.(pdf)
     } catch (e) {
       // 「やめる」で止めたときは、最初の画面に戻っている
       if (controller.signal.aborted) return
-      setPhase({ kind: 'error', draft, message: e instanceof Error ? e.message : String(e) })
+      setPhase({ kind: 'error', message: e instanceof Error ? e.message : String(e) })
     }
+  }
+
+  /** 「PDF を保存する（作る）」・「もう一度作る」を押したとき */
+  const start = () => {
+    onStart?.()
+    void build()
   }
 
   /** 「やめる」：ページとページの間で止めて、最初の画面に戻る */
@@ -288,9 +323,8 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
   // 段階（作っている・できた・作れなかった）ごとに窓を作り直す（key）：開いた窓の最初のボタンに移り、Tab で外に出ないように
   // ---- 作っている ----
   if (phase.kind === 'build') {
-    const title = phase.draft ? '下書きの PDF を作っています' : 'PDF を作っています'
     return (
-      <Modal key="build" title={title} onClose={onClose} className="pdf-modal">
+      <Modal key="build" title="PDF を作っています" onClose={onClose} className="pdf-modal">
         <p className="lead">この画面のまま、お待ちください。</p>
         <div className="pdf-progress" role="progressbar" aria-valuemin={0} aria-valuemax={phase.total} aria-valuenow={thumbs.length} aria-label="できたページの数">
           <div className="bar">
@@ -300,7 +334,7 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
             <b>{thumbs.length}</b> / {phase.total}ページ
           </span>
         </div>
-        <Thumbs urls={thumbs} total={phase.total} draft={phase.draft} />
+        <Thumbs urls={thumbs} total={phase.total} />
         <p className="pdf-small">写真が多いと、少し時間がかかります（20ページで10秒ほど。スマホはもう少し）。</p>
         <div className="row-buttons">
           <span className="spacer" />
@@ -316,9 +350,9 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
     const size = `${pdf.pageCount}ページ・${sizeText(pdf.blob.size)}`
     if (mode === 'share') {
       return (
-        <Modal key="done" title={pdf.draft ? '下書きの PDF ができました' : 'PDF ができました'} onClose={onClose} className="pdf-modal">
-          <FileBox fileName={pdf.fileName} note={size} draft={pdf.draft} />
-          <Thumbs urls={thumbs} total={pdf.pageCount} draft={pdf.draft} />
+        <Modal key="done" title="PDF ができました" onClose={onClose} className="pdf-modal">
+          <FileBox fileName={pdf.fileName} note={size} />
+          <Thumbs urls={thumbs} total={pdf.pageCount} />
           <p className="lead">
             {saved === 'shared'
               ? '保存しました。ほかの場所にも保存するときは、もう一度「保存する」を押します。'
@@ -341,10 +375,10 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
       )
     }
     return (
-      <Modal key="done" title={pdf.draft ? '下書きの PDF を保存しました' : '保存しました'} heading={<><span className="pdf-ok">{Icon.check}</span>{pdf.draft ? '下書きの PDF を保存しました' : '保存しました'}</>} onClose={onClose} className="pdf-modal">
-        <FileBox fileName={pdf.fileName} note={`${size}　「ダウンロード」のフォルダ`} draft={pdf.draft} />
-        <Thumbs urls={thumbs} total={pdf.pageCount} draft={pdf.draft} />
-        <p className="lead">{pdf.draft ? 'どのページにも「下書き」の透かしが入っています（提出には使えません）。' : '開いて、ページの数と写真を確かめてください。'}</p>
+      <Modal key="done" title="保存しました" heading={<><span className="pdf-ok">{Icon.check}</span>保存しました</>} onClose={onClose} className="pdf-modal">
+        <FileBox fileName={pdf.fileName} note={`${size}　「ダウンロード」のフォルダ`} />
+        <Thumbs urls={thumbs} total={pdf.pageCount} />
+        <p className="lead">開いて、ページの数と写真を確かめてください。</p>
         <div className="row-buttons">
           <button className="link pdf-fallback" onClick={() => downloadPdf(pdf)}>
             保存されていないときは、もう一度保存
@@ -364,12 +398,12 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
     return (
       <Modal key="error" title="PDF を作れませんでした" heading={<><span className="pdf-ng">{Icon.warn}</span>PDF を作れませんでした</>} onClose={onClose} className="pdf-modal">
         <p className="lead">この端末では、ツールの中で PDF を作れませんでした（メモリが足りないなど）。印刷の画面から保存してください。</p>
-        <PrintGuide fileName={fileName(phase.draft)} />
+        <PrintGuide fileName={fileName} />
         <p className="pdf-small">くわしいこと：{phase.message}</p>
         <div className="row-buttons">
           <span className="spacer" />
-          <button onClick={() => void build(phase.draft)}>もう一度作る</button>
-          <button className="primary pdf-print" onClick={() => print(phase.draft)}>
+          <button onClick={start}>もう一度作る</button>
+          <button className="primary pdf-print" onClick={print}>
             印刷の画面を開く
           </button>
         </div>
@@ -377,91 +411,39 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
     )
   }
 
-  // ---- エラーが残っている：下書きの PDF ----
-  if (errors.length > 0) {
-    return (
-      <Modal key="start" title="PDFを書き出す前に" onClose={onClose}>
-        <p className="lead">
-          直してから出す箇所（エラー）が <b className="ng">{errors.length}件</b> あります。エラーを0件にすると、提出用のPDFを書き出せます。
-        </p>
-        <ul className="error-list">
-          {errors.slice(0, 8).map((f, i) => (
-            <li key={i}>
-              <button
-                className="link"
-                onClick={() => {
-                  onClose()
-                  editor.goToFinding(f)
-                }}
-              >
-                {AREA_LABELS[f.area]}：{f.title}
-              </button>
-              {f.detail && <span className="detail">（{f.detail}）</span>}
-            </li>
-          ))}
-          {errors.length > 8 && <li>ほか {errors.length - 8}件（セルフチェックを見てください）</li>}
-        </ul>
-        <div className="draft-box">
-          <b>先生に途中経過を見せるとき</b>
-          エラーが残っていても、どのページにも「下書き」の透かしが入った PDF を保存できます（提出には使えません）。
-          <button className="primary pdf-draft" onClick={() => void build(true)}>
-            {mode === 'share' ? '下書きの PDF を作る' : '下書きの PDF を保存する'}
-          </button>
-          <button className="pdf-fallback" aria-expanded={printOpen} onClick={() => setPrintOpen(!printOpen)}>
-            うまくいかないとき：印刷の画面から保存
-          </button>
-          {printOpen && (
-            <div className="pdf-print-box">
-              <PrintSteps />
-              <button className="pdf-print" onClick={() => print(true)}>
-                印刷の画面を開く
-              </button>
-            </div>
-          )}
-        </div>
-        <div className="row-buttons">
-          <span className="spacer" />
-          <button className="primary" onClick={onClose}>
-            直しに戻る
-          </button>
-        </div>
-      </Modal>
-    )
-  }
-
-  // ---- 3つを確かめる ----
+  // ---- 書き出す前（直すところ・まだのところが残っていれば、その一覧も） ----
   return (
-    <Modal key="start" title="提出用のPDFを書き出す" onClose={onClose}>
-      <p className="lead">
-        エラーはありません{warnings > 0 ? `（要確認が${warnings}件あります。内容を確かめてください）` : ''}。最後に、次のことを確認してください。
-      </p>
-      {warnings > 0 && <WarningList warnings={warningList} editor={editor} onClose={onClose} />}
-      {editor.getSnapshot().report.abstract.started === false && (
+    <Modal key="start" title="PDFを書き出す" onClose={onClose}>
+      {left ? (
+        <>
+          <p className="lead">{exportNote({ fix: fixes.length, notYet: notYet.length, pending: false, abstractWaiting: false })}。</p>
+          <div className="pdf-left">
+            {fixes.length > 0 && (
+              <>
+                <b className="pdf-left-h">直すところ</b>
+                <FixList fixes={fixes} editor={editor} onClose={onClose} />
+              </>
+            )}
+            {notYet.length > 0 && (
+              <>
+                <b className="pdf-left-h">まだのところ</b>
+                <NotYetList rows={notYet} editor={editor} onClose={onClose} />
+              </>
+            )}
+          </div>
+          <p className="lead pdf-anyway">提出の前に直しましょう。このまま書き出すこともできます（途中で先生に見せるときなど）。</p>
+        </>
+      ) : (
+        <p className="lead">直すところ・まだのところはありません。</p>
+      )}
+      {abstractWaiting && (
         <p className="note">抄録はまだ書いていないため、このPDFには抄録のページは入りません（先生の許可が出たら、抄録のページの「先生の許可が出た」を押して書き始めます）。</p>
       )}
-      <div className="checklist">
-        {SELF_CHECKS.map((text, i) => (
-          <label key={i}>
-            <input type="checkbox" checked={checked[i]} onChange={(e) => setChecked(checked.map((c, j) => (j === i ? e.target.checked : c)))} />
-            {text}
-          </label>
-        ))}
-      </div>
-      <FileBox fileName={fileName(false)} note={mode === 'share' ? 'できたら「保存する」を押し、「"ファイル"に保存」を選びます' : '「ダウンロード」のフォルダに保存します'} />
-      {/* エラーが0件でも、先生に途中経過を見せる下書きの PDF を出せる（エラーがあるときと同じ欄。mockups/v35 ⑤ 案A）。
-          前は、エラーが0件になると下書きを選べず、先生に見てもらう前に「了承を得た」にチェックを入れることになっていた。
-          下の「PDF を保存する」と並ぶので、ボタンは目立たない形（primary にしない） */}
-      <div className="draft-box draft-zero">
-        <b>先生に途中経過を見せるとき</b>
-        どのページにも「下書き」の透かしが入った PDF を保存できます（提出には使えません。上の3つのチェックは要りません）。
-        <button className="pdf-draft" onClick={() => void build(true)}>
-          {mode === 'share' ? '下書きの PDF を作る' : '下書きの PDF を保存する'}
-        </button>
-      </div>
+      <FileBox fileName={fileName} note={mode === 'share' ? 'できたら「保存する」を押し、「"ファイル"に保存」を選びます' : '「ダウンロード」のフォルダに保存します'} />
       {printOpen && (
         <div className="pdf-print-box">
-          <PrintGuide fileName={fileName(false)} />
-          <button className="pdf-print" disabled={!allChecked} onClick={() => print()}>
+          <PrintGuide fileName={fileName} />
+          <button className="pdf-print" onClick={print}>
             印刷の画面を開く
           </button>
         </div>
@@ -471,8 +453,8 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
           うまくいかないとき：印刷の画面から保存
         </button>
         <span className="spacer" />
-        <button onClick={onClose}>やめる</button>
-        <button className="primary pdf-start" disabled={!allChecked} onClick={() => void build(false)}>
+        <button onClick={onClose}>{left ? '直しに戻る' : 'やめる'}</button>
+        <button className="primary pdf-start" onClick={start}>
           {mode === 'share' ? 'PDF を作る' : 'PDF を保存する'}
         </button>
       </div>

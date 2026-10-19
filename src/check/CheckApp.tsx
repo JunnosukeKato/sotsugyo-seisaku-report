@@ -655,7 +655,7 @@ export function CheckApp() {
       }
       const { bytes, pageCount } = await mergeParts(items, fileName.replace(/\.pdf$/, ''))
       const blob = new Blob([bytes.slice()], { type: 'application/pdf' })
-      const pdf: BuiltPdf = { blob, fileName, pageCount, draft: false, url: URL.createObjectURL(blob) }
+      const pdf: BuiltPdf = { blob, fileName, pageCount, url: URL.createObjectURL(blob) }
       mergedUrl.current = pdf.url
       const mode = save.saveMode()
       setPhase({ kind: 'done', pdf, mode, size: `${pageCount}ページ・${save.sizeText(blob.size)}`, saved: '' })

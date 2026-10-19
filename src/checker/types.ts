@@ -1,6 +1,6 @@
 /**
  * セルフチェックの型。
- * - error: 手順書のルール違反。0件にしないと提出用PDFを書き出せない
+ * - error: 手順書のルール違反。提出の前に0件にする（PDF は書き出せる。「PDFを書き出す」の窓で一覧にする）
  * - warning / hint: 手順書にない補助的な注意。提出は妨げない
  */
 export type Severity = 'error' | 'warning' | 'hint'

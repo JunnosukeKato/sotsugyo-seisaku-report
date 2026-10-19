@@ -6,8 +6,8 @@ export function fakeDrive(email = '00zz901@bunka-wu.ac.jp') {
   const files = new Map()
   let seq = 0
   let clock = Date.now()
-  // 学生のアカウント（@ より前は学籍番号の小文字）
-  const drive = { files, email, failNext: null, logins: 0 }
+  // 学生のアカウント（@ より前は学籍番号の小文字）。pdfCopies：学科の Apps Script（配信の窓口）に届いた PDF の控え（PDF の中身は先頭と大きさだけ）
+  const drive = { files, email, failNext: null, logins: 0, pdfCopies: [] }
   const now = () => new Date((clock += 1000)).toISOString()
   const meta = (f) => ({ id: f.id, name: f.name, size: String(f.content?.length ?? 0), modifiedTime: f.modifiedTime, appProperties: f.appProperties })
   const unquote = (s) => s.replace(/\\'/g, "'").replace(/\\\\/g, '\\')
@@ -99,13 +99,33 @@ const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers
 
 /**
  * ページの Google への通信を、偽物に答えさせる。
- * 学科の設定（Apps Script）は config を返す（返すたびに読むので、あとから config を書き換えると次から変わる）
+ * 学科の設定（Apps Script）は config を返す（返すたびに読むので、あとから config を書き換えると次から変わる）。
+ * 同じ窓口への POST（書き出した PDF の控え。app/usePdfCopy.ts）は、中身を drive.pdfCopies に残して { ok: true } を返す
  */
 export async function routeGoogle(page, drive, config) {
   await page.setRequestInterception(true)
   page.on('request', async (request) => {
     const url = request.url()
     if (/script\.google(usercontent)?\.com/.test(url)) {
+      if (request.method() === 'OPTIONS') return request.respond({ status: 204, headers: CORS })
+      if (request.method() === 'POST') {
+        let data = null
+        try {
+          data = JSON.parse((await request.fetchPostData()) ?? '')
+        } catch {
+          // JSON でなければ、data は null のまま残す
+        }
+        const { pdf, ...fields } = data ?? {}
+        drive.pdfCopies.push({
+          url,
+          contentType: request.headers()['content-type'] ?? '',
+          cookie: request.headers().cookie ?? '',
+          data: data && fields,
+          pdfHead: typeof pdf === 'string' ? Buffer.from(pdf.slice(0, 16), 'base64').toString('latin1') : '',
+          pdfBytes: typeof pdf === 'string' ? Buffer.from(pdf, 'base64').length : 0,
+        })
+        return request.respond({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify({ ok: true }) })
+      }
       return request.respond({ status: 200, contentType: 'application/json', headers: CORS, body: JSON.stringify({ ok: true, year: config.fiscalYear, config }) })
     }
     if (url.startsWith('https://accounts.google.com/gsi/client')) return request.respond({ status: 200, contentType: 'text/javascript', body: FAKE_GIS })

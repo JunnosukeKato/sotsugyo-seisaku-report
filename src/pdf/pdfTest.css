@@ -25,8 +25,6 @@ body { margin: 0; background: #f4f3f0; color: var(--ink); font-family: 'BIZ UDPG
 .pt-choice input { margin-top: 6px; }
 .pt-choice small { display: block; color: var(--muted); font-size: 12.5px; }
 .pt-choice.disabled { opacity: 0.55; }
-.pt-check { display: flex; align-items: flex-start; gap: 6px; }
-.pt-check input { margin-top: 6px; }
 button, a.button { font: inherit; font-size: 14px; border: 1px solid var(--line); background: #fff; color: var(--ink); border-radius: 8px; padding: 7px 16px; cursor: pointer; white-space: nowrap; text-decoration: none; display: inline-block; line-height: 1.5; }
 button.primary, a.button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
 button:disabled { opacity: 0.45; cursor: default; }

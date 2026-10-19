@@ -17,7 +17,7 @@ const OUT = 'poc-output/check'
 mkdirSync(OUT, { recursive: true })
 /** まとめた PDF の置き場所（毎回空にする） */
 const DOWNLOADS = `${OUT}/downloads`
-const FILE_NAME = '2026_卒業制作報告書_00ZZ0123_文化花子.pdf'
+const FILE_NAME = '00ZZ0123_文化花子.pdf'
 
 const results = []
 const check = (name, ok, detail = '') => {
@@ -423,7 +423,7 @@ await withEdge(async (browser) => {
     await page.type('.m-ask label:nth-of-type(1) input', '00ZZ0123')
     await page.type('.m-ask label:nth-of-type(2) input', '文化 花子')
     const typed = await page.evaluate(() => document.querySelector('.m-file b')?.textContent)
-    check('学籍番号・氏名を読み取れないときは、入れる欄が出て（字は 16px）、ファイル名に入る', asking.inputs === 2 && asking.name === '2026_卒業制作報告書.pdf' && asking.font >= 16 && typed === FILE_NAME, `${JSON.stringify(asking)} ${typed}`)
+    check('学籍番号・氏名を読み取れないときは、入れる欄が出て（字は 16px）、ファイル名に入る', asking.inputs === 2 && asking.name === '卒業制作報告書.pdf' && asking.font >= 16 && typed === FILE_NAME, `${JSON.stringify(asking)} ${typed}`)
     // まとめる（確かめの窓 → このまままとめる）
     await page.click('.merge .btn.big')
     await page.waitForSelector('.modal.confirm')

@@ -1,4 +1,5 @@
 import type { YearConfig } from '../config'
+import { submissionTitle } from '../model/fileName'
 
 /**
  * 提出前チェック（check.html。mockups/v30 案C2）の決まり：5つのパート、入れたファイルの分け方、ファイル名、確かめの窓。
@@ -113,10 +114,10 @@ export function isStale(word: { lastModified: number } | null | undefined, pdf: 
 
 /**
  * まとめた PDF のファイル名（学生用ツールの「PDFを書き出す」と同じ形。reportEditor.ts の pdfTitle）。
- * 例：2026_卒業制作報告書_00ZZ0123_文化花子.pdf。学籍番号・氏名が分からなければ、その部分は付けない
+ * 提出ガイドの決まり「学籍番号_氏名.pdf」（例：00ZZ0123_文化花子.pdf）。学籍番号・氏名が分からなければ、その部分は付けない
  */
 export function mergedFileName(config: Pick<YearConfig, 'fiscalYear' | 'reportName'>, studentId: string, name: string): string {
-  return `${[String(config.fiscalYear), config.reportName, studentId.trim(), name.replace(/[\s　]/g, '')].filter(Boolean).join('_')}.pdf`
+  return `${submissionTitle(studentId, name, config.reportName)}.pdf`
 }
 
 /**

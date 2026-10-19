@@ -1,5 +1,5 @@
 // はじめて使う先生の試しで見つかったことの直しを確かめる（Edge を自動で操作する。smoke.mjs から呼ぶ）。画面の写真は poc-output/student-fixes/ に置く。
-// - 先生が決めた書き間違えやすい語のうち、エラーの語は「このままにする（確認済み）」にできない（前に確認済みにしていても隠れず、提出用の PDF を止める）。
+// - 先生が決めた書き間違えやすい語のうち、エラーの語は「このままにする（確認済み）」にできない（前に確認済みにしていても隠れず、PDF の窓の「直すところ」に出る）。
 //   注意の語は、今までどおり「このままにする」にできる
 // - はじめての案内の途中（「Word で書き始めていますか？」・学籍番号など）で読み込み直すと、案内の続きが出る（指差し確認ではなく）。
 //   「あとで入力する」で閉じたら、読み込み直しても出ない
@@ -103,14 +103,14 @@ async function wordErrorCheck(browser, check) {
     !after.kiji && after.mikoro?.error && !after.mikoro.keep && snap.errors.includes('word-見頃') && snap.acked.join(',') === 'word-記事' && after.acked.includes('確認済み 1件'),
     JSON.stringify({ after, snap }),
   )
-  // 「PDFを書き出す」：エラーが残っているので、提出用ではなく下書きの PDF だけ。エラーの一覧に「見頃」が出る
+  // 「PDFを書き出す」：エラーの語が残っているので、窓の「直すところ」の一覧に「見頃」が出る（提出の前に直す。そのまま書き出すこともできる）
   await page.click('.side .export')
-  await page.waitForSelector('.modal .draft-box')
-  const dialog = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent ?? '', list: [...document.querySelectorAll('.modal .error-list li')].map((li) => li.textContent) }))
+  await page.waitForSelector('.modal .pdf-left')
+  const dialog = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent ?? '', list: [...document.querySelectorAll('.modal .fix-list li')].map((li) => li.textContent), anyway: document.querySelector('.modal .pdf-anyway')?.textContent ?? '' }))
   await page.screenshot({ path: `${OUT}/word-error-export.png` })
   check(
-    'エラーの語が残っていると、提出用の PDF は書き出せない（「PDFを書き出す前に」の一覧に「見頃」が出る）',
-    dialog.title === 'PDFを書き出す前に' && dialog.list.some((t) => t.includes('「見頃」ではなく「身頃」と書く')),
+    'エラーの語が残っていると、PDF の窓の「直すところ」の一覧に「見頃」が出て、提出の前に直すよう伝える',
+    dialog.title === 'PDFを書き出す' && dialog.list.some((t) => t.includes('「見頃」ではなく「身頃」と書く')) && dialog.anyway.startsWith('提出の前に直しましょう'),
     JSON.stringify(dialog),
   )
   await page.evaluate(() => document.querySelector('.modal .close')?.click())

@@ -95,7 +95,7 @@ describe('まだのところ・直すところに分ける（mockups/v35 ① 案
 })
 
 describe('まだのところの行', () => {
-  it('書き始めたばかり（標準のひな形）：表紙・本文のページ・本文の段落・作品写真がまだ（4つ）。抄録は「先生の許可のあと」、図は目安', () => {
+  it('書き始めたばかり（標準のひな形）：表紙・本文のページ・本文の段落・作品写真がまだ（4つ）。抄録は「先生の許可のあと」。図の枚数の行はない', () => {
     const r = fresh(plainConfig)
     const list = rows(r, layout(), false, plainConfig)
     expect(list.map((x) => [x.id, x.state])).toEqual([
@@ -104,7 +104,6 @@ describe('まだのところの行', () => {
       ['paragraphs', 'todo'],
       ['photos', 'todo'],
       ['abstract', 'wait'],
-      ['figures', 'info'],
     ])
     expect(notYetCount(list)).toBe(4)
     const min = plainConfig.body.minPages
@@ -114,13 +113,14 @@ describe('まだのところの行', () => {
     expect(list[2]).toMatchObject({ value: '書いていない段落 ', strong: String(templateParagraphs(r).length) })
     expect(list[3].value).toBe('まだ')
     expect(list[4]).toMatchObject({ value: '先生の許可のあと', target: { kind: 'area', area: 'abstract' } })
-    expect(list[5].value).toBe(`0枚（目安 ${3 * plainConfig.body.imagesPerPageGuide}枚まで）`)
+    // 図の枚数の行は出さない（依頼者の判断。2026-10-19）
+    expect(list.some((x) => x.label === '図の枚数')).toBe(false)
   })
 
   it('図の枠・表のセルが空いているときだけ「図・表」の行（空いている枠・セルの数。同じセルは1つ）', () => {
     const r = fresh()
     const list = rows(r)
-    expect(list.map((x) => x.id)).toEqual(['cover', 'bodyPages', 'paragraphs', 'figuresTables', 'photos', 'abstract', 'figures'])
+    expect(list.map((x) => x.id)).toEqual(['cover', 'bodyPages', 'paragraphs', 'figuresTables', 'photos', 'abstract'])
     // 図の枠1つと、素材表の1行目（名称・使用箇所・生地見本）の3つのセル
     expect(list[3]).toMatchObject({ state: 'todo', value: '空いている所 ', strong: '4', target: { kind: 'finding', finding: { ruleId: 'figure-image' } } })
     expect(notYetCount(list)).toBe(5)
@@ -175,9 +175,9 @@ describe('「PDFを書き出す」の下のひとこと', () => {
     expect(note(3, 2)).toBe('直すところが3つ、まだのところが2つあります')
     expect(note(1, 0)).toBe('直すところが1つあります')
   })
-  it('どちらも0なら今までの文。抄録（先生の許可のあと）だけが残っているときは、抄録を書いてから', () => {
-    expect(note(0, 0)).toBe('提出用のPDFを書き出せます')
+  it('どちらも0なら「ありません」。抄録（先生の許可のあと）だけが残っているときは、あとは抄録（PDF は1つだけ。いつでも書き出せる）', () => {
+    expect(note(0, 0)).toBe('直すところ・まだのところはありません')
     expect(note(0, 0, true)).toBe('紙面を確かめています…')
-    expect(note(0, 0, false, true)).toBe('抄録を書くと、提出用のPDFを書き出せます')
+    expect(note(0, 0, false, true)).toBe('あとは抄録です（先生の許可のあと）')
   })
 })

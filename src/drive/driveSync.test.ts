@@ -333,6 +333,70 @@ describe('パソコンで、許可が切れる少し前にクリックしたら�
   })
 })
 
+describe('PDF の控えを先生のフォルダに送るときの許可（app/usePdfCopy.ts）', () => {
+  const MIN = 60_000
+  const nav = navigator as { userAgent: string; onLine: boolean }
+  async function writing() {
+    const drive = await loggedIn()
+    await drive.resolve(written('花子'))
+    drive.activate()
+    signIns.length = 0
+    return drive
+  }
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-10-08T10:00:00'))
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+    nav.userAgent = 'test'
+  })
+
+  it('許可が十分あれば、延ばさずにその許可で送る', async () => {
+    const drive = await writing()
+    vi.setSystemTime(Date.now() + 30 * MIN)
+    drive.renewForExport()
+    expect(signIns).toEqual([])
+    expect((await drive.copyToken())?.accessToken).toBe('fake-1')
+  })
+
+  it('パソコン：「PDF を保存する」を押したときに、許可が切れていても（残りが10分を切っていても）延ばし、延ばした許可で送る', async () => {
+    const drive = await writing()
+    vi.setSystemTime(Date.now() + 70 * MIN)
+    expect(drive.tokenValid).toBe(false)
+    drive.renewForExport()
+    expect(signIns).toEqual([{ prompt: '', hint: 'test@bunka-wu.ac.jp' }])
+    expect((await drive.copyToken())?.accessToken).toBe('fake-2')
+    // 同じクリックで、紙面のクリックの延長（renewOnClick）と重ねて窓を開かない
+    drive.renewForExport()
+    expect(signIns).toHaveLength(1)
+  })
+
+  it('スマホでは延ばさない。許可が切れていれば送らずに待ち、PDF の窓を閉じたら「もう一度ログイン」を出す', async () => {
+    const drive = await writing()
+    nav.userAgent = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)'
+    vi.setSystemTime(Date.now() + 70 * MIN)
+    drive.renewForExport()
+    expect(signIns).toEqual([])
+    expect(await drive.copyToken()).toBeNull()
+    const states: string[] = []
+    drive.subscribe(() => states.push(drive.getState().status.kind))
+    drive.noticeExpired()
+    expect(drive.getState().status.kind).toBe('expired')
+    // ログインし直すと、許可が使えるようになったことを知らせる（待っていた控えを送る）
+    await drive.login()
+    expect(drive.tokenValid).toBe(true)
+    expect(states.at(-1)).not.toBe('expired')
+    expect((await drive.copyToken())?.accessToken).toBe('fake-2')
+  })
+
+  it('許可が使えるときは、「もう一度ログイン」を出さない', async () => {
+    const drive = await writing()
+    drive.noticeExpired()
+    expect(drive.getState().status.kind).not.toBe('expired')
+  })
+})
+
 describe('メールアドレスから学籍番号', () => {
   it('@ より前を大文字にする。学籍番号の形でなければ（教職員）null', async () => {
     const { studentIdFromEmail } = await import('../model/account')
@@ -343,6 +407,15 @@ describe('メールアドレスから学籍番号', () => {
     // 管理ページで形式を決めていれば、そちらで見る
     expect(studentIdFromEmail('00zz0123@bunka-wu.ac.jp', '^\\d{2}ZZ\\d{3}$')).toBeNull()
     expect(studentIdFromEmail('00zz012@bunka-wu.ac.jp', '^\\d{2}ZZ\\d{3}$')).toBe('00ZZ012')
+  })
+  it('学生のアドレスは「wu」＋学籍番号（提出ガイド：wu学籍番号@bunka-wu.ac.jp）。先頭の wu は除く', async () => {
+    const { studentIdFromEmail } = await import('../model/account')
+    expect(studentIdFromEmail('wu23aaa999@bunka-wu.ac.jp', null)).toBe('23AAA999')
+    expect(studentIdFromEmail('WU00zz0123@bunka-wu.ac.jp', null)).toBe('00ZZ0123')
+    expect(studentIdFromEmail('wu00zz012@bunka-wu.ac.jp', '^\\d{2}ZZ\\d{3}$')).toBe('00ZZ012')
+    // 教務などの共用アドレス（wu- で始まる）は教職員のまま
+    expect(studentIdFromEmail('wu-kyoumu@bunka-wu.ac.jp', null)).toBeNull()
+    expect(studentIdFromEmail('wu@bunka-wu.ac.jp', null)).toBeNull()
   })
 })
 

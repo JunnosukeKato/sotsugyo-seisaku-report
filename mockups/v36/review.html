@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v36 デザイン案（選んだ文のボタン）</title>
+<!-- 画面の絵は node scripts/mockup-shots-v36.mjs で作る（本物の学生用ツールを開き、紙面を本当にマウスでなぞって選び、案ごとにボタンを書き足して写したもの）。このページの写しは同じスクリプトの review で作る（shots/review-selection.png） -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  section { max-width: 1336px; margin: 0 0 40px; padding: 4px 0 2px; background: #eceae6; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 14px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+  .lead b { color: var(--ink); }
+  img { display: block; width: 100%; }
+  .common { margin: 0 0 16px; padding: 10px 16px; border-radius: 12px; background: #fff; font-size: 13.5px; line-height: 1.8; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+  .common b { font-size: 13px; letter-spacing: 0.06em; color: var(--accent); }
+  .common ul { margin: 2px 0 0; padding-left: 20px; }
+  .rec { display: inline-block; margin-left: 6px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff !important; font-size: 11.5px !important; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .why { display: block; margin: 8px 0 0; padding: 6px 10px; border-radius: 8px; background: #e8ebf5; color: var(--accent); font-size: 13px; line-height: 1.6; }
+  /* 4つを横に並べて比べる（いま・案A・案B・案C） */
+  .cmp { display: grid; grid-template-columns: 84px repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  .cmp > div { background: #fff; }
+  .cmp .h { padding: 10px 12px 8px; font-size: 14.5px; font-weight: 700; line-height: 1.45; }
+  .cmp .h small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 400; color: var(--muted); }
+  .cmp .h.a { background: #e8ebf5; color: var(--accent); }
+  .cmp .h.a small { color: var(--accent); }
+  .cmp .rl { padding: 12px 8px; background: #f4f2ee; font-size: 13px; font-weight: 700; line-height: 1.5; color: var(--muted); }
+  .cmp .rl small { display: block; margin-top: 4px; font-size: 11.5px; font-weight: 400; }
+  .cmp .cell { padding: 8px; background: #faf9f7; }
+  .cmp .cell.a { background: #eef0f7; }
+  .cmp .cell img { border-radius: 8px; border: 1px solid #ddd; }
+  .cmp .d { padding: 10px 12px 12px; font-size: 13px; line-height: 1.7; }
+  .cmp .d.a { background: #f5f6fb; }
+  .cmp .d p { margin: 0 0 6px; }
+  .cmp .d .g { color: var(--ok); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
+  .cmp .d .w { color: #b5443b; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
+  /* いま（ボタンなし）：小さく横に並べる */
+  .now { display: grid; grid-template-columns: 220px 1fr 1fr; gap: 14px; align-items: start; margin: 0 0 16px; padding: 12px 16px; border-radius: 12px; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.05); font-size: 13.5px; line-height: 1.8; color: var(--muted); }
+  .now b { display: block; color: var(--ink); font-size: 14.5px; }
+  .now img { border-radius: 8px; border: 1px solid #ddd; }
+  .now small { display: block; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<section id="selection">
+  <h1>選んだ文の「コピー・切り取り・削除・貼り付け」のボタン</h1>
+  <p class="lead">紙面をマウスでなぞると、段落や図をまたいで選べるようにしました（パソコン）。いまは <b>Ctrl+C（コピー）・Ctrl+X（切り取り）・Delete（削除）</b>、書く欄で <b>Ctrl+V（貼り付け）</b> で使えます。<br>キーを知らない学生のために、ボタンをどこに出すかを1つ選んでください（絵は本物のツールで、選んだ所の色も本物です）。</p>
+  <div class="common"><b>どの案でも同じ</b>
+    <ul>
+      <li>ボタンは、紙面で文を選んだときだけ出ます。「貼り付け」は、このツールで文をコピーしたあと、書く欄を開いたときだけ。</li>
+      <li>大見出し（Ⅰ．Ⅱ．）は、選んでも消しません（章立てが崩れないように）。消したあとは「切り取りました［戻す］」が出ます。</li>
+      <li>スマホは、今回は作りません（指で押すと、今までどおり書く欄が開きます）。</li>
+    </ul>
+  </div>
+
+  <div class="now">
+    <div><b>いま（ボタンなし）</b>キーを知っている学生だけが使えます。</div>
+    <div><a href="shots/sel-now-near.png"><img src="shots/sel-now-near.png" alt=""></a><small>文を選んだとき（選んだ所に色が付く）</small></div>
+    <div><a href="shots/paste-now.png"><img src="shots/paste-now.png" alt=""></a><small>貼り付けるとき（書く欄を開いて Ctrl+V）</small></div>
+  </div>
+
+  <div class="cmp">
+    <div class="rl"></div>
+    <div class="h">案A<small>選んだ所のすぐ上に、小さな帯</small></div>
+    <div class="h a">案B<span class="rec">おすすめ</span><small>左の道具に「選んだ文」</small></div>
+    <div class="h">案C<small>右クリックのメニュー</small></div>
+
+    <div class="rl">文を選んだとき<small>図をはさむ2つの段落</small></div>
+    <div class="cell"><a href="shots/sel-a-near.png"><img src="shots/sel-a-near.png" alt=""></a></div>
+    <div class="cell a"><a href="shots/sel-b-near.png"><img src="shots/sel-b-near.png" alt=""></a></div>
+    <div class="cell"><a href="shots/sel-c-near.png"><img src="shots/sel-c-near.png" alt=""></a></div>
+
+    <div class="rl">貼り付けるとき<small>コピーしたあと、書く欄を開いた</small></div>
+    <div class="cell"><a href="shots/paste-a.png"><img src="shots/paste-a.png" alt=""></a></div>
+    <div class="cell a"><a href="shots/paste-b.png"><img src="shots/paste-b.png" alt=""></a></div>
+    <div class="cell"><a href="shots/paste-c.png"><img src="shots/paste-c.png" alt=""></a></div>
+
+    <div class="rl"></div>
+    <div class="d"><p>選んだ文のすぐ上に出る（スマホの文字選びと同じ形）。</p><span class="g">よいところ</span><br>目の前に出るので、すぐ気づく。<br><span class="w">弱いところ</span><br>上の行の文字を少し隠す。新しい形の部品が増える。</div>
+    <div class="d a"><p>図・表を選んだときの「この図」「この表」と同じ所に出る。貼り付けは「この段落」に。</p><span class="g">よいところ</span><br>いつも同じ場所。文を隠さない。<br><span class="w">弱いところ</span><br>選んだ所から少し遠い。<span class="why">おすすめの理由：ほかの物の「削除」と同じ場所なので、迷わないから。</span></div>
+    <div class="d"><p>選んだ所で右クリックすると出る。</p><span class="g">よいところ</span><br>Word と同じ。画面がすっきり。<br><span class="w">弱いところ</span><br>右クリックを知らないと、見つからない。</div>
+  </div>
+</section>
+
+</body>
+</html>

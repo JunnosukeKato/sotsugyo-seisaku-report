@@ -187,7 +187,7 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     const area = AREA_OF_KIND[e.kind]
     for (const { locked, ...f } of checkText(e.text, words) as TextFinding[]) {
       if (SENTENCE_RULES.includes(f.ruleId) && !SENTENCE_KINDS.includes(e.kind)) continue
-      // 書き間違えやすい語のエラー（locked）は「このままにする」にできない（直すまで提出用の PDF を書き出せない）
+      // 書き間違えやすい語のエラー（locked）は「このままにする」にできない（提出の前に直す）
       const key = f.source === 'supplementary' && !locked ? `${f.ruleId}|${e.id}|${e.text.slice(f.start, f.end)}` : undefined
       findings.push({ ...f, area, blockId: e.id, ...(key ? { key } : {}) })
     }
@@ -261,14 +261,14 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
 
   // ---- 抄録 ----
   // 抄録は、先生の許可が出てから書く。書き始めるまでは字数・行数を確かめず、まだ書いていないことだけを知らせる。
-  // 抄録のない報告書は提出できないので、エラーにする（途中経過を先生に見せるときは、下書きの PDF で出せる）
+  // 抄録のない報告書は提出できないので、エラーにする（まだのところの「先生の許可のあと」。途中の PDF は書き出せて、抄録のページは入らない）
   const chars = abstractCharCount(report)
   const { minChars, maxChars, minLines, maxLines } = config.abstract
   const abstractStarted = report.abstract.started !== false
   if (!abstractStarted) {
     findings.push(
       guide('abstract-not-started', 'error', '抄録はまだ書いていない', 'abstract', {
-        detail: '本文を書き終えて、先生のチェックで許可が出たら、抄録のページの「先生の許可が出た」を押して書き始めます（それまでの途中経過は、下書きの PDF で先生に見せられます）',
+        detail: '本文を書き終えて、先生のチェックで許可が出たら、抄録のページの「先生の許可が出た」を押して書き始めます（それまでも PDF を書き出して先生に見せられます。抄録のページは入りません）',
       }),
     )
   }

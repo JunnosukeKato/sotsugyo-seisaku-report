@@ -608,31 +608,27 @@ async function studentShots(browser, config, images) {
   console.log(`  見本の原稿：本文 ${info.bodyPages}ページ・抄録 ${info.abstractLines}行・指摘 ${info.findings.length}件${info.findings.length ? `（${info.findings.join('、')}）` : ''}`)
   if (info.findings.some((f) => f.startsWith('error'))) throw new Error('見本の原稿にエラーが残っています（提出用の PDF の画面が撮れません）')
 
-  // ---- 提出用の PDF を書き出す窓（エラーが0件のとき） ----
-  // （PDF はツールの中で作って保存する。3つにチェックを入れ、「PDF を保存する」が押せるところ。mockups/v28 案C）
+  // ---- PDF を書き出す窓（直すところ・まだのところが0のとき） ----
+  // （PDF はツールの中で作って保存する。「PDF を保存する」が押せるところ。3つのチェックと下書きは、依頼者の判断でなくした。2026-10-19）
   await page.evaluate(() => document.querySelector('.side .export').click())
-  await page.waitForSelector('.modal .checklist')
-  await page.evaluate(() => document.querySelectorAll('.modal .checklist input').forEach((i) => i.click()))
+  await page.waitForSelector('.modal .pdf-start')
   await page.evaluate(() => document.activeElement?.blur())
   await sleep(500)
   await capture(page, 'g-export', await page.evaluate(rectOf, '.modal'), [
-    { n: 1, box: await page.evaluate(rectOf, '.modal .checklist'), at: 'l' },
-    { n: 2, box: await page.evaluate(rectOf, '.modal .pdf-file'), at: 'l' },
-    { n: 3, box: await page.evaluate(rectOf, '.modal .row-buttons button.primary'), at: 'l' },
+    { n: 1, box: await page.evaluate(rectOf, '.modal .pdf-file'), at: 'l' },
+    { n: 2, box: await page.evaluate(rectOf, '.modal .row-buttons button.primary'), at: 'l' },
   ])
   await page.evaluate(() => document.querySelector('.modal .close').click())
 
-  // ---- 下書きの透かしの入った PDF（教員用：途中経過を見せてもらう）。本文の1ページ目を画像にする ----
+  // ---- 学生が書き出した PDF（教員用：途中点検で印刷して見る）。本文の1ページ目を画像にする（画像の名前は前の「下書き」のときのまま） ----
   {
     const bodyPage = await page.evaluate(() => window.__editor.getSnapshot().layout.kinds.indexOf('body'))
     await page.evaluate(() => {
-      document.title = `${window.__editor.pdfTitle}_下書き`
-      document.documentElement.classList.add('print-draft')
+      document.title = window.__editor.pdfTitle
     })
     await page.pdf({ path: 'poc-output/guides/draft.pdf', preferCSSPageSize: true, printBackground: true })
     await page.evaluate(() => {
       window.dispatchEvent(new Event('afterprint'))
-      document.documentElement.classList.remove('print-draft')
     })
     const view = await browser.newPage()
     await view.setViewport({ width: 1000, height: 1400, deviceScaleFactor: 1 })
@@ -643,12 +639,12 @@ async function studentShots(browser, config, images) {
     const size = await canvases[bodyPage].evaluate((c) => ({ w: c.width, h: c.height }))
     MARKS['g-draft-page'] = { w: size.w, h: size.h, marks: [] }
     writeMarks()
-    console.log(`  ${IMG}/g-draft-page.jpg（下書きの PDF の ${bodyPage + 1}ページ目）`)
+    console.log(`  ${IMG}/g-draft-page.jpg（書き出した PDF の ${bodyPage + 1}ページ目）`)
     await view.close()
     await page.bringToFront()
   }
 
-  // ---- 抄録：先生の許可が出るまでは、案内と「先生の許可が出た」ボタン。エラーがあると、PDF の窓は「下書き」だけ ----
+  // ---- 抄録：先生の許可が出るまでは、案内と「先生の許可が出た」ボタン ----
   await page.evaluate(() => window.__editor.update((r) => ({ ...r, abstract: { ...r.abstract, started: false } })))
   await sleep(500)
   await ready(page)
@@ -661,15 +657,6 @@ async function studentShots(browser, config, images) {
     const head = await page.evaluate(rectOf, CUR)
     await capture(page, 'g-abstract', { x: lock.x - 24, y: head.y + 60, w: lock.w + 48, h: lock.y + lock.h - head.y - 60 + 20 }, [{ n: 1, box, at: 'r' }])
   }
-  await page.evaluate(() => document.querySelector('.side .export').click())
-  await page.waitForSelector('.modal .draft-box')
-  await page.evaluate(() => document.activeElement?.blur())
-  await sleep(500)
-  await capture(page, 'g-export-draft', await page.evaluate(rectOf, '.modal'), [
-    { n: 1, box: await page.evaluate(rectOf, '.modal .error-list'), at: 'l' },
-    { n: 2, box: await page.evaluate(rectOf, '.modal .draft-box button'), at: 'r' },
-  ])
-  await page.evaluate(() => document.querySelector('.modal .close').click())
   await page.evaluate(() => window.__editor.update((r) => ({ ...r, abstract: { ...r.abstract, started: true } })))
   await sleep(500)
   await ready(page)
@@ -748,7 +735,10 @@ async function studentShots(browser, config, images) {
   await sleep(300)
 
   // ---- バックアップ（自動の控え） ----
-  await page.evaluate(() => [...document.querySelectorAll('.side .link-btn')].find((b) => b.textContent.includes('バックアップ')).click())
+  // 「バックアップ・作り直す」は右の欄の「メニュー」の中（mockups/v37 案C）
+  await page.click('.side .menu-btn')
+  await page.waitForSelector('.side .head-menu')
+  await page.evaluate(() => [...document.querySelectorAll('.side .head-menu [role="menuitem"]')].find((b) => b.textContent.includes('バックアップ')).click())
   await page.waitForSelector('.modal .snapshots, .modal .muted')
   await page.evaluate(() => document.activeElement?.blur())
   await sleep(400)

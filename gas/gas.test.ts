@@ -45,6 +45,7 @@ class FakeSpreadsheet {
   getSheets = () => this.sheets
   deleteSheet = (s: FakeSheet) => void (this.sheets = this.sheets.filter((x) => x !== s))
   getId = () => 'sheet-id'
+  getName = () => '卒業制作報告書_管理'
 }
 
 let spreadsheet: FakeSpreadsheet
@@ -57,8 +58,86 @@ let opened = 0
 /** 鍵を待つあいだに、ほかの人の操作が終わったことにする（同時に操作したときの確かめ） */
 let whileWaiting: (() => void) | null = null
 
-function load(project: 'admin-project' | 'api-project') {
-  const source = readFileSync(`gas/${project}/Code.js`, 'utf8').replace('/*INITIAL_CONFIG*/ null', JSON.stringify(initialConfig))
+const FOLDER = 'application/vnd.google-apps.folder'
+interface DriveItem {
+  id: string
+  name: string
+  mimeType: string
+  parents: string[]
+  trashed: boolean
+  appProperties?: Record<string, string>
+  description?: string
+  /** 中身（文字にしたもの） */
+  content?: string
+  /** 中身の版の数（新しく作ると1、中身を新しくするたびに増える） */
+  versions: number
+}
+
+/** ドライブの高度なサービス（Drive API v3）の簡易版。先生のフォルダ（root-folder）だけがある */
+class FakeDrive {
+  items = new Map<string, DriveItem>([['root-folder', { id: 'root-folder', name: '先生のフォルダ', mimeType: FOLDER, parents: ['my-drive'], trashed: false, versions: 0 }]])
+  seq = 0
+  private match(item: DriveItem, q: string) {
+    const unquote = (s: string) => s.replace(/\\'/g, "'").replace(/\\\\/g, '\\')
+    const name = q.match(/name = '((?:\\.|[^'])*)'/)
+    const mime = q.match(/mimeType = '((?:\\.|[^'])*)'/)
+    const parents = [...q.matchAll(/'([^']+)' in parents/g)].map((m) => m[1])
+    const app = q.match(/appProperties has \{ key='([^']*)' and value='((?:\\.|[^'])*)' \}/)
+    return (
+      (!name || item.name === unquote(name[1])) &&
+      (!mime || item.mimeType === unquote(mime[1])) &&
+      (!parents.length || parents.some((p) => item.parents.includes(p))) &&
+      (!/trashed = false/.test(q) || !item.trashed) &&
+      (!app || item.appProperties?.[app[1]] === unquote(app[2]))
+    )
+  }
+  private text = (blob: { bytes: number[] } | null) => (blob ? Buffer.from(blob.bytes).toString('latin1') : undefined)
+  api = {
+    Files: {
+      get: (id: string) => {
+        const f = this.items.get(id)
+        if (!f) throw new Error(`File not found: ${id}`)
+        return { id: f.id, name: f.name, mimeType: f.mimeType, trashed: f.trashed }
+      },
+      list: (o: { q: string }) => ({ files: [...this.items.values()].filter((f) => this.match(f, o.q)).map((f) => ({ id: f.id, name: f.name, parents: [...f.parents] })) }),
+      create: (r: Partial<DriveItem>, blob: { bytes: number[] } | null) => {
+        const item: DriveItem = { id: `d${++this.seq}`, name: r.name!, mimeType: r.mimeType!, parents: r.parents ?? [], trashed: false, appProperties: r.appProperties, description: r.description, content: this.text(blob), versions: blob ? 1 : 0 }
+        this.items.set(item.id, item)
+        return { id: item.id }
+      },
+      update: (r: Partial<DriveItem>, id: string, blob: { bytes: number[] } | null, o: { addParents?: string; removeParents?: string } = {}) => {
+        const f = this.items.get(id)
+        if (!f) throw new Error(`File not found: ${id}`)
+        Object.assign(f, { name: r.name ?? f.name, description: r.description ?? f.description, appProperties: { ...f.appProperties, ...r.appProperties } })
+        if (blob) {
+          f.content = this.text(blob)
+          f.versions++
+        }
+        if (o.addParents) f.parents = [...f.parents.filter((p) => !(o.removeParents ?? '').split(',').includes(p)), o.addParents]
+        return { id }
+      },
+    },
+  }
+  pdfs = () => [...this.items.values()].filter((f) => f.mimeType === 'application/pdf')
+  folders = () => [...this.items.values()].filter((f) => f.mimeType === FOLDER && f.id !== 'root-folder')
+  nameOf = (id: string) => this.items.get(id)?.name
+}
+
+let drive: FakeDrive
+/** Google に確かめたときのログインの許可（トークン → tokeninfo の答え）。ないトークンは期限切れ（400） */
+let tokens: Map<string, Record<string, string>>
+/** 外部につないだ先（URL） */
+let fetched: string[]
+/** 配信の窓口が書いた記録（console） */
+let logs: string[]
+
+/**
+ * プログラムを読み込む。values：ビルド時に入る値（Code.js の「名前を囲んだコメントと ''」の場所。scripts/build-gas.mjs と同じ）、
+ * props：スクリプト プロパティ（SHEET_ID は、いつも sheet-id）
+ */
+function load(project: 'admin-project' | 'api-project', { values = {}, props = {} }: { values?: Record<string, string>; props?: Record<string, string> } = {}) {
+  let source = readFileSync(`gas/${project}/Code.js`, 'utf8').replace('/*INITIAL_CONFIG*/ null', JSON.stringify(initialConfig))
+  for (const [name, value] of Object.entries(values)) source = source.replace(`/*${name}*/ ''`, JSON.stringify(value))
   const cache = new Map<string, string>()
   const context = createContext({
     SpreadsheetApp: {
@@ -79,11 +158,26 @@ function load(project: 'admin-project' | 'api-project') {
         releaseLock: () => {},
       }),
     },
-    Logger: { log: () => {} },
+    Logger: { log: (m: string) => void logs.push(m) },
     CacheService: { getScriptCache: () => ({ get: (k: string) => cache.get(k) ?? null, put: (k: string, v: string) => void cache.set(k, v) }) },
-    PropertiesService: { getScriptProperties: () => ({ getProperty: () => 'sheet-id' }) },
+    PropertiesService: { getScriptProperties: () => ({ getProperty: (k: string) => (k === 'SHEET_ID' ? 'sheet-id' : (props[k] ?? null)) }) },
     ContentService: { MimeType: { JSON: 'json' }, createTextOutput: (text: string) => ({ text, setMimeType() { return this } }) },
     HtmlService: { createHtmlOutputFromFile: () => ({ setTitle() { return this }, addMetaTag() { return this } }) },
+    UrlFetchApp: {
+      fetch: (url: string) => {
+        fetched.push(url)
+        const token = new URL(url).searchParams.get('access_token') ?? ''
+        const info = tokens.get(token)
+        return { getResponseCode: () => (info ? 200 : 400), getContentText: () => JSON.stringify(info ?? { error: 'invalid_token' }) }
+      },
+    },
+    Drive: drive.api,
+    Utilities: {
+      base64Decode: (s: string) => [...Buffer.from(s, 'base64')],
+      newBlob: (bytes: number[], type: string, name: string) => ({ bytes, type, name }),
+      formatDate: () => '2026-10-19 12:00',
+    },
+    console: { log: () => {}, warn: (m: string) => void logs.push(m), error: (m: string) => void logs.push(m) },
     JSON,
     Date,
     Number,
@@ -100,6 +194,10 @@ beforeEach(() => {
   owner = 'kato@example.ac.jp'
   opened = 0
   whileWaiting = null
+  drive = new FakeDrive()
+  tokens = new Map()
+  fetched = []
+  logs = []
 })
 
 const sheetRows = (name: string) => spreadsheet.getSheetByName(name)!.rows
@@ -671,5 +769,177 @@ describe('配信（api-project）', () => {
     spreadsheet.getSheetByName('年度設定')!.rows[1][1] = '終了'
     const body = JSON.parse(load('api-project').doGet({ parameter: {} }).text)
     expect(body).toEqual({ ok: false, error: '公開中の年度設定がありません' })
+  })
+})
+
+describe('PDF の控え（api-project の doPost）', () => {
+  const CLIENT = 'client-1.apps.googleusercontent.com'
+  /** ビルド時に入る値（フォルダ・OAuth クライアント ID・大学のドメイン） */
+  const values = { PDF_FOLDER_ID: 'root-folder', CLIENT_ID: CLIENT, DOMAIN: 'example.ac.jp' }
+  const FILM = initialConfig.courses[0]
+  const pdfBase64 = (text = '1') => Buffer.from(`%PDF-1.4\n${text}\n%%EOF`).toString('base64')
+  /** Google に確かめると、このツールのログインの許可（確かめ済みの大学のアドレス）と答えるトークン */
+  const tokenOf = (email: string, info: Record<string, string> = {}) => {
+    const token = `tok-${email}-${tokens.size}`
+    tokens.set(token, { aud: CLIENT, azp: CLIENT, email, email_verified: 'true', expires_in: '3500', scope: 'openid email https://www.googleapis.com/auth/drive.file', ...info })
+    return token
+  }
+  const request = (token: string, patch: Record<string, unknown> = {}) => ({ action: 'pdfCopy', token, year: 2026, courseId: FILM.id, studentId: '00ZZ0123', name: '文化　花子', pdf: pdfBase64(), ...patch })
+  const post = (api: ReturnType<typeof load>, body: unknown) => JSON.parse(api.doPost({ postData: { type: 'text/plain', contents: typeof body === 'string' ? body : JSON.stringify(body) } }).text)
+  const setup = (options: Parameters<typeof load>[1] = { values }) => {
+    load('admin-project').setup()
+    return load('api-project', options)
+  }
+
+  it('フォルダが未設定なら、ログインも確かめずに「未設定」と返す（ドライブには何も置かない）', () => {
+    const api = setup({ values: { CLIENT_ID: CLIENT, DOMAIN: 'example.ac.jp' } })
+    const body = post(api, request(tokenOf('00zz0123@example.ac.jp')))
+    expect(body.ok).toBe(false)
+    expect(body.error).toContain('未設定')
+    expect(fetched).toEqual([])
+    expect(drive.pdfs()).toEqual([])
+    // OAuth クライアント ID が未設定でも、送った人を確かめられないので断る
+    expect(post(setup({ values: { PDF_FOLDER_ID: 'root-folder', DOMAIN: 'example.ac.jp' } }), request(tokenOf('00zz0123@example.ac.jp'))).error).toContain('未設定')
+  })
+
+  it('フォルダ・クライアント ID・ドメインは、スクリプト プロパティからでもよい', () => {
+    const api = setup({ props: { PDF_FOLDER_ID: 'root-folder', GOOGLE_CLIENT_ID: CLIENT, GOOGLE_DOMAIN: 'example.ac.jp' } })
+    expect(post(api, request(tokenOf('00zz0123@example.ac.jp')))).toEqual({ ok: true })
+    expect(drive.pdfs()).toHaveLength(1)
+  })
+
+  it('送った人を Google に確かめる：期限切れ・ほかのツールのログイン・大学でないアカウント・確かめていないアドレスは断る', () => {
+    const api = setup()
+    const rejected = [
+      'expired-token',
+      tokenOf('00zz0123@example.ac.jp', { aud: 'other-client' }),
+      tokenOf('00zz0123@example.ac.jp', { azp: 'other-client' }),
+      tokenOf('00zz0123@gmail.com'),
+      tokenOf('00zz0123@example.ac.jp.evil.com'),
+      tokenOf('00zz0123@example.ac.jp', { email_verified: 'false' }),
+      tokenOf('00zz0123@example.ac.jp', { expires_in: '0' }),
+    ]
+    for (const token of rejected) expect(post(api, request(token)).ok, token).toBe(false)
+    // トークンは Google の確かめ（tokeninfo）にだけ渡す
+    expect(fetched.every((url) => url.startsWith('https://oauth2.googleapis.com/tokeninfo?access_token='))).toBe(true)
+    expect(fetched).toHaveLength(rejected.length)
+    expect(drive.pdfs()).toEqual([])
+    // 窓口の記録には、トークンを書かない
+    expect(logs.some((l) => rejected.some((t) => l.includes(t)))).toBe(false)
+  })
+
+  it('学生：コースのフォルダを作り、「氏名（空白を詰める）_学籍番号_年度卒業制作報告書.pdf」で置く。2回目からは同じファイルの新しい版（ファイルは1つ）', () => {
+    const api = setup()
+    const token = tokenOf('00zz0123@example.ac.jp')
+    expect(post(api, request(token))).toEqual({ ok: true })
+    expect(drive.folders().map((f) => `${f.name}<${drive.nameOf(f.parents[0])}`)).toEqual([`${FILM.name}<先生のフォルダ`])
+    const [first] = drive.pdfs()
+    expect(first).toMatchObject({ name: '文化花子_00ZZ0123_2026年度卒業制作報告書.pdf', parents: [drive.folders()[0].id], appProperties: { reportKey: '2026:00ZZ0123' }, versions: 1 })
+    expect(first.content).toContain('%PDF-1.4\n1\n')
+    expect(first.description).toContain('送った人：00zz0123@example.ac.jp')
+    // もう一度書き出した（氏名も直した）：同じファイルの中身を新しい版にし、名前も今のものにする
+    expect(post(api, request(token, { name: '文化 花子子', pdf: pdfBase64('2') }))).toEqual({ ok: true })
+    expect(drive.pdfs()).toHaveLength(1)
+    expect(drive.pdfs()[0]).toMatchObject({ id: first.id, name: '文化花子子_00ZZ0123_2026年度卒業制作報告書.pdf', versions: 2 })
+    expect(drive.pdfs()[0].content).toContain('%PDF-1.4\n2\n')
+    // 同じコースの別の学生：同じコースのフォルダに、別のファイル
+    expect(post(api, request(tokenOf('00zz0456@example.ac.jp'), { studentId: '00zz0456', name: '衣装　次郎' }))).toEqual({ ok: true })
+    expect(drive.folders()).toHaveLength(1)
+    expect(drive.pdfs().map((f) => f.name)).toEqual(['文化花子子_00ZZ0123_2026年度卒業制作報告書.pdf', '衣装次郎_00ZZ0456_2026年度卒業制作報告書.pdf'])
+  })
+
+  it('学生のアカウントで、表紙の学籍番号が違えば断る（表紙が空なら、アカウントの学籍番号で置く）', () => {
+    const api = setup()
+    const token = tokenOf('00zz0123@example.ac.jp')
+    expect(post(api, request(token, { studentId: '00ZZ0999' }))).toEqual({ ok: false, error: '表紙の学籍番号が、ログインしたアカウントと違います' })
+    expect(drive.pdfs()).toEqual([])
+    expect(post(api, request(token, { studentId: '', name: '' }))).toEqual({ ok: true })
+    expect(drive.pdfs()[0].name).toBe('00ZZ0123_2026年度卒業制作報告書.pdf')
+  })
+
+  it('学生のアドレスは「wu」＋学籍番号（提出ガイド）：先頭の wu を除いて学籍番号と比べ、学生のファイルとして置く', () => {
+    const api = setup()
+    const token = tokenOf('wu00zz0123@example.ac.jp')
+    expect(post(api, request(token))).toEqual({ ok: true })
+    expect(drive.pdfs()[0]).toMatchObject({ name: '文化花子_00ZZ0123_2026年度卒業制作報告書.pdf', appProperties: { reportKey: '2026:00ZZ0123' } })
+    expect(post(api, request(token, { studentId: '00ZZ0999' }))).toEqual({ ok: false, error: '表紙の学籍番号が、ログインしたアカウントと違います' })
+  })
+
+  it('教職員のアカウント（学籍番号の形でない）は、見本の原稿で試せる。学生のファイルとは別のファイルで、説明に送った人のアドレス', () => {
+    const api = setup()
+    post(api, request(tokenOf('00zz0123@example.ac.jp')))
+    expect(post(api, request(tokenOf('Sensei.A@Example.ac.jp'), { name: '見本　花子', pdf: pdfBase64('staff') }))).toEqual({ ok: true })
+    const [student, staff] = drive.pdfs()
+    expect(student.content).toContain('\n1\n')
+    expect(student.versions).toBe(1)
+    expect(staff).toMatchObject({ name: '見本花子_00ZZ0123_2026年度卒業制作報告書.pdf', appProperties: { reportKey: '2026:staff:sensei.a@example.ac.jp' } })
+    expect(staff.description).toContain('送った人：sensei.a@example.ac.jp')
+  })
+
+  it('PDF でない中身・形の正しくない内容・大きすぎる中身は断る（Google にも確かめない）', () => {
+    const api = setup()
+    const token = tokenOf('00zz0123@example.ac.jp')
+    const before = fetched.length
+    expect(post(api, request(token, { pdf: Buffer.from('<html>not a pdf</html>').toString('base64') }))).toEqual({ ok: false, error: '送られたファイルが PDF ではありません' })
+    expect(post(api, request(token, { pdf: '%PDF-1.4 base64 ではない' }))).toEqual({ ok: false, error: '送られたファイルが PDF ではありません' })
+    expect(post(api, request(token, { pdf: '' })).ok).toBe(false)
+    for (const patch of [{ year: '20x6' }, { year: 20261 }, { pdf: 5 }, { token: '' }, { name: 'あ'.repeat(101) }, { courseId: { id: 'x' } }]) expect(post(api, request(token, patch)), JSON.stringify(patch)).toMatchObject({ ok: false, error: '送られた内容の形が正しくありません' })
+    expect(post(api, 'JSON ではない')).toEqual({ ok: false, error: '知らない操作です' })
+    expect(post(api, { action: 'other' })).toEqual({ ok: false, error: '知らない操作です' })
+    // 40MB を超える PDF（base64 の文字数で、読む前に断る）
+    const limit = Math.ceil((40 * 1024 * 1024) / 3) * 4
+    expect(post(api, request(token, { pdf: 'A'.repeat(limit + 4) }))).toEqual({ ok: false, error: 'PDF が大きすぎます（40MB まで）' })
+    expect(post(api, 'A'.repeat(limit + 200_000))).toEqual({ ok: false, error: 'PDF が大きすぎます（40MB まで）' })
+    expect(fetched.length).toBe(before)
+    expect(drive.pdfs()).toEqual([])
+  })
+
+  it('コースを変えた学生のファイルは、新しいコースのフォルダへ移す（ファイルは1つのまま）。コースが分からなければ「コース未設定」', () => {
+    const api = setup()
+    // 2つめのコースがある年度
+    const other = { ...FILM, id: 'stylist', name: 'スタイリスト・コーディネーター' }
+    sheetRows('年度設定')[1][2] = JSON.stringify({ ...initialConfig, courses: [FILM, other] })
+    const token = tokenOf('00zz0123@example.ac.jp')
+    post(api, request(token))
+    expect(post(api, request(token, { courseId: other.id }))).toEqual({ ok: true })
+    expect(drive.pdfs()).toHaveLength(1)
+    expect(drive.nameOf(drive.pdfs()[0].parents[0])).toBe(other.name)
+    expect(drive.pdfs()[0].parents).toHaveLength(1)
+    post(api, request(token, { courseId: 'no-such-course' }))
+    expect(drive.nameOf(drive.pdfs()[0].parents[0])).toBe('コース未設定')
+    expect(drive.folders().map((f) => f.name).sort()).toEqual([FILM.name, other.name, 'コース未設定'].sort())
+  })
+
+  it('同じ名前のファイルが前からあれば（印がない）、そのファイルを新しい版にする。フォルダが見つからなければ、くわしいこと（ID）は返さない', () => {
+    const api = setup()
+    const course = drive.api.Files.create({ name: FILM.name, mimeType: FOLDER, parents: ['root-folder'] }, null)
+    drive.api.Files.create({ name: '文化花子_00ZZ0123_2026年度卒業制作報告書.pdf', mimeType: 'application/pdf', parents: [course.id] }, { bytes: [...Buffer.from('%PDF-old')] })
+    expect(post(api, request(tokenOf('00zz0123@example.ac.jp')))).toEqual({ ok: true })
+    expect(drive.pdfs()).toHaveLength(1)
+    expect(drive.pdfs()[0]).toMatchObject({ versions: 2, appProperties: { reportKey: '2026:00ZZ0123' } })
+    // フォルダが消えていた
+    drive.items.delete('root-folder')
+    const body = post(api, request(tokenOf('00zz0123@example.ac.jp')))
+    expect(body).toEqual({ ok: false, error: 'PDF の控えを保存できませんでした（ドライブのエラー）' })
+    expect(JSON.stringify(body)).not.toContain('root-folder')
+  })
+
+  it('authorizePdfCopy（エディタで1回実行して承認する）：スプレッドシートを読み、外部につなぎ、フォルダの名前を出す（未設定なら、そう出す）', () => {
+    const api = setup()
+    api.authorizePdfCopy()
+    expect(logs).toContain('PDF の控えを置くフォルダ：先生のフォルダ')
+    expect(logs.some((l) => l.startsWith('読み込めました'))).toBe(true)
+    expect(fetched).toHaveLength(1)
+    logs = []
+    setup({ values: { CLIENT_ID: CLIENT, DOMAIN: 'example.ac.jp' } }).authorizePdfCopy()
+    expect(logs.some((l) => l.includes('未設定'))).toBe(true)
+    // フォルダでないもの（ファイル）の ID なら知らせる
+    drive.items.set('a-file', { id: 'a-file', name: 'x.pdf', mimeType: 'application/pdf', parents: [], trashed: false, versions: 1 })
+    expect(() => setup({ values: { ...values, PDF_FOLDER_ID: 'a-file' } }).authorizePdfCopy()).toThrow(/フォルダではありません/)
+  })
+
+  it('年度設定の配信（doGet）は今までどおり', () => {
+    const api = setup()
+    expect(JSON.parse(api.doGet({ parameter: {} }).text)).toMatchObject({ ok: true, year: 2026 })
   })
 })

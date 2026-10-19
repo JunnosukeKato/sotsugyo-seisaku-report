@@ -346,7 +346,7 @@ export const DEFAULT_WORD_CHECKS: WordCheck[] = MISCONVERSIONS.map(([wrong, righ
 
 /**
  * 書き間違えやすい語のルール（正しい語を detail に出し、学生が直す）。
- * 重さが「エラー」の語は「このままにする」にできない（locked。直すまで提出用の PDF を書き出せない）。「注意」の語は、正しく使っていれば「このままにする」にできる
+ * 重さが「エラー」の語は「このままにする」にできない（locked。提出の前に直す）。「注意」の語は、正しく使っていれば「このままにする」にできる
  */
 function wordRules(words: WordCheck[]): TextRule[] {
   return words

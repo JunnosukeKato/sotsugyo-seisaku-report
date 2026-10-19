@@ -29,6 +29,7 @@ import { Tour } from './app/Tour'
 import { firstOpenInTab, forgetGuide, guideLeftAt, markTourSeen, markTourShown, rememberGuide, tourSeen } from './app/tourMemory'
 import { useTabLock } from './app/useTabLock'
 import { useTokenRenewal } from './app/useTokenRenewal'
+import { usePdfCopy } from './app/usePdfCopy'
 import { useAutosave } from './app/useAutosave'
 import { usePanelWidths } from './app/usePanelWidths'
 import { WordImportDialog, WordTodoCard } from './app/WordImport'
@@ -645,10 +646,15 @@ export default function App() {
           editor.undo()
         } else if (e.key === 's') {
           e.preventDefault()
+        } else if (key === 'x' && !e.shiftKey && !e.altKey && !isTyping(e.target) && !dialog && !driveDialog && editor.cutSelection()) {
+          // 紙面をなぞって選んだ範囲を切り取る（段落をまたいでも。コピー（Ctrl+C）は、編集の中核がブラウザのコピーを受け取る：editor/reportEditor.ts の onCopy）
+          e.preventDefault()
         }
         return
       }
       if (dialog || driveDialog || guide === 'course' || guide === 'word' || isTyping(e.target) || e.altKey) return
+      // 紙面で文字を選んでいるとき：Shift+矢印は選ぶ範囲を広げる（ページは送らない）
+      if (e.shiftKey && /^(Arrow|Page|Home|End)/.test(e.key) && editor.hasPaperSelection()) return
       // スマホの下から出る欄など、窓の中で押したキーでは、ページを送らない
       if (e.target instanceof Element && e.target.closest('[aria-modal="true"]')) return
       // キーを押したままのときは、めくり終えてから次へ（続けて押した分は、押した数だけ送るが、押したままの繰り返しで一気に送らない）
@@ -664,6 +670,11 @@ export default function App() {
         e.preventDefault()
         editor.prevPage()
       } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        // 紙面をなぞって選んだ範囲（段落をまたいでも）を消す
+        if (editor.deleteSelection()) {
+          e.preventDefault()
+          return
+        }
         // 図・表・改ページ・作品写真を選んでいるとき（書いていないとき）は、Delete（Mac は delete）で消す。左の道具の「削除」「外す」と同じ（依頼者の要望。2026-10-19）
         const sel = editor.getSnapshot().selection
         if (!sel || (sel.kind === 'photos' && sel.index === undefined)) return
@@ -782,6 +793,8 @@ export default function App() {
   const reloginShown = !!drive && !gate && !driveDialog && !reloginLater && driveState?.status.kind === 'expired'
   // パソコン：許可が切れる少し前にクリックしたら、許可を延ばす（ログインにかかわる窓が開いているとき・別のタブで開いているときは延ばさない）
   useTokenRenewal(drive, !!gate || !!driveDialog || reloginShown || tabLock.locked || driveStopped)
+  // 書き出した PDF の控えを、先生のドライブのフォルダに送る（ドライブにログインして使っているときだけ。学生の画面には出さない）
+  const pdfCopy = usePdfCopy(drive, !driveStopped)
   // 指差し確認を出さないとき：ログインの窓・どの原稿で続けるか・学籍番号の確かめ・Word の読み込みなどの窓・別のタブで開いている・
   // はじめての案内・使い方を開いている
   const tourBlocked = !snap?.layout || !!loadError || !!guide || !!gate || !!dialog || !!driveDialog || tabLock.locked || help || reloginShown
@@ -793,10 +806,10 @@ export default function App() {
   useEffect(() => {
     if (tourOn) markTourShown()
   }, [tourOn])
-  // PC：使い方を閉じたら、右の欄の「？ 使い方」に戻る（キーボードで続けられるように）
+  // PC：使い方を閉じたら、右の欄の「メニュー」（「？ 使い方」はこの中。mockups/v37 案C）に戻る（キーボードで続けられるように）
   const helpWasOpen = useRef(false)
   useEffect(() => {
-    if (!help && helpWasOpen.current && !narrow) document.querySelector<HTMLElement>('.side .help-btn')?.focus()
+    if (!help && helpWasOpen.current && !narrow) document.querySelector<HTMLElement>('.side .menu-btn')?.focus()
     helpWasOpen.current = help
   }, [help, narrow])
   const helpView = (variant: 'side' | 'sheet') => (
@@ -988,7 +1001,19 @@ export default function App() {
           onClose={() => setDialog(null)}
         />
       )}
-      {dialog?.kind === 'export' && snap && editor && <ExportDialog editor={editor} findings={snap.findings} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'export' && snap && editor && (
+        <ExportDialog
+          editor={editor}
+          snap={snap}
+          config={config}
+          onStart={pdfCopy.onStart}
+          onBuilt={(pdf) => pdfCopy.onBuilt(pdf, editor.getSnapshot().report)}
+          onClose={() => {
+            setDialog(null)
+            pdfCopy.onClosed()
+          }}
+        />
+      )}
       {dialog?.kind === 'backup' && editor && snap && (
         <BackupDialog
           driveStopped={driveStopped}

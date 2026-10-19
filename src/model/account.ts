@@ -1,6 +1,6 @@
 /**
  * 大学のアカウント（メールアドレス）について。
- * 学生のアドレスの @ より前は学籍番号（小文字）。学籍番号の形でないアドレスは教職員。
+ * 学生のアドレスの @ より前は「wu」＋学籍番号（小文字。提出ガイド：wu学籍番号@bunka-wu.ac.jp）。学籍番号の形でないアドレスは教職員。
  */
 
 /** 大学のアカウントのドメイン */
@@ -9,17 +9,22 @@ export const UNIVERSITY_DOMAIN = (import.meta.env.VITE_GOOGLE_DOMAIN as string |
 /** 学籍番号の形（手順書の例：23FA●●●・22FAC●●●）。管理ページで形式を決めていれば、そちらを使う */
 const DEFAULT_STUDENT_ID = /^\d{2}[A-Z]{2,3}\d{3,4}$/
 
-/** 学生のアドレスなら、@ より前を大文字にした学籍番号。学籍番号の形でなければ（教職員のアカウント）null */
+/**
+ * 学生のアドレスなら、@ より前を大文字にした学籍番号（先頭の「wu」は除く）。学籍番号の形でなければ（教職員のアカウント）null。
+ * 「wu」のないアドレス（00zz0123@…）も、学籍番号の形なら学生として読む。gas/api-project/Code.js の studentIdOf_ と同じ
+ */
 export function studentIdFromEmail(email: string | null, pattern: string | null): string | null {
-  const id = (email ?? '').split('@')[0].trim().toUpperCase()
-  if (!id) return null
+  const local = (email ?? '').split('@')[0].trim().toUpperCase()
+  if (!local) return null
   let re = DEFAULT_STUDENT_ID
   try {
     if (pattern) re = new RegExp(pattern)
   } catch {
     // 形式が正しくなければ、手順書の例の形で見る
   }
-  return re.test(id) ? id : null
+  const withoutWu = local.replace(/^WU/, '')
+  if (withoutWu !== local && re.test(withoutWu)) return withoutWu
+  return re.test(local) ? local : null
 }
 
 /**

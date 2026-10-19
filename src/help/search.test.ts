@@ -20,15 +20,15 @@ describe('言葉で探す：言葉の区切り', () => {
 })
 
 describe('言葉で探す：項目を探す', () => {
-  it('「PDF 出ない」：両方の言葉が入っている項目（PDF の出し方・下書きの PDF）を先に、片方だけの項目をその下に出す', () => {
+  it('「PDF 出ない」：両方の言葉が入っている項目（PDF の出し方）を先に、片方だけの項目をその下に出す', () => {
     const { terms, hits } = searchTopics(STUDENT_TOPICS, 'PDF 出ない')
     expect(terms).toEqual(['pdf', '出ない'])
-    expect(ids(hits).slice(0, 2)).toEqual(['pdf', 'draft'])
+    expect(ids(hits)[0]).toBe('pdf')
     expect(hits[0].found).toEqual(['pdf', '出ない'])
-    expect(hits.slice(2).every((h) => h.found.length === 1)).toBe(true)
+    expect(hits.slice(1).every((h) => h.found.length === 1)).toBe(true)
     expect(ids(hits)).toContain('login')
     // 結果に出す1行は、題に入っていない「出ない」が入っている行
-    expect(hits[0].line.label).toBe('提出用の PDF が出ないとき')
+    expect(hits[0].line.label).toBe('PDF が出ないとき')
   })
 
   it('全角・大文字で入れても、同じ項目が見つかる', () => {
@@ -92,8 +92,8 @@ describe('言葉で探す：項目を探す', () => {
 
 describe('言葉で探す：印を付ける', () => {
   it('大文字・小文字、全角・半角が違っても、元の文字のまま印を付ける', () => {
-    const parts = highlightParts('提出用の PDF が出ないとき', termsOf('pdf 出ない'))
-    expect(parts.map((p) => p.text).join('')).toBe('提出用の PDF が出ないとき')
+    const parts = highlightParts('PDF が出ないとき', termsOf('pdf 出ない'))
+    expect(parts.map((p) => p.text).join('')).toBe('PDF が出ないとき')
     expect(marked(parts)).toEqual(['PDF', '出ない'])
     expect(marked(highlightParts('ＰＤＦを書き出す', ['pdf']))).toEqual(['ＰＤＦ'])
   })
@@ -110,8 +110,8 @@ describe('言葉で探す：印を付ける', () => {
 describe('使い方の項目', () => {
   const all = [...STUDENT_TOPICS, ...TEACHER_TOPICS]
 
-  it('学生用は18項目、先生用は11項目。id は重ならない', () => {
-    expect(STUDENT_TOPICS).toHaveLength(18)
+  it('学生用は17項目、先生用は11項目。id は重ならない', () => {
+    expect(STUDENT_TOPICS).toHaveLength(17)
     expect(TEACHER_TOPICS).toHaveLength(11)
     expect(new Set(all.map((t) => t.id)).size).toBe(all.length)
   })

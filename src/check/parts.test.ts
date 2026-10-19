@@ -62,10 +62,12 @@ describe('Word のほうが新しい', () => {
 
 describe('まとめた PDF のファイル名', () => {
   it('学生用ツールと同じ形（氏名の空白は除く。分からない部分は付けない）', () => {
-    expect(mergedFileName(config, '00ZZ0123', '文化　花子')).toBe('2026_卒業制作報告書_00ZZ0123_文化花子.pdf')
-    expect(mergedFileName(config, ' 00ZZ0123 ', '文化 花子')).toBe('2026_卒業制作報告書_00ZZ0123_文化花子.pdf')
-    expect(mergedFileName(config, '', '文化花子')).toBe('2026_卒業制作報告書_文化花子.pdf')
-    expect(mergedFileName(config, '', '')).toBe('2026_卒業制作報告書.pdf')
+    // 提出ガイドの決まり「学籍番号_氏名.pdf」
+    expect(mergedFileName(config, '00ZZ0123', '文化　花子')).toBe('00ZZ0123_文化花子.pdf')
+    expect(mergedFileName(config, ' 00ZZ0123 ', '文化 花子')).toBe('00ZZ0123_文化花子.pdf')
+    expect(mergedFileName(config, '', '文化花子')).toBe('文化花子.pdf')
+    expect(mergedFileName(config, '00ZZ0123', '')).toBe('00ZZ0123.pdf')
+    expect(mergedFileName(config, '', '')).toBe('卒業制作報告書.pdf')
   })
   it('学籍番号と氏名を、表紙・抄録の行から読む（仮の文字のままなら読まない）', () => {
     expect(idAndName(['学籍番号　００ＺＺ０１２３', '氏名：文化　花子'])).toEqual({ studentId: '00ZZ0123', name: '文化　花子' })

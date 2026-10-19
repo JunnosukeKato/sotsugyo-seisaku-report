@@ -9,7 +9,6 @@ import { collectUsedText, documentFontFiles, FontCache, pickFontFiles } from './
  * - 紙面のページを複製し、画面の CSS が効かない場所に原寸で置いて撮る。入力欄の仮の文字・選んだ印・指摘の下線・ページの影などは、
  *   画面の CSS（.page-viewport の中だけに効く）か紙面の外の部品なので、複製には出ない。画面では紙面を縮小して表示しているが、複製は縮小しない
  * - 抄録を書き始める前の抄録のページ（.print-skip）は入れない。抄録の欄の案内とボタン（.abstract-lock）は消す
- * - 下書きなら、どのページにも「下書き」の透かしを入れる（印刷の透かしと同じ見た目）
  *
  * 画像にする部品は modern-screenshot：複製を SVG に入れて、ブラウザ自身に描かせる（字の位置・字間・行が印刷とそろう）。
  * 試作では html-to-image（字間が崩れて行の折り返しがずれた）・html2canvas（字が少し下にずれ、作品写真の切り抜きが効かず、遅い）とも比べた。
@@ -18,8 +17,6 @@ import { collectUsedText, documentFontFiles, FontCache, pickFontFiles } from './
  */
 
 export interface PagesToPdfOptions {
-  /** 下書き：どのページにも「下書き」の透かしを入れる */
-  draft?: boolean
   /** 画像の細かさ（1インチあたりの点の数）。150 で A4 が 1240×1754 点 */
   dpi?: number
   /** JPEG の画質（0〜1） */
@@ -94,29 +91,6 @@ const needsRedraw = () => (navigator.vendor ?? '').startsWith('Apple') || /Firef
 const nextFrame = () => new Promise<void>((resolve) => setTimeout(resolve, 0))
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 
-/** 「下書き」の透かし（index.css の印刷のときの .print-draft と同じ見た目） */
-function watermark(): HTMLElement {
-  const el = document.createElement('div')
-  el.textContent = '下書き'
-  el.style.cssText = [
-    'position:absolute',
-    'left:50%',
-    'top:50%',
-    'transform:translate(-50%,-50%) rotate(-32deg)',
-    "font-family:'BIZ UDPGothic',sans-serif",
-    'font-weight:700',
-    'font-size:96pt',
-    'line-height:normal',
-    'letter-spacing:0.3em',
-    // 灰色（先生は赤ペンで書き込むので、赤い透かしだと見分けにくい。文字の上でも、暗い写真の上でも見える濃さ。mockups/v35 ⑤ 案B）
-    'color:rgba(140,140,140,0.26)',
-    'white-space:nowrap',
-    'pointer-events:none',
-    'z-index:10',
-  ].join(';')
-  return el
-}
-
 /**
  * 複製を置く場所。まわりの CSS を受け継がない（all: initial）。画面の左上に、見えないように（透明・いちばん奥）置く
  * （撮るときは複製の見た目だけを写すので、置き場所の透明は写らない）
@@ -137,7 +111,7 @@ function engineVariables(page: HTMLElement): [string, string][] {
 }
 
 /** ページを複製し、印刷と同じ中身にする（画面だけの印を外し、原寸・白地にする）。variables：組版エンジンの CSS の変数 */
-function printableClone(page: HTMLElement, variables: [string, string][], draft: boolean): HTMLElement {
+function printableClone(page: HTMLElement, variables: [string, string][]): HTMLElement {
   const clone = page.cloneNode(true) as HTMLElement
   for (const [name, value] of variables) clone.style.setProperty(name, value)
   for (const el of [clone, ...clone.querySelectorAll<HTMLElement>(SCREEN_CLASSES.map((c) => `.${c}`).join(','))]) el.classList.remove(...SCREEN_CLASSES)
@@ -157,7 +131,6 @@ function printableClone(page: HTMLElement, variables: [string, string][], draft:
   }
   for (const [name, value] of Object.entries(fixed)) clone.style.setProperty(name, value, 'important')
   clone.setAttribute('lang', 'ja')
-  if (draft) clone.append(watermark())
   return clone
 }
 
@@ -272,12 +245,10 @@ async function assemble(jpegs: Blob[], title: string): Promise<Blob> {
  * .print-skip の付いたページは入れない。ページは文書の中に置いたまま渡すこと（表示していなくてもよい）
  */
 export async function pagesToPdf(pages: HTMLElement[], options: PagesToPdfOptions = {}): Promise<PagesToPdfResult> {
-  const { draft = false, dpi = DEFAULT_DPI, quality = DEFAULT_QUALITY, title = '', onPage, signal } = options
+  const { dpi = DEFAULT_DPI, quality = DEFAULT_QUALITY, title = '', onPage, signal } = options
   const started = performance.now()
   // 部品を先に読み込んでおく（読み込みの時間を、画像にする時間と分けて測る）
   await Promise.all([import('modern-screenshot'), import('jspdf')])
-  // 透かしの太字は、紙面では使っていないので、読み込んでおく
-  if (draft) await document.fonts.load(`700 96pt "BIZ UDPGothic"`, '下書き').catch(() => [])
   const loaded = performance.now()
 
   const printed = pages.filter((p) => !p.classList.contains('print-skip'))
@@ -296,7 +267,7 @@ export async function pagesToPdf(pages: HTMLElement[], options: PagesToPdfOption
     for (const [index, page] of printed.entries()) {
       signal?.throwIfAborted()
       const pageStarted = performance.now()
-      const clone = printableClone(page, variables, draft)
+      const clone = printableClone(page, variables)
       host.replaceChildren(clone)
       const { width, height } = clone.getBoundingClientRect()
       await imagesReady(clone)

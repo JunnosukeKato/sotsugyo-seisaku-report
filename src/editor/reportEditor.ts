@@ -4,6 +4,7 @@ import { FIELD_IDS } from '../layout/document'
 import type { LayoutInfo, PageKind } from '../layout/measure'
 import { FIGURE_MAX_PX, fitFigureSize, importImage, PHOTO_MAX_PX } from '../model/images'
 import { putImage, type StoredImage } from '../model/storage'
+import { skippedPages } from '../pdf/exportPages'
 import { applyCourseTemplate, bodyWritten } from '../model/template'
 import { changeArrangement, clampPercent, movePhoto, putPhoto, wholePhoto } from '../model/photos'
 import { addColumn, addRow, blankTable, cellPosition, materialTable, removeColumn, removeRow, setCellImage } from '../model/table'
@@ -16,7 +17,10 @@ import { blockPaperKey, fixedTitleNote, markFocusable, PAPER_FOCUSABLE, paperEle
 import * as ops from './reportOps'
 import { ReportRenderer, type FirstShow, type PageEffect } from './reportRenderer'
 import { PLACEHOLDER_ATTR } from './pageView'
+import { copyRange, deleteRange, pasteClip, rangePieces, resolveRange, sameClipText, type Clip, type ModelPoint, type ModelRange } from './rangeOps'
+import { domPoint, paperPoint } from './rangeSelection'
 import { changedPlace, type ChangedPlace, type NoticeBody, type RemovedWhat, type UndoNotice } from './undoNotice'
+import { submissionTitle } from '../model/fileName'
 
 /**
  * 報告書の編集の中核（画面の部品から独立した、紙面まわりの処理）。
@@ -312,6 +316,13 @@ export class ReportEditor {
       },
       // 貼り付けたものを、そのままの形では入れなかった（1行の欄の2行目から・表）：画面の下に知らせる
       onPasteNote: (what) => this.showNotice(what === 'table' ? '表は「表を入れる」で作ります（貼り付けた表は文になりました）' : 'この欄は1行なので、1行目だけを貼り付けました'),
+      // 紙面で選んでコピーした・切り取ったまとまり（段落・図表など）を、書いている段落に貼り付ける（rangeOps.ts の pasteClip）
+      onPasteClip: {
+        matches: (pasted) => !!this.clip && sameClipText(pasted, this.clip.text),
+        paste: (id, text, start, end) => this.pasteClipAt(id, text, start, end),
+      },
+      // 段落の最後の行で Shift+↓（最初の行で Shift+↑）：選ぶ範囲を、紙面の次（前）の欄へ広げる
+      onExtend: (id, text, anchor, direction) => this.extendFromEditor(id, text, anchor, direction),
       onResize: () => this.shiftFollowing(),
     })
 
@@ -347,6 +358,9 @@ export class ReportEditor {
       }
     })
     scroller.addEventListener('click', (e) => this.onClick(e))
+    // 段落をまたいで選ぶ：書いている欄から Shift+クリックで選ぶ・紙面で選んだ範囲をコピーする（PC）
+    scroller.addEventListener('mousedown', (e) => this.onPaperMouseDown(e), true)
+    document.addEventListener('copy', (e) => this.onCopy(e))
     scroller.addEventListener('keydown', (e) => this.onPaperKey(e))
     // Tab で紙面に入ったときに止まる欄：最後にいた欄（はじめは、ページのいちばん上の欄）
     scroller.addEventListener('focusin', (e) => rememberTabStop(e.target))
@@ -355,6 +369,7 @@ export class ReportEditor {
     // スマホ：指で押した点を覚える（押した欄を、ブラウザが寄せる前の点で決めるため。rawTouch）
     scroller.addEventListener('pointerdown', (e) => {
       this.touchPoint = e.pointerType === 'touch' ? { x: e.clientX, y: e.clientY, time: performance.now() } : null
+      this.pointerType = e.pointerType
     })
     scroller.addEventListener('dragstart', (e) => {
       if ((e.target as HTMLElement).closest?.('[data-photo-slot]')) e.preventDefault()
@@ -853,6 +868,8 @@ export class ReportEditor {
     this.marker.hidden = true
     this.selection = null
     this.markSelection()
+    // 紙面で選んでいた文字は、見えなくなるページにあれば選ぶのをやめる（見えないまま Delete で消してしまわないように）
+    if (!samePair) this.clearPaperSelection()
     const from = this.page
     // 紙面の欄にフォーカスがあったら、送った先のページの最初の欄に移す（前のページは隠れて、フォーカスが失われるため）
     const focused = this.paperFocus()
@@ -922,6 +939,7 @@ export class ReportEditor {
     const shown = this.isVisiblePage(page)
     this.page = page
     if (shown) return this.renderer.show(page)
+    this.clearPaperSelection()
     this.clearFrozen(Infinity)
     this.setRevealRoom(0, 0)
     this.scroller.scrollTop = 0
@@ -1304,7 +1322,21 @@ export class ReportEditor {
       styleSource,
       // 見出し・図表のタイトルの Enter は、その下に段落を作る（段落を足すボタンはない）
       enterCreatesParagraph: ['chapter', 'subheading', 'figureCaption', 'tableCaption'].includes(editable.kind),
+      refs: this.refsFor(editable.kind, id),
+      // 紙面の段落の中身（組版エンジンが句読点などを包んだもの）を、書く欄に写す（紙面と同じ所で折り返す。overlayEditor.ts の copyPage）
+      page: this.renderer.pageView.fragments(id),
     }
+  }
+
+  /** 本文の段落の、確定すると図表へのリンクになる所（書く欄で「（図1）」を折り返さないため。抄録の段落は図表とつながらない） */
+  private refsFor(kind: ops.EditableKind, id?: string): ((text: string) => [number, number][]) | undefined {
+    if (kind !== 'paragraph') return undefined
+    const num = ops.numbering(this.report)
+    // 開いたときの文字のままなら、いま紙面にある参照（原稿のリンク）の位置。書き換えたら、確定したときにリンクになる所
+    // （図を入れる前に「図1」と書いていた段落は、開いただけなら紙面と同じく折り返せる。書き換えると、確定したときにリンクになる）
+    const paragraph = id ? this.report.body.flatMap((c) => c.blocks).find((b) => b.id === id) : undefined
+    const opened = paragraph?.type === 'paragraph' ? { text: ops.contentToText(paragraph.content, num), refs: ops.contentRefRanges(paragraph.content, num) } : null
+    return (text) => (opened && text === opened.text ? opened.refs : ops.refRanges(text, num))
   }
 
   openEditor(id: string, caret: number): void {
@@ -1376,7 +1408,7 @@ export class ReportEditor {
       ghosts = ghosts.slice(0, -1)
     }
     const ghostsBefore = this.overlay.ghostCount
-    this.overlay.continueIn({ blockId: id, kind, text: editable.text, caret, styleSource }, ghost)
+    this.overlay.continueIn({ blockId: id, kind, text: editable.text, caret, styleSource, refs: this.refsFor(editable.kind, id), page: fragment ? view.fragments(id) : undefined }, ghost)
     if (how.ghostOf && this.overlay.ghostCount > ghostsBefore) ghosts = [...ghosts, how.ghostOf]
     if (this.overlay.ghostCount === 0) ghosts = []
     const placement = fragment ? this.overlayPlacement(id) : null
@@ -1401,7 +1433,7 @@ export class ReportEditor {
   /** 組み直した紙面に、書いている箇所が出た：入力欄を正しい位置・書体に合わせる（continueWriting のあと） */
   private settleContinued(id: string): void {
     this.continuing = null
-    this.overlay.settle(this.renderer.pageView.fragments(id)[0])
+    this.overlay.settle(this.renderer.pageView.fragments(id)[0], this.renderer.pageView.fragments(id))
     this.hideStyle.textContent = this.editingStyle(id)
     this.followCaret()
     if (this.overlay.inSheet) this.revealEditing()
@@ -1480,6 +1512,7 @@ export class ReportEditor {
       caret,
       styleSource,
       enterCreatesParagraph: ['chapter', 'subheading', 'figureCaption', 'tableCaption'].includes(editable.kind),
+      refs: this.refsFor(editable.kind, id),
     }
   }
 
@@ -1644,6 +1677,9 @@ export class ReportEditor {
       this.suppressClick = false
       return
     }
+    // 紙面をマウスでなぞって文字を選んだ（Shift+クリックで広げたときも）：書く欄は開かない（選んだ所をコピー・切り取り・削除できるように）。
+    // 指で押したとき（スマホ・タブレット）は今までどおり
+    if (keyHit === undefined && this.pointerType !== 'touch' && this.hasPaperSelection()) return
     // 削除して、組み直した紙面がまだ出ていない間は、紙面を押しても何もしない（古い紙面で、消したブロックの隣を開いてしまわないように）
     if (this.removed.size > 0) return
     // スマホ：指で押した点で決める（ブラウザが近くの欄へ寄せたあとの点ではなく。rawTouch）
@@ -1989,7 +2025,7 @@ export class ReportEditor {
     const shown = this.currentNotice
     this.commitForChange()
     // やり直したときは、いま出ている知らせ（「段落を削除しました［戻す］」など）を、もう一度出す
-    const again: NoticeBody | null = shown?.kind === 'removed' ? { kind: 'removed', what: shown.what } : shown?.kind === 'started' ? { kind: 'started' } : null
+    const again: NoticeBody | null = shown?.kind === 'removed' ? { kind: 'removed', what: shown.what, note: shown.note } : shown?.kind === 'started' ? { kind: 'started' } : null
     const previous = this.history.undo(this.report, again)
     if (!previous) return
     // 戻した所は、組み直した紙面で見せる（ほかのページでも、そこへ移って少しの間光らせる）
@@ -2051,7 +2087,7 @@ export class ReportEditor {
   private readonly removed = new Set<string>()
 
   /** 原稿を削除で変える（元に戻せる）。消えたものは、組み直すのを待たずに紙面から隠す。what：消したもの（画面の下に知らせる） */
-  private removeNow(fn: (report: Report) => Report, what: RemovedWhat): void {
+  private removeNow(fn: (report: Report) => Report, what: RemovedWhat, note?: string): void {
     const before = bodyIds(this.report)
     this.update(fn)
     // 隠した分だけ紙面の後ろの文章が詰まり、書き終えた欄の仮の表示と位置が合わなくなるので外す
@@ -2060,7 +2096,7 @@ export class ReportEditor {
     const gone = [...before].filter((id) => !after.has(id))
     for (const id of gone) this.removed.add(id)
     this.hideRemoved()
-    if (gone.length > 0) this.noticeRemoved(what)
+    if (gone.length > 0) this.noticeRemoved(what, note)
   }
 
   // ---- 削除の「戻す」の知らせと、元に戻した所（mockups/v32 ② 案A。言葉と比べ方は undoNotice.ts、知らせの部品は app/UndoBar.tsx） ----
@@ -2100,8 +2136,8 @@ export class ReportEditor {
   private autoPeriodNoticed = false
 
   /** 削除した（画面の下に「〜を削除しました［戻す］」を出す） */
-  private noticeRemoved(what: RemovedWhat): void {
-    this.notice = { notice: { kind: 'removed', what, id: ++this.noticeCount }, report: this.report }
+  private noticeRemoved(what: RemovedWhat, note?: string): void {
+    this.notice = { notice: { kind: 'removed', what, ...(note ? { note } : {}), id: ++this.noticeCount }, report: this.report }
     this.notify()
   }
 
@@ -2573,6 +2609,171 @@ export class ReportEditor {
     return !!at && !!at.table.rows[at.row]?.cells[at.column]?.imageId
   }
 
+  // ---- 段落をまたいで選ぶ（紙面をマウスでなぞって選び、コピー・切り取り・削除・貼り付け。PC だけ。範囲の決まりは rangeOps.ts） ----
+
+  /** 紙面で選んでコピーした・切り取ったもの（書く欄で貼り付けたとき、クリップボードの文字がこれと同じなら、まとまりのまま入れる） */
+  private clip: Clip | null = null
+  /** 最後に紙面を押したものの種類（mouse・touch・pen。指で押したときは、選んだ文字があっても今までどおり書く欄を開く） */
+  private pointerType = ''
+
+  /** 紙面で選んでいる文字を、選ばないようにする（ページを替えたとき） */
+  private clearPaperSelection(): void {
+    if (this.hasPaperSelection()) getSelection()?.removeAllRanges()
+  }
+
+  /** 紙面で文字を選んでいるか（選んだ所が紙面の中にある。書く欄の中の選択は数えない。スマホは数えない） */
+  hasPaperSelection(): boolean {
+    if (this.overlay.inSheet) return false
+    const sel = getSelection()
+    return !!sel && sel.rangeCount > 0 && !sel.isCollapsed && this.viewport.contains(sel.anchorNode) && this.viewport.contains(sel.focusNode)
+  }
+
+  /**
+   * 紙面で選んでいる範囲（原稿の範囲と、その範囲を求めた原稿＝表に出ている紙面の原稿・選んだ点）。
+   * 選んでいない・本文と抄録をまたぐ・表紙や目次など本文と抄録の外にかかる・何も文字がかからないときは null
+   */
+  private paperRange(): { range: ModelRange; report: Report; points: [ModelPoint, ModelPoint] } | null {
+    if (!this.hasPaperSelection()) return null
+    const r = getSelection()!.getRangeAt(0)
+    const report = this.shownReport ?? this.report
+    const a = paperPoint(this.viewport, r.startContainer, r.startOffset, 'start')
+    const b = paperPoint(this.viewport, r.endContainer, r.endOffset, 'end')
+    if (!a || !b) return null
+    const range = resolveRange(report, a, b)
+    return range && rangePieces(report, range).length > 0 ? { range, report, points: [a, b] } : null
+  }
+
+  /**
+   * コピー（Ctrl+C・⌘+C。切り取りのときも）：紙面で選んだ範囲を、ふつうの文字としてクリップボードに入れ、まとまり（段落・図表など）を覚える。
+   * 範囲にできないとき（表紙・目次にかかるなど）は、ブラウザのふつうのコピーのまま（覚えていたまとまりは忘れる）
+   */
+  private onCopy(e: ClipboardEvent): void {
+    if (e.defaultPrevented || this.overlay.inSheet) return
+    if (e.target instanceof Node && this.overlay.element.contains(e.target)) return
+    const found = this.paperRange()
+    if (!found) {
+      if (this.hasPaperSelection()) this.clip = null
+      return
+    }
+    const clip = copyRange(found.report, found.range)
+    if (!clip.text && clip.blocks.length === 0) return
+    e.clipboardData?.setData('text/plain', clip.text)
+    e.preventDefault()
+    this.clip = clip
+  }
+
+  /**
+   * 紙面で選んだ範囲を、いまの原稿の範囲にする（紙面を組み直す前に書き換えていたら、選んだ欄の文字が紙面と同じときだけ）。
+   * 組み直すのを待っているときは、知らせて null
+   */
+  private currentRange(found: { range: ModelRange; report: Report; points: [ModelPoint, ModelPoint] }): ModelRange | null {
+    if (found.report === this.report) return found.range
+    const same = found.points.every((p) => ops.findEditable(found.report, p.id)?.text === ops.findEditable(this.report, p.id)?.text)
+    const range = same ? resolveRange(this.report, found.points[0], found.points[1]) : null
+    if (!range) this.noticeInfo('紙面を組み直しています。少し待ってから、もう一度選んでください')
+    return range
+  }
+
+  /** 切り取り（Ctrl+X・⌘+X）：紙面で選んだ範囲をコピーしてから消す（1回で元に戻せる）。範囲がなければ false（ほかに任せる） */
+  cutSelection(): boolean {
+    const found = this.paperRange()
+    if (!found || this.overlay.blockId) return false
+    if (this.removed.size > 0) return true
+    const range = this.currentRange(found)
+    if (!range) return true
+    // ブラウザのコピーを通して、クリップボードに入れる（onCopy）
+    document.execCommand('copy')
+    this.removeRange(range, '切り取り')
+    return true
+  }
+
+  /** 削除（Delete・Backspace）：紙面で選んだ範囲を消す（1回で元に戻せる）。範囲がなければ false（ほかに任せる） */
+  deleteSelection(): boolean {
+    const found = this.paperRange()
+    if (!found || this.overlay.blockId) return false
+    if (this.removed.size > 0) return true
+    const range = this.currentRange(found)
+    if (range) this.removeRange(range, '選んだ文')
+    return true
+  }
+
+  /** 範囲を消す。画面の下に「選んだ文を削除しました［戻す］」（切り取りは「切り取りました［戻す］」）を出す */
+  private removeRange(range: ModelRange, what: '選んだ文' | '切り取り'): void {
+    const result = deleteRange(this.report, range)
+    getSelection()?.removeAllRanges()
+    this.selection = null
+    this.currentId = null
+    const note = result.keptChapters ? '（大見出しは残しました）' : undefined
+    this.removeNow(() => result.report, what, note)
+    // 段落の中の文字だけを消したとき（消えたブロックがない）も知らせる
+    if (this.notice?.notice.kind !== 'removed' || this.notice.report !== this.report) this.noticeRemoved(what, note)
+  }
+
+  /**
+   * 書いている段落 id に、紙面で選んでコピーしたまとまりを貼り付ける（書いている文字 text の start〜end を置き換える）。
+   * 元に戻すと、まず貼り付けたことだけを戻す（その前に書いた文字は残る。もう一度戻すと、書いた文字も戻る：段落を分けたときと同じ）
+   */
+  private pasteClipAt(id: string, text: string, start: number, end: number): void {
+    const clip = this.clip
+    if (!clip) return
+    const typed = ops.setText(this.report, id, text.slice(0, start) + text.slice(end))
+    const before = this.reportBeforeEdit ?? this.report
+    if (ops.findEditable(before, id)?.text !== ops.findEditable(typed, id)?.text) this.pushHistory(before)
+    this.pushHistory(typed)
+    // 入れる位置（確定した文字は、先頭の空白などを除くので、後ろの文字の数から数える）
+    const typedText = ops.findEditable(typed, id)?.text ?? ''
+    const offset = Math.max(0, typedText.length - text.slice(end).length)
+    const result = pasteClip(typed, id, offset, clip)
+    this.report = result.report
+    this.autoPeriod = null
+    if (result.skippedChapters) this.showNotice('大見出し（Ⅰ．など）は貼り付けていません（大見出しは「大見出し」で足します）')
+    else if (result.droppedForAbstract) this.showNotice('抄録には、文だけを貼り付けました（見出し・図・表は貼り付けません）')
+    if (result.caret) {
+      this.reopenAfterRender(result.caret.id, result.caret.offset, { id, place: 'after' })
+      return
+    }
+    // 図・表で終わり、続けて書く段落がない：書く欄を閉じる
+    this.hideStyle.textContent = ''
+    this.reportBeforeEdit = null
+    this.afterChange({ render: 'now', save: true })
+  }
+
+  /**
+   * 書いている欄で Shift+↓（↑）を押した（段落の最後（最初）の行で）：書いた文字が紙面と同じなら、書く欄を閉じて、紙面で選ぶ。
+   * 書く欄で選び始めた所から、次（前）の欄の1行まで（そのあとは、紙面で Shift+↑↓ で広げられる）。
+   * 書き換えていたとき（紙面の文字と違う）は広げない（false。今までどおり次の欄へ移る）
+   */
+  private extendFromEditor(id: string, text: string, anchor: number, direction: 'prev' | 'next'): boolean {
+    const shown = this.shownReport ? ops.findEditable(this.shownReport, id)?.text : undefined
+    const a = domPoint(this.viewport, id, anchor)
+    const b = domPoint(this.viewport, id, direction === 'next' ? text.length : 0)
+    if (shown !== text || this.overlay.inSheet || !a || !b) return false
+    this.overlay.commit()
+    const sel = getSelection()
+    if (!sel) return true
+    sel.setBaseAndExtent(a.node, a.offset, b.node, b.offset)
+    sel.modify('extend', direction === 'next' ? 'forward' : 'backward', 'line')
+    return true
+  }
+
+  /**
+   * 書いている欄があるときに、紙面を Shift+クリックした：書いている欄のカーソルの所から、押した所までを紙面で選ぶ
+   * （書いた文字が紙面と同じときだけ。書き換えていたときは、今までどおり押した所を書き始める）
+   */
+  private onPaperMouseDown(e: MouseEvent): void {
+    if (!e.shiftKey || e.button !== 0 || this.overlay.inSheet) return
+    const id = this.overlay.blockId
+    if (!id || !(e.target instanceof Node) || this.overlay.element.contains(e.target)) return
+    const shown = this.shownReport ? ops.findEditable(this.shownReport, id)?.text : undefined
+    if (shown !== this.overlay.text) return
+    const anchor = domPoint(this.viewport, id, this.overlay.caret)
+    const focus = document.caretPositionFromPoint?.(e.clientX, e.clientY)
+    if (!anchor || !focus || !this.viewport.contains(focus.offsetNode)) return
+    e.preventDefault()
+    this.overlay.commit()
+    getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, focus.offsetNode, focus.offset)
+  }
+
   // ---- 作品写真 ----
 
   /** 並べ方を変える（写真は消さずに先頭へ詰める。枚数を減らすと、1枚目から順に載る） */
@@ -2720,27 +2921,26 @@ export class ReportEditor {
     if (this.overlay.blockId) this.overlay.commit()
     for (const h of Object.values(this.highlights)) h.clear()
     for (const el of this.viewport.querySelectorAll('.is-selected')) el.classList.remove('is-selected')
-    // 「PDFを書き出す」の窓を通らずに、ブラウザの印刷（Ctrl+P など）で出したとき：エラーが残っていれば下書き（透かし入り）にする。
-    // 提出用に見える PDF が、エラーを残したまま出ないように。ファイル名のもとになるページの題も合わせる
-    const fromDialog = document.title === this.pdfTitle || document.title === `${this.pdfTitle}_下書き`
-    if (fromDialog) return
-    const draft = this.findings.some((f) => f.severity === 'error')
+    // 「PDFを書き出す」の窓を通らずに、ブラウザの印刷（Ctrl+P など）で出したとき：窓から出すときと同じにする
+    // （ファイル名のもとになるページの題を合わせ、作品写真がまだなければ空の作品写真のページを入れない。pdf/exportPages.ts）
+    if (document.title === this.pdfTitle) return
     const title = document.title
-    document.title = draft ? `${this.pdfTitle}_下書き` : this.pdfTitle
-    document.documentElement.classList.toggle('print-draft', draft)
+    document.title = this.pdfTitle
+    const skipped = skippedPages(this.pageElements(), this.report, this.layout).filter((p) => !p.classList.contains('print-skip'))
+    for (const p of skipped) p.classList.add('print-skip')
     window.addEventListener(
       'afterprint',
       () => {
         document.title = title
-        document.documentElement.classList.remove('print-draft')
+        for (const p of skipped) p.classList.remove('print-skip')
       },
       { once: true },
     )
   }
 
-  /** PDF のファイル名のもと（例：2026_卒業制作報告書_00ZZ0123_文化花子）。学籍番号・氏名がまだ空なら、その部分は付けない */
+  /** PDF のファイル名のもと（提出ガイドの決まり。例：00ZZ0123_文化花子）。学籍番号・氏名がまだ空なら、その部分は付けない（model/fileName.ts） */
   get pdfTitle(): string {
     const { studentId, name } = this.report.basicInfo
-    return [String(this.config.fiscalYear), this.config.reportName, studentId.trim(), name.replace(/[\s　]/g, '')].filter(Boolean).join('_')
+    return submissionTitle(studentId, name, this.config.reportName)
   }
 }

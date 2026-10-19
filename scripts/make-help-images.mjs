@@ -185,10 +185,9 @@ async function studentShots(browser) {
   const errors = await page.evaluate(() => window.__editor.getSnapshot().findings.map((f) => `${f.severity}:${f.title}`))
   if (errors.length) throw new Error(`見本の原稿に指摘が残っています：${errors.join('、')}`)
 
-  // ---- 提出用の PDF を保存したところ（エラーが0件のとき。3つにチェック →「PDF を保存する」→ できたページが並ぶ。mockups/v28 案C） ----
+  // ---- PDF を保存したところ（直すところ・まだのところが0のとき。「PDF を保存する」→ できたページが並ぶ。mockups/v28 案C） ----
   await page.evaluate(() => document.querySelector('.side .export').click())
-  await page.waitForSelector('.modal .checklist')
-  await page.evaluate(() => document.querySelectorAll('.modal .checklist input').forEach((i) => i.click()))
+  await page.waitForSelector('.modal .pdf-start')
   await page.evaluate(() => document.querySelector('.modal .pdf-start').click())
   await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
   await page.evaluate(() => document.activeElement?.blur())
@@ -212,7 +211,7 @@ async function studentShots(browser) {
   await sleep(500)
   await ready(page)
 
-  // ---- セルフチェック・下書きの PDF：わざと誤りを入れる ----
+  // ---- セルフチェック：わざと誤りを入れる ----
   await setParagraph(page, 'p7', CHECK_TEXT)
   await sleep(500)
   await ready(page)
@@ -234,12 +233,6 @@ async function studentShots(browser) {
     await sleep(800)
     await ready(page)
   }
-  await page.evaluate(() => document.querySelector('.side .export').click())
-  await page.waitForSelector('.modal .draft-box')
-  await page.evaluate(() => document.activeElement?.blur())
-  await sleep(500)
-  await capture(page, 'export-draft', await R(page, '.modal'))
-  await page.evaluate(() => document.querySelector('.modal .close').click())
   await setParagraph(page, 'p7', P7)
   await sleep(500)
   await ready(page)
@@ -291,7 +284,10 @@ async function studentShots(browser) {
   await sleep(300)
 
   // ---- バックアップ（自動の控え） ----
-  await page.evaluate(() => [...document.querySelectorAll('.side .link-btn')].find((b) => b.textContent.includes('バックアップ')).click())
+  // 「バックアップ・作り直す」は右の欄の「メニュー」の中（mockups/v37 案C）
+  await page.click('.side .menu-btn')
+  await page.waitForSelector('.side .head-menu')
+  await page.evaluate(() => [...document.querySelectorAll('.side .head-menu [role="menuitem"]')].find((b) => b.textContent.includes('バックアップ')).click())
   await page.waitForSelector('.modal .snapshots, .modal .muted')
   await page.evaluate(() => document.activeElement?.blur())
   await sleep(400)

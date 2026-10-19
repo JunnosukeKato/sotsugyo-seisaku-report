@@ -10,6 +10,8 @@ import { stubConfig } from './configStub.mjs'
 import { firstTimeV3Pc, firstTimeV3Word } from './firstTimeV3.mjs'
 import { editorFixesV3Pc } from './editorFixesV3.mjs'
 import { teacherTrialPc } from './teacherTrialFixes.mjs'
+import { rangeSelectPc } from './rangeSelect.mjs'
+import { writingWrapPc } from './writingWrap.mjs'
 import { setupWriting } from './sampleReport.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
@@ -89,6 +91,15 @@ const paperMatchesWhole = (page) =>
       box.remove()
     }
   })
+/**
+ * 右の欄の「≡ メニュー」を開いて、項目を押す（mockups/v37 案C。「？ 使い方」「バックアップ・作り直す」「Word で書いた分を読み込む」はこの中）。
+ * name：項目の名前の一部（例「使い方」）
+ */
+const pickMenu = async (page, name) => {
+  if (!(await page.$('.side .head-menu'))) await page.click('.side .menu-btn')
+  await page.waitForSelector('.side .head-menu [role="menuitem"]')
+  await page.evaluate((name) => [...document.querySelectorAll('.side .head-menu [role="menuitem"]')].find((b) => b.textContent.includes(name)).click(), name)
+}
 const results = []
 const check = (name, ok, detail = '') => {
   results.push({ name, ok, detail })
@@ -149,8 +160,11 @@ await withEdge(async (browser) => {
   const noticeText = () => page.evaluate(() => document.querySelector('.side .notice')?.textContent ?? '')
   // 見出しは「コースからのお知らせ」だけ（右の欄の上の半分を詰める。mockups/v35 ①）
   check('右の欄に、自分のコースのお知らせが出る（見出しは「コースからのお知らせ」）', (await noticeText()).startsWith('コースからのお知らせ') && (await noticeText()).includes('衣装コースへのお知らせ'), await noticeText())
-  // 「？ 使い方」のボタン（右の欄の「バックアップ・作り直す」の横。mockups/v27 案A・v34 案A。印刷用の手引きの PDF は、使い方の一覧のいちばん下から開く）
-  check('右の欄の「バックアップ・作り直す」の横に「？ 使い方」のボタンがある', await page.evaluate(() => [...document.querySelectorAll('.side .links .link-btn')].map((b) => b.textContent.trim()).join(',').includes('バックアップ・作り直す,使い方')))
+  // 「？ 使い方」「バックアップ・作り直す」「Word で書いた分を読み込む」は、名前の横の「≡ メニュー」の中（mockups/v37 案C。中身はこのあと確かめる）
+  check(
+    '右の欄の名前の横に「メニュー」のボタンがあり（閉じている）、前の「バックアップ・作り直す」「使い方」のボタンと Word のリンクは右の欄の上に並ばない',
+    await page.evaluate(() => !!document.querySelector('.side .brand-row .menu-btn[aria-haspopup="menu"][aria-expanded="false"]') && !document.querySelector('.side .links, .side .help-btn, .side .backup-btn, .side .word-link, .side .head-menu')),
+  )
   await page.keyboard.type('00ZZ0123')
   await page.keyboard.press('Enter')
   await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:name', { timeout: 30000 })
@@ -187,6 +201,13 @@ await withEdge(async (browser) => {
       next: document.querySelector('.tour-acts .next')?.textContent ?? '',
       skip: !!document.querySelector('.tour-acts .skip'),
       again: document.querySelector('.tour-again')?.textContent ?? '',
+      text: document.querySelector('.tour-tip p')?.textContent ?? '',
+      // 光の枠が、右の欄の「メニュー」のボタンを囲んでいるか
+      onMenu: (() => {
+        const s = document.querySelector('.tour-spot')?.getBoundingClientRect()
+        const b = document.querySelector('.side .menu-btn')?.getBoundingClientRect()
+        return !!s && !!b && s.left <= b.left && s.right >= b.right && s.top <= b.top && s.bottom >= b.bottom
+      })(),
     }))
   const tourShown = await page.waitForSelector('.tour .tour-tip', { timeout: 20000 }).then(() => true, () => false)
   await pause0(300)
@@ -206,7 +227,11 @@ await withEdge(async (browser) => {
     JSON.stringify(steps.map((x) => `${x.count} ${x.title}${x.focus ? '' : '（移っていない）'}`)),
   )
   const lastStep = steps.at(-1)
-  check('最後は「？ 使い方」を指し、「おわり」と、使い方からもう一度見られることを伝える（「とばす」はない）', lastStep?.next === 'おわり' && !lastStep.skip && lastStep.again.includes('使い方'), JSON.stringify(lastStep))
+  check(
+    '最後は「？ 使い方」：右上の「メニュー」のボタンに光を当て、「？ 使い方」はメニューの中と伝える。「おわり」と、メニューの使い方からもう一度見られることを伝える（「とばす」はない）',
+    lastStep?.next === 'おわり' && !lastStep.skip && lastStep.onMenu && lastStep.text.includes('「メニュー」の中') && lastStep.again.includes('メニュー') && lastStep.again.includes('使い方'),
+    JSON.stringify(lastStep),
+  )
   await page.keyboard.press('Enter')
   await page.waitForFunction(() => !document.querySelector('.tour'), { timeout: 10000 }).catch(() => {})
   check('「おわり」で閉じ、見たことをこの端末に覚える', !(await page.$('.tour')) && (await page.evaluate((k) => localStorage.getItem(k), TOUR_KEY)) === 'done')
@@ -217,7 +242,11 @@ await withEdge(async (browser) => {
     const sec = document.querySelector('.side .sec.check')
     const red = [...sec.querySelectorAll('*')].filter((e) => { const cs = getComputedStyle(e); return cs.color === 'rgb(181, 68, 59)' || cs.backgroundColor === 'rgb(181, 68, 59)' }).map((e) => e.className || e.tagName)
     return {
-      tally: document.querySelector('.side .tally')?.textContent.replace(/\s/g, '') ?? '',
+      // 数は小見出しの横の小さな札（mockups/v37。直すところは 0 なので出さない）。小見出しの右のひとことは、マウスを乗せたときだけ（title）
+      tally: [...sec.querySelectorAll('.check-sub')].map((s) => s.textContent.replace(/\s/g, '')).join(','),
+      oldTally: !!document.querySelector('.side .tally'),
+      hints: [...sec.querySelectorAll('.check-sub')].map((s) => s.title).join(','),
+      fold: !!sec.querySelector('.done-fold'),
       rows: [...sec.querySelectorAll('.check-prog li')].map((li) => `${li.className}:${li.querySelector('.l')?.textContent}:${li.querySelector('.v')?.textContent}`),
       none: sec.querySelector('.check-none')?.textContent ?? '',
       issues: sec.querySelectorAll('.issue').length,
@@ -234,13 +263,16 @@ await withEdge(async (browser) => {
   })
   await page.screenshot({ path: `${OUT}/0-check-fresh.png` })
   check(
-    '書き始め（表紙だけ入れた）の右の欄：「直すところ 0　まだ 3」で赤い字・印がなく、まだのところは表紙 ✓・本文のページ／本文の段落／作品写真 ○・抄録「先生の許可のあと」・図の枚数。直すところは「いま直すところはありません」（凡例は出さない）',
-    freshPanel.tally === '直すところ0まだ3' &&
+    '書き始め（表紙だけ入れた）の右の欄：「まだのところ 3」（数は小見出しの横。直すところは 0 なので数を出さない）で赤い字・印がなく、まだのところは表紙 ✓・本文のページ／本文の段落／作品写真 ○・抄録「先生の許可のあと」（図の枚数の行はない。直すところがないので ✓ の行はたたまない）。直すところは「いま直すところはありません」（凡例は出さない）。「押すと、その場所へ」「書いた文の間違い」はマウスを乗せたときだけ',
+    freshPanel.tally === 'まだのところ3,直すところ' &&
+      !freshPanel.oldTally &&
+      freshPanel.hints === '押すと、その場所へ,書いた文の間違い' &&
+      !freshPanel.fold &&
       freshPanel.red.length === 0 &&
       freshPanel.issues === 0 &&
       !freshPanel.legend &&
       freshPanel.none.includes('いま直すところはありません') &&
-      freshPanel.rows.map((r) => r.split(':').slice(0, 2).join(':')).join(',') === 'done:表紙,todo:本文のページ,todo:本文の段落,todo:作品写真,wait:抄録,info:図の枚数' &&
+      freshPanel.rows.map((r) => r.split(':').slice(0, 2).join(':')).join(',') === 'done:表紙,todo:本文のページ,todo:本文の段落,todo:作品写真,wait:抄録' &&
       freshPanel.rows[4].endsWith('先生の許可のあと'),
     JSON.stringify(freshPanel),
   )
@@ -256,8 +288,82 @@ await withEdge(async (browser) => {
   await page.evaluate(() => window.__editor.goToPage(0, 'none'))
   await ready()
 
-  // ---- 使い方（PC：右の欄が使い方に替わる。mockups/v27 案A） ----
-  await page.click('.side .help-btn')
+  // ---- 右の欄の「≡ メニュー」（mockups/v37 案C）：マウスで開く・ほかの所を押すと閉じる・キーボードで開いて動く・Esc でボタンに戻る ----
+  const menuState = () =>
+    page.evaluate(() => {
+      const btn = document.querySelector('.side .menu-btn')
+      const menu = document.querySelector('.side .head-menu')
+      const a = document.activeElement
+      return {
+        open: !!menu,
+        expanded: btn?.getAttribute('aria-expanded'),
+        controls: !!menu && btn?.getAttribute('aria-controls') === menu.id,
+        role: menu?.getAttribute('role') ?? null,
+        labelled: !!menu && menu.getAttribute('aria-labelledby') === btn?.id,
+        items: [...(menu?.querySelectorAll('[role="menuitem"]') ?? [])].map((b) => b.textContent.trim()),
+        width: menu ? Math.round(menu.getBoundingClientRect().width) : 0,
+        font: menu ? getComputedStyle(menu.querySelector('[role="menuitem"]')).fontSize : '',
+        focus: a === btn ? 'button' : a?.getAttribute('role') === 'menuitem' ? a.textContent.trim() : String(a?.className || a?.tagName || ''),
+      }
+    })
+  const pageBeforeMenu = (await snap()).page
+  await page.click('.side .menu-btn')
+  await page.waitForSelector('.side .head-menu')
+  const menuOpen = await menuState()
+  await page.screenshot({ path: `${OUT}/0-side-menu.png` })
+  const WORD_ITEM = 'Word で書いた分を読み込む今年度だけ'
+  check(
+    '「メニュー」を押すと開き（aria-expanded・role="menu"）、「使い方」がいちばん上、その下に「バックアップ・作り直す」「Word で書いた分を読み込む（今年度だけ）」が出る（幅 262px・字 13.5px）',
+    menuOpen.expanded === 'true' && menuOpen.controls && menuOpen.role === 'menu' && menuOpen.labelled && menuOpen.items.join(',') === `使い方,バックアップ・作り直す,${WORD_ITEM}` && menuOpen.width === 262 && menuOpen.font === '13.5px',
+    JSON.stringify(menuOpen),
+  )
+  // ほかの所（「PDFを書き出す」の下のひとこと。セルフチェックの見出しはメニューに隠れることがある）を押すと閉じる
+  await page.click('.side-foot .export-note')
+  await pause0(200)
+  const menuOutside = await menuState()
+  check('メニューの外を押すと閉じる', !menuOutside.open && menuOutside.expanded === 'false', JSON.stringify(menuOutside))
+  // キーボード：Enter で開いて最初の項目へ、↓↑ で動き（端で回る）、Home・End、Tab でも次の項目へ、←→ でページは送らない、Esc で閉じてボタンに戻る
+  await page.focus('.side .menu-btn')
+  await page.keyboard.press('Enter')
+  await page.waitForSelector('.side .head-menu')
+  const menuKeys = [(await menuState()).focus]
+  for (const key of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp', 'Home', 'End', 'ArrowLeft', 'Home', 'Tab']) {
+    await page.keyboard.press(key)
+    await pause0(60)
+    menuKeys.push((await menuState()).focus)
+  }
+  await page.keyboard.press('Escape')
+  await pause0(150)
+  const menuEsc = await menuState()
+  check(
+    'キーボード：Enter で開いて「使い方」へ、↓↑ で項目を動き（端で回る）、Home・End、Tab でも次の項目へ（←→ でページは送らない）。Esc で閉じて「メニュー」のボタンに戻る',
+    menuKeys.join('|') === ['使い方', 'バックアップ・作り直す', WORD_ITEM, '使い方', WORD_ITEM, '使い方', WORD_ITEM, WORD_ITEM, '使い方', 'バックアップ・作り直す'].join('|') &&
+      !menuEsc.open &&
+      menuEsc.focus === 'button' &&
+      menuEsc.expanded === 'false' &&
+      (await snap()).page === pageBeforeMenu,
+    JSON.stringify({ menuKeys, menuEsc }),
+  )
+  // Space でも開く。↑ で開くと最後の項目へ。最後の項目から Tab でメニューの外に出ると閉じる
+  await page.keyboard.press('Space')
+  await page.waitForSelector('.side .head-menu')
+  const menuBySpace = (await menuState()).focus
+  await page.keyboard.press('Escape')
+  await page.keyboard.press('ArrowUp')
+  await page.waitForSelector('.side .head-menu')
+  const menuByUp = (await menuState()).focus
+  await page.keyboard.press('Tab')
+  await pause0(150)
+  const menuTabbedOut = await menuState()
+  check(
+    'Space でも開き（「使い方」へ）、↑ で開くと最後の項目へ。最後の項目から Tab でメニューの外に出ると閉じる',
+    menuBySpace === '使い方' && menuByUp === WORD_ITEM && !menuTabbedOut.open && menuTabbedOut.focus !== 'button',
+    JSON.stringify({ menuBySpace, menuByUp, menuTabbedOut }),
+  )
+  await page.evaluate(() => document.activeElement?.blur())
+
+  // ---- 使い方（PC：右の欄が使い方に替わる。mockups/v27 案A。v37 案C から「メニュー」の中） ----
+  await pickMenu(page, '使い方')
   await page.waitForSelector('.side .help-side')
   await pause0(300)
   const helpOpen = await page.evaluate(() => ({
@@ -267,7 +373,7 @@ await withEdge(async (browser) => {
     pdf: document.querySelector('.help-foot .help-pdf')?.getAttribute('href'),
     paper: !!document.querySelector('.palette'),
   }))
-  check('「？ 使い方」で、右の欄が使い方に替わる（項目18・見出しに移る・紙面と道具はそのまま・いちばん下に印刷用の手引き（PDF））', helpOpen.topics === 18 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf', JSON.stringify(helpOpen))
+  check('「？ 使い方」で、右の欄が使い方に替わる（項目17・見出しに移る・紙面と道具はそのまま・いちばん下に印刷用の手引き（PDF））', helpOpen.topics === 17 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf', JSON.stringify(helpOpen))
   await page.type('.help-search input', 'PDF 出ない')
   await pause0(300)
   const found = await page.evaluate(() => ({
@@ -277,7 +383,7 @@ await withEdge(async (browser) => {
     part: !!document.querySelector('.help-part'),
   }))
   await page.screenshot({ path: `${OUT}/0-help-search.png` })
-  check('「言葉で探す」に「PDF 出ない」と入れると、両方の言葉が入っている項目が先に出て、言葉に印（黄色）が付く', found.titles[0] === 'PDF の出し方（端末ごと）' && found.titles[1] === '下書きの PDF' && found.part && found.marks.includes('PDF') && found.marks.includes('出ない') && found.count.includes('件'), JSON.stringify(found))
+  check('「言葉で探す」に「PDF 出ない」と入れると、両方の言葉が入っている項目が先に出て、言葉に印（黄色）が付く', found.titles[0] === 'PDF の出し方（端末ごと）' && found.part && found.marks.includes('PDF') && found.marks.includes('出ない') && found.count.includes('件'), JSON.stringify(found))
   await page.evaluate(() => document.querySelector('.help-results button').click())
   await page.waitForSelector('.help-topic')
   await pause0(400)
@@ -344,11 +450,11 @@ await withEdge(async (browser) => {
   await page.keyboard.press('Escape')
   await pause0(300)
   check('使い方の「指差し確認をもう一度見る」から、もう一度見られ（使い方は閉じる）、Esc でとばせる', replayed && replayInfo.count === '1 / 7' && !(await page.$('.help-side')) && !(await page.$('.tour')), JSON.stringify(replayInfo))
-  await page.click('.side .help-btn')
+  await pickMenu(page, '使い方')
   await page.waitForSelector('.side .help-side')
   await page.click('.help-close')
   await pause0(200)
-  check('使い方の「閉じる」で、セルフチェックの欄に戻る（「？ 使い方」に戻る）', !(await page.$('.help-side')) && !!(await page.$('.side .sec.check')) && (await page.evaluate(() => document.activeElement?.classList.contains('help-btn'))))
+  check('使い方の「閉じる」で、セルフチェックの欄に戻る（「？ 使い方」の入っている「メニュー」のボタンに戻る）', !(await page.$('.help-side')) && !!(await page.$('.side .sec.check')) && (await page.evaluate(() => document.activeElement?.classList.contains('menu-btn'))))
   // 一度見たら、読み込み直しても出ない
   await page.reload({ waitUntil: 'networkidle0' })
   await ready()
@@ -662,14 +768,42 @@ await withEdge(async (browser) => {
     icons: [...document.querySelectorAll('.side .sev-legend .dot')].map((i) => getComputedStyle(i, '::before').content),
     chips: document.querySelectorAll('.side .issue .src').length,
     chipText: /手順書|補助/.test([...document.querySelectorAll('.side .issue .ttl')].map((t) => t.textContent).join('')),
-    // 凡例と指摘は「直すところ」の中（mockups/v35 ① 案A）。数は「直すところ N、まだ M」で、直すところは赤い数
+    // 凡例と指摘は「直すところ」の中（mockups/v35 ① 案A）。数は小見出し「直すところ」の横の赤い札（mockups/v37）
     inFix: !!document.querySelector('.side .sec.check .check-sub.fix ~ .sev-legend'),
-    tally: document.querySelector('.side .tally')?.textContent.replace(/\s/g, '') ?? '',
-    tallyRed: getComputedStyle(document.querySelector('.side .tally b')).color === 'rgb(181, 68, 59)',
+    tally: document.querySelector('.side .check-sub.fix')?.textContent.replace(/\s/g, '') ?? '',
+    tallyRed: getComputedStyle(document.querySelector('.side .check-sub.fix .count-badge')).color === 'rgb(181, 68, 59)',
     issues: document.querySelectorAll('.side .sec.check .issue').length,
   }))
   check('セルフチェックの一覧の上に「× エラー：直してから出す」「! 要確認：確かめて、必要なら直す」が出て、指摘ごとの札（手順書・補助）はない', legend.text.includes('エラー：直してから出す') && legend.text.includes('要確認：確かめて、必要なら直す') && legend.aboveList && legend.icons.join(',') === '"×","!"' && legend.chips === 0 && !legend.chipText, JSON.stringify(legend))
-  check('書いた文の間違いは「直すところ」に出る（凡例も直すところの中。「直すところ N」の数は赤）', legend.inFix && legend.tallyRed && legend.tally.startsWith(`直すところ${legend.issues}まだ`), JSON.stringify(legend))
+  check('書いた文の間違いは「直すところ」に出る（凡例も直すところの中。「直すところ」の横の数 N は赤）', legend.inFix && legend.tallyRed && legend.tally === `直すところ${legend.issues}`, JSON.stringify(legend))
+  // 直すところがあるときは、まだのところの済んだ（✓）行を、灰色の1行「✓ 表紙・…」にたたむ（mockups/v37 の承認）。まだ・先生の許可のあとの行は、そのまま
+  const folded = await page.evaluate(() => {
+    const sec = document.querySelector('.side .sec.check')
+    const s = window.__editor.getSnapshot()
+    return {
+      line: sec.querySelector('.check-prog li.done-fold')?.textContent ?? null,
+      last: sec.querySelector('.check-prog li:last-child')?.className ?? '',
+      doneRows: sec.querySelectorAll('.check-prog li.done').length,
+      rows: [...sec.querySelectorAll('.check-prog li:not(.done-fold)')].map((li) => li.className),
+      names: [...sec.querySelectorAll('.done-fold button')].map((b) => b.textContent),
+      tip: sec.querySelector('.done-fold button')?.title ?? '',
+      color: getComputedStyle(sec.querySelector('.done-fold .row') ?? sec).color,
+      page: s.page,
+    }
+  })
+  await page.screenshot({ path: `${OUT}/1-check-folded.png` })
+  check(
+    '直すところがあるときは、済んだ行（✓）が「✓ 表紙・…」の灰色の1行（まだのところのいちばん下）にたたまれ、まだの行はそのまま。名前にマウスを乗せると、右の字（入れました など）が出る',
+    folded.doneRows === 0 && folded.last === 'done-fold' && folded.names[0] === '表紙' && folded.line === `済んだもの：${folded.names.join('・')}` && folded.rows.every((c) => c !== 'done') && folded.tip === '表紙：入れました（押すと、その場所へ）' && folded.color === 'rgb(104, 107, 114)',
+    JSON.stringify(folded),
+  )
+  // たたんだ行の名前を押すと、その場所へ移る（表紙 → 表紙のページ）
+  await page.evaluate(() => [...document.querySelectorAll('.side .done-fold button')].find((b) => b.textContent === '表紙').click())
+  await page.waitForFunction(() => { const s = window.__editor.getSnapshot(); return s.layout.kinds[s.page] === 'cover' && !s.turning }, { timeout: 20000 }).catch(() => {})
+  await ready()
+  check('たたんだ1行の「表紙」を押すと、表紙のページへ移る', await page.evaluate(() => { const s = window.__editor.getSnapshot(); return s.layout.kinds[s.page] === 'cover' }))
+  await page.evaluate((p) => window.__editor.goToPage(p, 'none'), folded.page)
+  await ready()
   await page.screenshot({ path: `${OUT}/1-findings.png` })
   const issueRows = await page.evaluate(() => ({
     fix: document.querySelectorAll('.side .issue .fix').length,
@@ -1161,8 +1295,9 @@ await withEdge(async (browser) => {
     const ed = window.__editor
     const s = ed.getSnapshot()
     const clip = document.querySelector('.overlay-clip').getBoundingClientRect()
-    const caret = getSelection().getRangeAt(0).getBoundingClientRect()
-    return { page: s.page, caretPage: ed.pageOfBlock(s.editingId, 1e9), caretVisible: caret.top >= clip.top && caret.bottom <= clip.bottom }
+    // カーソルの位置は、書く欄が測ったもの（句読点を包んだ要素のすぐ後ろでは、ブラウザの選択の四角が空になるため。editor/overlayEditor.ts の caretBox）
+    const caret = ed.overlay.caretRect()
+    return { page: s.page, caretPage: ed.pageOfBlock(s.editingId, 1e9), caretVisible: !!caret && caret.top >= clip.top && caret.bottom <= clip.bottom }
   })
   await page.screenshot({ path: `${OUT}/3-follow.png` })
   check('書いた文字が次のページへ移ると、表示も追いかける', follow.page === follow.caretPage && follow.caretPage > startPage && follow.caretVisible, JSON.stringify({ startPage, ...follow }))
@@ -1897,7 +2032,7 @@ await withEdge(async (browser) => {
     // 窓は、使い方の「引用・参考文献」の「引用・参考文献を入れる」から開く（右の欄からは外した。mockups/v35 ①。PC の使い方は開いたまま）
     const openRefs = async () => {
       if (!(await page.$('.help-topic .help-refs'))) {
-        if (!(await page.$('.side .help-side'))) await page.click('.side .help-btn')
+        if (!(await page.$('.side .help-side'))) await pickMenu(page, '使い方')
         await page.waitForSelector('.help-list button[data-topic="references"]')
         await page.evaluate(() => document.querySelector('.help-list button[data-topic="references"]').click())
         await page.waitForSelector('.help-topic .help-refs')
@@ -1967,14 +2102,14 @@ await withEdge(async (browser) => {
     check('入れた引用・参考文献は、使い方の「引用・参考文献を入れる」からもう一度開くと、窓の中に出て直せる', JSON.stringify(reopened) === JSON.stringify(['浜松隆志']) && !(await page.$('.modal')), JSON.stringify(reopened))
     // 使い方を閉じて、右の欄に戻る
     await page.click('.side .help-close')
-    await page.waitForSelector('.side .help-btn')
+    await page.waitForSelector('.side .menu-btn')
 
     // PC の使い方の題は「クリック」のまま（スマホだけ「タップ」。phone.mjs）
-    await page.click('.side .help-btn')
+    await pickMenu(page, '使い方')
     await page.waitForSelector('.side .help-list')
     const pcHelp = await page.evaluate(() => [...document.querySelectorAll('.side .help-list button')].map((b) => b.textContent).find((t) => t.startsWith('書き方')))
     await page.evaluate(() => document.querySelector('.side .help-close').click())
-    await page.waitForSelector('.side .help-btn')
+    await page.waitForSelector('.side .menu-btn')
     check('PC の使い方の題は「書き方（クリックして書く）」のまま', pcHelp === '書き方（クリックして書く）', pcHelp)
 
     await page.evaluate((r) => window.__editor.update(() => r), savedReport)
@@ -1993,6 +2128,9 @@ await withEdge(async (browser) => {
   }
   const leftBefore = await colWidth('.thumbs-col')
   const rightBefore = await colWidth('.side')
+  // 右の欄の既定の幅は 340px（mockups/v37。前は 312px）。動かしていない欄の幅は、このブラウザに覚えない（既定の幅が変われば、それに合わせる）
+  const storedPanels = await page.evaluate(() => localStorage.getItem('sotsugyo-seisaku-report-panels'))
+  check('右の欄の幅は、ふだん 340px（動かしていなければ、幅を覚えない）', rightBefore === 340 && leftBefore === 124 && (storedPanels === null || storedPanels === '{}'), `${leftBefore} / ${rightBefore} / ${storedPanels}`)
   await dragHandle('left', 60)
   await dragHandle('right', -80)
   const leftAfter = await colWidth('.thumbs-col')
@@ -2001,6 +2139,12 @@ await withEdge(async (browser) => {
   await page.evaluate(() => document.querySelector('.resize-handle.left').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })))
   await pause(300)
   check('境目をダブルクリックすると、元の幅に戻る', (await colWidth('.thumbs-col')) === leftBefore, String(await colWidth('.thumbs-col')))
+  // 動かした右の欄の幅は覚えておき、ダブルクリックで既定の 340px に戻すと、覚えた幅も消す
+  const rightStored = await page.evaluate(() => JSON.parse(localStorage.getItem('sotsugyo-seisaku-report-panels') ?? '{}'))
+  await page.evaluate(() => document.querySelector('.resize-handle.right').dispatchEvent(new MouseEvent('dblclick', { bubbles: true })))
+  await pause(300)
+  const rightReset = { width: await colWidth('.side'), stored: await page.evaluate(() => JSON.parse(localStorage.getItem('sotsugyo-seisaku-report-panels') ?? '{}')) }
+  check('動かした右の欄の幅は覚えておき、ダブルクリックで 340px に戻すと、覚えた幅も消す', rightStored.right === rightAfter && rightReset.width === 340 && rightReset.stored.right === undefined && rightReset.stored.left === undefined, JSON.stringify({ rightStored, rightReset }))
 
   // ---- 抄録を書き始める前は、PDF に抄録のページを入れない ----
   await page.evaluate(() => window.__editor.update((r) => ({ ...r, abstract: { ...r.abstract, started: false } })))
@@ -2013,7 +2157,7 @@ await withEdge(async (browser) => {
   for (let n = 1; n <= naDoc.numPages; n++) naText += (await (await naDoc.getPage(n)).getTextContent()).items.map((it) => it.str).join('')
   check('抄録を書き始める前は、PDF に抄録のページが入らない（画面には残る）', naDoc.numPages === s.layout.kinds.length - 1 && !/卒業制作\s*抄録/.test(naText) && s.layout.kinds.includes('abstract'), `${naDoc.numPages} / ${s.layout.kinds.length}ページ`)
 
-  // ---- エラーが残っていても、「下書き」の透かし入りの PDF は書き出せる（mockups/v22 ① 案A） ----
+  // ---- 直すところ・まだのところが残っていても、PDF は書き出せる（PDF は1つだけ。下書きの PDF と3つのチェックはなくした：依頼者の判断 2026-10-19） ----
   // 文末に「。」がない段落を作る（補助の指摘のエラー）
   const keepId = await page.evaluate(() => {
     const ed = window.__editor
@@ -2023,57 +2167,104 @@ await withEdge(async (browser) => {
   })
   await pause(300)
   await ready()
-  await page.evaluate(() => {
-    window.print = () => (window.__printed = { draft: document.documentElement.classList.contains('print-draft'), title: document.title })
-  })
-  await page.click('.side .export')
-  await page.waitForSelector('.modal .draft-box .pdf-draft')
-  const titleBefore = await page.title()
-  // 印刷の画面から保存する道（「うまくいかないとき」を開いてから）
-  await page.click('.modal .draft-box .pdf-fallback')
-  await page.waitForSelector('.modal .draft-box .pdf-print')
-  await page.click('.modal .draft-box .pdf-print')
-  await page.waitForFunction(() => !!window.__printed)
-  const printed = await page.evaluate(() => window.__printed)
-  // 印刷画面が開いているときの見た目：どのページにも「下書き」が入る（透かしは PDF の文字としては取り出せないので、印刷のときの見た目で確かめる。PDF は目視用）
-  // （PDF に書き出すと「印刷が終わった」ことになり、透かしの印が外れるので、見た目を確かめてから書き出す）
-  await page.evaluate(() => document.documentElement.classList.add('print-draft'))
-  await page.emulateMediaType('print')
-  const draftPages = await page.evaluate(() => [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].map((p) => getComputedStyle(p, '::after').content))
-  // 透かしは灰色（先生の赤ペンと見分けやすく。mockups/v35 ⑤ 案B。ツールの中で作る PDF と同じ色）
-  const draftColor = await page.evaluate(() => getComputedStyle(document.querySelector('.page-viewport.front [data-vivliostyle-page-container]'), '::after').color)
-  await page.emulateMediaType(null)
-  await page.pdf({ path: `${OUT}/draft.pdf`, preferCSSPageSize: true, printBackground: true })
-  await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
-  const afterPrint = await page.evaluate(() => ({ draft: document.documentElement.classList.contains('print-draft'), title: document.title }))
-  check('エラーが残っていても、下書きの欄の「うまくいかないとき：印刷の画面から保存」から印刷に進め、ファイル名に「_下書き」が付く（終わると元に戻る）', printed.draft && printed.title.endsWith('_下書き') && !afterPrint.draft && afterPrint.title === titleBefore, JSON.stringify(printed))
-  check('下書きの PDF は、どのページにも「下書き」の透かしが入る', draftPages.length > 0 && draftPages.every((t) => t.includes('下書き')), draftPages.map((t) => (t.includes('下書き') ? '○' : '×')).join(''))
-  check('印刷の画面から保存する下書きの透かしは灰色', draftColor === 'rgba(140, 140, 140, 0.26)', draftColor)
-  await page.emulateMediaType('print')
-  const plainPages = await page.evaluate(() => [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].map((p) => getComputedStyle(p, '::after').content))
-  await page.emulateMediaType(null)
-  check('提出用の PDF には透かしが入らない', plainPages.length > 0 && !plainPages.some((t) => t.includes('下書き')), plainPages.join(','))
-
-  // ---- 下書きの PDF を、ツールの中で作って保存する（「やめる」・作れなかったときも） ----
   {
     const title = await page.evaluate(() => window.__editor.pdfTitle)
+    rmSync(`${DOWNLOADS}/${title}.pdf`, { force: true })
+    // 右の欄と同じ分け方（app/checkSummary.ts）での、残っている直すところ・まだのところ
+    const left = await page.evaluate(async (keepId) => {
+      const { checkSummary } = await import('/src/app/checkSummary.ts')
+      const ed = window.__editor
+      const { rows, fixes } = checkSummary(ed.getSnapshot(), ed.config)
+      const keep = fixes.find((f) => f.ruleId === 'sentence-end' && f.blockId === keepId)
+      return { fixes: fixes.length, notYet: rows.filter((r) => r.state === 'todo').length, keep: keep ? `本文：${keep.title}` : '' }
+    }, keepId)
     await page.click('.side .export')
-    await page.waitForSelector('.modal .draft-box .pdf-draft')
-    check('エラーが残っているときは「下書きの PDF を保存する」', (await page.$eval('.modal .draft-box .pdf-draft', (b) => b.textContent)) === '下書きの PDF を保存する')
-    // やめる：ページとページの間で止まり、最初の窓に戻る
-    await page.click('.modal .draft-box .pdf-draft')
+    await page.waitForSelector('.modal .pdf-left')
+    const dialog = await page.evaluate(() => ({
+      title: document.querySelector('.modal h2')?.textContent ?? '',
+      lead: document.querySelector('.modal .lead')?.textContent ?? '',
+      heads: [...document.querySelectorAll('.modal .pdf-left-h')].map((h) => h.textContent),
+      fixes: [...document.querySelectorAll('.modal .fix-list li:not(.more)')].map((li) => li.textContent),
+      more: document.querySelector('.modal .fix-list .more')?.textContent ?? '',
+      notYet: document.querySelectorAll('.modal .notyet-list li').length,
+      anyway: document.querySelector('.modal .pdf-anyway')?.textContent ?? '',
+      start: document.querySelector('.modal .pdf-start')?.textContent ?? '',
+      startDisabled: document.querySelector('.modal .pdf-start')?.disabled,
+      primaries: [...document.querySelectorAll('.modal button.primary')].map((b) => b.textContent),
+      file: document.querySelector('.modal .pdf-file b')?.textContent ?? '',
+      old: !!document.querySelector('.modal .checklist, .modal .draft-box, .modal .pdf-draft, .modal input[type=checkbox]') || /下書き|透かし/.test(document.querySelector('.modal').textContent),
+      buttons: [...document.querySelectorAll('.modal .row-buttons button')].map((b) => b.textContent),
+    }))
+    await page.screenshot({ path: `${OUT}/0-pdf-left.png` })
+    check(
+      '直すところ・まだのところが残っていると、PDF の窓に右の欄と同じ言葉で一覧（押すとその場所へ）と「提出の前に直しましょう。このまま書き出すこともできます」を出し、ふつうの「PDF を保存する」で書き出せる（3つのチェック・下書きの欄・透かしの話はない）',
+      left.keep &&
+        dialog.title === 'PDFを書き出す' &&
+        dialog.lead.startsWith('直すところが') &&
+        dialog.heads[0] === '直すところ' &&
+        dialog.fixes.some((t) => t.startsWith(left.keep)) &&
+        dialog.fixes.length + (dialog.more ? Number(dialog.more.replace(/\D/g, '')) : 0) === left.fixes &&
+        (left.notYet ? dialog.heads[1] === 'まだのところ' && dialog.notYet === left.notYet : dialog.heads.length === 1) &&
+        dialog.anyway === '提出の前に直しましょう。このまま書き出すこともできます（途中で先生に見せるときなど）。' &&
+        dialog.start === 'PDF を保存する' &&
+        !dialog.startDisabled &&
+        dialog.primaries.join(',') === 'PDF を保存する' &&
+        dialog.file === `${title}.pdf` &&
+        !dialog.old &&
+        dialog.buttons.includes('直しに戻る'),
+      JSON.stringify({ dialog, left }),
+    )
+    // 一覧の直すところを押すと、窓が閉じて、その場所へ移る（その段落が開く）
+    await page.evaluate((keep) => [...document.querySelectorAll('.modal .fix-list button.link')].find((b) => b.textContent.startsWith(keep)).click(), left.keep)
+    await page.waitForFunction((id) => !document.querySelector('.modal') && window.__editor.getSnapshot().editingId === id, { timeout: 10000 }, keepId).catch(() => {})
+    const jumped = await page.evaluate(() => ({ modal: !!document.querySelector('.modal'), editing: window.__editor.getSnapshot().editingId }))
+    check('PDF の窓の一覧で直すところを押すと、窓が閉じて、その場所へ移る', !jumped.modal && jumped.editing === keepId, JSON.stringify(jumped))
+    await page.evaluate(() => window.__editor.finishEditing())
+    await pause(300)
+    await ready()
+
+    // 印刷の画面から保存する道（「うまくいかないとき」を開いてから）。ファイル名は同じで、透かしは入らない
+    await page.evaluate(() => {
+      window.print = () => (window.__printed = { title: document.title, draftClass: document.documentElement.classList.contains('print-draft') })
+    })
+    const titleBefore = await page.title()
+    await page.click('.side .export')
+    await page.waitForSelector('.modal .pdf-left')
+    await page.click('.modal .row-buttons .pdf-fallback')
+    await page.waitForSelector('.modal .pdf-print-box .pdf-print')
+    await page.click('.modal .pdf-print-box .pdf-print')
+    await page.waitForFunction(() => !!window.__printed)
+    const printed = await page.evaluate(() => window.__printed)
+    await page.emulateMediaType('print')
+    const marks = await page.evaluate(() => [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].map((p) => getComputedStyle(p, '::after').content))
+    await page.emulateMediaType(null)
+    await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
+    const afterTitle = await page.title()
+    check(
+      '残っていても「うまくいかないとき：印刷の画面から保存」から印刷に進め、ファイル名はいつもと同じ（「_下書き」も透かしもない。終わると元に戻る）',
+      printed.title === title && !printed.draftClass && marks.length > 0 && !marks.some((t) => t.includes('下書き')) && afterTitle === titleBefore,
+      JSON.stringify({ printed, afterTitle }),
+    )
+
+    // ツールの中で作って保存する（「やめる」・作れなかったときも）
+    await page.click('.side .export')
+    await page.waitForSelector('.modal .pdf-start')
+    await page.click('.modal .pdf-start')
     await page.waitForFunction(() => document.querySelectorAll('.modal .pdf-thumbs img').length >= 1, { timeout: 60000 })
     await page.evaluate(() => [...document.querySelectorAll('.modal .row-buttons button')].find((b) => b.textContent === 'やめる').click())
     await pause0(1500)
-    check('作っている途中の「やめる」で止まり、最初の窓に戻る（保存しない）', !!(await page.$('.modal .draft-box .pdf-draft')) && !existsSync(`${DOWNLOADS}/${title}_下書き.pdf`))
-    // 下書きの PDF を作って保存する
-    await page.click('.modal .draft-box .pdf-draft')
+    check('作っている途中の「やめる」で止まり、最初の窓に戻る（保存しない）', !!(await page.$('.modal .pdf-left .fix-list')) && !existsSync(`${DOWNLOADS}/${title}.pdf`))
+    await page.click('.modal .pdf-start')
     await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
-    const draftDone = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, file: document.querySelector('.modal .pdf-file b')?.textContent, note: document.querySelector('.modal .lead')?.textContent ?? '' }))
+    const done = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, file: document.querySelector('.modal .pdf-file b')?.textContent, note: document.querySelector('.modal .lead')?.textContent ?? '' }))
     const printedPages = await page.evaluate(() => window.__editor.pageElements().filter((p) => !p.classList.contains('print-skip')).length)
-    const saved = await savedPdf(`${title}_下書き.pdf`)
-    await page.screenshot({ path: `${OUT}/0-pdf-draft-saved.png` })
-    check('下書きの PDF も同じ流れで作って保存し、ファイル名に「_下書き」が付く（透かしの説明）', draftDone.title === '下書きの PDF を保存しました' && draftDone.file === `${title}_下書き.pdf` && draftDone.note.includes('透かし') && saved.pages === printedPages, JSON.stringify({ draftDone, saved, printedPages }))
+    const saved = await savedPdf(`${title}.pdf`)
+    await page.screenshot({ path: `${OUT}/0-pdf-left-saved.png` })
+    check(
+      '残っていても、同じ流れで PDF を作って保存できる（ファイル名はいつもと同じ。透かしの説明はない）',
+      done.title === '保存しました' && done.file === `${title}.pdf` && !/下書き|透かし/.test(done.note) && saved.pages === printedPages && !saved.files.some((f) => f.includes('下書き')),
+      JSON.stringify({ done, saved, printedPages }),
+    )
     await page.click('.modal .close')
     await pause0(300)
     // 作れなかったとき（画像を JPEG にできない）：印刷の画面から保存する道を出す
@@ -2084,15 +2275,15 @@ await withEdge(async (browser) => {
       }
     })
     await page.click('.side .export')
-    await page.waitForSelector('.modal .draft-box .pdf-draft')
-    await page.click('.modal .draft-box .pdf-draft')
+    await page.waitForSelector('.modal .pdf-start')
+    await page.click('.modal .pdf-start')
     await page.waitForSelector('.modal .pdf-print', { timeout: 60000 })
     const failed = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, guide: document.querySelector('.modal .print-guide')?.textContent ?? '', retry: [...document.querySelectorAll('.modal button')].some((b) => b.textContent === 'もう一度作る') }))
     await page.screenshot({ path: `${OUT}/0-pdf-failed.png` })
     await page.evaluate(() => {
       HTMLCanvasElement.prototype.toBlob = window.__toBlob
     })
-    check('作れなかったときは「PDF を作れませんでした」と、印刷の画面での選び方・「印刷の画面を開く」・「もう一度作る」を出す', failed.title === 'PDF を作れませんでした' && failed.guide.includes('印刷の画面で') && failed.guide.includes('_下書き.pdf') && failed.retry, JSON.stringify(failed))
+    check('作れなかったときは「PDF を作れませんでした」と、印刷の画面での選び方・「印刷の画面を開く」・「もう一度作る」を出す', failed.title === 'PDF を作れませんでした' && failed.guide.includes('印刷の画面で') && failed.guide.includes(`${title}.pdf`) && !failed.guide.includes('下書き') && failed.retry, JSON.stringify(failed))
     await page.click('.modal .close')
     await pause0(300)
   }
@@ -2155,6 +2346,12 @@ await withEdge(async (browser) => {
 
   // ---- はじめて使う先生の試しで見つかったこと（書き間違えやすい語のエラー・はじめての案内の続き。scripts/e2e/teacherTrialFixes.mjs） ----
   await teacherTrialPc(browser, check)
+
+  // ---- 段落をまたいで選ぶ（なぞって選ぶ・コピー・切り取り・削除・貼り付け。scripts/e2e/rangeSelect.mjs） ----
+  await rangeSelectPc(browser, check)
+
+  // ---- 書く欄の折り返しが紙面と同じ（scripts/e2e/writingWrap.mjs） ----
+  await writingWrapPc(browser, check)
 })
 
 /**
@@ -2239,7 +2436,6 @@ async function photoWholeCheck(browser) {
       let colors = null
       await buildPdf([photos], {
         title: 'whole-check',
-        draft: false,
         onPage: ({ canvas }) => {
           const ctx = canvas.getContext('2d')
           const y = Math.round(canvas.height * 0.25)
@@ -2342,7 +2538,7 @@ async function photoWholeCheck(browser) {
   await context.close()
 }
 
-/** エラーが0件の見本の原稿で、3つを確かめる → PDF を作る（進み具合・できたページの絵）→「ダウンロード」に保存、までを確かめる */
+/** 直すところ・まだのところのない見本の原稿で、PDF を作る（進み具合・できたページの絵）→「ダウンロード」に保存、までを確かめる */
 async function pdfSaveCheck(browser) {
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
@@ -2374,84 +2570,37 @@ async function pdfSaveCheck(browser) {
   await pause(800)
   await ready()
   const errorsNow = await page.evaluate(() => window.__editor.getSnapshot().findings.filter((f) => f.severity === 'error').map((f) => f.title))
-  // 右の欄：指摘のない原稿は「直すところ 0、まだ 0」、まだのところは全部 ✓（抄録は書いている・図は目安）、「提出用のPDFを書き出せます」（mockups/v35 ① 案A）
+  // 右の欄：指摘のない原稿は「直すところ 0、まだ 0」、まだのところは全部 ✓（抄録は書いている）、「直すところ・まだのところはありません」（mockups/v35 ① 案A）
   const zeroPanel = await page.evaluate(() => ({
-    tally: document.querySelector('.side .tally')?.textContent.replace(/\s/g, '') ?? '',
+    // 数は小見出しの横（mockups/v37）。0 のときは出さない
+    tally: [...document.querySelectorAll('.side .check-sub')].map((s) => s.textContent.replace(/\s/g, '')).join(','),
     rows: [...document.querySelectorAll('.side .check-prog li')].map((li) => li.className).join(','),
     note: document.querySelector('.side-foot .export-note')?.textContent ?? '',
   }))
-  check('指摘のない原稿の右の欄は「直すところ 0　まだ 0」で、まだのところは全部 ✓、PDF のボタンの下は「提出用のPDFを書き出せます」', zeroPanel.tally === '直すところ0まだ0' && zeroPanel.rows === 'done,done,done,done,done,info' && zeroPanel.note === '提出用のPDFを書き出せます', JSON.stringify(zeroPanel))
-  // ツールの中で作る下書きの PDF の透かしは灰色（mockups/v35 ⑤ 案B）：同じページを下書きと提出用で画像にして、違う所（透かし）の色を見る
-  const watermark = await page.evaluate(async () => {
-    const { pagesToPdf } = await import('/src/pdf/pagesToPdf.ts')
-    const ed = window.__editor
-    const target = ed.pageElements()[ed.getSnapshot().layout.kinds.indexOf('toc')]
-    const grab = async (draft) => {
-      let data = null
-      await pagesToPdf([target], { draft, onPage: ({ canvas }) => { data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data } })
-      return data
-    }
-    const a = await grab(true)
-    const b = await grab(false)
-    let changed = 0
-    let gray = 0
-    for (let i = 0; i < a.length; i += 4 * 7) {
-      if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) < 12) continue
-      changed++
-      if (Math.abs(a[i] - a[i + 1]) <= 6 && Math.abs(a[i + 1] - a[i + 2]) <= 6) gray++
-    }
-    return { changed, gray }
-  })
-  check('ツールの中で作る下書きの PDF の透かしは灰色（透かしの所に赤みがない）', watermark.changed > 1000 && watermark.gray / watermark.changed > 0.95, JSON.stringify(watermark))
+  check('指摘のない原稿の右の欄は、まだのところ・直すところの数を出さず（0）、まだのところは全部 ✓ の行のまま（直すところがないので、たたまない）、PDF のボタンの下は「直すところ・まだのところはありません」', zeroPanel.tally === 'まだのところ,直すところ' && zeroPanel.rows === 'done,done,done,done,done' && zeroPanel.note === '直すところ・まだのところはありません', JSON.stringify(zeroPanel))
   await page.click('.side .export')
-  await page.waitForSelector('.modal .checklist')
+  await page.waitForSelector('.modal .pdf-start')
   const confirm = await page.evaluate(() => ({
+    title: document.querySelector('.modal h2')?.textContent,
+    lead: document.querySelector('.modal .lead')?.textContent,
     start: document.querySelector('.modal .pdf-start')?.textContent,
     disabled: document.querySelector('.modal .pdf-start')?.disabled,
     file: document.querySelector('.modal .pdf-file b')?.textContent,
     fallback: document.querySelector('.modal .row-buttons .pdf-fallback')?.textContent,
+    list: !!document.querySelector('.modal .pdf-left'),
+    old: !!document.querySelector('.modal .checklist, .modal .draft-box, .modal .pdf-draft, .modal input[type=checkbox]') || /下書き|透かし/.test(document.querySelector('.modal').textContent),
   }))
   const title = await page.evaluate(() => window.__editor.pdfTitle)
+  await page.screenshot({ path: `${OUT}/0-pdf-zero.png` })
   check(
-    '「PDFを書き出す」の窓：3つを確かめるまで「PDF を保存する」は押せず、ファイル名と、左下に「うまくいかないとき：印刷の画面から保存」が出る',
-    errorsNow.length === 0 && confirm.start === 'PDF を保存する' && confirm.disabled && confirm.file === `${title}.pdf` && confirm.fallback?.includes('印刷の画面から保存'),
+    '「PDFを書き出す」の窓（残っていないとき）：「直すところ・まだのところはありません」と、すぐ押せる「PDF を保存する」・ファイル名・左下の「うまくいかないとき：印刷の画面から保存」だけ（3つのチェック・下書きの欄はない）',
+    errorsNow.length === 0 && confirm.title === 'PDFを書き出す' && confirm.lead === '直すところ・まだのところはありません。' && confirm.start === 'PDF を保存する' && !confirm.disabled && confirm.file === `${title}.pdf` && confirm.fallback?.includes('印刷の画面から保存') && !confirm.list && !confirm.old,
     JSON.stringify({ errorsNow, ...confirm }),
   )
-  // エラーが0件の窓にも、エラーがあるときと同じ下書きの欄（mockups/v35 ⑤ 案A）。ボタンは目立たない形（青いボタンは「PDF を保存する」だけ）で、下のボタンの前
-  const draftZero = await page.evaluate(() => {
-    const box = document.querySelector('.modal .draft-box')
-    const btn = box?.querySelector('.pdf-draft')
-    const rows = document.querySelector('.modal .row-buttons')
-    return {
-      text: box?.textContent ?? '',
-      button: btn?.textContent ?? '',
-      primary: btn ? btn.classList.contains('primary') : null,
-      primaries: document.querySelectorAll('.modal button.primary').length,
-      beforeButtons: !!box && !!rows && !!(box.compareDocumentPosition(rows) & Node.DOCUMENT_POSITION_FOLLOWING),
-    }
-  })
-  await page.screenshot({ path: `${OUT}/0-pdf-zero-draft-box.png` })
-  check(
-    'エラーが0件の窓にも「先生に途中経過を見せるとき」の下書きの欄があり（3つのチェックは要らない）、ボタンは目立たない形で、下のボタンの前にある',
-    draftZero.text.includes('先生に途中経過を見せるとき') && draftZero.text.includes('上の3つのチェックは要りません') && draftZero.button === '下書きの PDF を保存する' && draftZero.primary === false && draftZero.primaries === 1 && draftZero.beforeButtons,
-    JSON.stringify(draftZero),
-  )
-  // チェックを入れずに、下書きの PDF を作って保存できる（前の確かめで保存した同じ名前のファイルは、先に消しておく）
-  rmSync(`${DOWNLOADS}/${title}_下書き.pdf`, { force: true })
-  await page.click('.modal .draft-box .pdf-draft')
-  await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
-  const zeroDraft = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, file: document.querySelector('.modal .pdf-file b')?.textContent }))
-  const zeroSaved = await savedPdf(`${title}_下書き.pdf`)
-  check('エラーが0件でも、チェックを入れずに下書きの PDF を作って保存できる（ファイル名に「_下書き」）', zeroDraft.title === '下書きの PDF を保存しました' && zeroDraft.file === `${title}_下書き.pdf` && zeroSaved.pages > 0, JSON.stringify({ zeroDraft, zeroSaved }))
-  await page.click('.modal .close')
-  await pause(300)
-  await page.click('.side .export')
-  await page.waitForSelector('.modal .checklist')
   // 「うまくいかないとき」を開くと、今までの印刷の画面での選び方と「印刷の画面を開く」が出る
   await page.click('.modal .row-buttons .pdf-fallback')
   check('「うまくいかないとき：印刷の画面から保存」を押すと、印刷の画面での選び方と「印刷の画面を開く」が出る', await page.evaluate(() => !!document.querySelector('.modal .pdf-print-box .print-guide') && !!document.querySelector('.modal .pdf-print-box .pdf-print')))
   await page.click('.modal .row-buttons .pdf-fallback')
-  await page.evaluate(() => document.querySelectorAll('.modal .checklist input').forEach((i) => i.click()))
   await page.click('.modal .pdf-start')
   // 作っている途中：進み具合と、できたページの小さな絵
   await page.waitForFunction(() => document.querySelectorAll('.modal .pdf-thumbs img').length >= 1, { timeout: 60000 })
@@ -2509,6 +2658,18 @@ async function wordImportCheck(browser) {
     await pause(200)
   }
   const clickButton = (sel, text) => page.evaluate((sel, text) => [...document.querySelectorAll(sel)].find((b) => b.textContent.includes(text)).click(), sel, text)
+  // 右の欄の「メニュー」に「Word で書いた分を読み込む」があるか（開いて見て、閉じる。mockups/v37 案C。開けなければ null）
+  const menuHasWord = () =>
+    page.evaluate(async () => {
+      const btn = document.querySelector('.side .menu-btn')
+      btn.click()
+      await new Promise((r) => setTimeout(r, 150))
+      const opened = !!document.querySelector('.side .head-menu')
+      const has = [...document.querySelectorAll('.side .head-menu [role="menuitem"]')].some((b) => b.textContent.includes('Word で書いた分を読み込む'))
+      btn.click()
+      await new Promise((r) => setTimeout(r, 150))
+      return opened ? has : null
+    })
 
   await page.waitForSelector('.guide.step-course .g-opts button')
   await page.evaluate(() => document.querySelector('.g-opts button').click())
@@ -2586,9 +2747,9 @@ async function wordImportCheck(browser) {
       kept: (await listSnapshots()).filter((x) => x.keep).length,
       guide: document.querySelector('.guide')?.className ?? null,
       todo: document.querySelector('.side .word-todo')?.textContent ?? '',
-      link: !!document.querySelector('.side .word-link'),
     }
   })
+  after.link = await menuHasWord()
   await page.screenshot({ path: `${OUT}/word-after.png` })
   const b = after.report.basicInfo
   check(
@@ -2602,7 +2763,7 @@ async function wordImportCheck(browser) {
     coverRead ? !!b.studentId && !!b.name && !!b.subtitleInput && after.guide === null && after.kind === 'body' : after.guide !== null,
     JSON.stringify({ basicInfo: b, guide: after.guide, page: after.kind }),
   )
-  check('右の欄の上に「Word から写しました」の「つぎにすること」が出る（リンクは隠す）', after.todo.includes('Word から写しました') && after.todo.includes('読み込む前の原稿に戻す') && !after.link, after.todo)
+  check('右の欄の上に「Word から写しました」の「つぎにすること」が出る（「メニュー」の「Word で書いた分を読み込む」は隠す）', after.todo.includes('Word から写しました') && after.todo.includes('読み込む前の原稿に戻す') && after.link === false, `${after.link} ${after.todo}`)
   if (after.guide) {
     await page.evaluate(() => document.querySelector('.g-later')?.click())
     await ready()
@@ -2641,9 +2802,10 @@ async function wordImportCheck(browser) {
   await ready()
   const restored = await page.evaluate(() => {
     const r = window.__editor.getSnapshot().report
-    return { body: JSON.stringify(r.body), basicInfo: r.basicInfo, link: !!document.querySelector('.side .word-link') }
+    return { body: JSON.stringify(r.body), basicInfo: r.basicInfo }
   })
-  check('「読み込む前の原稿に戻す」で、読み込む前の原稿に戻り、「つぎにすること」は消えてリンクが戻る', restored.body === JSON.stringify(template.body) && restored.basicInfo.name === template.basicInfo.name && restored.link, JSON.stringify(restored.basicInfo))
+  restored.link = await menuHasWord()
+  check('「読み込む前の原稿に戻す」で、読み込む前の原稿に戻り、「つぎにすること」は消えて「メニュー」の「Word で書いた分を読み込む」が戻る', restored.body === JSON.stringify(template.body) && restored.basicInfo.name === template.basicInfo.name && restored.link === true, JSON.stringify({ ...restored.basicInfo, link: restored.link }))
   await context.close()
 }
 

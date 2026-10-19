@@ -7,7 +7,7 @@ import { abstractCharCount, type Area, type ReportFinding } from './reportChecks
  * セルフチェックの指摘を「まだのところ」と「直すところ」に分ける（mockups/v35 ① 案A）。
  * - まだのところ：まだ書いていない・入れていないだけのもの。決まった行の進み具合（灰色の ○、済むと緑の ✓、「あと2」）で見せ、赤くしない
  * - 直すところ：書いた文の間違い。今までどおり、エラー（赤）・要確認（黄）の一覧
- * 提出用の PDF の決まりは変えない（どちらに分けても、エラーが残っていれば提出用の PDF は書き出せない。app/ExportDialog.tsx）
+ * どちらも、提出の前に0にするもの。「PDFを書き出す」の窓は、残っていれば同じ言葉で一覧にする（そのまま書き出すこともできる。app/ExportDialog.tsx）
  */
 
 /**
@@ -16,7 +16,7 @@ import { abstractCharCount, type Area, type ReportFinding } from './reportChecks
  * - body-pages：本文のページが足りない
  * - paragraph-empty：ひな形の段落（書くことの説明がある段落）を、まだ書いていない。説明のない空の段落（Enter を押して残ったもの）は直すところ
  * - photos-required：作品写真がまだ1枚もない
- * - abstract-not-started：抄録は先生の許可のあと（灰色の「先生の許可のあと」。まだの数にも数えない。提出用の PDF は今までどおり止める）
+ * - abstract-not-started：抄録は先生の許可のあと（灰色の「先生の許可のあと」。まだの数にも数えない。書き出す PDF には、抄録のページが入らない）
  * - abstract-length・abstract-lines：書き始めた抄録が、まだ短い（字数・行数が足りない）。多すぎるときは直すところ
  * - figure-image・swatch-image・table-cell-empty：図の枠・素材表の生地見本に、まだ写真を入れていない／表のセルがまだ空（ひな形の図の枠と素材表は、書き始めたときから空）
  * - figure-unreferenced・table-unreferenced：図表のすぐ前の、ひな形の段落をまだ書いていない（書いたのに「図1」がなければ、直すところ）
@@ -119,7 +119,8 @@ export interface ProgressRow {
 const COVER_FIELDS: Record<string, string> = { 'basic:studentId': '学籍番号', 'basic:name': '氏名', 'basic:subtitleInput': 'サブタイトル', 'basic:course': 'コース' }
 
 /**
- * まだのところの行（表紙・本文のページ・本文の段落・（空いている所があれば）図・表・作品写真・抄録・図の枚数）。
+ * まだのところの行（表紙・本文のページ・本文の段落・（空いている所があれば）図・表・作品写真・抄録）。
+ * 図の枚数の行は出さない（依頼者の判断。2026-10-19。多すぎるときは、直すところの「画像は1ページあたり…」で知らせる）。
  * findings はツールの指摘（セルフチェック）、pending は紙面を組み終えていない（ページ数のチェックをまだしていない）とき
  */
 export function progressRows(findings: ReportFinding[], ctx: ProgressContext, pending = false): ProgressRow[] {
@@ -187,26 +188,22 @@ export function progressRows(findings: ReportFinding[], ctx: ProgressContext, pe
     rows.push({ id: 'abstract', label: '抄録', state: 'todo', value: `${lines} / ${minLines}行　あと`, strong: String(minLines - lines), bar: lines / minLines, target: at(fewLines) })
   } else rows.push({ id: 'abstract', label: '抄録', state: 'done', value: '書いています', target: abstractArea })
 
-  // 図の枚数（目安だけ。多すぎるときは、直すところの「画像は1ページあたり…」）
-  const figures = blocks.reduce((n, b) => n + (b.type === 'figureRow' ? b.figures.length : 0), 0)
-  const figureMax = Math.max(1, bodyPages * config.body.imagesPerPageGuide)
-  rows.push({ id: 'figures', label: '図の枚数', state: 'info', value: `${figures}枚（目安 ${figureMax}枚まで）` })
   return rows
 }
 
-/** まだのところの数（「まだ」の行の数。抄録の「先生の許可のあと」と図の枚数は数えない） */
+/** まだのところの数（「まだ」の行の数。抄録の「先生の許可のあと」は数えない） */
 export const notYetCount = (rows: ProgressRow[]): number => rows.filter((r) => r.state === 'todo').length
 
 /**
  * 「PDFを書き出す」の下のひとこと。fix：直すところの数、notYet：まだのところの数、
- * pending：紙面を確かめている途中、abstractWaiting：抄録を先生の許可の前で、まだ書き始めていない（提出用の PDF は書き出せない）
+ * pending：紙面を確かめている途中、abstractWaiting：抄録を先生の許可の前で、まだ書き始めていない（ほかは済んでいる）
  */
 export function exportNote({ fix, notYet, pending, abstractWaiting }: { fix: number; notYet: number; pending: boolean; abstractWaiting: boolean }): string {
   if (fix > 0 && notYet > 0) return `直すところが${fix}つ、まだのところが${notYet}つあります`
   if (fix > 0) return `直すところが${fix}つあります`
   if (notYet > 0) return `まだのところが${notYet}つあります`
   if (pending) return '紙面を確かめています…'
-  // 残っているのは、抄録（先生の許可のあと）だけ。提出用の PDF は、抄録を書いてから
-  if (abstractWaiting) return '抄録を書くと、提出用のPDFを書き出せます'
-  return '提出用のPDFを書き出せます'
+  // 残っているのは、抄録（先生の許可のあと）だけ
+  if (abstractWaiting) return 'あとは抄録です（先生の許可のあと）'
+  return '直すところ・まだのところはありません'
 }

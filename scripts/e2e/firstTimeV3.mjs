@@ -5,7 +5,7 @@
 // - Word を選び直したとき、読めない形のファイルなら、その名前を出し、前のファイルは外す
 // - 1行の欄に2行を貼り付けたら1行目だけ。氏名に数字・「学籍番号」、表紙の欄からはみ出す、はエラー
 // - 表を貼り付けた・「。」を自動で付けた・引用・参考文献を反映した、を画面の下に知らせる
-// - 提出用の PDF の窓に警告の一覧。下書きの PDF に、空の作品写真のページを入れない
+// - PDF の窓に、要確認も一覧で出す。作品写真がまだないときの PDF に、空の作品写真のページを入れない
 // - 作品写真：まとめて選べる。入らない枚数と、隠れた写真を知らせる
 // - 「バックアップ・作り直す」（mockups/v34 案A）
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
@@ -116,6 +116,12 @@ const paste = (page, plain, html) =>
   )
 
 /** 画面の下の知らせ（出ていなければ空） */
+/** 右の欄の「≡ メニュー」を開いて、項目を押す（mockups/v37 案C。「？ 使い方」「バックアップ・作り直す」はこの中）。name：項目の名前の一部 */
+const pickMenu = async (page, name) => {
+  if (!(await page.$('.side .head-menu'))) await page.click('.side .menu-btn')
+  await page.waitForSelector('.side .head-menu [role="menuitem"]')
+  await page.evaluate((name) => [...document.querySelectorAll('.side .head-menu [role="menuitem"]')].find((b) => b.textContent.includes(name)).click(), name)
+}
 const toastText = (page) => page.evaluate(() => document.querySelector('.undo-area .undo-toast')?.textContent ?? '')
 
 /** 保存された PDF を待って、ページの数を返す（smoke.mjs と同じ数え方） */
@@ -175,16 +181,20 @@ export async function firstTimeV3Pc(browser, check) {
   await pause(800)
   await ready()
 
-  // ---- 「バックアップ・作り直す」（mockups/v34 案A） ----
+  // ---- 「バックアップ・作り直す」（mockups/v34 案A。v37 案C から、右の欄の「≡ メニュー」の中） ----
+  await page.click('.side .menu-btn')
+  await page.waitForSelector('.side .head-menu')
   const side = await page.evaluate(() => {
-    const btns = [...document.querySelectorAll('.side .links .link-btn')]
-    const b = btns.find((x) => x.textContent.includes('バックアップ'))
-    const h = btns.find((x) => x.classList.contains('help-btn'))
-    return { names: btns.map((x) => x.textContent.trim()), width: Math.round(b?.getBoundingClientRect().width ?? 0), help: Math.round(h?.getBoundingClientRect().width ?? 0), oneLine: (() => { const l = b?.querySelector('.backup-label'); return !!l && l.getBoundingClientRect().height < parseFloat(getComputedStyle(l).fontSize) * 2 })() }
+    const items = [...document.querySelectorAll('.side .head-menu [role="menuitem"]')]
+    const b = items.find((x) => x.textContent.includes('バックアップ'))
+    const cs = b && getComputedStyle(b)
+    // 上下の余白を除いた高さが、1行分
+    return { names: items.map((x) => x.textContent.trim()), oneLine: !!b && b.getBoundingClientRect().height - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom) < parseFloat(cs.lineHeight) * 1.5 }
   })
+  await page.click('.side .menu-btn')
   check(
-    '右の欄のボタンは「バックアップ・作り直す」（となりの「使い方」より広く、1行に入る）',
-    side.names.join(',') === 'バックアップ・作り直す,使い方' && side.width > side.help && side.oneLine,
+    '右の欄の「メニュー」の中に「バックアップ・作り直す」がある（いちばん上は「使い方」。1行に入る）',
+    side.names[0] === '使い方' && side.names[1] === 'バックアップ・作り直す' && side.oneLine,
     JSON.stringify(side),
   )
   // 自動の控えを3つにする（10分ごとの控えと同じもの）
@@ -206,7 +216,7 @@ export async function firstTimeV3Pc(browser, check) {
     const r = window.__editor.getSnapshot().report
     for (const at of ['2026-10-17T07:50:00.000Z', '2026-10-18T05:30:00.000Z', '2026-10-18T12:32:53.000Z']) await saveSnapshot(r, at)
   })
-  await page.evaluate(() => [...document.querySelectorAll('.side .links .link-btn')].find((b) => b.textContent.includes('バックアップ')).click())
+  await pickMenu(page, 'バックアップ')
   await page.waitForSelector('.modal .snapshots li')
   await page.evaluate(() => document.activeElement?.blur())
   await pause(300)
@@ -246,7 +256,7 @@ export async function firstTimeV3Pc(browser, check) {
   await page.waitForFunction(() => !document.querySelector('.modal'), { timeout: 10000 })
   await ready()
   const replaced = await snap()
-  await page.evaluate(() => [...document.querySelectorAll('.side .links .link-btn')].find((b) => b.textContent.includes('バックアップ')).click())
+  await pickMenu(page, 'バックアップ')
   await page.waitForSelector('.modal .snapshots li')
   const newest = await page.evaluate(() => document.querySelector('.modal .snapshots li span')?.textContent ?? '')
   await page.screenshot({ path: `${OUT}/01-replace-snapshot.png` })
@@ -263,7 +273,7 @@ export async function firstTimeV3Pc(browser, check) {
     JSON.stringify({ restoreMessage, before: replaced.report.basicInfo.courseId, after: restored.report.basicInfo.courseId }),
   )
   // 同じコースの控え（はじめに残した、いちばん下の控え）なら、コースのことは書かない
-  await page.evaluate(() => [...document.querySelectorAll('.side .links .link-btn')].find((b) => b.textContent.includes('バックアップ')).click())
+  await pickMenu(page, 'バックアップ')
   await page.waitForSelector('.modal .snapshots li')
   const sameAsked = new Promise((r) => page.once('dialog', async (d) => { r(d.message()); await d.dismiss() }))
   await page.evaluate(() => document.querySelector('.modal .snapshots li:last-child button').click())
@@ -300,7 +310,7 @@ export async function firstTimeV3Pc(browser, check) {
   await page.screenshot({ path: `${OUT}/03-name-overflow-errors.png` })
   const nameErrors = polluted.findings.filter((f) => f.blockId === 'basic:name' && f.severity === 'error').map((f) => f.ruleId)
   check(
-    '氏名に「学籍番号」や数字が入っている・表紙の欄からはみ出す、はエラーになる（提出用の PDF を書き出せない）',
+    '氏名に「学籍番号」や数字が入っている・表紙の欄からはみ出す、はエラーになる（直すところに残る）',
     nameErrors.includes('name-text') && nameErrors.includes('cover-field-fit'),
     JSON.stringify(nameErrors),
   )
@@ -371,7 +381,7 @@ export async function firstTimeV3Pc(browser, check) {
 
   // ---- 引用・参考文献の「反映する」：そのページへ移り、「引用・参考文献を反映しました」と出る ----
   // 引用・参考文献は、使い方の「引用・参考文献」の「引用・参考文献を入れる」から入れる（右の欄からは外した。mockups/v35 ①）
-  await page.click('.side .help-btn')
+  await pickMenu(page, '使い方')
   await page.waitForSelector('.help-list button[data-topic="references"]')
   await page.click('.help-list button[data-topic="references"]')
   await page.waitForSelector('.help-topic .help-refs')
@@ -398,32 +408,38 @@ export async function firstTimeV3Pc(browser, check) {
   await page.click('.help-close')
   await page.waitForSelector('.side .sec.check')
 
-  // ---- 提出用の PDF の窓：警告を一覧で出す（多いときは5件と「ほか◯件」） ----
+  // ---- PDF の窓：要確認も、直すところの一覧で出す（多いときは5件と「ほか◯件」） ----
+  // 説明のない空の段落（要確認の「空の段落がある」。直すところ）を7つ作る
   await page.evaluate(() =>
     window.__editor.update((r) => ({
       ...r,
-      body: r.body.map((c) => (c.id === 'c3' ? { ...c, blocks: [...c.blocks, ...Array.from({ length: 7 }, (_, i) => ({ type: 'paragraph', id: `w${i}`, content: [{ type: 'text', text: '' }], hint: '工夫した点を書く' }))] } : c)),
+      body: r.body.map((c) => (c.id === 'c3' ? { ...c, blocks: [...c.blocks, ...Array.from({ length: 7 }, (_, i) => ({ type: 'paragraph', id: `w${i}`, content: [{ type: 'text', text: '' }] }))] } : c)),
     })),
   )
   await pause(800)
   await ready()
   const warnState = await snap()
   const errorsNow = warnState.findings.filter((f) => f.severity === 'error')
-  const warningsNow = warnState.findings.filter((f) => f.severity !== 'error')
+  // 右の欄と同じ分け方の、直すところ（app/checkSummary.ts）
+  const fixesNow = await page.evaluate(async () => {
+    const { checkSummary } = await import('/src/app/checkSummary.ts')
+    const ed = window.__editor
+    return checkSummary(ed.getSnapshot(), ed.config).fixes.filter((f) => f.severity !== 'error').length
+  })
   await page.click('.side .export')
-  await page.waitForSelector('.modal .checklist', { timeout: 60000 })
+  await page.waitForSelector('.modal .pdf-left .fix-list', { timeout: 60000 })
   const listed = await page.evaluate(() => ({
-    items: [...document.querySelectorAll('.modal .warning-list li')].map((li) => li.textContent),
-    links: document.querySelectorAll('.modal .warning-list li:not(.more) button.link').length,
+    items: [...document.querySelectorAll('.modal .fix-list li')].map((li) => li.textContent),
+    links: document.querySelectorAll('.modal .fix-list li:not(.more) button.link').length,
   }))
   await page.screenshot({ path: `${OUT}/09-pdf-warnings.png` })
-  await page.evaluate(() => document.querySelector('.modal .warning-list .more button').click())
+  await page.evaluate(() => document.querySelector('.modal .fix-list .more button').click())
   await pause(200)
-  const expanded = await page.evaluate(() => document.querySelectorAll('.modal .warning-list li').length)
+  const expanded = await page.evaluate(() => document.querySelectorAll('.modal .fix-list li').length)
   check(
-    '提出用の PDF の窓に、警告をエラーと同じ形の一覧で出す（はじめは5件と「ほか◯件」。押すとすべて）',
-    errorsNow.length === 0 && warningsNow.length >= 7 && listed.links === 5 && listed.items[5] === `ほか${warningsNow.length - 5}件` && expanded === warningsNow.length,
-    JSON.stringify({ errors: errorsNow.map((f) => f.title), warnings: warningsNow.length, listed, expanded }),
+    'PDF の窓に、要確認もエラーと同じ形の一覧（直すところ。「（要確認」を付ける）で出す（はじめは5件と「ほか◯件」。押すとすべて）',
+    errorsNow.length === 0 && fixesNow >= 7 && listed.links === 5 && listed.items[5] === `ほか${fixesNow - 5}件` && expanded === fixesNow && listed.items.slice(0, 5).every((t) => t.includes('（要確認')),
+    JSON.stringify({ errors: errorsNow.map((f) => f.title), fixesNow, listed, expanded }),
   )
   await page.click('.modal .close')
   await pause(300)
@@ -474,7 +490,7 @@ export async function firstTimeV3Pc(browser, check) {
   await page.screenshot({ path: `${OUT}/11-photos-hidden.png` })
   check('写真より枠の少ない並べ方にすると「3枚目からは隠れています（並べ方を戻すと出ます）」と出る', hiddenToast === '3枚目からは隠れています（並べ方を戻すと出ます）', hiddenToast)
 
-  // ---- 作品写真がないときの下書きの PDF には、空の作品写真のページを入れない ----
+  // ---- 作品写真がまだないときの PDF には、空の作品写真のページを入れない（前は下書きの PDF だけの決まり） ----
   await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: { layout: 1, imageIds: [] } })))
   await pause(600)
   await ready()
@@ -484,18 +500,19 @@ export async function firstTimeV3Pc(browser, check) {
     const printed = ed.pageElements().filter((p) => !p.classList.contains('print-skip'))
     return { all: printed.length, photos: kinds.filter((k) => k === 'photos').length, title: ed.pdfTitle }
   })
+  rmSync(`${downloads}/${pages.title}.pdf`, { force: true })
   await page.click('.side .export')
-  await page.waitForSelector('.modal .pdf-draft', { timeout: 60000 })
-  await page.click('.modal .pdf-draft')
+  await page.waitForSelector('.modal .pdf-start', { timeout: 60000 })
+  await page.click('.modal .pdf-start')
   await page.waitForSelector('.modal .pdf-progress span')
   const total = await page.evaluate(() => Number(document.querySelector('.modal .pdf-progress span').textContent.split('/')[1].replace(/\D/g, '')))
   await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
-  const draft = await savedPdf(downloads, `${pages.title}_下書き.pdf`)
-  await page.screenshot({ path: `${OUT}/10-draft-no-photo-page.png` })
+  const made = await savedPdf(downloads, `${pages.title}.pdf`)
+  await page.screenshot({ path: `${OUT}/10-no-photo-page.png` })
   check(
-    '作品写真がまだないときの下書きの PDF には、空の作品写真のページを入れない',
-    pages.photos === 1 && total === pages.all - 1 && draft.head === '%PDF-' && draft.pages === pages.all - 1,
-    JSON.stringify({ pages, total, draft }),
+    '作品写真がまだないときの PDF には、空の作品写真のページを入れない',
+    pages.photos === 1 && total === pages.all - 1 && made.head === '%PDF-' && made.pages === pages.all - 1,
+    JSON.stringify({ pages, total, made }),
   )
   await page.click('.modal .close')
   await context.close()

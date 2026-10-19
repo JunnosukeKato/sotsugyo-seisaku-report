@@ -45,7 +45,7 @@ function WithFileNames({ text }: { text: string }) {
   return <>{parts.map((part, i) => (i % 2 === 1 ? <FileName key={i} name={part} /> : part))}</>
 }
 
-// ---- ① 入り口：右の欄（スマホはメニュー）の小さなリンク ----
+// ---- ① 入り口：スマホのメニューの小さなリンク（PC は右の欄の「≡ メニュー」の項目。app/SideMenu.tsx） ----
 
 export function WordImportLink({ onClick }: { onClick: () => void }) {
   return (

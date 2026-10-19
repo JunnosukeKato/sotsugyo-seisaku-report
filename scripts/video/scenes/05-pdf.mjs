@@ -1,17 +1,18 @@
-// 動画 5：PDF を出す（下書き・提出用）（パソコン）
-// 下書きを見せるため、見本の原稿の段落の終わりの「。」を消してから録る（エラー1件。段落の終わりに「。」を打って直す）
+// 動画 5：PDF を書き出す（パソコン）
+// 「下書きの PDF」と提出前の3つのチェックは、依頼者の判断でなくした（2026-10-19）。直すところが残っていても、一覧を見たうえで書き出せる。
+// 見本の原稿の段落の終わりの「。」を消してから録る（直すところ1つ。途中で書き出して先生に見せ、そのあと段落の終わりに「。」を打って直す）
 export const meta = {
   number: '5',
-  label: 'PDF を出す（下書き・提出用）',
+  label: 'PDF を書き出す',
   device: 'pc',
   captions: {
-    export: '途中で先生に見せるときも、右下の「PDFを書き出す」を押します',
-    draft: 'エラーが残っていても、「下書き」の透かし入りの PDF を保存できます（提出には使えません）',
-    draftDone: '保存した PDF を、印刷して先生に見せます',
-    fixFirst: '提出用は、エラーを0件にしてから書き出します',
+    export: '書いた原稿は、右下の「PDFを書き出す」で PDF にします',
+    left: '直すところ・まだのところが残っていると、ここに出ます（押すとその場所へ移ります）',
+    anyway: '途中で先生に見せるときは、このまま「PDF を保存する」を押します',
+    savedMid: 'できた PDF を印刷して、先生に見せます',
+    fixFirst: '提出の前に、直すところを0にします',
     fixType: '項目を押してその場所へ移り、段落の終わりに「。」を打ちます',
-    final: 'もう一度「PDFを書き出す」を押し、3つを確かめてチェックを入れます',
-    save: '「PDF を保存する」を押すと、提出用の PDF ができます',
+    final: 'もう一度「PDFを書き出す」を押して、PDF を保存します',
     saved: 'ファイル名には、学籍番号と氏名が入ります。この1ファイルを提出します',
   },
 }
@@ -28,26 +29,33 @@ export async function prepare({ page, h }) {
 
 const exportArea = async (h, page) => h.union(await h.rectOf(page, '.side .export'), await h.rectOf(page, '.side .sec.check'))
 
+/** PDF ができるのを待つ（できたページが並ぶ窓） */
+const waitSaved = (page) => page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+
 export async function run({ page, rec, h }) {
-  // 1. 「PDFを書き出す」（エラーがあるとき）
+  // 1. 「PDFを書き出す」（直すところが残っているとき）
   rec.mark('export', { focus: await exportArea(h, page) })
-  await h.sleep(2200)
+  await h.sleep(2400)
   await h.clickEl(page, '.side .export', null, { pause: 800 })
-  await page.waitForSelector('.modal .draft-box')
+  await page.waitForSelector('.modal .pdf-start')
   await h.sleep(600)
 
-  // 2. 下書きの PDF
-  rec.mark('draft', { focus: await h.rectOf(page, '.modal') })
-  await h.sleep(3200)
-  await h.clickEl(page, '.modal .pdf-draft', null, { pause: 800 })
-  await page.waitForFunction(() => [...document.querySelectorAll('.modal')].some((m) => m.textContent.includes('下書きの PDF を保存しました')), { timeout: 120000 })
+  // 2. 残っているものの一覧
+  rec.mark('left', { focus: await h.rectOf(page, '.modal') })
+  await h.sleep(3800)
+
+  // 3. このまま書き出す（途中で先生に見せるとき）
+  rec.mark('anyway')
+  await h.sleep(1800)
+  await h.clickEl(page, '.modal .pdf-start', null, { pause: 800 })
+  await waitSaved(page)
   await h.sleep(500)
-  rec.mark('draftDone', { focus: await h.rectOf(page, '.modal') })
-  await h.sleep(3600)
+  rec.mark('savedMid', { focus: await h.rectOf(page, '.modal') })
+  await h.sleep(3400)
   await h.clickEl(page, '.modal .close', null, { pause: 600 })
   await h.sleep(600)
 
-  // 3. エラーを直す（「直す」ボタンはない。項目を押してその場所へ移り、自分で「。」を打つ）
+  // 4. 直す（「直す」ボタンはない。項目を押してその場所へ移り、自分で「。」を打つ）
   rec.mark('fixFirst', { focus: await exportArea(h, page) })
   await h.sleep(2200)
   await h.clickEl(page, '.side .sec.check .issues li .go', null, { pause: 800 })
@@ -72,25 +80,16 @@ export async function run({ page, rec, h }) {
   if (left) throw new Error(`エラーが残っています（${left}件）`)
   await h.sleep(1200)
 
-  // 4. 提出用：3つを確かめる（押す前に「PDFを書き出す」へ寄せておく。段落に寄ったまま窓が開くと、窓が見切れるため）
+  // 5. もう一度書き出す（押す前に「PDFを書き出す」へ寄せておく。段落に寄ったまま窓が開くと、窓が見切れるため）
   rec.mark('final', { focus: await exportArea(h, page) })
   await h.sleep(1600)
   await h.clickEl(page, '.side .export', null, { pause: 700 })
-  await page.waitForSelector('.modal .checklist')
+  await page.waitForSelector('.modal .pdf-start')
   await h.sleep(400)
   rec.mark('finalDialog', { focus: await h.rectOf(page, '.modal') })
-  await h.sleep(2600)
-  const boxes = await page.evaluate(() => [...document.querySelectorAll('.modal .checklist input')].map((i) => { const r = i.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } }))
-  for (const b of boxes) {
-    await h.clickAt(page, b.x, b.y, { pause: 500 })
-    await h.sleep(500)
-  }
-
-  // 5. 保存する
-  rec.mark('save')
-  await h.sleep(1500)
+  await h.sleep(2200)
   await h.clickEl(page, '.modal .pdf-start', null, { pause: 800 })
-  await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+  await waitSaved(page)
   await h.sleep(500)
   rec.mark('saved', { focus: await h.rectOf(page, '.modal') })
   await h.sleep(5200)

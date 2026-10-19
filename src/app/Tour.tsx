@@ -3,7 +3,7 @@ import { useDialogFocus } from './useDialogFocus'
 
 /**
  * 指差し確認（mockups/v27 案A「スポットライト」）。画面の大事な場所に1か所ずつ光を当て、ひとことで知らせる。
- * PC は7か所（紙面・道具・ページの一覧・保存のようす・セルフチェック・PDFを書き出す・？使い方）、
+ * PC は7か所（紙面・道具・ページの一覧・保存のようす・セルフチェック・PDFを書き出す・？使い方（右上の「メニュー」の中。mockups/v37 案C））、
  * スマホは4か所（紙面・下の「チェック」「PDF」・保存のようす・メニュー）。
  * 「次へ」で次の場所へ、「とばす」（Esc）でいつでも終わる。見終えたら（とばしたら）この端末に覚えておき、次からは出さない。
  * 使い方の「指差し確認をもう一度見る」から、もう一度見られる。
@@ -52,8 +52,9 @@ const PC_STEPS = (drive: boolean): Step[] => [
     sides: ['left', 'below'],
   },
   { title: 'セルフチェック', text: 'まだのところと、直すところの一覧です。押すと、その場所へ移ります。', targets: first('.side .sec.check'), sides: ['left'] },
-  { title: 'PDFを書き出す', text: 'エラーが0件になったら、ここから提出用の PDF にします。', targets: first('.side .export'), sides: ['left', 'above'] },
-  { title: '？ 使い方', text: '困ったら、ここを押します。言葉で探せます。', targets: first('.side .help-btn'), sides: ['left', 'below'] },
+  { title: 'PDFを書き出す', text: 'ここから PDF にします。提出の前に、直すところ・まだのところを0にします。', targets: first('.side .export'), sides: ['left', 'above'] },
+  // 「？ 使い方」は、右の欄の「メニュー」の中（mockups/v37 案C）。光はメニューのボタンに当てる
+  { title: '？ 使い方', text: '困ったときの「？ 使い方」は、右上の「メニュー」の中です。言葉で探せます。', targets: first('.side .menu-btn'), sides: ['left', 'below'] },
 ]
 const PHONE_STEPS = (drive: boolean): Step[] => [
   { title: '紙面', text: '文をタップすると、書く欄が出ます。', targets: paper, sides: ['below', 'above'] },
@@ -227,7 +228,12 @@ function TourSteps({ steps, narrow, onDone }: { steps: Step[]; narrow: boolean; 
             {last ? 'おわり' : '次へ'}
           </button>
         </div>
-        {last && <span className="tour-again">この案内は、<b>？使い方</b>からもう一度見られます</span>}
+        {last && (
+          <span className="tour-again">
+            {/* PC の「？ 使い方」は、右の欄の「メニュー」の中（mockups/v37 案C。スマホは今までどおり） */}
+            この案内は、{!narrow && <><b>メニュー</b>の</>}<b>？使い方</b>からもう一度見られます
+          </span>
+        )}
       </div>
     </div>
   )

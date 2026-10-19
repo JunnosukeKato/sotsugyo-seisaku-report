@@ -8,8 +8,11 @@ import type { BodyBlock, Report } from '../model/types'
  * ここは原稿のデータだけを見る（紙面の要素は reportEditor.ts が探す）
  */
 
-/** 削除したもの（知らせの言葉に使う）。下書き：コースを変えて、本文の下書きをそのコースのひな形に入れ替えた */
-export type RemovedWhat = '段落' | '小見出し' | '大見出し（章）' | '図' | '表' | '改ページ' | '作品写真' | '下書き'
+/**
+ * 削除したもの（知らせの言葉に使う）。下書き：コースを変えて、本文の下書きをそのコースのひな形に入れ替えた。
+ * 選んだ文：紙面をなぞって選んだ範囲を Delete・Backspace で消した／切り取り：選んだ範囲を Ctrl+X で切り取った（editor/rangeOps.ts）
+ */
+export type RemovedWhat = '段落' | '小見出し' | '大見出し（章）' | '図' | '表' | '改ページ' | '作品写真' | '下書き' | '選んだ文' | '切り取り'
 
 /**
  * 画面の下に出す知らせの中身。
@@ -17,7 +20,7 @@ export type RemovedWhat = '段落' | '小見出し' | '大見出し（章）' | 
  * - started：抄録を書き始めた（「先生の許可が出た」を押した。［戻す］を出す）／unstarted：戻して、書き始める前に戻った
  * - info：戻すもののない、短い知らせ（表の行・列を消せないわけなど。text）
  */
-export type NoticeBody = { kind: 'removed' | 'restored'; what: RemovedWhat } | { kind: 'started' | 'unstarted' } | { kind: 'info'; text: string }
+export type NoticeBody = { kind: 'removed' | 'restored'; what: RemovedWhat; note?: string } | { kind: 'started' | 'unstarted' } | { kind: 'info'; text: string }
 
 /** 画面の下に出す知らせ。id：知らせごとに変わる番号（出しておく時間を、知らせごとに数え直すため） */
 export type UndoNotice = NoticeBody & { id: number }
@@ -31,10 +34,14 @@ export function undoable(notice: NoticeBody): boolean {
 export function noticeText(notice: NoticeBody): string {
   switch (notice.kind) {
     case 'restored':
-      return `${notice.what}を戻しました`
-    case 'removed':
+      return notice.what === '切り取り' ? '切り取る前に戻しました' : `${notice.what}を戻しました`
+    case 'removed': {
+      // note：添える一言（選んだ範囲に大見出しがかかったが、大見出しは残した、など）
+      const note = notice.note ?? ''
       if (notice.what === '下書き') return '下書きを入れ替えました'
-      return notice.what === '作品写真' ? '作品写真を外しました' : `${notice.what}を削除しました`
+      if (notice.what === '切り取り') return `切り取りました${note}`
+      return notice.what === '作品写真' ? '作品写真を外しました' : `${notice.what}を削除しました${note}`
+    }
     case 'started':
       return '抄録を書き始めました'
     case 'unstarted':

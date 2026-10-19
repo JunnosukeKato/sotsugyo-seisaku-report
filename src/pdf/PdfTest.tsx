@@ -50,7 +50,6 @@ export function PdfTest() {
   const [mine, setMine] = useState<{ savedAt: string } | null | undefined>(undefined)
   const [dpi, setDpi] = useState(DEFAULT_DPI)
   const [quality, setQuality] = useState(DEFAULT_QUALITY)
-  const [draft, setDraft] = useState(false)
   const [progress, setProgress] = useState<Progress | null>(null)
   const [result, setResult] = useState<(MakePdfResult & { url: string; sourceTitle: string; settings: string; at: string }) | null>(null)
   const [thumbs, setThumbs] = useState<string[]>([])
@@ -74,7 +73,6 @@ export function PdfTest() {
     try {
       const manuscript = await loadManuscript(source)
       const made = await makePdf(paperRef.current!, manuscript, {
-        draft,
         dpi,
         quality,
         onProgress: setProgress,
@@ -87,7 +85,7 @@ export function PdfTest() {
         ...made,
         url: URL.createObjectURL(made.blob),
         sourceTitle: SOURCES.find((s) => s.key === source)!.title,
-        settings: `${dpi}dpi・画質${Math.round(quality * 100)}${draft ? '・下書きの透かし' : ''}`,
+        settings: `${dpi}dpi・画質${Math.round(quality * 100)}`,
         at: new Date().toLocaleString('ja-JP'),
       })
     } catch (e) {
@@ -191,10 +189,6 @@ export function PdfTest() {
               </label>
             ))}
           </div>
-          <label className="pt-check">
-            <input type="checkbox" checked={draft} disabled={running} onChange={(e) => setDraft(e.target.checked)} />
-            <span>「下書き」の透かしを入れる（エラーが残っているときの PDF）</span>
-          </label>
         </section>
 
         <div className="pt-go">

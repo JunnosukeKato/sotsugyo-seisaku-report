@@ -139,6 +139,40 @@ await withEdge(async (browser) => {
   await skipTour(pc.page)
   check('「とばす」で閉じ、この端末に覚える', (await pc.page.evaluate(() => localStorage.getItem('sotsugyo-seisaku-report-tour'))) === 'done')
 
+  // ---- PDF を書き出すと、同じ PDF の控えを先生のフォルダ（学科の Apps Script の窓口）に送る。学生の画面には出さない ----
+  {
+    // 保存（ダウンロード）は、ここでは確かめないので止めておく（ほかの場所にファイルを作らない）
+    await (await pc.page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'deny', browserContextId: pc.context.id })
+    const before = drive.pdfCopies.length
+    await pc.page.click('.side .export')
+    await pc.page.waitForSelector('.modal .pdf-start')
+    await pc.page.click('.modal .pdf-start')
+    await pc.page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+    const sent = await until(() => drive.pdfCopies.length > before, 30000)
+    await sleep(1000)
+    const copy = drive.pdfCopies.at(-1) ?? {}
+    const expected = await pc.page.evaluate((key) => {
+      const { report } = window.__editor.getSnapshot()
+      return { token: JSON.parse(sessionStorage.getItem(key)).accessToken, year: report.fiscalYear, courseId: report.basicInfo.courseId }
+    }, TOKEN_KEY)
+    const shown = await pc.page.evaluate(() => document.querySelector('.modal')?.textContent ?? '')
+    await pc.page.screenshot({ path: 'poc-output/e2e/drive-pdf-copy.png' })
+    check(
+      'PDF を書き出すと、同じ PDF の控えを1つだけ、学科の窓口に送る（いまのログインの許可・年度・コース・表紙の学籍番号と氏名・PDF。JSON を text/plain で、cookie なし）',
+      sent &&
+        drive.pdfCopies.length === before + 1 &&
+        /^https:\/\/script\.google\.com\/macros\//.test(copy.url) &&
+        JSON.stringify(copy.data) === JSON.stringify({ action: 'pdfCopy', token: expected.token, year: expected.year, courseId: expected.courseId, studentId: '00ZZ901', name: '文化　花子' }) &&
+        copy.pdfHead.startsWith('%PDF-') &&
+        copy.pdfBytes > 10000 &&
+        copy.contentType.startsWith('text/plain') &&
+        !copy.cookie,
+      JSON.stringify({ ...copy, data: { ...copy.data, token: copy.data?.token === expected.token ? '（いまの許可）' : copy.data?.token } }),
+    )
+    check('控えを送ったことは、学生の画面（PDF の窓）には出さない', !/控え|先生のフォルダ/.test(shown), shown)
+    await pc.page.click('.modal .close')
+  }
+
   // ---- スマホ：別の端末でログインすると、ドライブの原稿が開く ----
   const phone = await device(browser, drive, { phone: true })
   await phone.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
@@ -276,7 +310,10 @@ await withEdge(async (browser) => {
   if (await tourAppears(renew.page)) await skipTour(renew.page)
   await nearExpiry(renew.page)
   // キーで押したときは延ばさない（書いている途中に Google の窓が出ないように）
-  await renew.page.focus('.side .help-btn')
+  // 「？ 使い方」は右の欄の「メニュー」の中（mockups/v37 案C）：Enter で開くと「使い方」に移るので、もう一度 Enter
+  await renew.page.focus('.side .menu-btn')
+  await renew.page.keyboard.press('Enter')
+  await renew.page.waitForSelector('.side .head-menu', { timeout: 10000 }).catch(() => {})
   await renew.page.keyboard.press('Enter')
   await renew.page.waitForSelector('.help-top', { timeout: 10000 }).catch(() => {})
   await sleep(500)
@@ -328,6 +365,70 @@ await withEdge(async (browser) => {
   const phoneRenew = await android.page.evaluate((key) => ({ opened: (window.__loginOptions ?? []).length, left: Math.round((JSON.parse(sessionStorage.getItem(key)).expiresAt - Date.now()) / 60_000) }), TOKEN_KEY)
   check('スマホ（Android）では、許可の残りが少なくても、クリックで Google の窓を開かない', phoneRenew.opened === 0 && phoneRenew.left <= 5 && !(await reloginOpen(android.page)), JSON.stringify(phoneRenew))
   await android.context.close()
+
+  // ---- パソコン：PDF を書き出すときに許可が切れていたら、「PDF を保存する」を押したときに延ばし、延ばした許可で控えを送る ----
+  {
+    const late = await device(browser, drive)
+    // はじめのログインだけ、許可を短く（70秒。切れる1分前から切れたものとして扱うので、使えるのは10秒ほど）
+    await late.page.evaluateOnNewDocument(() => {
+      window.__fakeExpiresIn = 70
+      try {
+        localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+      } catch {}
+    })
+    await (await late.page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'deny', browserContextId: late.context.id })
+    await late.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+    await editorReady(late.page)
+    await late.page.click('.login-btn')
+    await gateClosed(late.page)
+    await editorReady(late.page)
+    await late.page.evaluate(() => (window.__fakeExpiresIn = 3600))
+    // 許可が切れるまで待つ（書いていないので、まだ「もう一度ログイン」は出ない）
+    await until(() => late.page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)).expiresAt - 60_000 < Date.now(), TOKEN_KEY), 30000)
+    const loginsBefore = await late.page.evaluate(() => (window.__loginOptions ?? []).length)
+    const before = drive.pdfCopies.length
+    await late.page.click('.side .export')
+    await late.page.waitForSelector('.modal .pdf-start')
+    await late.page.click('.modal .pdf-start')
+    await late.page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+    const sent = await until(() => drive.pdfCopies.length > before, 30000)
+    const after = await late.page.evaluate((key) => ({ options: (window.__loginOptions ?? []).slice(-1)[0], logins: (window.__loginOptions ?? []).length, token: JSON.parse(sessionStorage.getItem(key)).accessToken }), TOKEN_KEY)
+    const copy = drive.pdfCopies.at(-1)
+    check(
+      'パソコン：書き出すときに許可が切れていたら、「PDF を保存する」を押したときに同じアカウントで延ばし（窓が一瞬出て閉じるだけ）、延ばした許可で控えを送る（「もう一度ログイン」は出さない）',
+      sent && after.logins === loginsBefore + 1 && after.options?.prompt === '' && after.options?.hint === '00zz901@bunka-wu.ac.jp' && copy?.data?.token === after.token && !(await reloginOpen(late.page)),
+      JSON.stringify({ ...after, token: undefined, sent, copyToken: copy?.data?.token === after.token }),
+    )
+    await late.context.close()
+  }
+
+  // ---- この端末だけに保存するとき（?nodrive）は、PDF を書き出しても控えを送らない ----
+  {
+    const local = await device(browser, drive)
+    await local.page.evaluateOnNewDocument(() => {
+      try {
+        localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+      } catch {}
+    })
+    await (await local.page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'deny', browserContextId: local.context.id })
+    await local.page.goto('http://localhost:5173/?nodrive', { waitUntil: 'networkidle0' })
+    await editorReady(local.page)
+    await local.page.waitForSelector('.guide.step-course .g-opts button')
+    await local.page.evaluate(() => document.querySelector('.g-opts button').click())
+    await local.page.waitForSelector('.guide.step-word .g-word-opt.no')
+    await local.page.evaluate(() => document.querySelector('.g-word-opt.no').click())
+    await local.page.waitForSelector('.g-later')
+    await local.page.evaluate(() => document.querySelector('.g-later').click())
+    await editorReady(local.page)
+    const before = drive.pdfCopies.length
+    await local.page.click('.side .export')
+    await local.page.waitForSelector('.modal .pdf-start')
+    await local.page.click('.modal .pdf-start')
+    await local.page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+    await sleep(3000)
+    check('この端末だけに保存するとき（?nodrive）は、PDF を書き出しても控えを送らない', drive.pdfCopies.length === before, `${drive.pdfCopies.length - before}件`)
+    await local.context.close()
+  }
 
   await phone.context.close()
   await pc.context.close()

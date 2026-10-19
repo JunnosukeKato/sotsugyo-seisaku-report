@@ -29,3 +29,5 @@ poc-output/
 
 # Apps Script に載せるファイル（scripts/build-gas.mjs で作る）
 gas-dist/
+# 書き出した PDF の控えを置く、先生のドライブのフォルダの ID（公開しない。scripts/build-gas.mjs が配信の窓口に入れる）
+gas/pdf-folder.local.json

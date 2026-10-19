@@ -175,6 +175,8 @@ export class DriveSync {
   private photos = new Map<string, DriveFile>()
   /** 最後にクリックで許可を延ばそうとした時刻 */
   private lastRenew = -Infinity
+  /** 許可を延ばしている途中（Google の窓の答えを待っている） */
+  private renewing: Promise<boolean> | null = null
 
   constructor(clientId: string) {
     this.clientId = clientId
@@ -259,18 +261,57 @@ export class DriveSync {
     if (!this.active || !email || !token || !this.tokenValid || !navigator.onLine || !canRenewOnClick() || !signInReady()) return null
     const now = Date.now()
     if (token.expiresAt - now > RENEW_BEFORE_MS || now - this.lastRenew < RENEW_INTERVAL_MS) return null
-    this.lastRenew = now
-    return signIn(this.clientId, { prompt: '', hint: email })
+    return this.renew(email)
+  }
+
+  /** 前と同じアカウントで、許可を延ばす（Google の窓が一瞬出て閉じる。クリックした処理の中から、待たずに呼ぶ） */
+  private renew(email: string): Promise<boolean> {
+    this.lastRenew = Date.now()
+    const renewing = signIn(this.clientId, { prompt: '', hint: email })
       .then(async (renewed) => {
         if ((await account(renewed)).email !== email || this.state.email !== email || !this.active) return false
         this.token = renewed
         writeSession({ ...renewed, email })
         // 待っている間に切れて「もう一度ログイン」になっていたら、閉じる。送っていない変更があれば、すぐ送る
         if (this.state.status.kind === 'expired') this.setStatus({ kind: 'idle' })
+        // 許可が変わったことを知らせる（PDF の控えを送るのを待っているときに送る。app/usePdfCopy.ts）
+        else this.set({ email })
         if (this.pending) void this.flush()
         return true
       })
       .catch(() => false)
+    this.renewing = renewing
+    void renewing.finally(() => {
+      if (this.renewing === renewing) this.renewing = null
+    })
+    return renewing
+  }
+
+  /**
+   * 「PDF を保存する（作る）」を押したとき（押した処理の中から、待たずに呼ぶ）：PDF の控えを先生のフォルダに送るため、
+   * 許可が切れている・残りが10分を切っていれば、前と同じアカウントで延ばしておく（パソコンだけ。Google の窓が一瞬出て閉じる）。
+   * スマホでは延ばさない（Google の窓がタブの切り替えになるため。切れていたら、窓を閉じたあとに「もう一度ログイン」。noticeExpired）
+   */
+  renewForExport(): void {
+    const email = this.state.email
+    if (!this.active || !email || this.renewing || !navigator.onLine || !canRenewOnClick() || !signInReady()) return
+    const now = Date.now()
+    if ((this.tokenValid && this.token!.expiresAt - now > RENEW_BEFORE_MS) || now - this.lastRenew < RENEW_INTERVAL_MS) return
+    void this.renew(email)
+  }
+
+  /** PDF の控えを送るときの許可（延ばしている途中なら、終わるのを待つ）。使える許可がなければ null */
+  async copyToken(): Promise<Token | null> {
+    if (this.renewing) await this.renewing
+    return this.tokenValid ? this.token : null
+  }
+
+  /**
+   * 許可が切れていたら、もう一度ログインしてもらう（「もう一度ログイン」の窓が出る）。
+   * PDF の控えを、許可が切れていて送れずに待っているとき、PDF の窓を閉じたあとに呼ぶ（ログインし直すと送る）
+   */
+  noticeExpired(): void {
+    if (this.active && this.state.email && !this.tokenValid && navigator.onLine && this.state.status.kind !== 'expired') this.expire()
   }
 
   private need(): Token {

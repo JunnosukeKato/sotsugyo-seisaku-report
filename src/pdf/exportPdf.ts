@@ -11,10 +11,9 @@ import { pagesToPdf, type CapturedPage } from './pagesToPdf'
 /** できた PDF（ファイル名とともに、1か所にまとめて持つ。あとで先生のドライブに送るときも、作り直さずにこれを使う） */
 export interface BuiltPdf {
   blob: Blob
-  /** ファイル名（例：2026_卒業制作報告書_00ZZ0123_文化花子.pdf。下書きは _下書き を付ける） */
+  /** ファイル名（例：00ZZ0123_文化花子.pdf） */
   fileName: string
   pageCount: number
-  draft: boolean
   /** 開く・保存するための URL（使い終えたら URL.revokeObjectURL で解放する） */
   url: string
 }
@@ -31,10 +30,10 @@ export function saveMode(): SaveMode {
  * 紙面のページを PDF にする。title：ファイル名のもと（拡張子なし）。onPage：1ページできるたびに呼ぶ（縮小の絵を作る）。
  * signal でやめると、ページとページの間で止まる
  */
-export async function buildPdf(pages: HTMLElement[], options: { title: string; draft: boolean; signal?: AbortSignal; onPage?: (page: CapturedPage) => void | Promise<void> }): Promise<BuiltPdf> {
-  const { title, draft, signal, onPage } = options
-  const result = await pagesToPdf(pages, { title, draft, signal, onPage })
-  return { blob: result.blob, fileName: `${title}.pdf`, pageCount: result.pageCount, draft, url: URL.createObjectURL(result.blob) }
+export async function buildPdf(pages: HTMLElement[], options: { title: string; signal?: AbortSignal; onPage?: (page: CapturedPage) => void | Promise<void> }): Promise<BuiltPdf> {
+  const { title, signal, onPage } = options
+  const result = await pagesToPdf(pages, { title, signal, onPage })
+  return { blob: result.blob, fileName: `${title}.pdf`, pageCount: result.pageCount, url: URL.createObjectURL(result.blob) }
 }
 
 /** そのまま保存する（パソコン・Android は「ダウンロード」のフォルダへ。iPhone・iPad では、ダウンロードの確認が出る） */

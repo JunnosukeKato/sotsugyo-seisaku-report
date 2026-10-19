@@ -6,6 +6,7 @@ import { withEdge } from '../poc/edge.mjs'
 import { stubConfig } from './configStub.mjs'
 import { firstTimeV3Phone } from './firstTimeV3.mjs'
 import { editorFixesV3Phone } from './editorFixesV3.mjs'
+import { rangeSelectPhone } from './rangeSelect.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -172,7 +173,7 @@ await withEdge(async (browser) => {
   await shot('4a-check-fresh')
   check(
     'スマホ：書き始めたばかりのチェックの欄は「直すところ 0　まだ 4」で、赤い字・印がない。まだのところ（表紙・本文のページ・本文の段落・作品写真は ○、抄録は「先生の許可のあと」）と、PDF のボタンの下に「まだのところが4つあります」。下の「チェック」に赤い数は出ない',
-    freshSheet.tally === '直すところ0まだ4' && freshSheet.red.length === 0 && freshSheet.issues === 0 && freshSheet.none.includes('いま直すところはありません') && freshSheet.rows.join(',') === 'todo:表紙,todo:本文のページ,todo:本文の段落,todo:作品写真,wait:抄録,info:図の枚数' && freshSheet.note === 'まだのところが4つあります' && !freshSheet.badge,
+    freshSheet.tally === '直すところ0まだ4' && freshSheet.red.length === 0 && freshSheet.issues === 0 && freshSheet.none.includes('いま直すところはありません') && freshSheet.rows.join(',') === 'todo:表紙,todo:本文のページ,todo:本文の段落,todo:作品写真,wait:抄録' && freshSheet.note === 'まだのところが4つあります' && !freshSheet.badge,
     JSON.stringify(freshSheet),
   )
   // まだの行を押すと、欄が閉じて、その場所へ移る（本文の段落：まだ書いていない最初の段落が開く）
@@ -534,7 +535,7 @@ await withEdge(async (browser) => {
     return { top: Math.round(r.top), left: r.left, right: r.right, width: innerWidth, menu: !!document.querySelector('.sheet'), topics: document.querySelectorAll('.help-list button').length, modal: document.querySelector('.help-sheet').getAttribute('aria-modal'), pdf: document.querySelector('.help-foot .help-pdf')?.getAttribute('href') }
   })
   await shot('8a-help')
-  check('メニューの「？ 使い方」で、画面いっぱいの使い方の欄が出る（メニューは閉じる・項目18・印刷用の手引き（PDF））', helpSheet.top <= 12 && helpSheet.left === 0 && helpSheet.right === helpSheet.width && !helpSheet.menu && helpSheet.topics === 18 && helpSheet.modal === 'true' && helpSheet.pdf === './guides/student-guide.pdf', JSON.stringify(helpSheet))
+  check('メニューの「？ 使い方」で、画面いっぱいの使い方の欄が出る（メニューは閉じる・項目17・印刷用の手引き（PDF））', helpSheet.top <= 12 && helpSheet.left === 0 && helpSheet.right === helpSheet.width && !helpSheet.menu && helpSheet.topics === 17 && helpSheet.modal === 'true' && helpSheet.pdf === './guides/student-guide.pdf', JSON.stringify(helpSheet))
   await page.type('.help-search input', 'PDF 出ない')
   await wait(300)
   const phoneFound = await page.evaluate(() => ({ titles: [...document.querySelectorAll('.help-results .t')].map((t) => t.textContent).slice(0, 2), marks: document.querySelectorAll('.help-results mark').length }))
@@ -646,6 +647,9 @@ await withEdge(async (browser) => {
 
   // はじめて使う学生の試し（3回目：スマホ）で見つかった、紙面と書く欄まわりの直し（開いた直後に書く・ページ送り・準備中の表示など。scripts/e2e/editorFixesV3.mjs）
   await editorFixesV3Phone(browser, check)
+
+  // 段落をまたいで選ぶのはパソコンだけ：指で押すと、今までどおり書く欄が開く（scripts/e2e/rangeSelect.mjs）
+  await rangeSelectPhone(browser, check)
 })
 
 /**
@@ -1064,26 +1068,28 @@ async function iphoneShareCheck(browser) {
   })
   const title = await page.evaluate(() => window.__editor.pdfTitle)
   await page.click('.p-nav .nav-pdf')
-  await page.waitForSelector('.modal .draft-box .pdf-draft')
-  check('iPhone：エラーが残っているときのボタンは「下書きの PDF を作る」（保存は、できたあとに押す）', (await page.$eval('.modal .draft-box .pdf-draft', (b) => b.textContent)) === '下書きの PDF を作る')
-  // 「直しに戻る」・「うまくいかないとき：印刷の画面から保存」も、見た目の高さ 44px 以上
-  const pdfStartH = { back: await minVisibleHeight(page, '.modal .row-buttons button'), print: await minVisibleHeight(page, '.modal .draft-box .pdf-fallback') }
-  const backLabel = await page.$eval('.modal .row-buttons button.primary', (b) => b.textContent)
+  await page.waitForSelector('.modal .pdf-start')
+  // 直すところ・まだのところが残っていても、ふつうの「PDF を作る」（保存は、できたあとに押す）。下書きの PDF はない
+  const startInfo = await page.evaluate(() => ({ start: document.querySelector('.modal .pdf-start')?.textContent, list: !!document.querySelector('.modal .pdf-left'), old: !!document.querySelector('.modal .draft-box, .modal .pdf-draft, .modal .checklist') }))
+  check('iPhone：直すところ・まだのところが残っていても、ボタンはふつうの「PDF を作る」（保存は、できたあとに押す。下書きの PDF はない）', startInfo.start === 'PDF を作る' && startInfo.list && !startInfo.old, JSON.stringify(startInfo))
+  // 「直しに戻る」「PDF を作る」・「うまくいかないとき：印刷の画面から保存」も、見た目の高さ 44px 以上
+  const pdfStartH = { back: await minVisibleHeight(page, '.modal .row-buttons button:not(.pdf-fallback)'), print: await minVisibleHeight(page, '.modal .row-buttons .pdf-fallback') }
+  const backLabels = await page.$$eval('.modal .row-buttons button', (bs) => bs.map((b) => b.textContent))
   await page.screenshot({ path: `${OUT}/10b-pdf-start-44.png` })
-  check('PDF の窓の「直しに戻る」「うまくいかないとき：印刷の画面から保存」は、見た目も高さ 44px 以上', backLabel === '直しに戻る' && pdfStartH.back >= 44 && pdfStartH.print >= 44, JSON.stringify(pdfStartH))
-  await page.tap('.modal .draft-box .pdf-draft')
+  check('PDF の窓の「直しに戻る」「PDF を作る」「うまくいかないとき：印刷の画面から保存」は、見た目も高さ 44px 以上', backLabels.includes('直しに戻る') && pdfStartH.back >= 44 && pdfStartH.print >= 44, JSON.stringify({ pdfStartH, backLabels }))
+  await page.tap('.modal .pdf-start')
   await page.waitForSelector('.modal .pdf-save', { timeout: 120000 })
   await wait(300)
   const made = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, save: document.querySelector('.modal .pdf-save')?.textContent, thumbs: document.querySelectorAll('.modal .pdf-thumbs img').length, shares: window.__shares.length }))
   await page.screenshot({ path: `${OUT}/11-pdf-share.png` })
-  check('iPhone：できたら「下書きの PDF ができました」と大きな「保存する」を出す（まだ保存しない・共有の画面も開かない）', made.title === '下書きの PDF ができました' && made.save === '保存する' && made.thumbs > 0 && made.shares === 0 && readdirSync(downloads).length === 0, JSON.stringify(made))
+  check('iPhone：できたら「PDF ができました」と大きな「保存する」を出す（まだ保存しない・共有の画面も開かない）', made.title === 'PDF ができました' && made.save === '保存する' && made.thumbs > 0 && made.shares === 0 && readdirSync(downloads).length === 0, JSON.stringify(made))
   // 文字のリンクの「PDF を開く」と「閉じる」も、見た目の高さ 44px 以上（前は「PDF を開く」が高さ 12px ほどだった）
   const pdfDoneH = { open: await minVisibleHeight(page, '.modal .row-buttons .pdf-fallback'), close: await minVisibleHeight(page, '.modal .row-buttons button:not(.pdf-fallback)') }
   check('できたあとの「PDF を開く」（文字のリンク）と「閉じる」は、見た目も高さ 44px 以上', pdfDoneH.open >= 44 && pdfDoneH.close >= 44, JSON.stringify(pdfDoneH))
   await page.tap('.modal .pdf-save')
   await wait(300)
   const cancelled = await page.evaluate(() => ({ save: document.querySelector('.modal .pdf-save')?.textContent, shares: [...window.__shares] }))
-  check('「保存する」で共有の画面を開き（ファイル名・PDF）、やめても「保存する」がそのまま押せる', cancelled.save === '保存する' && cancelled.shares[0] === `${title}_下書き.pdf|application/pdf`, JSON.stringify(cancelled))
+  check('「保存する」で共有の画面を開き（ファイル名・PDF）、やめても「保存する」がそのまま押せる', cancelled.save === '保存する' && cancelled.shares[0] === `${title}.pdf|application/pdf`, JSON.stringify(cancelled))
   await page.tap('.modal .pdf-save')
   await wait(300)
   const shared = await page.evaluate(() => ({ save: document.querySelector('.modal .pdf-save')?.textContent, lead: document.querySelector('.modal .lead')?.textContent ?? '', shares: window.__shares.length }))
@@ -1091,7 +1097,7 @@ async function iphoneShareCheck(browser) {
   // 共有の画面が開けなかったとき（やめた以外の理由）は、ダウンロードに切り替える
   await page.tap('.modal .pdf-save')
   for (let i = 0; i < 40 && !readdirSync(downloads).some((n) => n.endsWith('.pdf')); i++) await wait(250)
-  check('共有の画面を開けなかったときは、ダウンロードに切り替えて知らせる', readdirSync(downloads).includes(`${title}_下書き.pdf`) && (await page.$eval('.modal .lead', (e) => e.textContent)).includes('ダウンロードしました'), readdirSync(downloads).join(','))
+  check('共有の画面を開けなかったときは、ダウンロードに切り替えて知らせる', readdirSync(downloads).includes(`${title}.pdf`) && (await page.$eval('.modal .lead', (e) => e.textContent)).includes('ダウンロードしました'), readdirSync(downloads).join(','))
   await context.close()
 }
 

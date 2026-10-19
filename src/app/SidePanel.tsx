@@ -1,21 +1,21 @@
-import { useEffect, useRef, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, type ReactNode } from 'react'
 import { findCourse, type YearConfig } from '../config'
-import { exportNote, type ProgressRow, type ProgressTarget } from '../checker/progress'
+import { exportNote, type ProgressRow } from '../checker/progress'
 import type { ReportFinding } from '../checker/reportChecks'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import type { PageKind } from '../layout/measure'
 import { Icon } from './icons'
 import { AREA_LABELS, AREA_ORDER, daysUntil, formatDeadline } from './labels'
-import { BackupLabel } from './dialogs'
-import { checkSummary } from './checkSummary'
+import { checkSummary, goToTarget } from './checkSummary'
 import { DriveChipMenu, type DriveControls } from './DriveUi'
+import { SideMenu } from './SideMenu'
 import type { SaveState } from './useAutosave'
-import { WordImportLink } from './WordImport'
 
 /**
- * 右の欄。上から：名前・保存のようす・締切・手順書と「バックアップ・作り直す」と「？ 使い方」（今年度だけ「Word で書いた分を読み込む」）／
- * Word から写したあとの「つぎにすること」（今年度だけ）／学科からのお知らせ／セルフチェック（まだのところ・直すところ）／PDFの書き出し。
- * 上の半分は詰めて（保存と締切を1行に・ボタンを小さく）、セルフチェックを広く見せる（mockups/v35 ①）。
+ * 右の欄（PC）。上から：名前と年度・「≡ メニュー」（使い方・手順書・バックアップ・作り直す・今年度だけ Word の読み込み。app/SideMenu.tsx）／
+ * 保存のようすと締切（1行）／Word から写したあとの「つぎにすること」（今年度だけ）／コースからのお知らせ／
+ * セルフチェック（まだのところ・直すところ。数は小見出しの横）／PDFの書き出し。
+ * 上の物をメニューに入れて減らし、字を大きく・行の間を広くしても、セルフチェックを広く見せる（mockups/v37 案C。前は mockups/v35 ①）。
  * 引用・参考文献を入れるボタンは、ここには置かない（使い方の「引用・参考文献」から入れる。入れた後は、そのページをクリックして直す）
  */
 
@@ -32,9 +32,9 @@ interface Props {
   onExport: () => void
   /** 「PDFを書き出す」を押して、紙面を確かめている途中 */
   exporting?: boolean
-  /** 「？ 使い方」：右の欄を使い方に切り替える（mockups/v27 案A） */
+  /** 「メニュー」の「？ 使い方」：右の欄を使い方に切り替える（mockups/v27 案A） */
   onHelp: () => void
-  /** 今年度だけ：「Word で書いた分を読み込む」の小さなリンク（mockups/v24 ① 案C）。渡したときだけ出す */
+  /** 今年度だけ：「メニュー」の「Word で書いた分を読み込む」（mockups/v24 ① 案C・v37 案C）。渡したときだけ出す */
   onWordImport?: () => void
   /** 今年度だけ：Word から写したあとの「つぎにすること」（mockups/v24 ③ 案B）。右の欄の上に出す */
   wordTodo?: ReactNode
@@ -214,20 +214,9 @@ export function ExportNote({ snap, config }: { snap: EditorSnapshot; config: Yea
   return <p className="export-note">{exportNote({ fix: fixes.length, notYet, pending: snap.pageChecksPending, abstractWaiting: snap.report.abstract.started === false })}</p>
 }
 
-/** まだのところの行を押したとき：その指摘の箇所へ（文字の欄なら書き始める）、またはそのページへ */
-function goToTarget(editor: ReportEditor, target: ProgressTarget): void {
-  if (target.kind === 'finding') {
-    void editor.goToFinding(target.finding)
-    return
-  }
-  const kinds = editor.getSnapshot().layout?.kinds ?? []
-  const index = target.last ? kinds.lastIndexOf(target.area) : kinds.indexOf(target.area)
-  if (index >= 0) void editor.goToPage(index, 'fade')
-}
-
 /**
  * まだのところの1行（灰色の ○、済むと緑の ✓、先生の許可のあとは点線の ○、目安は小さな点）。赤くしない。
- * 押すと、その場所へ移る（図の枚数は目安だけなので押せない）
+ * 押すと、その場所へ移る
  */
 function ProgressItem({ row, editor, onPick }: { row: ProgressRow; editor: ReportEditor; onPick?: () => void }) {
   const inner = (
@@ -262,6 +251,46 @@ function ProgressItem({ row, editor, onPick }: { row: ProgressRow; editor: Repor
       ) : (
         <div className="row">{inner}</div>
       )}
+    </li>
+  )
+}
+
+/**
+ * 済んだ（✓）行を1行にたたんだもの（PC の右の欄で、直すところがあるとき。mockups/v37 の承認：依頼者の判断）。
+ * 灰色の字で「✓ 表紙・本文の段落・作品写真」。名前を押すと、たたむ前の行と同じく、その場所へ移る（開いたり閉じたりはしない）。
+ * マウスを乗せると、たたむ前の右の字（「入れました」など）が出る
+ */
+function DoneLine({ rows, editor, onPick }: { rows: ProgressRow[]; editor: ReportEditor; onPick?: () => void }) {
+  return (
+    <li className="done-fold">
+      <div className="row">
+        <i aria-hidden="true">{Icon.check}</i>
+        <span className="l">
+          <span className="sr-only">済んだもの：</span>
+          {rows.map((row, i) => {
+            const target = row.target
+            return (
+              <Fragment key={row.id}>
+                {i > 0 && '・'}
+                {target ? (
+                  <button
+                    type="button"
+                    title={`${row.label}：${row.value}（押すと、その場所へ）`}
+                    onClick={() => {
+                      onPick?.()
+                      goToTarget(editor, target)
+                    }}
+                  >
+                    {row.label}
+                  </button>
+                ) : (
+                  <span title={`${row.label}：${row.value}`}>{row.label}</span>
+                )}
+              </Fragment>
+            )
+          })}
+        </span>
+      </div>
     </li>
   )
 }
@@ -350,8 +379,8 @@ export function SourceNotice() {
 }
 
 /**
- * 「？ 使い方」のボタン（mockups/v27 案A）。PC は右の欄の「バックアップ・作り直す」の横（押すと右の欄が使い方に替わる）、
- * スマホはメニューの中（押すと画面いっぱいの使い方の欄）。印刷用の手引き（PDF）は、使い方の一覧のいちばん下から開く
+ * スマホのメニューの「？ 使い方」のボタン（mockups/v27 案A。押すと画面いっぱいの使い方の欄）。
+ * PC は右の欄の「メニュー」の中の項目（app/SideMenu.tsx。押すと右の欄が使い方に替わる）。印刷用の手引き（PDF）は、使い方の一覧のいちばん下から開く
  */
 export function HelpButton({ onClick }: { onClick: () => void }) {
   return (
@@ -365,8 +394,10 @@ export function HelpButton({ onClick }: { onClick: () => void }) {
  * セルフチェックの中身（mockups/v35 ① 案A）。PC は右の欄、スマホは下から出る欄に置く。
  * - まだのところ：まだ書いていない・入れていないだけのもの。決まった行の進み具合（赤くしない。押すとその場所へ）
  * - 直すところ：書いた文の間違い。エラーと要確認の意味（凡例）と、場所ごとにまとめた指摘（押すとその箇所へ）
+ * pc：PC の右の欄（mockups/v37 案C）。数は小見出しの横の小さな札（直すところは赤。0 のときは出さない）、小見出しの右のひとことは
+ * マウスを乗せたときだけ出す。直すところがあるときは、まだのところの済んだ（✓）行を1行にたたむ（DoneLine）。スマホは今までどおり
  */
-export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEditor; snap: EditorSnapshot; config: YearConfig; onPick?: () => void }) {
+export function CheckBody({ editor, snap, config, onPick, pc }: { editor: ReportEditor; snap: EditorSnapshot; config: YearConfig; onPick?: () => void; pc?: boolean }) {
   const { findings } = snap
   const listRef = useRef<HTMLDivElement>(null)
   // 書いている（選んでいる）箇所の指摘が変わったら、その指摘が一覧の見えるところに来るようにする
@@ -376,22 +407,30 @@ export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEdit
     const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
     if (here) listRef.current?.querySelector('.issue.here')?.scrollIntoView({ block: 'nearest', behavior })
   }, [here])
-  const { rows, fixes } = checkSummary(snap, config)
+  const { rows, fixes, notYet } = checkSummary(snap, config)
+  // PC：小見出しの横の数（紙面を組み終えるまでは出さない。ページ数などのチェックが加わって、数が変わるため）
+  const count = (n: number, error?: boolean) => pc && !snap.pageChecksPending && n > 0 && <span className={`count-badge${error ? ' e' : ''}`}>{n}</span>
+  // PC で直すところがあるときは、済んだ行を1行にたたむ（まだ・先生の許可のあとなどの行は、そのまま）
+  const fold = !!pc && fixes.length > 0
+  const done = fold ? rows.filter((r) => r.state === 'done') : []
   return (
     <>
-      <div className="check-sub">
+      <div className="check-sub" title={pc ? '押すと、その場所へ' : undefined}>
         <b>まだのところ</b>
-        <span>押すと、その場所へ</span>
+        {pc ? count(notYet) : <span>押すと、その場所へ</span>}
       </div>
       <ul className="check-prog">
-        {rows.map((row) => (
-          <ProgressItem key={row.id} row={row} editor={editor} onPick={onPick} />
-        ))}
+        {rows
+          .filter((row) => !done.includes(row))
+          .map((row) => (
+            <ProgressItem key={row.id} row={row} editor={editor} onPick={onPick} />
+          ))}
+        {done.length > 0 && <DoneLine rows={done} editor={editor} onPick={onPick} />}
       </ul>
       <div ref={listRef}>
-      <div className="check-sub fix">
+      <div className="check-sub fix" title={pc ? '書いた文の間違い' : undefined}>
         <b>直すところ</b>
-        <span>書いた文の間違い</span>
+        {pc ? count(fixes.length, true) : <span>書いた文の間違い</span>}
       </div>
       {/* 開いた直後で、紙面を組み終えていない間は、ページ数などのチェックをまだしていない（「直すところはありません」とは言わない） */}
       {snap.pageChecksPending && fixes.length > 0 && <p className="check-pending">ページ数などのチェックは、紙面の準備ができてからします。</p>}
@@ -458,10 +497,12 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
       <header className="side-head">
         <div className="brand-row">
           <span className="mark">卒</span>
-          <div>
+          <div className="brand-text">
             <div className="brand-name">{config.reportName}</div>
             <div className="brand-sub">{config.fiscalYear}年度</div>
           </div>
+          {/* 使い方・手順書・バックアップと「最初から作り直す」の窓（mockups/v34 案A）・今年度だけ Word の読み込み（mockups/v37 案C） */}
+          <SideMenu handbookUrl={config.handbookUrl} onHelp={onHelp} onBackup={onBackup} onWordImport={onWordImport} />
         </div>
         <div className="meta">
           {drive ? <DriveChipMenu drive={drive} /> : <SaveChip state={saveState} />}
@@ -469,20 +510,6 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
         </div>
         {driveStopped && <DriveStoppedNote />}
         {drive?.staff && <p className="staff-note">教職員のアカウントで試しています（学籍番号は自動で入りません）</p>}
-        <div className="links">
-          {config.handbookUrl && (
-            <a className="link-btn" href={config.handbookUrl} target="_blank" rel="noreferrer">
-              {Icon.handbook}手順書
-            </a>
-          )}
-          {/* バックアップと「最初から作り直す」の窓（mockups/v34 案A。名前が長い分、となりの「使い方」より広い） */}
-          <button className="link-btn backup-btn" onClick={onBackup}>
-            {Icon.backup}
-            <BackupLabel />
-          </button>
-          <HelpButton onClick={onHelp} />
-        </div>
-        {onWordImport && <WordImportLink onClick={onWordImport} />}
       </header>
 
       {wordTodo}
@@ -490,11 +517,11 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
       <CourseNotice config={config} courseId={snap.report.basicInfo.courseId} short />
 
       <section className="sec check">
+        {/* 数は、小見出し（まだのところ・直すところ）の横に出す（mockups/v37。スマホは見出しの横の Tally のまま） */}
         <div className="sec-h">
           <span>セルフチェック</span>
-          <Tally snap={snap} config={config} />
         </div>
-        <CheckBody editor={editor} snap={snap} config={config} />
+        <CheckBody editor={editor} snap={snap} config={config} pc />
       </section>
 
       <footer className="side-foot">
