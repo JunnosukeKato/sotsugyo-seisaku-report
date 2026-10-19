@@ -1,0 +1,276 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v35 デザイン案（5つ）</title>
+<!-- 画面の絵は node scripts/mockup-shots-v35.mjs で作る（本物の学生用ツールを開き、案ごとに一部を書き換えて写したもの）。このページの写しは同じスクリプトの review で作る（質問ごとに shots/review-*.png） -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  .top { max-width: 1240px; margin: 0 0 22px; font-size: 13.5px; color: var(--muted); line-height: 1.8; }
+  .top b { color: var(--ink); font-size: 15px; }
+  section { max-width: 1240px; margin: 0 0 40px; padding: 4px 0 2px; background: #eceae6; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  h2 { font-size: 16px; margin: 22px 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 14px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 3px; }
+  figcaption span { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff !important; font-size: 11.5px !important; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .why { display: block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #e8ebf5; color: var(--accent) !important; font-size: 13px !important; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > div { background: #fff; align-self: stretch; }
+  .row > .lbl { grid-column: 1 / -1; padding: 7px 16px 5px !important; background: #f4f2ee !important; font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 10px; border: 1px solid #ddd; }
+  .row small, .cell small { display: block; padding: 6px 4px 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .row small b, .cell small b { color: var(--ink); }
+  .note { display: flex; flex-direction: column; justify-content: center; padding: 14px 20px !important; font-size: 13.5px; color: var(--muted); line-height: 1.8; background: #faf9f7 !important; }
+  .note b { color: var(--ink); }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 10px 16px 12px; font-size: 13.5px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: var(--ok); }
+  .pw .weak b { color: #b5443b; }
+  .now { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+  .now > b { display: block; padding: 10px 16px 8px; font-size: 14px; border-bottom: 1px solid var(--line); }
+  /* どの案でも同じこと */
+  .common { margin: 0 0 16px; padding: 10px 16px; border-radius: 12px; background: #fff; font-size: 13.5px; line-height: 1.8; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+  .common b { font-size: 13px; letter-spacing: 0.06em; color: var(--accent); }
+  .common ul { margin: 2px 0 0; padding-left: 20px; }
+
+  /* ① 4つを横に並べて比べる（いま・案A・案B・案C） */
+  .cmp { display: grid; grid-template-columns: 76px repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); margin-bottom: 18px; }
+  .cmp > div { background: #fff; }
+  .cmp .h { padding: 10px 12px 8px; font-size: 14.5px; font-weight: 700; line-height: 1.45; }
+  .cmp .h small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 400; color: var(--muted); }
+  .cmp .h.a { background: #e8ebf5; color: var(--accent); }
+  .cmp .h.a small { color: var(--accent); }
+  .cmp .h .rec { margin-left: 4px; }
+  .cmp .rl { padding: 12px 8px; background: #f4f2ee; font-size: 13px; font-weight: 700; line-height: 1.5; color: var(--muted); }
+  .cmp .rl small { display: block; margin-top: 4px; font-size: 11.5px; font-weight: 400; }
+  .cmp .cell { padding: 8px; background: #faf9f7; }
+  .cmp .cell.a { background: #eef0f7; }
+  .cmp .cell img { border-radius: 8px; border: 1px solid #ddd; }
+  .cmp .d { padding: 10px 12px 12px; font-size: 13px; line-height: 1.7; }
+  .cmp .d.a { background: #f5f6fb; }
+  .cmp .d p { margin: 0 0 6px; }
+  .cmp .d .g { color: var(--ok); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
+  .cmp .d .w { color: #b5443b; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
+
+  /* 絵の高さが、だいたいそろう幅（絵の横÷縦の比） */
+  .r-pa { grid-template-columns: 260px 260px 260px 1fr; }
+  .r-tpc { grid-template-columns: 1fr 1fr 1.35fr; }
+  .r-tph { grid-template-columns: 250px 250px 250px 1fr; }
+  .r-sp2 { grid-template-columns: 1fr 1fr; }
+  .r-sp1 { grid-template-columns: 1fr; }
+  .r-ua { grid-template-columns: 1.78fr 0.68fr; }
+  .r-ub { grid-template-columns: 1.78fr 1fr; }
+  .r-unow { grid-template-columns: 300px 250px 1fr; }
+  .r-uph { grid-template-columns: 250px 250px 1fr; }
+  .r-d3 { grid-template-columns: 1fr 1fr 1fr; }
+  .r-wm { grid-template-columns: 1fr 1fr 1fr; }
+  /* 画面のままの大きさで見せる絵（縮めない） */
+  .real { display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: flex-start; padding: 14px 16px 16px; background: #faf9f7; }
+  .real div { font-size: 13px; color: var(--muted); }
+  .real img { width: auto; max-width: none; margin-top: 6px; border: 1px solid #ddd; image-rendering: pixelated; }
+  .real b { color: var(--ink); }
+  .stack > a + a { display: block; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<p class="top"><b>v35　デザイン案（5つ）</b><br>質問ごとに1つ選んでください（②は1つの案です）。画面は本物のツールを開いて、案の部分だけ書き足して写したものです。指摘の数や中身も本物です（絵を押すと大きく見られます）。</p>
+
+<!-- ===================================================================== -->
+<section id="panel">
+  <h1>① 右の欄（セルフチェック）の見せ方</h1>
+  <p class="lead">書き始めたばかりで「まだ書いていない」だけなのに、赤い「5 エラー」が出て、こわく見えます。<br>抄録は緑で「許可が出てから書きます」なのに、一覧では赤い ×。上の半分も、欄の半分ほどを使っています。</p>
+  <div class="common"><b>どの案でも同じ</b>
+    <ul>
+      <li>上の半分を詰める（保存と締切を1行に・ボタンを小さく・Word の読み込みの字を小さく）</li>
+      <li>「引用・参考文献」は右の欄から外し、「使い方」から入れる（下の右の絵）</li>
+      <li>抄録は、先生の許可の前は灰色の「先生の許可のあと」（赤くしない・エラーに数えない）</li>
+    </ul>
+  </div>
+
+  <div class="cmp">
+    <div class="rl"></div>
+    <div class="h">いま</div>
+    <div class="h a">案A<span class="rec">おすすめ</span><small>「まだのところ」と「直すところ」を分ける</small></div>
+    <div class="h">案B<small>いまのページの指摘を先に</small></div>
+    <div class="h">案C<small>「次にやること」を1つだけ</small></div>
+
+    <div class="rl">始めたばかり<small>表紙の案内のあと。氏名・サブタイトルは空</small></div>
+    <div class="cell"><a href="shots/panel-now-1.png"><img src="shots/panel-now-1.png" alt=""></a></div>
+    <div class="cell a"><a href="shots/panel-a-1.png"><img src="shots/panel-a-1.png" alt=""></a></div>
+    <div class="cell"><a href="shots/panel-b-1.png"><img src="shots/panel-b-1.png" alt=""></a></div>
+    <div class="cell"><a href="shots/panel-c-1.png"><img src="shots/panel-c-1.png" alt=""></a></div>
+
+    <div class="rl">書いている途中<small>本文4ページ。書き間違いが3つ（です・私・先生）</small></div>
+    <div class="cell"><a href="shots/panel-now-2.png"><img src="shots/panel-now-2.png" alt=""></a></div>
+    <div class="cell a"><a href="shots/panel-a-2.png"><img src="shots/panel-a-2.png" alt=""></a></div>
+    <div class="cell"><a href="shots/panel-b-2.png"><img src="shots/panel-b-2.png" alt=""></a></div>
+    <div class="cell"><a href="shots/panel-c-2.png"><img src="shots/panel-c-2.png" alt=""></a></div>
+
+    <div class="rl"></div>
+    <div class="d"><p>まだ書いていない所も、赤いエラーになる。</p></div>
+    <div class="d a"><p>まだの所は灰色の ○（済むと緑の ✓）。赤と黄は、書いた文の間違いだけ。</p><span class="g">よいところ</span><br>始めたばかりでも赤くならない。進み具合が分かる。<br><span class="w">弱いところ</span><br>一覧が2つに分かれる。</div>
+    <div class="d"><p>見ているページの指摘だけ開く。ほかのページは閉じておく。</p><span class="g">よいところ</span><br>このページで何を直すか分かる。<br><span class="w">弱いところ</span><br>赤い「4 エラー」は残る。</div>
+    <div class="d"><p>次にやることを1つだけ大きく。ほかは「一覧を開く」で。</p><span class="g">よいところ</span><br>迷わない。<br><span class="w">弱いところ</span><br>あとどれだけか見えにくい。</div>
+  </div>
+
+  <figure class="is-rec">
+    <figcaption><b>案A のスマホ（「チェック」の欄）と、使い方の「引用・参考文献」</b><span>スマホも同じ分け方にします。「引用・参考文献」は、使い方の項目にボタンを付けて、そこから入れます（どの案でも）。</span></figcaption>
+    <div class="row r-pa">
+      <div class="ph"><a href="shots/ph-panel-a-1.png"><img src="shots/ph-panel-a-1.png" alt=""></a><small><b>スマホ</b>：始めたばかり</small></div>
+      <div class="ph"><a href="shots/ph-panel-a-2.png"><img src="shots/ph-panel-a-2.png" alt=""></a><small><b>スマホ</b>：書いている途中</small></div>
+      <div class="ph"><a href="shots/panel-help-refs.png"><img src="shots/panel-help-refs.png" alt=""></a><small>「？ 使い方」→「引用・参考文献」</small></div>
+      <div class="note"><b>PDF のボタンの下のひとこと</b>「まだのところが4つあります」<br>「直すところが3つ、まだのところが2つあります」<br><br>スマホの下の「チェック」の赤い数は、直すところの数だけにします。</div>
+    </div>
+  </figure>
+</section>
+
+<!-- ===================================================================== -->
+<section id="table">
+  <h1>② 表の大きさを最初に選ぶ</h1>
+  <p class="lead">いまは「空の表（2列）」を押すと、いつも2列×2行で入り、あとから行・列を足します。入れる前に大きさを選べるようにします。<br>パソコンはます目、スマホは［−］［＋］（決めていただいた形。1つずつ描きました）。</p>
+
+  <figure>
+    <figcaption><b>パソコン：ます目で選ぶ</b><span>「表を入れる」のメニューに、ます目（6列×10行まで）。マウスを乗せた所まで色が付き、押すとその大きさで入ります。素材表は、ます目の下のボタン。</span></figcaption>
+    <div class="row r-tpc">
+      <div class="ph"><a href="shots/table-pc-now.png"><img src="shots/table-pc-now.png" alt=""></a><small><b>いま</b>：どの表を入れますか</small></div>
+      <div class="ph"><a href="shots/table-pc-grid.png"><img src="shots/table-pc-grid.png" alt=""></a><small><b>案</b>：3列×4行に乗せたところ（濃い行が見出し）</small></div>
+      <div class="ph"><a href="shots/table-pc-after.png"><img src="shots/table-pc-after.png" alt=""></a><small>押したあと：3列×4行の表が入る（本物の表）<br>入れたあとも、今までどおり「行を足す」「列を足す」で変えられます。</small></div>
+    </div>
+  </figure>
+
+  <figure>
+    <figcaption><b>スマホ：列と行を［−］［＋］で</b><span>書く欄の「表を入れる」を押すと、下から小さな欄。最初は2列×2行。素材表もこの欄の中へ移すので、書く欄の道具は1つ減ります。</span></figcaption>
+    <div class="row r-tph">
+      <div class="ph"><a href="shots/table-ph-now.png"><img src="shots/table-ph-now.png" alt=""></a><small><b>いま</b>：書く欄の道具</small></div>
+      <div class="ph"><a href="shots/table-ph-tools.png"><img src="shots/table-ph-tools.png" alt=""></a><small><b>案</b>：「素材表」は出さない</small></div>
+      <div class="ph"><a href="shots/table-ph-sheet.png"><img src="shots/table-ph-sheet.png" alt=""></a><small>「表を入れる」を押すと（3列×4行にしたところ）</small></div>
+      <div class="note">［＋］［−］は、指で押しやすい大きさ（46px）。<br>下の小さな表の絵で、できる形が分かります。</div>
+    </div>
+  </figure>
+</section>
+
+<!-- ===================================================================== -->
+<section id="spread">
+  <h1>③ 見開き表示（パソコンだけ・使いたい人だけ）</h1>
+  <p class="lead">いまのページと次のページを並べ、1–2、3–4…と2ページずつめくります。ノートパソコンでは、字がかなり小さくなります（下の「画面のままの大きさ」）。</p>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　右下の切り替えを「全体／見開き／拡大」の3つにする<span class="rec">おすすめ</span></b><span>道具は台の左端（拡大のときと同じ）、←→は下に置きます。左のページ一覧は、2ページとも選んだ印。</span><span class="why">おすすめの理由：切り替えの場所が1つのままで、迷わないから。</span></figcaption>
+    <div class="row r-sp2">
+      <div class="lbl">ノートパソコン（1366×768）</div>
+      <div class="ph"><a href="shots/spread-now-1366.png"><img src="shots/spread-now-1366.png" alt=""></a><small><b>いま</b>：全体（1ページずつ）</small></div>
+      <div class="ph"><a href="shots/spread-a-1366.png"><img src="shots/spread-a-1366.png" alt=""></a><small><b>見開き</b>：5〜6ページ</small></div>
+    </div>
+    <div class="row r-sp1">
+      <div class="lbl">大きい画面（1920×1080）</div>
+      <div class="ph" style="padding:10px 18%"><a href="shots/spread-a-1920.png"><img src="shots/spread-a-1920.png" alt=""></a><small><b>見開き</b>：5〜6ページ</small></div>
+    </div>
+    <div class="row r-sp1">
+      <div class="lbl">画面のままの大きさ（縮めていない写し。本文3ページの上の部分）</div>
+      <div class="real">
+        <div><b>1366×768・いま</b><br><img src="shots/spread-real-now-1366.png" alt=""></div>
+        <div><b>1366×768・見開き</b><br><img src="shots/spread-real-1366.png" alt=""></div>
+        <div><b>1920×1080・いま</b><br><img src="shots/spread-real-now-1920.png" alt=""></div>
+        <div><b>1920×1080・見開き</b><br><img src="shots/spread-real-1920.png" alt=""></div>
+      </div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>図や表の並び・ページの切れ目を、本のように見られる。</div><div class="weak"><b>弱いところ</b><br>ノートパソコンでは字が小さく、書くより見た目の確かめ向き。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　「見開き」を、別の切り替えのボタンにする</b><span>「全体／拡大」はそのまま。その左に「見開き」のスイッチ。紙面は案Aと同じ。</span></figcaption>
+    <div class="row r-sp2" style="grid-template-columns: 460px 1fr">
+      <div class="ph"><a href="shots/spread-b-1366.png"><img src="shots/spread-b-1366.png" alt=""></a><small>右下（1366×768）</small></div>
+      <div class="note">いまの切り替えの形は変わりません。<br>ただ、「全体」と「見開き」の両方が選ばれて見えるので、少し分かりにくくなります。</div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>いまの「全体／拡大」は変わらない。</div><div class="weak"><b>弱いところ</b><br>ボタンが1つ増え、組み合わせが分かりにくい。</div></div>
+  </figure>
+</section>
+
+<!-- ===================================================================== -->
+<section id="undo">
+  <h1>④ 「元に戻す」「やり直す」の置き場所</h1>
+  <p class="lead">いまは「元に戻す」（Ctrl+Z）だけです。戻しすぎたときに進める「やり直す」（Ctrl+Y、Mac は ⌘+Shift+Z）を足します。置き場所を1つ選んでください。</p>
+
+  <!-- パソコン：いま・案A・案B・案C を横に並べて比べる。黒い吹き出しは、マウスを乗せたときの見た目 -->
+  <div class="cmp u4">
+    <div class="rl"></div>
+    <div class="h">いま<small>左の道具のいちばん下に「元に戻す」だけ</small></div>
+    <div class="h a">案A<span class="rec">おすすめ</span><small>左の道具のいちばん下に、2つ並べる</small></div>
+    <div class="h">案B<small>紙面の右下（「全体／拡大」の左）</small></div>
+    <div class="h">案C<small>紙面の左上に、小さく（Word と同じ形）</small></div>
+
+    <div class="rl">画面全体</div>
+    <div class="cell"><a href="shots/undo-pc-now-full.png"><img src="shots/undo-pc-now-full.png" alt=""></a></div>
+    <div class="cell a"><a href="shots/undo-pc-a.png"><img src="shots/undo-pc-a.png" alt=""></a></div>
+    <div class="cell"><a href="shots/undo-pc-b.png"><img src="shots/undo-pc-b.png" alt=""></a></div>
+    <div class="cell"><a href="shots/undo-pc-c.png"><img src="shots/undo-pc-c.png" alt=""></a></div>
+
+    <div class="rl">近くで</div>
+    <div class="cell"><a href="shots/undo-pc-now.png"><img src="shots/undo-pc-now.png" alt=""></a></div>
+    <div class="cell a"><a href="shots/undo-pc-a-zoom.png"><img src="shots/undo-pc-a-zoom.png" alt=""></a></div>
+    <div class="cell"><a href="shots/undo-pc-b-zoom.png"><img src="shots/undo-pc-b-zoom.png" alt=""></a></div>
+    <div class="cell"><a href="shots/undo-pc-c-zoom.png"><img src="shots/undo-pc-c-zoom.png" alt=""></a></div>
+
+    <div class="rl"></div>
+    <div class="d"><p>「やり直す」のボタンはない。</p></div>
+    <div class="d a"><p>いまの場所に、2つを横に並べる。</p><span class="g">よいところ</span><br>場所が変わらず、探さなくてよい。<br><span class="w">弱いところ</span><br>ボタンの字が少し小さい。</div>
+    <div class="d"><p>左の道具から外し、右下にまとめる。</p><span class="g">よいところ</span><br>字を省かずに出せる。<br><span class="w">弱いところ</span><br>書いている所から遠い。</div>
+    <div class="d"><p>印だけのボタン。名前は、マウスを乗せると出る。</p><span class="g">よいところ</span><br>Word に慣れた学生には分かる。<br><span class="w">弱いところ</span><br>字がなく、何のボタンか分かりにくい。</div>
+  </div>
+
+  <figure>
+    <figcaption><b>スマホ（どの案でも）</b><span>書く欄の「戻す」の横に「やり直す」。</span></figcaption>
+    <div class="row r-uph">
+      <div class="ph"><a href="shots/undo-ph-now.png"><img src="shots/undo-ph-now.png" alt=""></a><small><b>いま</b></small></div>
+      <div class="ph"><a href="shots/undo-ph-a.png"><img src="shots/undo-ph-a.png" alt=""></a><small><b>案</b>：「戻す」「やり直す」</small></div>
+      <div class="note">道具が2段になります（いまも、段落を書いているときは2段）。</div>
+    </div>
+  </figure>
+</section>
+
+<!-- ===================================================================== -->
+<section id="draft">
+  <h1>⑤ エラー0件のときの下書き PDF・透かし</h1>
+  <p class="lead">エラーが0件になると、下書きの PDF を選べません。先生に最後に見てもらうには、まだなのに「了承を得た」にチェックを入れることになります。</p>
+
+  <div class="now"><b>いま（エラー0件）</b>
+    <div class="row r-unow" style="grid-template-columns: 460px 1fr">
+      <div class="ph"><a href="shots/draft-now.png"><img src="shots/draft-now.png" alt=""></a></div>
+      <div class="note">3つのチェックを全部入れないと、保存できません。<br>エラーが残っているときだけ、下書きの PDF を出せます。</div>
+    </div>
+  </div>
+
+  <div class="row r-d3" style="border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.08); margin-bottom:18px">
+    <div class="lbl">窓の形（1つ選んでください）</div>
+    <div class="ph" style="background:#eef0f7 !important"><b style="display:block;margin:2px 4px 8px;font-size:15px;color:var(--accent)">案A　下書きの欄を足す<span class="rec">おすすめ</span></b><a href="shots/draft-a.png"><img src="shots/draft-a.png" alt=""></a><small>エラーがあるときと同じ欄。<br><b style="color:var(--ok)">よい</b>：いつも同じ形で、すぐ見つかる。<br><b style="color:#b5443b">弱い</b>：窓が少し長くなる。</small></div>
+    <div class="ph stack"><b style="display:block;margin:2px 4px 8px;font-size:15px">案B　上にタブ「提出用｜下書き」</b><a href="shots/draft-b-1.png"><img src="shots/draft-b-1.png" alt=""></a><a href="shots/draft-b-2.png"><img src="shots/draft-b-2.png" alt=""></a><small>上：提出用（いつもの形）　下：下書き<br><b style="color:var(--ok)">よい</b>：どちらを作るか、はっきり分かれる。<br><b style="color:#b5443b">弱い</b>：タブに気づかない学生がいる。</small></div>
+    <div class="ph"><b style="display:block;margin:2px 4px 8px;font-size:15px">案C　左下に小さな字のボタン</b><a href="shots/draft-c.png"><img src="shots/draft-c.png" alt=""></a><small>「うまくいかないとき」の上。<br><b style="color:var(--ok)">よい</b>：窓の形はほとんど変わらない。<br><b style="color:#b5443b">弱い</b>：目立たない。</small></div>
+  </div>
+
+  <div class="row r-wm" style="border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.08)">
+    <div class="lbl">透かしの色（1つ選んでください）　赤い丸・線・字は、先生の赤ペンの例です</div>
+    <div class="ph"><b style="display:block;margin:2px 4px 8px;font-size:15px">案A　いまの赤い透かし</b><a href="shots/draft-wm-a.png"><img src="shots/draft-wm-a.png" alt=""></a><small>赤ペンの書き込みと色が重なり、見分けにくい。</small></div>
+    <div class="ph"><b style="display:block;margin:2px 4px 8px;font-size:15px">案B　灰色の透かし</b><a href="shots/draft-wm-b.png"><img src="shots/draft-wm-b.png" alt=""></a><small>赤ペンがよく見える。</small></div>
+    <div class="ph" style="background:#eef0f7 !important"><b style="display:block;margin:2px 4px 8px;font-size:15px;color:var(--accent)">案C　灰色＋書き出した日時<span class="rec">おすすめ</span></b><a href="shots/draft-wm-c.png"><img src="shots/draft-wm-c.png" alt=""></a><small>ページの下に「書き出し 2026/10/19 11:30」。<br>何回目の下書きか、先生にも分かる。</small></div>
+  </div>
+</section>
+
+</body>
+</html>

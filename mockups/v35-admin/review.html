@@ -1,0 +1,226 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v35 管理ページ</title>
+<!-- 画面の絵は node scripts/mockup-shots-v35-admin.mjs で作る（本物の管理ページを試験用サーバーで開き、案ごとに一部を書き換えて写したもの）。このページの話題ごとの写しは同じスクリプトの review で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #1e3a8a; --line: #ecebe8; --ok: #3f7a55; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 0 0 24px; word-break: auto-phrase; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  section { max-width: 1300px; margin: 0; padding: 28px 30px 30px; }
+  section + section { border-top: 6px solid #dcd9d3; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 16px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 3px; }
+  figcaption span { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff !important; font-size: 11.5px !important; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .why { display: block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #e8ebf5; color: var(--accent) !important; font-size: 13px !important; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > div { background: #fff; align-self: stretch; }
+  .row > .lbl { grid-column: 1 / -1; padding: 7px 16px 5px !important; background: #f4f2ee !important; font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 8px; border: 1px solid #ddd; }
+  .row small { display: block; padding: 6px 4px 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .row small b { color: var(--ink); }
+  .note { display: flex; flex-direction: column; justify-content: center; padding: 14px 22px !important; font-size: 13.5px; color: var(--muted); line-height: 1.8; background: #faf9f7 !important; }
+  .note b { color: var(--ink); }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 10px 16px 12px; font-size: 13.5px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: var(--ok); }
+  .pw .weak b { color: #b5443b; }
+  .now { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.06); }
+  .now > b { display: block; padding: 10px 16px 8px; font-size: 14px; border-bottom: 1px solid var(--line); }
+  .one { grid-template-columns: 1fr; }
+  /* 絵の高さが、だいたいそろう幅（絵の横÷縦の比） */
+  .r-full2 { grid-template-columns: 1.78fr 1.5fr; }
+  .r-menus { grid-template-columns: 3.52fr 2.97fr; }
+  .r-done { grid-template-columns: 3.8fr 2fr; }
+  .r-delb { grid-template-columns: 2.46fr 1fr; }
+  .r-tnow { grid-template-columns: 1.78fr 0.99fr; }
+  .r-tfull { grid-template-columns: 1.78fr 1.5fr; }
+  /* 3つ並べる（③） */
+  .trio { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; align-items: start; }
+  .trio figure, .trio .now { margin: 0; }
+  .trio .now > b { font-size: 16px; padding: 12px 16px 10px; }
+  .trio .pw { grid-template-columns: 1fr; }
+</style>
+</head>
+<body>
+
+<!-- ===================================================================== -->
+<section id="header">
+  <h1>v35 管理ページ ①　上の見出しが、狭い画面で切れる</h1>
+  <p class="lead">ノートパソコン（1280×720）では、見出しの行が画面より広く（約1500px）、「この年度を学生に公開」が右に隠れて、下に横の棒が出ます。1440×900 でも「保存していない変更があります」が出ると切れます。1つ選んでください。<br>画面は本物の管理ページ（準備中の2027年度・保存していない変更あり）に、案の部分だけ書き足して写したものです。</p>
+
+  <div class="now"><b>いま</b>
+    <div class="row one">
+      <div class="ph"><a href="shots/h-now-1280.png"><img src="shots/h-now-1280.png" alt=""></a><small><b>1280×720</b>：「保存」が途中で切れ、「この年度を学生に公開」は画面の外</small></div>
+      <div class="ph"><a href="shots/h-now-1440.png"><img src="shots/h-now-1440.png" alt=""></a><small><b>1440×900</b>：「この年度を学生に公開」が途中で切れる</small></div>
+    </div>
+    <div class="row r-full2">
+      <div class="ph"><a href="shots/h-now-1280-full.png"><img src="shots/h-now-1280-full.png" alt=""></a><small>1280×720 の画面全体：いちばん下に横の棒</small></div>
+      <div class="note">右へ動かさないと、公開のボタンが押せません。<br>本番では「試験用サーバー」の印が出ない分だけ短くなりますが、1280×720 では「保存していない変更があります」が出ると、やはり切れます。</div>
+    </div>
+  </div>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　2段にする<span class="rec">おすすめ</span></b><span>上の段：年度・状態の印・「保存」「この年度を学生に公開」。下の細い段：ログイン中の人・試験用サーバーと、ときどき使う「変更履歴」「先生の登録」「新年度を作成」。</span><span class="why">おすすめの理由：名前を短くしたり隠したりせずに、どの広さの画面でも「保存」「この年度を学生に公開」がいつも見えるから。</span></figcaption>
+    <div class="row one">
+      <div class="ph"><a href="shots/h-a-1280.png"><img src="shots/h-a-1280.png" alt=""></a><small><b>1280×720</b></small></div>
+      <div class="ph"><a href="shots/h-a-1440.png"><img src="shots/h-a-1440.png" alt=""></a><small><b>1440×900</b></small></div>
+    </div>
+    <div class="row r-full2">
+      <div class="ph"><a href="shots/h-a-1280-full.png"><img src="shots/h-a-1280-full.png" alt=""></a><small>1280×720 の画面全体（横の棒は出ない）</small></div>
+      <div class="note">見出しは約30px高くなります。<br>上の段には、まだ余裕があります（②の「この年度を削除」も、下の段に入ります）。</div>
+    </div>
+    <div class="row one">
+      <div class="lbl">先生の画面（1280×720）</div>
+      <div class="ph"><a href="shots/h-teacher-now.png"><img src="shots/h-teacher-now.png" alt=""></a><small><b>いま</b>：先生の画面は、いまも1段に入っています</small></div>
+      <div class="ph"><a href="shots/h-teacher-a.png"><img src="shots/h-teacher-a.png" alt=""></a><small><b>案A</b>：管理者の画面とそろえて、ログイン中の人を下の段に</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>名前はそのまま、全部見えます。ボタンが増えても入ります。</div><div class="weak"><b>弱いところ</b><br>見出しが高くなり、入力欄と見本が少し狭くなります。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　1段のまま、まとめる</b><span>メールアドレスと試験用サーバーの印は、丸いボタンの中へ。「変更履歴」「先生の登録」「新年度を作成」は「…」の中へ。「保存」「この年度を学生に公開」は右にいつも出します。</span></figcaption>
+    <div class="row one">
+      <div class="ph"><a href="shots/h-b-1280.png"><img src="shots/h-b-1280.png" alt=""></a><small><b>1280×720</b></small></div>
+      <div class="ph"><a href="shots/h-b-1440.png"><img src="shots/h-b-1440.png" alt=""></a><small><b>1440×900</b></small></div>
+    </div>
+    <div class="row r-menus">
+      <div class="ph"><a href="shots/h-b-more.png"><img src="shots/h-b-more.png" alt=""></a><small>「…」を押したところ</small></div>
+      <div class="ph"><a href="shots/h-b-acct.png"><img src="shots/h-b-acct.png" alt=""></a><small>丸いボタンを押したところ</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>見出しの高さは今のまま。すっきりします。</div><div class="weak"><b>弱いところ</b><br>「変更履歴」などが隠れ、どこにあるか探す手間が増えます。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C　名前を短く、印を小さくする</b><span>「学生に公開」「履歴」「先生」「新年度」「未保存の変更あり」「試験用」。並びは今のままです。</span></figcaption>
+    <div class="row one">
+      <div class="ph"><a href="shots/h-c-1280.png"><img src="shots/h-c-1280.png" alt=""></a><small><b>1280×720</b>：ぎりぎり入る</small></div>
+      <div class="ph"><a href="shots/h-c-1440.png"><img src="shots/h-c-1440.png" alt=""></a><small><b>1440×900</b></small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>形は今のままで、直すところが少ない。</div><div class="weak"><b>弱いところ</b><br>「先生」「履歴」だけでは分かりにくい。1280では余裕がなく、印が増えるとまた切れます。</div></div>
+  </figure>
+</section>
+
+<!-- ===================================================================== -->
+<section id="delete">
+  <h1>v35 管理ページ ②　準備中の年度を消すボタン</h1>
+  <p class="lead">間違えて作った年度を消せるようにします（サーバーには、もう用意があります）。消せるのは、一度も学生に公開していない「準備中」の年度だけで、管理者だけが使えます。どこに置くか、1つ選んでください。<br>画面は、試験用サーバーで2027年度（準備中）を作ったところです。見出しは①の案A（2段）の形で描いています。</p>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　見出しの「変更履歴」のとなりに、赤い字で<span class="rec">おすすめ</span></b><span>消せる年度のときだけ出ます（公開中・終了の年度、公開したことのある年度では出ません）。</span><span class="why">おすすめの理由：消せるときだけ見え、ふだん使う上の段から離れているので、間違えて押しにくいから。</span></figcaption>
+    <div class="row one">
+      <div class="ph"><a href="shots/d-a.png"><img src="shots/d-a.png" alt=""></a><small>下の段の右（「変更履歴」と同じ、この年度についてのリンク）</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>見つけやすく、よく使うボタンから離れています。</div><div class="weak"><b>弱いところ</b><br>①で案Bを選んだときは、「…」の中に入れます。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　「変更履歴」の窓のいちばん下</b><span>ふだんの画面には出しません。</span></figcaption>
+    <div class="row r-delb">
+      <div class="ph"><a href="shots/d-b.png"><img src="shots/d-b.png" alt=""></a><small>「変更履歴」を押したところ</small></div>
+      <div class="note">消せる年度のときだけ、いちばん下に区切って出します。</div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>ふだんは見えないので、間違えて押しません。</div><div class="weak"><b>弱いところ</b><br>「変更履歴」の中に削除があるとは、思いつきにくい。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C　年度を選ぶ欄のとなりに、小さく</b><span>消せる年度のときだけ、「準備中」の印のとなりに出ます。</span></figcaption>
+    <div class="row one">
+      <div class="ph"><a href="shots/d-c.png"><img src="shots/d-c.png" alt=""></a><small>上の段の左</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>どの年度を消すのか、いちばん分かりやすい。</div><div class="weak"><b>弱いところ</b><br>よく使う年度の欄のすぐとなり。準備のあいだ、ずっと目に入ります。</div></div>
+  </figure>
+
+  <div class="now"><b>どの案でも同じ：押したときの確かめと、消したあと</b>
+    <div class="row one">
+      <div class="ph"><a href="shots/d-confirm.png"><img src="shots/d-confirm.png" alt=""></a><small>押したときの確かめ（ブラウザの窓。似せて描いたもの）</small></div>
+    </div>
+    <div class="row r-done">
+      <div class="ph"><a href="shots/d-done.png"><img src="shots/d-done.png" alt=""></a><small>「OK」のあと：公開中の年度に戻り、知らせを出す</small></div>
+      <div class="note">「キャンセル」なら、何も変わりません。<br>消したあと、同じ年度を「新年度を作成」でもう一度作れます。</div>
+    </div>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section id="notice">
+  <h1>v35 管理ページ ③　新年度を作ったあとの知らせ</h1>
+  <p class="lead">「新年度を作成」のあとに出る緑の知らせ（前の年度のままの項目）が、長い1つの文で読みにくいです。1つ選んでください。<br>文は、試験用サーバーで本当に作ったときに出たものです（2026年度のコースにお知らせを入れた状態）。</p>
+  <div class="trio">
+    <div class="now"><b>いま</b>
+      <div class="row one"><div class="ph"><a href="shots/n-now.png"><img src="shots/n-now.png" alt=""></a><small>項目が「、」でつながった1つの文</small></div></div>
+    </div>
+    <figure class="is-rec">
+      <figcaption><b>案A　箇条書きにする<span class="rec">おすすめ</span></b><span>同じ緑の枠のまま、1行に1つ。どこを直すかを小さな字で添えます。</span><span class="why">おすすめの理由：いちばん簡単で、読みにくさはこれで解けるから。</span></figcaption>
+      <div class="row one"><div class="ph"><a href="shots/n-a.png"><img src="shots/n-a.png" alt=""></a></div></div>
+      <div class="pw"><div class="good"><b>よいところ</b><br>項目が1つずつ読め、直す場所も分かります。</div><div class="weak"><b>弱いところ</b><br>今と同じく、「保存」を押すと知らせは消えます。</div></div>
+    </figure>
+    <figure>
+      <figcaption><b>案B　チェックを付けられる一覧にする</b><span>直した項目にチェック。全部に付けるまで、「保存」を押しても残ります。</span></figcaption>
+      <div class="row one"><div class="ph"><a href="shots/n-b.png"><img src="shots/n-b.png" alt=""></a><small>1つ目にチェックを付けたところ</small></div></div>
+      <div class="pw"><div class="good"><b>よいところ</b><br>何日かに分けて直しても、直し忘れがありません。</div><div class="weak"><b>弱いところ</b><br>枠が大きくなり、作る手間も少し増えます。</div></div>
+    </figure>
+  </div>
+</section>
+
+<!-- ===================================================================== -->
+<section id="template">
+  <h1>v35 管理ページ ④　ひな形の窓：「反映する」が押せない理由</h1>
+  <p class="lead">説明が長すぎる・見出しが空など、直すところがあると「反映する」が押せません。いまは理由が、左の欄のいちばん下（画面の外のことが多い）の赤い字と、マウスを重ねたときの小さな説明だけです。1つ選んでください。<br>画面は、3行目の説明を400字にし、7行目の小見出しを空にしたところです（1280×720）。</p>
+
+  <div class="now"><b>いま</b>
+    <div class="row r-tnow">
+      <div class="ph"><a href="shots/t-now.png"><img src="shots/t-now.png" alt=""></a><small>「反映する」にマウスを重ねたときだけ、小さな説明（似せて描いたもの）</small></div>
+      <div class="ph"><a href="shots/t-now-bottom.png"><img src="shots/t-now-bottom.png" alt=""></a><small>赤い字は、左の欄をいちばん下まで動かすと見える</small></div>
+    </div>
+    <div class="row one">
+      <div class="ph"><a href="shots/t-now-foot.png"><img src="shots/t-now-foot.png" alt=""></a><small>窓のいちばん下（大きく）：ボタンは薄い色になるだけ</small></div>
+    </div>
+  </div>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　「反映する」のとなりに、1つ目の理由を出す<span class="rec">おすすめ</span></b><span>2つ以上あるときは「ほか1件」。直すところがあるあいだは、下の案内の代わりに出します。</span><span class="why">おすすめの理由：何もしなくても、押せない理由がボタンのすぐとなりに見えるから。</span></figcaption>
+    <div class="row one">
+      <div class="ph"><a href="shots/t-a-foot.png"><img src="shots/t-a-foot.png" alt=""></a><small>窓のいちばん下</small></div>
+    </div>
+    <div class="row r-tfull">
+      <div class="ph"><a href="shots/t-a.png"><img src="shots/t-a.png" alt=""></a><small>窓の全体</small></div>
+      <div class="note">「ほか1件」を押すと、左の欄のいちばん下の一覧へ動きます。<br>案Bの「行を赤くする」を足すこともできます。</div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>押せない理由が、いつも目に入ります。</div><div class="weak"><b>弱いところ</b><br>2つ目からは「ほか1件」を押さないと見えません。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　押すと、直す行へ動いて赤くする</b><span>「反映する」を押すと、左の欄が直す行へ動き、その行を赤い枠にして、すぐ下に理由を出します。</span></figcaption>
+    <div class="row r-tnow">
+      <div class="ph"><a href="shots/t-b.png"><img src="shots/t-b.png" alt=""></a><small>押したところ</small></div>
+      <div class="ph"><a href="shots/t-b-edit.png"><img src="shots/t-b-edit.png" alt=""></a><small>左の欄（大きく）</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>どの行を直せばよいか、その場で分かります。</div><div class="weak"><b>弱いところ</b><br>押すまで理由が出ません。押せない色のボタンは、押されにくい。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C　「反映する」に赤い数。押すと一覧</b><span>ボタンの右上に、直すところの数。押す（マウスを重ねる）と、理由の一覧が出て、押すとその行へ動きます。</span></figcaption>
+    <div class="row one">
+      <div class="ph"><a href="shots/t-c-foot.png"><img src="shots/t-c-foot.png" alt=""></a><small>押したところ（窓のいちばん下）</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>いくつ直すところがあるか、ひと目で分かります。</div><div class="weak"><b>弱いところ</b><br>数だけでは理由が分からず、もう一度押す必要があります。</div></div>
+  </figure>
+</section>
+
+</body>
+</html>
