@@ -7,10 +7,10 @@ export const meta = {
   device: 'pc',
   captions: {
     table: '表は、入れたい文で「表を入れる」を押します',
-    kind: '表の種類を選びます（素材表のひな形もあります）',
+    kind: 'マス目で表の大きさを選びます（1行目は見出し。下に素材表のひな形もあります）',
     tcaption: '表の上のタイトルを打ちます。「表2.」の番号と、本文の「（表2）」は自動です',
     cell: 'マスをクリックして、中身を書きます',
-    row: '行や列は、左の「行を足す」「列を足す」で増やせます',
+    row: 'あとから行や列を増やすときは、左の「行を足す」「列を足す」を押します',
     photos: '作品写真のページでは、左で写真の並べ方を選びます',
     photoAdd: '空いている枠をクリックして、写真を選びます',
     fit: '写真が枠で切れるときは、「全体を入れる（切らない）」を押します',
@@ -48,13 +48,25 @@ export async function run({ page, rec, h }) {
   await page.keyboard.press('End')
   await h.sleep(800)
   await h.clickAt(page, btn.x, btn.y, { pause: 900 })
-  await page.waitForSelector('.palette .side-menu')
+  await page.waitForSelector('.palette .tgrid')
   await h.sleep(400)
 
-  // 2. 表の種類
-  rec.mark('kind', { focus: await h.rectOf(page, '.palette .side-menu') })
-  await h.sleep(2600)
-  await h.clickEl(page, '.palette .side-menu button', '空の表', { pause: 700 })
+  // 2. 表の大きさ：マス目の上で矢印を動かし、2列×3行を選ぶ（マス目は 6列×10行。左上から行ごとに並ぶ）
+  rec.mark('kind', { focus: await h.rectOf(page, '.palette .table-menu') })
+  await h.sleep(1800)
+  const cellAt = (index) =>
+    page.evaluate((index) => {
+      const r = document.querySelectorAll('.palette .tgrid button')[index].getBoundingClientRect()
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    }, index)
+  for (const index of [0, 7, 13]) {
+    const c = await cellAt(index)
+    await h.moveTo(page, c.x, c.y)
+    await h.sleep(700)
+  }
+  await h.sleep(1200)
+  const pick = await cellAt(13)
+  await h.clickAt(page, pick.x, pick.y, { pause: 300 })
   await page.waitForFunction(() => window.__editor.getSnapshot().editingKind === 'tableCaption', { timeout: 30000 })
   // 表が入って紙面を組み直し終えてから、位置を測る
   await h.sleep(600)
@@ -72,7 +84,7 @@ export async function run({ page, rec, h }) {
   await h.ready(page)
   await h.sleep(500)
 
-  // 4. マスに書く（見出しの行と、1行目）
+  // 4. マスに書く（見出しの行と、2行）
   table = await tableNow(page)
   rec.mark('cell', { focus: await tableRect() })
   await h.sleep(1200)
@@ -87,6 +99,8 @@ export async function run({ page, rec, h }) {
   await write(table.rows[0].cells[1], '寸法')
   await write(table.rows[1].cells[0], '帯の幅')
   await write(table.rows[1].cells[1], '15cm')
+  await write(table.rows[2].cells[0], 'ズボンの丈')
+  await write(table.rows[2].cells[1], '98cm')
   await h.sleep(600)
 
   // 5. 行を足す
@@ -98,9 +112,9 @@ export async function run({ page, rec, h }) {
   await h.sleep(400)
   await h.ready(page).catch(() => {})
   await h.sleep(500)
-  await h.typeSlow(page, 'ズボンの丈')
+  await h.typeSlow(page, '袖丈')
   table = await tableNow(page)
-  await write(table.rows.at(-1).cells[1], '98cm')
+  await write(table.rows.at(-1).cells[1], '62cm')
   await h.sleep(1200)
   await page.keyboard.press('Escape')
   await h.ready(page)
