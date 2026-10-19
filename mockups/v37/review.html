@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v37 右の欄のゆとり</title>
+<!-- 画面の絵は node scripts/mockup-shots-v37.mjs panel で作る（本物の学生用ツールを開き、右の欄を案ごとに書き換えて写したもの）。このページの写し（shots/review-panel-spacing.png）は同じスクリプトの review で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  section { max-width: 1240px; margin: 0; padding: 4px 0 8px; background: #eceae6; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 14px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+  .lead q { color: var(--ink); }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 3px; }
+  figcaption span { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff !important; font-size: 11.5px !important; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .why { display: block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #e8ebf5; color: var(--accent) !important; font-size: 13px !important; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > div { background: #fff; align-self: stretch; }
+  .row > .lbl { grid-column: 1 / -1; padding: 7px 16px 5px !important; background: #f4f2ee !important; font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 8px; border: 1px solid #ddd; }
+  .row small { display: block; padding: 6px 4px 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .row small b { color: var(--ink); }
+  .note { display: flex; flex-direction: column; justify-content: center; padding: 14px 20px !important; font-size: 13.5px; color: var(--muted); line-height: 1.8; background: #faf9f7 !important; }
+  .note b { color: var(--ink); }
+  .common { margin: 0 0 16px; padding: 10px 16px; border-radius: 12px; background: #fff; font-size: 13.5px; line-height: 1.8; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+  .common b { font-size: 13px; letter-spacing: 0.06em; color: var(--accent); }
+  .common ul { margin: 2px 0 0; padding-left: 20px; }
+
+  /* 4つを横に並べて比べる（いま・案A・案B・案C） */
+  .cmp { display: grid; grid-template-columns: 100px repeat(4, minmax(0, 1fr)); gap: 1px; background: var(--line); border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); margin-bottom: 18px; }
+  .cmp > div { background: #fff; }
+  .cmp .h { padding: 10px 12px 8px; font-size: 14.5px; font-weight: 700; line-height: 1.45; }
+  .cmp .h small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 400; color: var(--muted); }
+  .cmp .h.a { background: #e8ebf5; color: var(--accent); }
+  .cmp .h.a small { color: var(--accent); }
+  .cmp .h .rec { margin-left: 4px; }
+  .cmp .sz { grid-column: 1 / -1; padding: 7px 16px 5px; background: #f4f2ee; font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+  .cmp .rl { padding: 12px 8px; background: #f4f2ee; font-size: 13px; font-weight: 700; line-height: 1.5; color: var(--muted); }
+  .cmp .rl small { display: block; margin-top: 4px; font-size: 11.5px; font-weight: 400; }
+  .cmp .cell { padding: 8px; background: #faf9f7; }
+  .cmp .cell.a { background: #eef0f7; }
+  .cmp .cell img { border-radius: 8px; border: 1px solid #ddd; }
+  .cmp .d { padding: 10px 12px 12px; font-size: 13px; line-height: 1.7; }
+  .cmp .d.a { background: #f5f6fb; }
+  .cmp .d p { margin: 0 0 6px; }
+  .cmp .d .g { color: var(--ok); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
+  .cmp .d .w { color: #b5443b; font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
+  .cmp .d .n { display: block; margin-top: 6px; padding-top: 6px; border-top: 1px dashed #ddd; font-size: 12.5px; color: var(--muted); }
+  .cmp .d .n b { color: var(--ink); }
+
+  .r-full { grid-template-columns: 1fr 1fr; }
+  .r-one { grid-template-columns: 1fr; }
+  /* 欄の幅（312px・340px）の比で並べて、字の大きさの見え方をそろえる */
+  .r-wide { grid-template-columns: 312fr 340fr 312fr 340fr; }
+  .r-menu { grid-template-columns: 290px 1fr; }
+</style>
+</head>
+<body>
+
+<section id="panel">
+  <h1>v37　右の欄のゆとり（レイアウトのバランス）</h1>
+  <p class="lead"><q>右パネルに書かれているものが詰まって見える</q> への案です。1つ選んでください。<br>いまは、字が小さく（11〜12.5px）、行の間がせまく、小さな説明の字があちこちにあります。画面は本物のツールを開いて、右の欄だけ書き換えて写しました（絵を押すと大きく見られます）。</p>
+  <div class="common"><b>どの案でも同じ</b>
+    <ul>
+      <li>字を大きく：まだのところの行 12.5 → 14px、小見出し 11 → 13.5px、指摘の題 13 → 14px</li>
+      <li>小見出しの右の小さな字（「押すと、その場所へ」「書いた文の間違い」）は出さず、マウスを乗せると出す</li>
+      <li>「直すところ 3　まだ 2」の数は、それぞれの小見出しの横へ</li>
+      <li>なくすものはありません（場所を移すだけ）。お知らせの文は例です</li>
+    </ul>
+  </div>
+
+  <div class="cmp">
+    <div class="rl"></div>
+    <div class="h">いま</div>
+    <div class="h">案A<small>ゆったりさせる</small></div>
+    <div class="h">案B<small>まとまりごとにカード</small></div>
+    <div class="h a">案C<span class="rec">おすすめ</span><small>上の物を減らす（メニューに）</small></div>
+
+    <div class="sz">ノートパソコン（1366×768）</div>
+    <div class="rl">始めたばかり<small>氏名・サブタイトルは空</small></div>
+    <div class="cell"><a href="shots/panel-now-1-1366.png"><img src="shots/panel-now-1-1366.png" alt=""></a></div>
+    <div class="cell"><a href="shots/panel-a-1-1366.png"><img src="shots/panel-a-1-1366.png" alt=""></a></div>
+    <div class="cell"><a href="shots/panel-b-1-1366.png"><img src="shots/panel-b-1-1366.png" alt=""></a></div>
+    <div class="cell a"><a href="shots/panel-c-1-1366.png"><img src="shots/panel-c-1-1366.png" alt=""></a></div>
+
+    <div class="rl">書いている途中<small>書き間違いが3つ（です・私・先生）</small></div>
+    <div class="cell"><a href="shots/panel-now-2-1366.png"><img src="shots/panel-now-2-1366.png" alt=""></a></div>
+    <div class="cell"><a href="shots/panel-a-2-1366.png"><img src="shots/panel-a-2-1366.png" alt=""></a></div>
+    <div class="cell"><a href="shots/panel-b-2-1366.png"><img src="shots/panel-b-2-1366.png" alt=""></a></div>
+    <div class="cell a"><a href="shots/panel-c-2-1366.png"><img src="shots/panel-c-2-1366.png" alt=""></a></div>
+
+    <div class="rl"></div>
+    <div class="d"><p>字が小さく、行がつまっている。</p><span class="n">書いている途中、動かさずに見える指摘：<b>2つ</b></span></div>
+    <div class="d"><p>置き場所はそのまま。行の高さ 26 → 32px、まとまりの間に線。</p><span class="g">よいところ</span><br>場所が変わらず、すぐ慣れる。<br><span class="w">弱いところ</span><br>ノートパソコンでは、直すところが下に隠れる。<span class="n">動かさずに見える指摘：<b>0</b></span></div>
+    <div class="d"><p>「保存・締切」「お知らせ」「セルフチェック」を白いカードに。「使い方」は右上。</p><span class="g">よいところ</span><br>まとまりが、いちばん分かりやすい。<br><span class="w">弱いところ</span><br>カードの余白の分、セルフチェックがせまい。<span class="n">動かさずに見える指摘：<b>0</b></span></div>
+    <div class="d a"><p>「使い方」「バックアップ・作り直す」「Word の読み込み」を「メニュー」に。上が2行になる。字と行は案Aと同じ。</p><span class="g">よいところ</span><br>字を大きくしても、セルフチェックがいまより広い。<br><span class="w">弱いところ</span><br>「使い方」などが、1回押した先になる。<span class="n">動かさずに見える指摘：<b>1つ</b></span></div>
+
+    <div class="rl"></div>
+    <div class="d" style="grid-column: 2 / -1">始めたばかりは、どの案でも全部が動かさずに見えます。書いている途中は、どの案でも（いまも）セルフチェックを下へ動かして見ます。</div>
+
+    <div class="sz">大きい画面（1920×1080）</div>
+    <div class="rl">始めたばかり</div>
+    <div class="cell"><a href="shots/panel-now-1-1920.png"><img src="shots/panel-now-1-1920.png" alt=""></a></div>
+    <div class="cell"><a href="shots/panel-a-1-1920.png"><img src="shots/panel-a-1-1920.png" alt=""></a></div>
+    <div class="cell"><a href="shots/panel-b-1-1920.png"><img src="shots/panel-b-1-1920.png" alt=""></a></div>
+    <div class="cell a"><a href="shots/panel-c-1-1920.png"><img src="shots/panel-c-1-1920.png" alt=""></a></div>
+
+    <div class="rl">書いている途中</div>
+    <div class="cell"><a href="shots/panel-now-2-1920.png"><img src="shots/panel-now-2-1920.png" alt=""></a></div>
+    <div class="cell"><a href="shots/panel-a-2-1920.png"><img src="shots/panel-a-2-1920.png" alt=""></a></div>
+    <div class="cell"><a href="shots/panel-b-2-1920.png"><img src="shots/panel-b-2-1920.png" alt=""></a></div>
+    <div class="cell a"><a href="shots/panel-c-2-1920.png"><img src="shots/panel-c-2-1920.png" alt=""></a></div>
+
+    <div class="rl"></div>
+    <div class="d" style="grid-column: 2 / -1">大きい画面では、どの案でも全部が動かさずに見えます。</div>
+  </div>
+
+  <figure class="is-rec">
+    <figcaption><b>案C を画面全体で<span class="rec">おすすめ</span></b><span>紙面と並べたときの見え方です。</span><span class="why">おすすめの理由：字を大きくしても、ノートパソコンでセルフチェックの広さを保てるのは、案Cだけだから。</span></figcaption>
+    <div class="row r-one">
+      <div class="lbl">ノートパソコン（1366×768）・書いている途中</div>
+      <div class="ph"><a href="shots/full-c-2-1366.png"><img src="shots/full-c-2-1366.png" alt=""></a><small><b>案C</b></small></div>
+    </div>
+    <div class="row r-full">
+      <div class="lbl">比べる：いま（同じ画面）　／　案C・始めたばかり</div>
+      <div class="ph"><a href="shots/full-now-2-1366.png"><img src="shots/full-now-2-1366.png" alt=""></a><small><b>いま</b>：1366×768・書いている途中</small></div>
+      <div class="ph"><a href="shots/full-c-1-1366.png"><img src="shots/full-c-1-1366.png" alt=""></a><small><b>案C</b>：1366×768・始めたばかり</small></div>
+    </div>
+    <div class="row r-one">
+      <div class="lbl">大きい画面（1920×1080）・書いている途中</div>
+      <div class="ph"><a href="shots/full-c-2-1920.png"><img src="shots/full-c-2-1920.png" alt=""></a><small><b>案C</b></small></div>
+    </div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C の「メニュー」を押したところ</b><span>いま上に並んでいる3つが、ここに入ります。</span></figcaption>
+    <div class="row r-menu">
+      <div class="ph"><a href="shots/panel-c-menu-1366.png"><img src="shots/panel-c-menu-1366.png" alt=""></a></div>
+      <div class="note">「使い方」をいちばん上に置きます。<br>手順書の場所が設定されている年は、手順書もここに入ります。</div>
+    </div>
+  </figure>
+
+  <figure>
+    <figcaption><b>右の欄を少し広げると（312 → 340px）</b><span>紙の大きさは変わりません（紙は画面の高さで決まるため。ノートパソコンも大きい画面も同じ）。長い指摘が1行に収まります。案Cで描きました。</span></figcaption>
+    <div class="row r-wide">
+      <div class="ph"><a href="shots/panel-c-2-1366.png"><img src="shots/panel-c-2-1366.png" alt=""></a><small><b>312px</b>：1366×768</small></div>
+      <div class="ph"><a href="shots/panel-c-2-1366-w340.png"><img src="shots/panel-c-2-1366-w340.png" alt=""></a><small><b>340px</b>：1366×768</small></div>
+      <div class="ph"><a href="shots/panel-c-2-1920.png"><img src="shots/panel-c-2-1920.png" alt=""></a><small><b>312px</b>：1920×1080</small></div>
+      <div class="ph"><a href="shots/panel-c-2-1920-w340.png"><img src="shots/panel-c-2-1920-w340.png" alt=""></a><small><b>340px</b>：1920×1080</small></div>
+    </div>
+  </figure>
+</section>
+
+</body>
+</html>
