@@ -614,6 +614,21 @@ await withEdge(async (browser) => {
   await wait(100)
   await ready()
   check('指で左にはらうと、次のページへめくれる', (await snap()).page === 1)
+  // 上下にはらっても、めくれる（上へで次のページ、下へで前のページ。紙面は上下に動かない）
+  const swipeV = async (fromY, toY) => {
+    await page.touchscreen.touchStart(200, fromY)
+    await page.touchscreen.touchMove(203, (fromY + toY) / 2)
+    await page.touchscreen.touchMove(206, toY)
+    await page.touchscreen.touchEnd()
+    await wait(100)
+    await ready()
+  }
+  const touchAction = await page.evaluate(() => getComputedStyle(document.querySelector('.stage .page-scroller')).touchAction)
+  await swipeV(520, 300)
+  const afterUp = (await snap()).page
+  await swipeV(300, 520)
+  const afterDown = (await snap()).page
+  check('指で上にはらうと次のページ、下にはらうと前のページへめくれる（紙面はブラウザの上下の動きにしない）', afterUp === 2 && afterDown === 1 && touchAction === 'none', JSON.stringify({ afterUp, afterDown, touchAction }))
   // 読み込み直すと、最後に見ていたページが開く（下のページ送りも、そのページを指す）
   await wait(300)
   await page.reload({ waitUntil: 'networkidle0' })

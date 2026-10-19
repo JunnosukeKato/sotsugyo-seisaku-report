@@ -366,6 +366,8 @@ body.resizing .page-viewport { pointer-events: none; }
 .app.phone { grid-template-columns: minmax(0, 1fr); grid-template-rows: 48px minmax(0, 1fr) 62px; touch-action: manipulation; }
 .app.phone .p-top { grid-row: 1; }
 .app.phone .stage { grid-row: 2; --inset-side: 10px; --inset-top: 12px; --inset-bottom: 64px; touch-action: pan-y; }
+/* 拡大していないときは、紙面を上下にはらってもページをめくる（ブラウザの上下の動き・引っぱって読み込み直すを止める。app/uiShared.ts の useSwipe）。拡大中は上下に動かす */
+.app.phone .stage:not(.zoomed) .page-scroller { touch-action: none; }
 .app.phone .stage.zoomed { --inset-side: 10px; --inset-top: 8px; --inset-bottom: 260px; --zoom-to-text: 1; }
 .app.phone .p-nav { grid-row: 3; }
 .app.phone .page-viewport [data-vivliostyle-page-container] { box-shadow: 0 1px 2px rgba(30, 25, 20, 0.06), 0 8px 24px rgba(30, 25, 20, 0.14); }

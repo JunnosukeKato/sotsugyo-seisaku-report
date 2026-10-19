@@ -75,7 +75,6 @@ export function useKeyboardInset(): void {
   }, [])
 }
 
-/** 紙面を指で左右にはらうと、ページをめくる */
 /** これより間が空いたら、ホイールの別の操作とみなす（ミリ秒） */
 const WHEEL_GESTURE_GAP_MS = 200
 /** ページを送るのに必要な回転の量（px。マウスのホイールなら1目盛りで届く） */
@@ -137,6 +136,7 @@ export function useWheelPaging(target: React.RefObject<HTMLElement | null>, scro
   }, [target, scroller, editor, enabled])
 }
 
+/** 紙面を指で左右・上下にはらうと、ページをめくる（スマホ。上下は、拡大していないときだけ） */
 export function useSwipe(target: React.RefObject<HTMLElement | null>, editor: ReportEditor | null, enabled: boolean): void {
   const start = useRef<{ x: number; y: number } | null>(null)
   useEffect(() => {
@@ -152,9 +152,15 @@ export function useSwipe(target: React.RefObject<HTMLElement | null>, editor: Re
       const dx = e.clientX - s.x
       const dy = e.clientY - s.y
       const snap = editor.getSnapshot()
-      if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 2 || snap.editingId || snap.zoomed) return
-      if (dx < 0) editor.nextPage()
-      else editor.prevPage()
+      if (snap.editingId || snap.zoomed) return
+      // 左右にはらう：左へで次のページ。上下にはらう（拡大していないときだけ。拡大中は上下に動かす）：上へで次のページ
+      if (Math.abs(dx) >= 60 && Math.abs(dx) >= Math.abs(dy) * 2) {
+        if (dx < 0) editor.nextPage()
+        else editor.prevPage()
+      } else if (Math.abs(dy) >= 60 && Math.abs(dy) >= Math.abs(dx) * 2) {
+        if (dy < 0) editor.nextPage()
+        else editor.prevPage()
+      }
     }
     el.addEventListener('pointerdown', down)
     el.addEventListener('pointerup', up)
