@@ -1,0 +1,228 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v38 作品写真のページ</title>
+<!-- 画面の絵は node scripts/mockup-shots-v38.mjs で作る（本物の学生用ツール・提出前チェックを開き、案の部分だけ書き足して写したもの）。このページの写しは同じスクリプトの review で作る（shots/review-photos-tool.png・review-photos-check.png） -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; --ng: #b5443b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 48px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  section { max-width: 1240px; margin: 0 0 40px; padding: 4px 0 2px; background: #eceae6; }
+  .top { margin: 0 0 18px; font-size: 13.5px; color: var(--muted); line-height: 1.8; }
+  .top b { color: var(--ink); font-size: 15px; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 14px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+  .lead b { color: var(--ink); }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 3px; }
+  figcaption span { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff !important; font-size: 11.5px !important; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .why { display: block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #e8ebf5; color: var(--accent) !important; font-size: 13px !important; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > div { background: #fff; align-self: stretch; }
+  .row > .lbl { grid-column: 1 / -1; padding: 7px 16px 5px !important; background: #f4f2ee !important; font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 8px; border: 1px solid #ddd; }
+  .ph small { display: block; padding: 6px 4px 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .ph small b { color: var(--ink); }
+  .note { display: flex; flex-direction: column; justify-content: center; padding: 14px 18px !important; font-size: 13.5px; color: var(--muted); line-height: 1.8; background: #faf9f7 !important; }
+  .note b { color: var(--ink); }
+  .note p { margin: 0 0 8px; }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 9px 16px 11px; font-size: 13.5px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: var(--ok); }
+  .pw .weak b { color: var(--ng); }
+  .common { margin: 0 0 16px; padding: 10px 16px; border-radius: 12px; background: #fff; font-size: 13.5px; line-height: 1.8; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+  .common > b { font-size: 13px; letter-spacing: 0.06em; color: var(--accent); }
+  .common ul { margin: 2px 0 0; padding-left: 20px; }
+  /* 決めていただきたいこと */
+  .ask { margin: 0 0 18px; padding: 12px 18px; border-radius: 12px; background: #fff8e6; border: 1.5px solid #e6c46a; font-size: 13.5px; line-height: 1.8; }
+  .ask > b { font-size: 14px; color: #7a5a00; letter-spacing: 0.04em; }
+  .ask ol { margin: 4px 0 0; padding-left: 22px; }
+  .ask li b { color: var(--ink); }
+  .ask small { color: var(--muted); font-size: 12.5px; }
+  /* 言葉の表 */
+  table.words { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.6; }
+  table.words th, table.words td { padding: 7px 12px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+  table.words th { width: 150px; font-weight: 700; color: var(--muted); background: #faf9f7; }
+  table.words td.old { color: var(--muted); }
+  table.words td.new { color: var(--accent); font-weight: 700; }
+
+  /* 学生用ツール：画面全体と左の部分 */
+  .r-opt { grid-template-columns: 600px 225px 1fr; }
+  .r-opt.wide { grid-template-columns: 600px 425px 1fr; }
+  .r-c { grid-template-columns: 1fr 1fr; }
+  .r-a { grid-template-columns: 210px 210px 1fr 1fr; }
+  .r-lay { grid-template-columns: 128px 128px 1fr 1fr; }
+  /* 提出前チェック：いま・案1・案2 */
+  .r-chk { grid-template-columns: 0.62fr 1fr 1fr; }
+  .h3 { padding: 10px 14px 8px !important; font-size: 15px; font-weight: 700; }
+  .h3 small { display: block; margin-top: 2px; font-size: 12.5px; font-weight: 400; color: var(--muted); }
+  .h3.a { background: #e8ebf5 !important; color: var(--accent); }
+  .h3.a small { color: var(--accent); }
+  .cell-a { background: #eef0f7 !important; }
+  .d { padding: 10px 14px 12px !important; font-size: 13px; line-height: 1.7; }
+  .d .g { color: var(--ok); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
+  .d .w { color: var(--ng); font-weight: 700; font-size: 12px; letter-spacing: 0.06em; }
+  .d.a { background: #f5f6fb !important; }
+</style>
+</head>
+<body>
+
+<!-- ===================================================================== -->
+<section id="tool">
+  <p class="top"><b>v38　作品写真を何ページかにする</b><br>決めていただいたこと：作品写真は何ページかにできる（いまは1ページ）。1ページは4枚まで（6枚の並べ方はなくす）。多いときは次のページへ。提出前チェックも同じ。<br>画面は本物のツールに、案の部分だけ書き足して写したものです（絵を押すと大きく見られます）。</p>
+
+  <h1>① 学生用ツール：写真のページの足し方・消し方</h1>
+  <p class="lead">3つの案から1つ選んでください。見本は、1ページ目に4枚、2ページ目に2枚（上下）、全部で6枚です。</p>
+  <div class="common"><b>どの案でも同じ</b>
+    <ul>
+      <li>並べ方は4つ（1枚・2枚左右・2枚上下・4枚）。<b>ページごとに選べます</b></li>
+      <li>左のページの一覧は「作品写真 1」「作品写真 2」。足したページは PDF にも入ります</li>
+    </ul>
+  </div>
+  <div class="ask"><b>決めていただきたいこと</b>
+    <ol>
+      <li><b>作品写真は何ページまでにしますか？</b>　案：<b>3ページ（12枚）まで</b>。<small>学科の設定「作品写真の上限 6枚」は「ページ数の上限」に変えます。</small></li>
+      <li><b>手順書の「写真6枚以内を、A4 の1ページ」</b>を直していただけますか。<small>ツールの言葉も合わせます。</small></li>
+      <li>空いている枠より多く写真を選んだとき、<b>ページを自動で足して入れますか？</b><small>（いまは「n枚は入れていません」と知らせるだけ）</small></li>
+    </ol>
+  </div>
+
+  <figure>
+    <figcaption><b>いま</b><span>作品写真は1ページだけ。並べ方は6つ（6枚が2つ）。</span></figcaption>
+    <div class="row r-opt">
+      <div class="ph"><a href="shots/now-pc.png"><img src="shots/now-pc.png" alt=""></a></div>
+      <div class="ph"><a href="shots/now-pc-zoom.png"><img src="shots/now-pc-zoom.png" alt=""></a><small>並べ方の6つ</small></div>
+      <div class="note"><p>写真が7枚以上あっても、入れる所がありません。</p></div>
+    </div>
+  </figure>
+
+  <figure class="is-rec">
+    <figcaption><b>案A　左の道具に「＋ 写真のページを足す」「このページを消す」<span class="rec">おすすめ</span></b><span>作品写真のページを開くと、並べ方の下に出ます。2ページ目を開いたところ。</span><span class="why">おすすめの理由：足す・消すが同じ場所にあり、押したらすぐ結果が見える。スマホも同じ形にできる。</span></figcaption>
+    <div class="row r-opt">
+      <div class="ph"><a href="shots/a-pc.png"><img src="shots/a-pc.png" alt=""></a></div>
+      <div class="ph"><a href="shots/a-pc-zoom.png"><img src="shots/a-pc-zoom.png" alt=""></a><small>近くで：左の道具の「ページ」と、一覧の「作品写真 1・2」</small></div>
+      <div class="note"><p>足したページは、前のページと同じ並べ方で始まります。</p><p>消したときは、下に「戻す」が出ます（下の絵）。1ページだけのときは、消せません。</p></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>ボタンの名前で、何が起きるか分かる。</div><div class="weak"><b>弱いところ</b><br>作品写真のページを開かないと、ボタンが見えない。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案B　紙面の下に点線の「＋ 写真のページを足す」</b><span>図・表の下の「＋ ここに続きを書く」と同じ形。消すのは左の道具から。</span></figcaption>
+    <div class="row r-opt wide">
+      <div class="ph"><a href="shots/b-pc.png"><img src="shots/b-pc.png" alt=""></a></div>
+      <div class="ph"><a href="shots/b-pc-zoom.png"><img src="shots/b-pc-zoom.png" alt=""></a><small>近くで：紙面の下の点線の枠と、左の道具の「ページを消す」</small></div>
+      <div class="note"><p>最後の写真のページだけ、紙面を少し小さくして、下に枠を置きます（下に空きがないため）。</p></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>紙面のすぐ下で、目に入りやすい。</div><div class="weak"><b>弱いところ</b><br>最後のページだけ紙面が小さくなる。足す所と消す所が分かれる。</div></div>
+  </figure>
+
+  <figure>
+    <figcaption><b>案C　自動：最後のページの枠がうまると、空のページが1つできる</b><span>同じ並べ方の空のページ。写真を入れなければ PDF に入りません。</span></figcaption>
+    <div class="row r-c">
+      <div class="ph"><a href="shots/c-pc-1.png"><img src="shots/c-pc-1.png" alt=""></a><small><b>1ページ目の4枚目を入れたとき</b>：一覧に「空のページ」、下に知らせ</small><a href="shots/c-pc-1-zoom.png"><img src="shots/c-pc-1-zoom.png" alt="" style="margin-top:10px"></a></div>
+      <div class="ph"><a href="shots/c-pc-2.png"><img src="shots/c-pc-2.png" alt=""></a><small><b>空のページを開いたとき</b>。消し方：そのページの写真を全部外すと、ページも消えます（左の道具の説明）</small><a href="shots/c-pc-2-zoom.png"><img src="shots/c-pc-2-zoom.png" alt="" style="margin-top:10px"></a></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>学生は何もしなくてよい。</div><div class="weak"><b>弱いところ</b><br>知らないうちにページが増えて戸惑う。空のページがいつも残る。消し方が分かりにくい。</div></div>
+  </figure>
+
+</section>
+
+<!-- ===================================================================== -->
+<section id="tool-a">
+  <h1>① のつづき：おすすめの案A のくわしい絵</h1>
+  <p class="lead">スマホの道具・セルフチェックの「まだのところ」・ページを消したとき・並べ方（6枚をなくしたあと）。</p>
+
+  <figure class="is-rec">
+    <figcaption><b>スマホ・セルフチェック・消したとき</b><span>スマホは、下の並べ方の横に「ページを足す」「ページを消す」。セルフチェックの「まだのところ」は、枚数とページ数。</span></figcaption>
+    <div class="row r-a">
+      <div class="ph"><a href="shots/a-ph.png"><img src="shots/a-ph.png" alt=""></a><small><b>スマホ</b>：2ページ目</small></div>
+      <div class="ph"><a href="shots/a-ph-check.png"><img src="shots/a-ph-check.png" alt=""></a><small><b>スマホ</b>：チェック</small></div>
+      <div class="ph"><a href="shots/a-pc-check.png"><img src="shots/a-pc-check.png" alt=""></a><small><b>パソコン</b>：「作品写真　<b>6枚（2ページ）</b>」</small></div>
+      <div class="ph"><a href="shots/a-pc-check-todo.png"><img src="shots/a-pc-check-todo.png" alt=""></a><small>足したページが空のとき：灰色の ○「<b>2ページ目に写真がまだ</b>」（赤くしない）</small></div>
+    </div>
+    <div class="row" style="grid-template-columns: 640px 1fr">
+      <div class="ph"><a href="shots/a-pc-del-zoom.png"><img src="shots/a-pc-del-zoom.png" alt=""></a></div>
+      <div class="note"><p><b>「このページを消す」を押したあと</b></p><p>1ページ目に戻り、下に「戻す」の知らせ。そのページの写真もいっしょに外れます。</p><p>1ページだけのときは、押せません（薄い字）。</p></div>
+    </div>
+  </figure>
+
+  <figure>
+    <figcaption><b>並べ方（6枚をなくしたあと）</b><span>どの案でも同じ。パソコンは2×2、スマホは横に4つ。</span></figcaption>
+    <div class="row r-lay">
+      <div class="ph"><a href="shots/lay-pc-now.png"><img src="shots/lay-pc-now.png" alt=""></a><small><b>いま</b></small></div>
+      <div class="ph"><a href="shots/lay-pc-a.png"><img src="shots/lay-pc-a.png" alt=""></a><small><b>これから</b>（案A）</small></div>
+      <div class="ph"><a href="shots/now-ph-bar.png"><img src="shots/now-ph-bar.png" alt=""></a><small><b>スマホ・いま</b></small><a href="shots/a-ph-bar.png"><img src="shots/a-ph-bar.png" alt="" style="margin-top:12px"></a><small><b>スマホ・これから</b>（案A）</small></div>
+      <div class="note"><p><b>言葉も変えます（案A）</b></p><p>使い方：「写真は6枚までです（手順書）」→<br>「<b>1ページに4枚まで。多いときは「＋ 写真のページを足す」</b>」</p><p>選びすぎたとき：「1ページ・6枚までです」→<br>「<b>枠が足りないため、n枚は入れていません。「＋ 写真のページを足す」で次のページへ</b>」</p></div>
+    </div>
+  </figure>
+</section>
+
+<!-- ===================================================================== -->
+<section id="check">
+  <h1>② 提出前チェック（Word で書く学生）：写真が5枚のとき</h1>
+  <p class="lead">いまは6枚まで、1ページに並べます（5枚なら 2列×3段）。これからは<b>1ページ4枚まで</b>。5枚なら2ページです。<br>学生は並べ方を選びません（入れた順と枚数で決まります）。分け方を1つ選んでください。</p>
+
+  <div class="row r-chk" style="border-radius:14px; overflow:hidden; box-shadow:0 2px 10px rgba(0,0,0,0.08); margin-bottom:18px">
+    <div class="h3">いま<small>1ページに5枚</small></div>
+    <div class="h3 a">案1　4枚＋1枚<span class="rec">おすすめ</span><small>4枚ずつ、入れた順に</small></div>
+    <div class="h3">案2　3枚＋2枚<small>枚数がそろうように分ける</small></div>
+
+    <div class="lbl">まとめた PDF の作品写真のページ</div>
+    <div class="ph"><a href="shots/chk-now-pages.png"><img src="shots/chk-now-pages.png" alt=""></a></div>
+    <div class="ph cell-a"><a href="shots/chk-41-pages.png"><img src="shots/chk-41-pages.png" alt=""></a></div>
+    <div class="ph"><a href="shots/chk-32-pages.png"><img src="shots/chk-32-pages.png" alt=""></a></div>
+
+    <div class="lbl">画面のページの並び（作品写真の欄）</div>
+    <div class="ph"><a href="shots/chk-now-row.png"><img src="shots/chk-now-row.png" alt=""></a></div>
+    <div class="ph cell-a"><a href="shots/chk-41-row.png"><img src="shots/chk-41-row.png" alt=""></a></div>
+    <div class="ph"><a href="shots/chk-32-row.png"><img src="shots/chk-32-row.png" alt=""></a></div>
+
+    <div class="lbl">「並べ替え・外す」の窓（ページの区切りを出す）</div>
+    <div class="ph"><a href="shots/chk-now-menu.png"><img src="shots/chk-now-menu.png" alt=""></a></div>
+    <div class="ph cell-a"><a href="shots/chk-41-menu.png"><img src="shots/chk-41-menu.png" alt=""></a></div>
+    <div class="ph"><a href="shots/chk-32-menu.png"><img src="shots/chk-32-menu.png" alt=""></a></div>
+
+    <div class="d"><p style="margin:0">写真が小さい（2列×3段）。</p></div>
+    <div class="d a"><span class="g">よいところ</span><br>学生用ツールと同じ「4枚ずつ」。1ページ目にすき間がない。並べ替えで、大きく見せたい1枚を最後に置ける。<br><span class="w">弱いところ</span><br>2ページ目が1枚だけになることがある。</div>
+    <div class="d"><span class="g">よいところ</span><br>2ページの枚数が近い。<br><span class="w">弱いところ</span><br>1ページ目の右下が空く。どの写真が何ページ目か、分かりにくい。</div>
+  </div>
+
+  <figure class="is-rec">
+    <figcaption><b>画面全体（案1）と、「6枚まで」と書いてある所の言葉</b><span>ページの絵が8ページになり、少し小さくなります。</span></figcaption>
+    <div class="row" style="grid-template-columns: 640px 1fr">
+      <div class="ph"><a href="shots/chk-41.png"><img src="shots/chk-41.png" alt=""></a></div>
+      <div style="padding:6px 0 10px">
+        <table class="words">
+          <tr><th>作品写真の欄</th><td class="old">写真 5枚（6枚まで）</td><td class="new">写真 5枚・2ページ（1ページ4枚まで）</td></tr>
+          <tr><th>窓の上</th><td class="old">5枚・6枚まで（A4 の1ページに並べます）</td><td class="new">5枚・2ページ（1ページに4枚まで）</td></tr>
+          <tr><th>窓の中</th><td class="old">（区切りなし）</td><td class="new">「1ページ目」「2ページ目」</td></tr>
+          <tr><th>窓の下</th><td class="old">並べ方は枚数で決まります。</td><td class="new">4枚ずつ、この順にページに並べます。</td></tr>
+          <tr><th>入れすぎたとき</th><td class="old">作品写真は6枚までです。</td><td class="new">作品写真は12枚（3ページ）までです。</td></tr>
+        </table>
+        <div style="padding:10px 12px 0"><a href="shots/chk-notice.png"><img src="shots/chk-notice.png" alt="" style="border:1px solid #ddd;border-radius:8px"></a><small style="display:block;padding-top:6px;font-size:12.5px;color:var(--muted)">入れすぎたときの知らせ（上限が3ページのとき）</small></div>
+      </div>
+    </div>
+  </figure>
+
+  <div class="ask"><b>決めていただきたいこと</b>
+    <ol>
+      <li><b>分け方</b>は、案1（4枚＋1枚）と案2（3枚＋2枚）のどちらにしますか。</li>
+      <li><b>上限</b>は学生用ツールと同じ（案：3ページ＝12枚）でよいですか。</li>
+    </ol>
+  </div>
+</section>
+
+</body>
+</html>
