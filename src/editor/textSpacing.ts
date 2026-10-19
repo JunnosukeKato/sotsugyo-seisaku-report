@@ -52,6 +52,11 @@ export interface TypesetOptions {
   /** until の文字の位置から後ろも、測らずに known のとおりに包む（測り直す所を、書いている所の近くだけにする） */
   until?: number
   known?: SpacingPlan | null
+  /**
+   * 包んだあとに、ブラウザに組み直させるか（既定は組み直させる。reshapeSpacing）。
+   * 組んだ中身を、ほかの要素へ移してから組み直させるときは false（スマホの紙面の上の写し：overlayEditor.ts）
+   */
+  reshape?: boolean
 }
 
 /**
@@ -138,6 +143,19 @@ function wrap(textNode: Text, tag: string, options: TypesetOptions): HTMLElement
  * 前に包んだ要素があれば、いったん文字に戻してから、やり直す
  */
 export function typesetSpacing(block: HTMLElement, options: TypesetOptions = {}): SpacingPlan {
+  const steps = typesetSteps(block, options)
+  for (;;) {
+    const step = steps.next()
+    if (step.done) return step.value
+  }
+}
+
+/**
+ * typesetSpacing を、字を1つ測るごとに区切って進める（終わったら包み方の記録を返す）。
+ * 長い段落を測り直すのに時間がかかるとき、時間を分けて少しずつ進めるため（スマホの紙面の上の写し：overlayEditor.ts）。
+ * 途中で block の中身を書き換えたら、続けずにやめること（はじめからやり直す）
+ */
+export function* typesetSteps(block: HTMLElement, options: TypesetOptions = {}): Generator<void, SpacingPlan> {
   unwrapSpacing(block)
   const doc = block.ownerDocument
   // 文字を、組版エンジンと同じ所で分ける
@@ -157,13 +175,14 @@ export function typesetSpacing(block: HTMLElement, options: TypesetOptions = {})
   if (from < Infinity) void block.offsetHeight
   let wrapped = false
   const measured = (at: number) => !options.known || (at >= from && at < until)
-  nodes.forEach((node, i) => {
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i]
     const prev = nodes[i - 1] ?? null
     const next = nodes[i + 1] ?? null
     const at = offsets[i]
     if (!measured(at)) {
       if (applyKnown(node, prev, at, options.known!, options, plan)) wrapped = true
-      return
+      continue
     }
     // 測らずに包んだ前の文字の、後ろのすき間（漢字・かなの後ろに英数字）は、前の文字を測ったときに入るものなので、ここで入れる
     if (prev && i > 0 && !measured(offsets[i - 1]) && IDEOGRAPH_END.test(prev.data) && (ALPHA_START.test(node.data) || NUMERIC_START.test(node.data)) && !nonZeroMarginBorderPadding(prev, node)) {
@@ -171,17 +190,23 @@ export function typesetSpacing(block: HTMLElement, options: TypesetOptions = {})
       plan.thins.add(at)
       wrapped = true
     }
-    if (processTextSpacing(node, prev, next, options, at, plan)) wrapped = true
-  })
+    if (processTextSpacing(node, prev, next, options, at, plan)) {
+      wrapped = true
+      yield
+    }
+  }
   // 包んだ要素を入れたあとは、ブラウザが前の文字の形の計算を使い回して、はじめから組んだときと違う所で折り返すことがあるため、組み直させる
   // （組版エンジンの reshapeBlockContainer と同じ。測らずに包んだだけのとき（あとで測り直す）は、しない）
-  if (wrapped && from < Infinity) {
-    const saved = block.style.fontKerning
-    block.style.fontKerning = getComputedStyle(block).fontKerning === 'none' ? 'normal' : 'none'
-    void block.offsetHeight
-    block.style.fontKerning = saved
-  }
+  if (wrapped && from < Infinity && options.reshape !== false) reshapeSpacing(block)
   return plan
+}
+
+/** block の字の形を、ブラウザに計算し直させる（前の計算を使い回さずに、はじめから組んだときと同じ所で折り返すように） */
+export function reshapeSpacing(block: HTMLElement): void {
+  const saved = block.style.fontKerning
+  block.style.fontKerning = getComputedStyle(block).fontKerning === 'none' ? 'normal' : 'none'
+  void block.offsetHeight
+  block.style.fontKerning = saved
 }
 
 /** 測らずに、記録のとおりに包む（記録が、いまの文字と合わないときは包まない）。包んだら true */

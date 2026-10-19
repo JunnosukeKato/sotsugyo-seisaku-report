@@ -12,7 +12,7 @@ import { addColumn, addRow, blankTable, cellPosition, materialTable, removeColum
 import type { BodyBlock, Chapter, PhotoPosition, Report, TableBlock, WorkPhotoLayout } from '../model/types'
 import { ContinueRow, endsPageWithRoom, type ContinueTarget } from './continueRow'
 import { EditHistory } from './history'
-import { OverlayEditor, type OverlayKind, type OverlayPlacement, type OverlayTarget } from './overlayEditor'
+import { OverlayEditor, offsetInCopy, type OverlayKind, type OverlayPlacement, type OverlayTarget } from './overlayEditor'
 import { PageStage, TEXT_LEFT, TEXT_W } from './pageStage'
 import { blockPaperKey, fixedTitleNote, markFocusable, PAPER_FOCUSABLE, paperElement, paperKeyOf, paperOrder, rememberTabStop, setTabStop } from './paperFocus'
 import * as ops from './reportOps'
@@ -308,8 +308,9 @@ export class ReportEditor {
         this.inputSeq += 1
         this.report = ops.setText(this.report, id, text)
         this.afterChange({ render: 'debounce', save: true })
-        // カーソルがページの下からはみ出した（書き足して、段落が次のページへ続いた）：打つ手が止まるのを待たずに組み直し、次のページへ移る（followCaret）
-        if (this.caretBelowContent()) void this.render(false)
+        // カーソルがページの下からはみ出した（書き足して、段落が次のページへ続いた）：打つ手が止まるのを待たずに組み直し、次のページへ移る（followCaret）。
+        // スマホは、次の絵を描く前に調べる（runLiveFrame）
+        if (!this.overlay.inSheet && this.caretBelowContent()) void this.render(false)
       },
       onCommit: (id, text, byKey, frozen) => this.onCommitEdit(id, text, byKey, frozen),
       onSplit: (id, before, after) => {
@@ -411,6 +412,15 @@ export class ReportEditor {
       // 段落の最後の行で Shift+↓（最初の行で Shift+↑）：選ぶ範囲を、紙面の次（前）の欄へ広げる
       onExtend: (id, text, anchor, direction) => this.extendFromEditor(id, text, anchor, direction),
       onResize: () => this.shiftFollowing(),
+      // スマホ：打った字をその場で見せる写しを出した・やめた：紙面のその段落を隠す・見せる。後ろの文章を、写しの下端に合わせてずらす（やめたら戻す）
+      // （見せはじめたときのずらしは、次の絵を描く前に。runLiveFrame）
+      onLive: (on) => {
+        this.hideLive(on ? this.overlay.blockId : null)
+        if (on) this.scheduleLiveFrame(true)
+        else this.shiftFollowing()
+      },
+      // スマホ：写しに打った字を入れた：次の絵を描く前に、書いている行が見えるようにし、本文の下へはみ出したら組み直す（runLiveFrame）
+      onLiveUpdate: () => this.scheduleLiveFrame(false),
     })
 
     // 画面の大きさが変わって紙面の倍率・位置が変わったら、入力欄も合わせる
@@ -422,13 +432,8 @@ export class ReportEditor {
       this.marker.hidden = true
       // 書き終えた欄の仮の表示は、紙面に合わせて動かし・大きさを変える（ページが替わっていれば外す）
       this.realignFrozen()
-      const id = this.overlay.blockId
       // 段落を分けたばかりで、前の段落を仮に表示しているときは、紙面にある元の段落の位置から並べ直す
-      const anchor = this.continuing?.id === id && this.overlay.ghostCount > 0 ? this.continuing.anchor : null
-      const anchorPlacement = anchor ? this.overlayPlacement(anchor) : null
-      const placement = anchorPlacement ? null : id ? this.overlayPlacement(id) : null
-      if (anchorPlacement) this.overlay.restack(anchorPlacement)
-      else if (placement) this.overlay.moveTo(placement)
+      this.realignOverlay()
       this.shiftFollowing()
       // スマホ：画面の向きを変えたときなど、書いている欄が隠れたら、見える所へ動かす
       if (this.overlay.inSheet) this.revealEditing(false)
@@ -441,8 +446,12 @@ export class ReportEditor {
       const caret = this.overlay.caret
       if (caret !== this.caretPos) {
         this.caretPos = caret
+        // スマホ：打った字をその場で見せているとき、下の欄でカーソルを動かしたら、紙面のその行が見えるようにする（次の絵を描く前に。runLiveFrame）
+        if (this.overlay.inSheet) {
+          if (this.overlay.live && caret !== this.liveCaretSeen) this.scheduleLiveFrame(false)
+        }
         // ページをまたぐ段落で、カーソルを見えているページの下の続き（次のページ）へ動かした（Ctrl+End など）：そのページへ移る
-        if (!this.turning && this.caretBelowContent() && this.renderer.pageView.pageOfOffset(this.overlay.blockId, caret) !== this.page) this.followCaret()
+        else if (!this.turning && this.caretBelowContent() && this.renderer.pageView.pageOfOffset(this.overlay.blockId, caret) !== this.page) this.followCaret()
         this.notify()
       }
     })
@@ -839,6 +848,8 @@ export class ReportEditor {
     } else if (this.overlay.blockId) {
       this.followCaret()
     }
+    // スマホ：組み直した紙面が書いた字に追いついたら、打った字をその場で見せていた写しをやめて、紙面の段落を見せる
+    this.syncLive()
     // 開いた直後に頼まれていたページへの移動（すべて組み終えたので、まだならここで移る）
     this.flushQueuedNav()
     // 元に戻した所を、組み直した紙面で見せる（続けてもう一度組み直すときは、その後で。戻したあとにほかを変えていたら見せない）
@@ -1211,25 +1222,112 @@ export class ReportEditor {
     if (!id || !this.overlay.inSheet || !this.stage.zoomed) return
     const view = this.renderer.pageView
     const fragment = view.fragments(id).find((f) => view.pageIndexOf(f) === this.page)
-    if (!fragment) return
-    const scroller = this.scroller
-    const s = scroller.getBoundingClientRect()
-    const r = fragment.getBoundingClientRect()
-    const area = this.visibleArea?.(r)
-    const top = Math.max(s.top, area?.top ?? s.top)
-    const bottom = Math.max(top, Math.min(s.bottom, area?.bottom ?? s.bottom))
-    if (!force && r.top >= top + 2 && r.bottom <= bottom - 2) return
+    // 打った字をその場で見せているときは、その写しの見えている所（紙面の段落は、組み直すまで前の字のままで、隠している）
+    const live = this.overlay.liveRect()
+    const caret = this.overlay.liveCaretRect()
+    const r = live ?? fragment?.getBoundingClientRect()
+    if (!r) return
+    const { top, bottom } = this.paperArea(r)
+    const height = r.bottom - r.top
+    const shown = (a: { top: number; bottom: number }) => a.top >= top + 2 && a.bottom <= bottom - 2
+    // 写しを見せているときは、書いている行（写しのカーソルの行）が見えていれば、段落の全部が見えていなくても動かさない
+    if (!force && (shown(r) || (caret && shown(caret)))) return
     // 欄の上端を、見えている所の上から少し下に（見えている所が低いときは、上下の真ん中あたりに。欄のほうが高いときは、上端に合わせる）
-    const margin = Math.max(2, Math.min(16, (bottom - top - r.height) / 2))
+    const margin = Math.max(2, Math.min(16, (bottom - top - height) / 2))
+    let delta = r.top - (top + margin)
+    // 書いている行が下に隠れるなら、その行が見える所まで（段落の上の方は隠れてもよい）
+    if (caret && caret.bottom - delta > bottom - 2) delta = caret.bottom - (bottom - Math.min(margin, 8))
     // 余白を足さない紙面での、移したいスクロールの位置（負なら、その分だけ紙面の上に余白を足す）
-    const want = scroller.scrollTop - this.revealTop + (r.top - (top + margin))
+    this.scrollPaperTo(this.scroller.scrollTop - this.revealTop + delta)
+  }
+
+  /** スマホ：紙面のうち、書いている欄 r（画面座標）を見せてよい高さの範囲（画面座標。上の案内より下、下の書く欄・キーボードより上） */
+  private paperArea(r: { left: number; top: number; right: number; bottom: number }): { top: number; bottom: number } {
+    const s = this.scroller.getBoundingClientRect()
+    const area = this.visibleArea?.(new DOMRect(r.left, r.top, r.right - r.left, r.bottom - r.top))
+    const top = Math.max(s.top, area?.top ?? s.top)
+    return { top, bottom: Math.max(top, Math.min(s.bottom, area?.bottom ?? s.bottom)) }
+  }
+
+  /**
+   * スマホ：紙面を、余白を足さない紙面でのスクロールの位置 want まで動かす（revealEditing・keepCaretVisible）。
+   * 上（下）に動かしきれない分は、紙面の上（下）に余白を足す。上の余白が変わると、紙面が表示枠の中で動くので、書いている欄の写しなども合わせる
+   */
+  private scrollPaperTo(want: number): void {
+    const scroller = this.scroller
     const shift = Math.ceil(Math.max(0, -want))
     const scrollTop = Math.max(0, want)
     // 下に動かしきれない分は、紙面の下に余白を足す
     const natural = scroller.scrollHeight - this.revealTop - this.revealBottom
     const room = Math.ceil(Math.max(0, scrollTop - (shift + natural - scroller.clientHeight)))
+    const moved = shift !== this.revealTop
     this.setRevealRoom(shift, room)
     scroller.scrollTop = scrollTop
+    if (moved) {
+      this.realignOverlay()
+      this.realignFrozen()
+    }
+  }
+
+  /** スマホ：次の絵を描く前に、写しに合わせてすること（runLiveFrame）を頼んである（requestAnimationFrame の番号）。shift：後ろの文章もずらす */
+  private liveFrame = 0
+  private liveShift = false
+  /** runLiveFrame で見たカーソルの位置（打ったあとのカーソルの移動の知らせで、同じことを2回しないため） */
+  private liveCaretSeen = -1
+
+  /**
+   * スマホ：打った字を写しに入れたあと、次の絵を描く前に、写しの位置を測ってすることを頼む（何字か続けて打っても1回）。
+   * 打った処理の中で測ると、そのあと画面の部品を書き直したときに、画面の組み直しをもう一度することになり、遅いスマホで打つのが重くなるため
+   */
+  private scheduleLiveFrame(shift: boolean): void {
+    this.liveShift ||= shift
+    if (!this.liveFrame) this.liveFrame = requestAnimationFrame(() => this.runLiveFrame())
+  }
+
+  /**
+   * スマホ：写しを見せはじめたら、後ろの文章をずらす。書いている行を見えるようにする。
+   * 書いている行が本文の下へはみ出したら（PC と同じ）、そこが次のページにあれば移り、なければ打つ手が止まるのを待たずに組み直す（組み直すと次のページへ移る：followCaret）
+   */
+  private runLiveFrame(): void {
+    this.liveFrame = 0
+    const shift = this.liveShift
+    this.liveShift = false
+    const id = this.overlay.blockId
+    if (!id || !this.overlay.live) return
+    this.liveCaretSeen = this.overlay.caret
+    if (shift) this.shiftFollowing()
+    this.keepCaretVisible()
+    if (this.turning || !this.caretBelowContent()) return
+    if (this.renderer.pageView.pageOfOffset(id, this.overlay.caret) !== this.page) this.followCaret()
+    else void this.render(false)
+  }
+
+  /**
+   * スマホ：打った字をその場で見せているとき、書いている行（写しのカーソルの行）が、紙面の見えている所から外れたら、見える所まで紙面を動かす
+   * （段落が長くなって、書いている行が下の書く欄・キーボードに隠れないように）。本文の下へはみ出した行（組み直すと次のページへ移る）は追わない
+   */
+  private keepCaretVisible(): void {
+    if (!this.overlay.inSheet || !this.stage.zoomed || this.turning) return
+    const live = this.overlay.liveRect()
+    const caret = this.overlay.liveCaretRect()
+    if (!live || !caret || caret.top >= live.bottom) return
+    const { top, bottom } = this.paperArea(live)
+    const line = caret.bottom - caret.top
+    if (bottom - top < line) return
+    const margin = Math.min(8, (bottom - top - line) / 2)
+    const delta = caret.bottom > bottom - 2 ? caret.bottom - (bottom - margin) : caret.top < top + 2 ? caret.top - (top + margin) : 0
+    if (delta) this.scrollPaperTo(this.scroller.scrollTop - this.revealTop + delta)
+  }
+
+  /** 書いている欄（入力欄・スマホの写し）を、紙面のいまの位置に合わせ直す（段落を分けたばかりで前の段落を仮に表示していれば、紙面にある元の段落から並べ直す） */
+  private realignOverlay(): void {
+    const id = this.overlay.blockId
+    if (!id) return
+    const anchor = this.continuing?.id === id && this.overlay.ghostCount > 0 ? this.continuing.anchor : null
+    const anchorPlacement = anchor ? this.overlayPlacement(anchor) : null
+    const placement = anchorPlacement ? null : this.overlayPlacement(id)
+    if (anchorPlacement) this.overlay.restack(anchorPlacement)
+    else if (placement) this.overlay.moveTo(placement)
   }
 
   /** いま見えている紙面の各ページの要素（ページ一覧の縮小表示に使う） */
@@ -1239,13 +1337,46 @@ export class ReportEditor {
 
   /**
    * PC：書いているカーソルが、見えているページの本文の領域（下の余白 25mm より上）の下へはみ出したか
-   * （はみ出した文字は、組み直すと次のページへ移る。打つ手が止まるのを待たずに組み直し、次のページへ移る：followCaret）
+   * （はみ出した文字は、組み直すと次のページへ移る。打つ手が止まるのを待たずに組み直し、次のページへ移る：followCaret）。
+   * スマホも、打った字をその場で見せている写しで同じように調べる
    */
   private caretBelowContent(): boolean {
-    const caret = this.overlay.caretRect()
+    // スマホ：打った字をその場で見せている写しの、カーソルの位置（写しを見せていなければ調べない）
+    const caret = this.overlay.inSheet ? this.overlay.liveCaretRect() : this.overlay.caretRect()
     const page = this.renderer.pageView.pages()[this.page]?.getBoundingClientRect()
     if (!caret || !page || !page.height) return false
     return caret.bottom > page.top + (page.height * (297 - 25)) / 297 + 1
+  }
+
+  /**
+   * スマホ：書いている段落の、打った字をその場で見せる写しを、紙面に合わせて出す・やめる（組み直した紙面が出たとき）。
+   * 紙面の段落が書いた字に追いついていれば、写しをやめて紙面の段落を見せる（見た目は同じ。後ろの文章のずらしも戻す）。
+   * 追いついていなければ（組んでいる間にまた打った・まだ紙面になかった段落が出たなど）、写しを見せる
+   */
+  private syncLive(): void {
+    const id = this.overlay.blockId
+    if (!id || !this.overlay.inSheet) return
+    const fragments = this.renderer.pageView.fragments(id)
+    const caughtUp = fragments.length > 0 && fragments.map((f) => f.textContent ?? '').join('') === this.overlay.text
+    this.overlay.showLive(!caughtUp)
+    // 写しを見せたままなら、組み直した紙面の段落（新しい要素）を隠し直す
+    if (this.overlay.live) this.hideLive(id)
+    // 追いついた紙面の段落の中身を、写しに写しておく（このあと打つときは、紙面と同じ組み方から始める）
+    if (caughtUp) this.overlay.adoptPage(fragments)
+  }
+
+  /** スマホ：打った字をその場で見せている写しの代わりに、紙面で隠している段落の要素（index.css の「スマホ：打った字をその場で紙面に」） */
+  private liveHidden: HTMLElement[] = []
+
+  /**
+   * スマホ：紙面の段落 id の要素を、写しを見せている間だけ隠す（null なら、隠すのをやめる）。
+   * 紙面全体の書き方（style 要素）を書き換えると、紙面のすべての要素の見た目を計算し直すことになり、遅いスマホで 0.1 秒ほどかかっていたため、
+   * その段落の要素にだけ印（live-hidden）を付ける
+   */
+  private hideLive(id: string | null): void {
+    for (const el of this.liveHidden) el.classList.remove('live-hidden')
+    this.liveHidden = id ? this.renderer.pageView.fragments(id) : []
+    for (const el of this.liveHidden) el.classList.add('live-hidden')
   }
 
   /** 書いている文字が別のページへ移ったら、表示もそのページへ移り、入力欄を合わせる */
@@ -1325,9 +1456,11 @@ export class ReportEditor {
     const id = this.overlay.blockId
     if (!id) return
     // PC：書く欄（段落。見出し・表紙の項目などは1行で、行は増えない）の下端まで。
-    // スマホ：段落を分けた前の段落を仮に表示しているときだけ、その下端まで（書く欄は画面の下の欄にあり、紙面には重ならない）
+    // スマホ：打った字をその場で見せている段落（紙面の上の写し）の下端まで。写しを見せていなければ、段落を分けた前の段落を仮に表示しているときだけ、
+    // その下端まで（書く欄は画面の下の欄にあり、紙面には重ならない）
     const pending = this.continuing?.id === id && this.overlay.ghostCount > 0
-    const bottom = this.overlay.inSheet ? (pending ? this.overlay.ghostsBottom : null) : this.overlay.kind === 'paragraph' ? this.overlay.bottom : null
+    const sheetBottom = this.overlay.live ? this.overlay.bottom : pending ? this.overlay.ghostsBottom : null
+    const bottom = this.overlay.inSheet ? sheetBottom : this.overlay.kind === 'paragraph' ? this.overlay.bottom : null
     if (bottom === null) return
     // 書き終えた欄の仮の表示が後ろの文章をずらしていれば、外してから測る（同じ要素を2つの仕組みでずらさないように）
     this.clearFrozen(Infinity, (f) => f.shift.length === 0)
@@ -1481,7 +1614,11 @@ export class ReportEditor {
       const r = fragment.getBoundingClientRect()
       const alignOffset = view.charsBefore(id, fragment)
       // 前のページから続く段落は、前のページの部分（入力欄の上の方）がページの上の余白に見えないよう、段落の上端から下だけを見せる
-      return { rect: { left: r.left, top: r.top, right: r.right }, clip: alignOffset > 0 ? { ...clip, top: r.top } : clip, scale, alignOffset }
+      const shown = { ...clip, top: alignOffset > 0 ? r.top : clip.top }
+      // スマホ：打った字をその場で見せる写しは、本文の領域（下の余白 25mm より上）までを見せる（はみ出した行は、組み直すと次のページへ移る。
+      // 下の余白のページ番号に重ねない）
+      if (this.overlay.inSheet) shown.bottom = p.top + (p.height * (297 - 25)) / 297
+      return { rect: { left: r.left, top: r.top, right: r.right }, clip: shown, scale, alignOffset }
     }
     // 見出し・図のタイトル・表紙の項目・表のセル：入力部分の左端から、行（セル）の右端まで
     const kind = this.overlayKind(editable.kind)
@@ -1605,9 +1742,10 @@ export class ReportEditor {
     this.pendingOpen = null
     this.currentId = id
     this.selection = null
-    // 紙面で隠す欄：書いている欄と、仮に表示している前の段落・つなげて無くなった段落（スマホは、書いている欄を枠で示し、仮に表示している段落だけを隠す）
+    // 紙面で隠す欄：書いている欄と、仮に表示している前の段落・つなげて無くなった段落（スマホは、書いている欄を枠で示し、仮に表示している段落と、
+    // つなげて無くなった段落を隠す。つなげた段落は、打った字をその場で見せる写しで、つなげた字を見せる）
     this.hideStyle.textContent = this.overlay.inSheet
-      ? [this.editingStyle(id), ...ghosts.map((x) => this.hiddenStyle(x))].join('\n')
+      ? [this.editingStyle(id), ...[...ghosts, how.alsoHide].filter((x): x is string => !!x).map((x) => this.hiddenStyle(x))].join('\n')
       : [id, ...ghosts, how.alsoHide].filter((x): x is string => !!x).map((x) => this.editingStyle(x)).join('\n')
     this.markSelection()
     this.shiftFollowing()
@@ -2015,6 +2153,10 @@ export class ReportEditor {
     if (pageBreak) return this.select({ kind: 'pageBreak', id: pageBreak.dataset.blockId! })
     // 表紙の題目（研究題目）は学科で決まっていて書けない。押しても何も起きないと理由が分からないので、画面の下に知らせる（PC のマウスを重ねたときの説明は paperFocus.ts）
     if (target.closest('section.cover .el.title')) return this.noticeInfo(fixedTitleNote(this.config.cover.titleLabel))
+    // スマホ：打った字をその場で見せている写し・書き終えた段落の仮の表示を押した：その字の位置から書く
+    // （紙面の段落は、組み直すまで前の字のままで隠しているので、紙面の字で決めると、押した所と違う所が開く）
+    const copied = this.overlay.inSheet && keyHit === undefined ? this.copyHit(x, y) : null
+    if (copied) return this.openOrSelect(copied.blockId, copied.offset, false)
     // 押した要素の欄を先に見る。文字の位置（押した点にいちばん近い文字）は、その欄の中のときだけ使う。
     // 空の項目は仮の文字（::before）や「＋」の印しかなく、近い文字は別の欄（上の見出しなど）になるため
     // （スマホの横向きで、空の段落の「＋」を押したら、上の見出し「まとめ」の途中が開いていた）。押した要素が欄でなければ、近い文字の欄
@@ -2068,6 +2210,24 @@ export class ReportEditor {
     if (near === FIELD_IDS.course) return this.callbacks.onCourseClick(this.renderer.pageView.fragments(near)[0].getBoundingClientRect())
     if (near) return this.openOrSelect(near, ops.findEditable(this.report, near)?.text.length ?? 0, false)
     this.select(null)
+  }
+
+  /**
+   * スマホ：画面の点 (x, y) が、打った字をその場で見せている写し、または書き終えた段落の仮の表示（組み直す前）の上なら、その段落と字の位置。
+   * 仮の表示は、段落の字が、書き終えたときのままのものだけ（見出しにした段落などは、紙面の字で決める）。どちらでもなければ null
+   */
+  private copyHit(x: number, y: number): { blockId: string; offset: number } | null {
+    const id = this.overlay.blockId
+    const live = id ? this.overlay.liveOffsetAt(x, y) : null
+    if (id && live !== null) return { blockId: id, offset: live }
+    for (const f of [...this.frozen].reverse()) {
+      const copy = f.element.lastElementChild
+      const editable = ops.findEditable(this.report, f.id)
+      if (!(copy instanceof HTMLElement) || !editable || this.overlayKind(editable.kind) !== 'paragraph' || editable.text !== f.text || copy.textContent !== f.text) continue
+      const offset = offsetInCopy(copy, x, y, f.element)
+      if (offset !== null) return { blockId: f.id, offset }
+    }
+    return null
   }
 
   /**

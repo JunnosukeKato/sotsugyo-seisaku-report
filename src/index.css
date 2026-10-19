@@ -1509,3 +1509,17 @@ button.row { cursor: pointer; }
 @keyframes toc-notice-in { from { opacity: 0; transform: translateY(-4px); } }
 @media (prefers-reduced-motion: reduce) { .toc-notice, .overlay-editor.toc-arrived { animation: none; } }
 @media print { .toc-notice { display: none !important; } }
+
+/* ---- スマホ：打った字をその場で紙面に ---- */
+/* スマホで段落を書いている間、下の欄で打った字を、紙面の段落の位置にすぐ出す写し（editor/overlayEditor.ts の mirror。紙面の段落は隠す：reportEditor.ts の hideLive）。
+   組み方は書く欄と同じ（紙面と同じ所で折り返す）。書いている欄の印（藍色の枠とうすい地）は、紙面の段落に付けていたもの（editingStyle）と同じ。
+   組み直した紙面が追いつくと、写しをやめて紙面の段落を見せる。画面だけのもので、紙面（PDF・印刷）には入らない */
+.page-viewport [data-block-id].live-hidden { visibility: hidden !important; }
+.overlay-mirror.live { visibility: visible; color: #000; outline: 2px solid #2f3e75; outline-offset: 2px; background: rgba(47, 62, 117, 0.08); }
+/* 何も書いていない段落も、紙面と同じ1行の高さにする（後ろの文章を、組み直した紙面と同じだけずらすため） */
+.overlay-mirror[data-typeset] { min-height: 1lh; }
+/* 図表の参照「（図1）」は、途中で折り返さない（書く欄・紙面と同じ） */
+.overlay-mirror .fig-ref { text-wrap-mode: nowrap; }
+/* 写しと仮の表示を入れる枠は、紙面と一緒にスクロールするよう、紙面の表示枠の中に置く（紙面より上に重ねる） */
+.page-scroller > .overlay-clip { z-index: 2; }
+@media print { .page-scroller > .overlay-clip { display: none !important; } }

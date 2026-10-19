@@ -11,6 +11,7 @@ import { photoPagesPhone } from './photoPages.mjs'
 import { tocLinksPhone } from './tocLinks.mjs'
 import { autoHeadingPhone } from './autoHeading.mjs'
 import { undoHeaderPhone } from './undoHeader.mjs'
+import { phoneLivePhone } from './phoneLive.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -681,6 +682,9 @@ await withEdge(async (browser) => {
 
   // 上の帯の「戻す」「やり直す」（mockups/v39 案A。何もタップしていなくても戻せる。scripts/e2e/undoHeader.mjs）
   await undoHeaderPhone(browser, check)
+
+  // 打った字をその場で紙面に（組み直すのを待たずに、紙面の段落の位置に写しを出す。Enter・見出し・ページをまたぐ段落・PDF・1字ごとの時間。scripts/e2e/phoneLive.mjs）
+  await phoneLivePhone(browser, check)
 })
 
 /**

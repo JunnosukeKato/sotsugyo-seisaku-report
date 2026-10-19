@@ -13,14 +13,24 @@
  * このときは、書く欄の文字を自分で持ち（model）、打った・消した・貼り付けた・元に戻したなどの入力をすべて受け取って、
  * 書く欄の中身を組み直す（ブラウザに書き換えさせると、句読点を包んだ要素の中に文字が入って、詰めた字間で重なるため）。
  * 日本語の変換中だけはブラウザに任せ、変換を終えたら組み直す。書く欄の中の「元に戻す」「やり直す」も、ここで受け持つ
+ *
+ * スマホの段落は、下の欄で打った字を、紙面の段落の位置にも、打つたびにすぐ出す（紙面の上の写し mirror を見せ、紙面の段落を隠す。
+ * 前は、打つ手を止めて紙面を組み直すまで、紙面が変わらなかった）。写しは PC の書く欄と同じく、紙面と同じ組み方・同じ倍率で組む。
+ * スマホは測るのが遅い（長い段落で句読点を1つ測るのに、遅いスマホで 8ms ほど）ため、打つたびには測らない：打った・消した所の字だけを
+ * 写しの中で入れ替える（できないときは、測らずに前の包み方のまま並べ直す）。打つ手が止まったら、見えない下書きの要素で、時間を分けて少しずつ測り直し、
+ * 測り終えたら写しと入れ替える（mirrorJob。打つ手を止めているときに打っても、待たされない）。日本語の変換中の字も出す。
+ * 組み直した紙面が書いた字に追いついたら、写しをやめて紙面の段落を見せる（reportEditor の syncLive）。
+ * 写しと仮の表示を入れる枠は、紙面と一緒にスクロールするよう、紙面の表示枠の中に置く（PC は今までどおり、重ねる層）
  */
 
-import { planFromDom, shiftPlan, typesetSpacing, type SpacingPlan } from './textSpacing'
+import { planFromDom, reshapeSpacing, shiftPlan, typesetSpacing, typesetSteps, type SpacingPlan } from './textSpacing'
 
 /** 句読点・括弧（書き換えたあとに測り直す所に、これがいくつあるかで、すぐ測るか、打つ手が止まってから測るかを決める） */
 const PUNCTUATION = /[\p{Ps}\p{Pe}\p{Pf}\p{Pi}、。，．]/gu
 /** これより少なければ、打つたびにすぐ測り直す（1つ測るのに、ふつうのパソコンで 1ms ほど） */
 const QUICK_PUNCTUATION = 12
+/** スマホの写しを、時間を分けて測り直すとき、1回に続けて測る時間（ms。これを超えたら、次の回に回して、打った字を先に受け取る） */
+const MIRROR_SLICE_MS = 8
 /** 測り直すのを待つ時間（打つ手が止まってから） */
 const TYPESET_DELAY_MS = 250
 
@@ -56,8 +66,12 @@ export interface OverlayCallbacks {
   onPasteNote?(what: 'firstLine' | 'table'): void
   /** 表のセルで Tab（Shift+Tab）を押した（隣のセルへ移る） */
   onTab?(blockId: string, text: string, backward: boolean): void
-  /** 紙面に重ねた入力欄の大きさが変わった（行が増えた・減った。日本語の変換中も呼ぶ） */
+  /** 紙面に重ねた入力欄の大きさが変わった（行が増えた・減った。日本語の変換中も呼ぶ。スマホは、紙面の上の写しを見せているとき） */
   onResize?(): void
+  /** スマホ：紙面の上の写し（打った字をその場で見せる段落）を見せはじめた・やめた（見せている間は、紙面のその段落を隠す） */
+  onLive?(on: boolean): void
+  /** スマホ：紙面の上の写しを、打った字に合わせた（日本語の変換中も呼ぶ。書いている所が見えるよう、紙面を動かすため） */
+  onLiveUpdate?(): void
   /**
    * 書く欄の中で、戻すもののない（開いてからまだ何も書いていない）ときに Ctrl+Z を押した。
    * 呼び出し側が、直前の原稿の変更を戻したら true（段落に「Ⅲ．まとめ」と打って Enter で見出しにした直後など）
@@ -129,6 +143,42 @@ function charRect(el: HTMLElement, i: number): DOMRect | undefined {
   return undefined
 }
 
+/** 紙面のその欄の要素（ページをまたぐと複数）の文字が、text と同じか（紙面が、書いた字に追いついているか） */
+function pageShows(page: HTMLElement[] | undefined, text: string): boolean {
+  return !!page && page.length > 0 && page.map((f) => f.textContent ?? '').join('') === text
+}
+
+/**
+ * 紙面の上の写し（打った字をその場で見せる段落・書き終えた段落の仮の表示）el の、画面の点 (x, y) にいちばん近い文字の位置
+ * （その文字の右半分なら、その文字の後ろ）。点が el の外（frame があれば、その見えている範囲の外）なら null
+ */
+export function offsetInCopy(el: HTMLElement, x: number, y: number, frame?: HTMLElement): number | null {
+  const box = el.getBoundingClientRect()
+  const view = frame?.getBoundingClientRect() ?? box
+  if (x < Math.max(box.left, view.left) || x > Math.min(box.right, view.right) || y < Math.max(box.top, view.top) || y > Math.min(box.bottom, view.bottom)) return null
+  const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+  const range = document.createRange()
+  let at = 0
+  let best = { d: Infinity, offset: 0 }
+  while (walker.nextNode()) {
+    const node = walker.currentNode as Text
+    for (let i = 0; i < node.length; i++) {
+      range.setStart(node, i)
+      range.setEnd(node, i + 1)
+      const r = [...range.getClientRects()].find((q) => q.height > 0)
+      if (r) {
+        // 行（上下）の近さを先に、そのあと左右の近さで比べる
+        const dy = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0
+        const dx = x < r.left ? r.left - x : x > r.right ? x - r.right : 0
+        const d = dy * 10000 + dx
+        if (d < best.d) best = { d, offset: at + i + (x > (r.left + r.right) / 2 ? 1 : 0) }
+      }
+    }
+    at += node.length
+  }
+  return best.d === Infinity ? 0 : best.offset
+}
+
 const COPIED_STYLES = ['fontFamily', 'fontSize', 'lineHeight', 'letterSpacing', 'textIndent', 'textAlign', 'fontWeight'] as const
 
 /**
@@ -175,6 +225,19 @@ export class OverlayEditor {
   private readonly mirror: HTMLDivElement
   /** 紙面の上の位置が決まっているか（まだ紙面にない欄を、下の欄で開いたときは決まっていない：仮の表示を出さない） */
   private placed = false
+  /**
+   * スマホの段落：紙面の上の写しを見せて、打った字をその場で紙面に出しているか（紙面のその段落は隠す）。
+   * 打つと見せ、組み直した紙面が書いた字に追いつくと（reportEditor の syncLive）、やめて紙面の段落を見せる。
+   * 写しは、見せていない間も、書く欄の字に合わせて紙面と同じ組み方で組んでおく（スマホの段落で、紙面の上の位置が決まっているとき：spacingBox）
+   */
+  private liveOn = false
+  /** スマホの写しで、まだ測り直していない所の始め（打った・消した所のうち、いちばん前。測り直してあれば null） */
+  private dirtyFrom: number | null = null
+  /**
+   * スマホの写しを、打つ手が止まってから測り直している途中（見えない下書きの要素 scratch で、時間を分けて測る。
+   * 測り終えたら、写しの中身と入れ替える。途中で打ったら、やめて、また打つ手が止まってからやり直す）
+   */
+  private mirrorJob: { text: string; scratch: HTMLElement; steps: Generator<void, SpacingPlan>; timer: number } | null = null
   /** キーボードで道具へ移っているあいだ、書いていたカーソルの位置（書く欄に戻ったら、そこから続ける） */
   private parkedCaret: number | null = null
   private unwatchParked: (() => void) | null = null
@@ -231,7 +294,11 @@ export class OverlayEditor {
       this.beforeComposition = null
     })
     this.element.addEventListener('input', () => {
-      if (this.composingNow) return
+      if (this.composingNow) {
+        // スマホ：日本語の変換中の字も、紙面の上の写しに出す（原稿には、変換を終えてから入れる）
+        if (this.sheetHost && this.target) this.liveInput(this.text)
+        return
+      }
       // 紙面と同じ組み方で書いているとき、受け取らなかった入力で中身が変わっていたら、書く欄の中身から文字を読み直す
       if (this.typeset) {
         if (this.domText() !== this.model) this.syncFromDom({ text: this.model, start: this.selectionOffsets().start, end: this.selectionOffsets().end })
@@ -268,6 +335,10 @@ export class OverlayEditor {
     new ResizeObserver(() => {
       if (this.target && !this.sheetHost) this.callbacks.onResize?.()
     }).observe(this.element)
+    // スマホ：紙面の上の写しの行が増えた・減った（後ろの文章をずらす）
+    new ResizeObserver(() => {
+      if (this.target && this.sheetHost && this.liveOn) this.callbacks.onResize?.()
+    }).observe(this.mirror)
   }
 
   /** 紙面の上の、書いている欄の下端（画面座標。スマホは、見えない写し） */
@@ -290,6 +361,19 @@ export class OverlayEditor {
   }
 
   /**
+   * 紙面と同じ組み方で組む要素：PC の段落は書く欄、スマホの段落は紙面の上の写し（紙面の上の位置が決まっているときだけ）。組まないときは null
+   */
+  private get spacingBox(): HTMLElement | null {
+    if (this.typeset) return this.element
+    return this.sheetHost && this.placed && this.target?.kind === 'paragraph' ? this.mirror : null
+  }
+
+  /** スマホ：紙面の上の写しを見せて、打った字をその場で紙面に出しているか */
+  get live(): boolean {
+    return this.liveOn
+  }
+
+  /**
    * 書く場所を切り替える。host を渡すと、その中で（大きな文字で）書く。null なら紙面に重ねる
    */
   setSheetHost(host: HTMLElement | null): void {
@@ -301,8 +385,12 @@ export class OverlayEditor {
     if (host) {
       for (const key of [...COPIED_STYLES, 'transform', 'width', 'top', 'left'] as const) el.style[key] = ''
       host.append(el)
+      // 紙面の上の写し・仮の表示を入れる枠は、紙面の表示枠の中に置く（紙面と一緒にスクロールする。
+      // 重ねる層に置いて、スクロールのたびに動かすと、指で動かしている間、紙面より少し遅れてついてきて、ずれて見えるため）
+      if (this.clip.parentElement !== this.scroller) this.scroller.append(this.clip)
     } else {
       this.clip.append(el)
+      if (this.clip.parentElement !== this.layer) this.layer.append(this.clip)
     }
   }
 
@@ -376,24 +464,247 @@ export class OverlayEditor {
   open(target: OverlayTarget): void {
     this.unpark()
     this.clearGhosts()
+    // ほかの欄を開く：前の欄の、紙面の上の写しはやめる（同じ欄を開き直すときは、下で見せるかを決め直す）
+    if (this.target?.blockId !== target.blockId) this.setLive(false)
     this.target = target
     this.element.dataset.kind = target.kind
     this.setTypeset(!this.sheetHost && target.kind === 'paragraph')
     this.model = target.text
     this.resetHistory()
-    this.mirror.textContent = this.sheetHost ? target.text : ''
+    this.resetTypeset()
+    this.clearMirror()
     // 下の欄で書く（スマホ）：書体などは画面用（CSS）のまま。スマホでキーボードを出すには、タップの処理の中で欄を見せて入力欄に移る必要がある。
-    // 紙面の上の位置と見た目は、見えない写しに合わせておく（仮の表示に使う）
+    // 紙面の上の位置と見た目は、写しに合わせておく（段落は、打った字をその場で見せる。ほかの欄は見えない：仮の表示に使う）
     if (this.sheetHost) this.sheetHost.closest('.edit-sheet')?.classList.add('open')
     this.copyStyle(target.styleSource, target.kind)
     this.clip.hidden = false
     // 紙面と同じ組み方で組むには、紙面と同じ幅が要る（行の位置を測って、句読点を詰めるかを決める）。幅を決めてから中身を組む
     this.box.style.transform = `scale(${target.scale})`
     this.box.style.width = this.widthOf(target)
+    // 紙面の上の位置が決まっているか（スマホの写しを組むかどうか）を、先に決めておく
+    this.setFrame(target)
     this.renderText(null, { full: true, page: target.page })
     this.moveTo(target)
     this.element.focus({ preventScroll: true })
     this.setCaret(target.caret)
+    // スマホ：紙面がまだ書いた字になっていなければ（書き終えた直後に、組み直す前にまた開いたなど）、はじめから写しを見せる
+    this.setLive(this.spacingBox === this.mirror && !pageShows(target.page, this.model))
+  }
+
+  /** 紙面の上の写しを空にする（紙面と同じ組み方の印と、包み方の記録も外す） */
+  private clearMirror(): void {
+    this.mirror.textContent = ''
+    delete this.mirror.dataset.typeset
+    if (!this.typeset) this.resetTypeset()
+  }
+
+  /** スマホ：紙面の上の写しを見せる・やめる（見せられるのは、段落で、紙面の上の位置が決まっているときだけ） */
+  showLive(on: boolean): void {
+    this.setLive(on && this.spacingBox === this.mirror)
+  }
+
+  private setLive(on: boolean): void {
+    if (this.liveOn === on) return
+    this.liveOn = on
+    this.mirror.classList.toggle('live', on)
+    this.callbacks.onLive?.(on)
+  }
+
+  /**
+   * スマホ：書く欄の字を、紙面の上の写しに入れる。段落で、紙面の上の位置が決まっていれば、紙面と同じ組み方で組む
+   * （前に組んだ字と比べて、変わった所の近くだけを測り直す。full：はじめから組む。page：紙面の段落の中身を写せるなら写す）。
+   * ほかの欄は、見えない写しに字だけを入れる（仮の表示に使う）
+   */
+  private syncMirror(text: string, how: { full?: boolean; page?: HTMLElement[] } = {}): void {
+    if (!this.sheetHost || !this.target) return
+    const mirror = this.mirror
+    if (this.spacingBox !== mirror) {
+      if (mirror.hasAttribute('data-typeset')) this.clearMirror()
+      if (mirror.textContent !== text) mirror.textContent = text
+      return
+    }
+    if (!mirror.hasAttribute('data-typeset')) {
+      mirror.dataset.typeset = ''
+      how = { ...how, full: true }
+    }
+    if (!how.full && text === this.renderedText) return
+    this.cancelMirrorJob()
+    const old = this.renderedText
+    if (how.full || old === null || !this.plan) {
+      // はじめから：紙面に同じ字の段落があれば、その中身を写す（測らずに済み、紙面と必ず同じ所で折り返す）。
+      // なければ、測らずに並べ（同じ字のままなら前の包み方で）、打つ手が止まったら、はじめから測る
+      if (how.page && this.copyPage(mirror, text, how.page)) {
+        this.dirtyFrom = null
+        return
+      }
+      const known = old === text && this.plan ? this.plan : { wraps: new Map(), thins: new Set<number>() }
+      mirror.replaceChildren(...this.buildNodes(text))
+      this.plan = typesetSpacing(mirror, { from: Infinity, known })
+      this.renderedText = text
+      this.dirtyFrom = 0
+      this.scheduleTypeset()
+      return
+    }
+    // 打った・消した所（前に組んだ字と比べる）
+    let p = 0
+    while (p < old.length && p < text.length && old[p] === text[p]) p++
+    let q = 0
+    while (q < old.length - p && q < text.length - p && old[old.length - 1 - q] === text[text.length - 1 - q]) q++
+    const known = shiftPlan(this.plan, p, old.length - q, text.length - old.length)
+    // 打った・消した所の字だけを、写しの中で入れ替える。できなければ、測らずに前の包み方のまま並べ直す（どちらも、打つ手が止まったら測り直す）
+    if (!this.patchMirror(old, text, p, q)) {
+      mirror.replaceChildren(...this.buildNodes(text))
+      this.plan = typesetSpacing(mirror, { from: Infinity, known })
+    } else this.plan = known
+    this.renderedText = text
+    this.dirtyFrom = Math.min(this.dirtyFrom ?? Infinity, p)
+    this.scheduleTypeset()
+  }
+
+  /**
+   * スマホの写しで、old の p 字目から（後ろの q 字は同じ）を text に書き換えた所だけを、写しの中で入れ替える（並べ直さない。入れ替えたら true）。
+   * - 書き換えた所が、包んだ要素の外の1つのテキストノードの中なら、その字を入れ替える（打った句読点・英数字も、包まず・すき間を入れずに入れる）
+   * - 包んだ句読点1つを消したなら、その要素を外す
+   * 図表の参照（「（図1）」のまとまり）が変わるときは、入れ替えない。句読点の包み方・すき間は、打つ手が止まったら測り直す（flushMirror）
+   */
+  private patchMirror(old: string, text: string, p: number, q: number): boolean {
+    const oldEnd = old.length - q
+    const inserted = text.slice(p, text.length - q)
+    if (old.length === 0) return false
+    const refs = this.target?.refs
+    if (refs) {
+      const delta = inserted.length - (oldEnd - p)
+      const moved = refs(old).map(([s, e]) => (e <= p ? [s, e] : s >= oldEnd ? [s + delta, e + delta] : [-1, -1]))
+      if (JSON.stringify(moved) !== JSON.stringify(refs(text))) return false
+    }
+    const walker = document.createTreeWalker(this.mirror, NodeFilter.SHOW_TEXT)
+    let start = 0
+    while (walker.nextNode()) {
+      const node = walker.currentNode as Text
+      const end = start + node.length
+      const parent = node.parentElement
+      // 包んだ句読点1つ（の字だけ）を消した
+      if (start === p && end === oldEnd && inserted === '' && parent?.localName === 'viv-ts-inner' && parent.parentElement?.parentElement === this.mirror) {
+        parent.parentElement.remove()
+        return true
+      }
+      // 書き換えた所が、このテキストノード（包んだ要素の外）の中にある（打ったときは、ノードの終わり・始めでもよい）
+      if (start <= p && oldEnd <= end && parent === this.mirror) {
+        node.replaceData(p - start, oldEnd - p, inserted)
+        return true
+      }
+      if (end > p) return false
+      start = end
+    }
+    return false
+  }
+
+  /** 打つ手が止まったら、測り直す（flushTypeset） */
+  private scheduleTypeset(): void {
+    clearTimeout(this.typesetTimer)
+    this.typesetTimer = window.setTimeout(() => this.flushTypeset(), TYPESET_DELAY_MS)
+  }
+
+  /**
+   * スマホの写しを、まだ測り直していない所（dirtyFrom の行の1つ前の行）から、正しく測り直す。
+   * 見えない下書きの要素（写しと同じ書体・幅・位置）に同じ字を並べ、MIRROR_SLICE_MS ずつ時間を分けて測り、測り終えたら写しと入れ替える。
+   * now：いま全部測る（書き終えるとき。仮の表示を、紙面と同じ所で折り返すように）
+   */
+  private flushMirror(now: boolean): void {
+    if (this.dirtyFrom === null || this.spacingBox !== this.mirror) return
+    if (!this.mirrorJob) {
+      const text = this.renderedText ?? ''
+      const from = this.dirtyFrom === 0 ? 0 : this.lineStartBefore(this.mirror, this.dirtyFrom)
+      const scratch = document.createElement('div')
+      scratch.className = 'overlay-mirror overlay-scratch'
+      scratch.dataset.typeset = ''
+      scratch.setAttribute('aria-hidden', 'true')
+      scratch.style.cssText = this.mirror.style.cssText
+      scratch.append(...this.buildNodes(text))
+      this.clip.append(scratch)
+      this.mirrorJob = { text, scratch, steps: typesetSteps(scratch, { from, known: this.plan, reshape: false }), timer: 0 }
+    }
+    this.runMirrorJob(now)
+  }
+
+  private runMirrorJob(now: boolean): void {
+    const job = this.mirrorJob
+    if (!job) return
+    const deadline = now ? Infinity : performance.now() + MIRROR_SLICE_MS
+    for (;;) {
+      const step = job.steps.next()
+      if (step.done) {
+        this.mirrorJob = null
+        job.scratch.remove()
+        // 測り終えた：写しの中身を入れ替え、ブラウザに字の形をはじめから計算させる（紙面と同じ所で折り返すように）
+        this.mirror.replaceChildren(...job.scratch.childNodes)
+        reshapeSpacing(this.mirror)
+        this.plan = step.value
+        this.renderedText = job.text
+        this.dirtyFrom = null
+        return
+      }
+      if (performance.now() >= deadline) break
+    }
+    job.timer = window.setTimeout(() => this.runMirrorJob(false), 0)
+  }
+
+  /** スマホの写しを測り直している途中なら、やめる（字が変わった・閉じた） */
+  private cancelMirrorJob(): void {
+    if (!this.mirrorJob) return
+    clearTimeout(this.mirrorJob.timer)
+    this.mirrorJob.scratch.remove()
+    this.mirrorJob = null
+  }
+
+  /**
+   * スマホ：組み直した紙面が、書いている字に追いついた：紙面の段落の中身を写しに写す（測らずに、紙面と同じ組み方になる。
+   * このあと打つときは、そこから字を入れ替える）
+   */
+  adoptPage(page: HTMLElement[]): void {
+    if (this.spacingBox !== this.mirror || this.composingNow) return
+    const text = this.text
+    if (!pageShows(page, text)) return
+    this.cancelMirrorJob()
+    clearTimeout(this.typesetTimer)
+    if (this.copyPage(this.mirror, text, page)) this.dirtyFrom = null
+  }
+
+  /** スマホ：書く欄の字が変わった（打った・消した・貼り付けた・日本語の変換中）。紙面の上の写しを合わせて、見せる */
+  private liveInput(text: string): void {
+    this.syncMirror(text)
+    if (this.spacingBox !== this.mirror) return
+    this.setLive(true)
+    this.callbacks.onLiveUpdate?.()
+  }
+
+  /** スマホ：紙面の上の写しの、見えている範囲（画面座標。写しを見せていなければ null） */
+  liveRect(): { left: number; top: number; right: number; bottom: number } | null {
+    if (!this.liveOn) return null
+    const r = this.mirror.getBoundingClientRect()
+    const c = this.clip.getBoundingClientRect()
+    return { left: Math.max(r.left, c.left), top: Math.max(r.top, c.top), right: Math.min(r.right, c.right), bottom: Math.max(Math.max(r.top, c.top), Math.min(r.bottom, c.bottom)) }
+  }
+
+  /**
+   * スマホ：紙面の上の写しで、書く欄のカーソルの位置にあたる所（画面座標。カーソルの前の字の右端。写しを見せていなければ null）。
+   * カーソルが紙面の本文の下へはみ出したか（組み直して次のページへ移る）・見えているかを調べるのに使う
+   */
+  liveCaretRect(): { left: number; top: number; bottom: number } | null {
+    if (!this.liveOn) return null
+    const length = this.renderedText?.length ?? 0
+    const at = Math.min(this.caret, length)
+    const before = at > 0 ? charRect(this.mirror, at - 1) : undefined
+    if (before) return { left: before.right, top: before.top, bottom: before.bottom }
+    const after = charRect(this.mirror, 0)
+    if (after) return { left: after.left, top: after.top, bottom: after.bottom }
+    const r = this.mirror.getBoundingClientRect()
+    return { left: r.left, top: r.top, bottom: r.bottom }
+  }
+
+  /** スマホ：紙面の上の写しを押した：押した点にいちばん近い字の位置（写しを見せていない・写しの外なら null） */
+  liveOffsetAt(x: number, y: number): number | null {
+    return this.liveOn ? offsetInCopy(this.mirror, x, y, this.clip) : null
   }
 
   /** 紙面と同じ組み方で書くか（PC の段落）を決める（書く欄の印 data-typeset：組み方の CSS は index.css） */
@@ -423,13 +734,15 @@ export class OverlayEditor {
     const el = this.element
     if (!this.typeset) {
       el.textContent = this.model
-      this.resetTypeset()
+      // スマホ：紙面の上の写しも、はじめから組む（段落は、紙面の段落の中身を写せるなら写す）
+      if (this.sheetHost) this.syncMirror(this.model, { full: true, page: how.page })
+      else this.resetTypeset()
       if (selection) this.select(selection.start, selection.end)
       return
     }
     const text = this.model
     // 紙面に同じ文字の段落があれば、紙面の中身を写す（組版エンジンが包んだまま。測らずに済み、紙面と必ず同じ所で折り返す）
-    if (how.page && this.copyPage(how.page)) {
+    if (how.page && this.copyPage(el, text, how.page)) {
       if (selection) this.select(selection.start, selection.end)
       return
     }
@@ -442,7 +755,7 @@ export class OverlayEditor {
       while (p < old.length && p < text.length && old[p] === text[p]) p++
       let q = 0
       while (q < old.length - p && q < text.length - p && old[old.length - 1 - q] === text[text.length - 1 - q]) q++
-      from = Math.min(this.lineStartBefore(p), this.pendingFrom ?? Infinity)
+      from = Math.min(this.lineStartBefore(el, p), this.pendingFrom ?? Infinity)
       known = shiftPlan(this.plan, p, old.length - q, text.length - old.length)
     }
     el.replaceChildren(...this.buildNodes(text))
@@ -483,12 +796,11 @@ export class OverlayEditor {
   }
 
   /**
-   * 紙面の段落の中身（組版エンジンが句読点などを包んだもの。ページをまたぐ段落は、ページごとの要素を順に）を、書く欄に写す。
-   * 文字が書く欄と違う・知らない要素があるときは写さない（false）
+   * 紙面の段落の中身（組版エンジンが句読点などを包んだもの。ページをまたぐ段落は、ページごとの要素を順に）を、box（書く欄・スマホの写し）に写す。
+   * 文字が text と違う・知らない要素があるときは写さない（false）
    */
-  private copyPage(fragments: HTMLElement[]): boolean {
-    const text = this.model
-    if (fragments.length === 0 || fragments.map((f) => f.textContent ?? '').join('') !== text) return false
+  private copyPage(box: HTMLElement, text: string, fragments: HTMLElement[]): boolean {
+    if (!pageShows(fragments, text)) return false
     const allowed = new Set(['viv-ts-open', 'viv-ts-close', 'viv-ts-inner', 'viv-ts-thin-sp', 'span'])
     const copied = fragments.flatMap((f) => [...f.childNodes].map((n) => n.cloneNode(true)))
     const holder = document.createElement('div')
@@ -497,19 +809,23 @@ export class OverlayEditor {
       if (!allowed.has(el.localName) || (el.localName === 'span' && el.className !== 'fig-ref')) return false
       // 組版エンジンの印・見た目の指定は外す（図表の参照の折り返さない見た目は index.css）。包んだ句読点は1文字のまとまりにする
       for (const name of [...el.getAttributeNames()]) if (name !== 'class') el.removeAttribute(name)
-      if (el.localName === 'viv-ts-open' || el.localName === 'viv-ts-close' || el.localName === 'viv-ts-thin-sp') (el as HTMLElement).contentEditable = 'false'
+      if (box === this.element && (el.localName === 'viv-ts-open' || el.localName === 'viv-ts-close' || el.localName === 'viv-ts-thin-sp')) (el as HTMLElement).contentEditable = 'false'
     }
-    this.element.replaceChildren(...holder.childNodes)
-    this.plan = planFromDom(this.element)
+    box.replaceChildren(...holder.childNodes)
+    this.plan = planFromDom(box)
     this.renderedText = text
     this.pendingFrom = null
     clearTimeout(this.typesetTimer)
     return true
   }
 
-  /** 打つ手が止まった（など）：あとで測り直すことにしていた所を、いま測り直す（日本語の変換中は待つ） */
-  private flushTypeset(): void {
+  /**
+   * 打つ手が止まった（など）：あとで測り直すことにしていた所を、いま測り直す（PC の書く欄は、日本語の変換中は待つ）。
+   * スマホの写しは、時間を分けて測り直す（flushMirror。変換中の字は下の欄にあるので待たない）。now：スマホの写しも、いま全部測る
+   */
+  private flushTypeset(now = false): void {
     clearTimeout(this.typesetTimer)
+    if (this.spacingBox === this.mirror) return this.flushMirror(now)
     if (this.pendingFrom === null || !this.typeset) return
     if (this.composingNow) {
       this.typesetTimer = window.setTimeout(() => this.flushTypeset(), TYPESET_DELAY_MS)
@@ -525,18 +841,20 @@ export class OverlayEditor {
 
   private resetTypeset(): void {
     clearTimeout(this.typesetTimer)
+    this.cancelMirrorJob()
     this.plan = null
     this.renderedText = null
     this.pendingFrom = null
+    this.dirtyFrom = null
   }
 
   /**
-   * いま組んである書く欄で、文字の位置 at のある行の、1つ前の行の始めの文字の位置（1行目・2行目なら 0）。
+   * いま組んである box（書く欄・スマホの写し）で、文字の位置 at のある行の、1つ前の行の始めの文字の位置（1行目・2行目なら 0）。
    * 書き換えたあと、ここから後ろだけを測り直す
    */
-  private lineStartBefore(at: number): number {
+  private lineStartBefore(box: HTMLElement, at: number): number {
     const nodes: { node: Text; start: number }[] = []
-    const walker = document.createTreeWalker(this.element, NodeFilter.SHOW_TEXT)
+    const walker = document.createTreeWalker(box, NodeFilter.SHOW_TEXT)
     let total = 0
     while (walker.nextNode()) {
       const node = walker.currentNode as Text
@@ -635,6 +953,8 @@ export class OverlayEditor {
       this.offset = { ...this.offset, top: this.offset.top + g.offsetHeight * this.scale }
     }
     const kindChanged = next.kind !== this.target.kind
+    // スマホ：前の段落の、紙面の上の写しはやめる（移った先の欄で、見せるかを決め直す）
+    if (next.blockId !== this.target.blockId) this.setLive(false)
     this.target = { ...this.target, blockId: next.blockId, kind: next.kind, text: next.text, caret: next.caret, enterCreatesParagraph: false, refs: next.refs }
     this.element.dataset.kind = next.kind
     this.setTypeset(!this.sheetHost && next.kind === 'paragraph')
@@ -650,11 +970,13 @@ export class OverlayEditor {
         this.box.style.width = `${Math.max(40, r.width / this.scale)}px`
       }
     }
+    // スマホ：紙面の上の写しも、移った先の欄の字で、はじめから組む（renderText）
     this.renderText(null, { full: true, page: next.page })
-    if (this.sheetHost) this.mirror.textContent = next.text
     this.place()
     this.element.focus({ preventScroll: true })
     this.setCaret(next.caret)
+    // スマホ：移った先の段落が、まだ紙面にない（分けた後ろの段落）・紙面と字が違う（つなげた段落）なら、写しを見せる
+    this.setLive(this.spacingBox === this.mirror && !pageShows(next.page, next.text))
   }
 
   /** 組み直した紙面の書体に合わせ、仮に表示していた前の段落を消す（continueIn のあと） */
@@ -666,7 +988,7 @@ export class OverlayEditor {
       if (this.typeset) {
         const focused = document.activeElement === this.element
         this.renderText(focused ? this.selectionOffsets() : null, { full: true, page })
-      }
+      } else if (this.sheetHost) this.syncMirror(this.text, { full: true, page })
     }
   }
 
@@ -698,6 +1020,8 @@ export class OverlayEditor {
     if (this.box.style.width === width) return
     this.box.style.width = width
     if (this.box === this.element) this.rerender()
+    // スマホの紙面の上の写しも、幅が変われば組み直す
+    else if (this.mirror.hasAttribute('data-typeset')) this.syncMirror(this.text, { full: true })
   }
 
   private copyStyle(source: HTMLElement, kind: OverlayKind): void {
@@ -763,6 +1087,8 @@ export class OverlayEditor {
     this.setFrame(placement)
     this.box.style.transform = `scale(${scale})`
     this.setWidth(this.widthOf(placement))
+    // スマホ：紙面の上の位置が決まった段落（まだ紙面になかった段落が、組み直した紙面に出た）は、写しを紙面と同じ組み方で組む
+    if (this.sheetHost) this.syncMirror(this.text)
     // ページをまたぐ段落：見えているページの最初の文字が、そのページの段落の上端に来るようにずらす
     this.offset = { top: rect.top - clip.top - this.alignShift(this.box, alignOffset, scale), left: rect.left - clip.left }
     this.place()
@@ -772,10 +1098,12 @@ export class OverlayEditor {
   private setFrame({ rect, clip, scale }: OverlayPlacement): void {
     this.scale = scale
     this.placed = rect.right - rect.left > 1
-    const layerRect = this.layer.getBoundingClientRect()
+    // 枠を置いている所（PC は重ねる層、スマホは紙面の表示枠）の中の、スクロールする前の位置
+    const parent = this.clip.parentElement ?? this.layer
+    const base = parent.getBoundingClientRect()
     this.clipBox = {
-      top: clip.top - layerRect.top + this.scroller.scrollTop,
-      left: clip.left - layerRect.left + this.scroller.scrollLeft,
+      top: clip.top - base.top - parent.clientTop + this.scroller.scrollTop,
+      left: clip.left - base.left - parent.clientLeft + this.scroller.scrollLeft,
       width: clip.right - clip.left,
       height: clip.bottom - clip.top,
     }
@@ -799,8 +1127,8 @@ export class OverlayEditor {
     const text = this.text
     const byKey = this.closingByKey
     this.closingByKey = false
-    // 測り直すのを待っていた所は、写す前に測り直す（書き終えた欄の仮の表示を、紙面と同じ所で折り返すように）
-    this.flushTypeset()
+    // 測り直すのを待っていた所は、写す前に測り直す（書き終えた欄の仮の表示を、紙面と同じ所で折り返すように。スマホの写しも、いま全部測る）
+    this.flushTypeset(true)
     const frozen = this.freeze()
     this.close()
     this.callbacks.onCommit(blockId, text, byKey, frozen)
@@ -818,15 +1146,18 @@ export class OverlayEditor {
     const clip = document.createElement('div')
     clip.className = 'overlay-clip overlay-frozen'
     clip.style.cssText = this.clip.style.cssText
+    // スマホ：枠は紙面の表示枠の中に置いているが、仮の表示は重ねる層に置く（呼び出し側）。層の中の位置にする
+    if (this.clip.parentElement !== this.layer) {
+      const at = this.clip.getBoundingClientRect()
+      const layer = this.layer.getBoundingClientRect()
+      clip.style.top = `${at.top - layer.top}px`
+      clip.style.left = `${at.left - layer.left}px`
+    }
     clip.setAttribute('aria-hidden', 'true')
     // 段落は、紙面と同じ組み方のまま写す（組み直した紙面が出たときに、行の折り返しが変わらないように）。
-    // スマホの見えない写しは、ふつうの文字なので、写す前に紙面と同じ組み方にする
+    // スマホの紙面の上の写しは、打つたびに紙面と同じ組み方で組んである（字が違えば、写す前に組む）
     const paragraph = this.target.kind === 'paragraph'
-    if (paragraph && this.box === this.mirror) {
-      this.mirror.textContent = text
-      this.mirror.dataset.typeset = ''
-      typesetSpacing(this.mirror)
-    }
+    if (paragraph && this.box === this.mirror) this.syncMirror(text)
     const copy = (from: HTMLElement, text: string, typeset: boolean) => {
       const el = document.createElement('div')
       el.style.cssText = from.style.cssText
@@ -846,12 +1177,13 @@ export class OverlayEditor {
 
   /** 確定せずに閉じる（呼び出し側がデータを処理済みのとき） */
   private close(): void {
+    // スマホ：紙面の上の写しはやめる（紙面の段落を隠すのもやめる。書いた字は、呼び出し側が仮の表示にする）
+    this.setLive(false)
     this.target = null
     this.unpark()
     this.clearGhosts()
     this.placed = false
-    this.mirror.textContent = ''
-    delete this.mirror.dataset.typeset
+    this.clearMirror()
     this.setTypeset(false)
     this.resetTypeset()
     this.resetHistory()
@@ -1017,8 +1349,10 @@ export class OverlayEditor {
     // 枠の中は動かさない（ブラウザがカーソルを見せようとしてずらしていたら、戻す）
     if (this.clip.scrollTop !== 0) this.clip.scrollTop = 0
     const c = this.clip.style
-    c.top = `${this.clipBox.top - this.scroller.scrollTop}px`
-    c.left = `${this.clipBox.left - this.scroller.scrollLeft}px`
+    // スマホ：枠は紙面の表示枠の中にあり、紙面と一緒にスクロールする（スクロールした分を引かない）
+    const scrolls = this.clip.parentElement !== this.scroller
+    c.top = `${this.clipBox.top - (scrolls ? this.scroller.scrollTop : 0)}px`
+    c.left = `${this.clipBox.left - (scrolls ? this.scroller.scrollLeft : 0)}px`
     c.width = `${this.clipBox.width}px`
     c.height = `${this.clipBox.height}px`
     this.box.style.top = `${this.offset.top}px`
@@ -1077,9 +1411,10 @@ export class OverlayEditor {
 
   private emitInput(): void {
     if (!this.target) return
-    // スマホ：紙面の上の見えない写しにも、書いている文字を入れておく（仮の表示に使う）
-    if (this.sheetHost) this.mirror.textContent = this.text
-    this.callbacks.onInput(this.target.blockId, this.text)
+    const text = this.text
+    // スマホ：紙面の上の写しにも、書いている字を入れる（段落は、その場で紙面に見せる。ほかの欄は見えない写し：仮の表示に使う）
+    if (this.sheetHost) this.liveInput(text)
+    this.callbacks.onInput(this.target.blockId, text)
   }
 
   private onKeyDown(e: KeyboardEvent): void {
