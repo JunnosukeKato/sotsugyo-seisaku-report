@@ -1,0 +1,14 @@
+{
+  "name": "卒業制作報告書 作成ツール",
+  "short_name": "卒制報告書",
+  "description": "卒業制作報告書を書いて、1つの PDF にするツール",
+  "lang": "ja",
+  "start_url": "./",
+  "scope": "./",
+  "display": "browser",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
