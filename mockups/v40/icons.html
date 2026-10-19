@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<title>v40 ホーム画面のアイコン</title>
+<link rel="stylesheet" href="/node_modules/@fontsource/biz-udmincho/400.css" />
+<link rel="stylesheet" href="/node_modules/@fontsource/biz-udpgothic/400.css" />
+<link rel="stylesheet" href="/node_modules/@fontsource/biz-udpgothic/700.css" />
+<style>
+  :root { --accent: #2f3e75; --ink: #26262b; --muted: #6b6b73; --line: #e2ded6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 36px; width: 1180px; background: #f3f1ec; color: var(--ink); font-family: 'BIZ UDPGothic', sans-serif; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  .lead { font-size: 14px; color: var(--muted); margin: 0 0 20px; line-height: 1.7; }
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; }
+  .card { background: #fff; border-radius: 14px; padding: 18px 18px 16px; border: 1px solid var(--line); }
+  .card h2 { font-size: 16px; margin: 0 0 4px; }
+  .card h2 .rec { display: inline-block; margin-left: 8px; padding: 2px 9px; border-radius: 999px; background: var(--accent); color: #fff; font-size: 12px; vertical-align: 2px; }
+  .card .sub { font-size: 12.5px; color: var(--muted); margin: 0 0 14px; }
+  .big { display: flex; justify-content: center; margin: 4px 0 16px; }
+  /* アイコン（180px＝iPhone のホーム画面用の大きさ） */
+  .icon { width: 180px; height: 180px; border-radius: 40px; display: grid; place-items: center; position: relative; overflow: hidden; box-shadow: 0 2px 8px rgba(0,0,0,0.12); }
+  .icon .k { font-family: 'BIZ UDMincho', serif; line-height: 1; }
+  .a { background: #fbfaf7; }
+  .a .frame { position: absolute; inset: 30px; border: 5px solid var(--accent); border-radius: 26px; }
+  .a .k { color: var(--accent); font-size: 78px; }
+  .b { background: var(--accent); }
+  .b .k { color: #fff; font-size: 96px; }
+  .c { background: var(--accent); }
+  .c .k { color: #fff; font-size: 82px; margin-top: -18px; }
+  .c .s { position: absolute; bottom: 30px; left: 0; right: 0; text-align: center; color: #fff; font-family: 'BIZ UDMincho', serif; font-size: 22px; letter-spacing: 0.3em; padding-left: 0.3em; opacity: 0.92; }
+  /* ホーム画面に置いたときの見え方（ほかのアプリと並べる。名前は2通り） */
+  .home { border-radius: 16px; padding: 16px 10px 12px; background: linear-gradient(160deg, #5b6c8f, #8c7fa3 60%, #b49b8e); display: grid; grid-template-columns: repeat(4, 1fr); row-gap: 14px; }
+  .app { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+  .app .ic { width: 60px; height: 60px; border-radius: 14px; overflow: hidden; position: relative; display: grid; place-items: center; }
+  .app .ic.dummy { background: rgba(255,255,255,0.35); }
+  .app .ic .icon { zoom: 0.3333; box-shadow: none; }
+  .app .lbl { width: 70px; text-align: center; color: #fff; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; text-shadow: 0 1px 2px rgba(0,0,0,0.35); }
+  .note { font-size: 12.5px; color: var(--muted); margin: 10px 0 0; line-height: 1.6; }
+  .good { font-size: 13px; margin: 12px 0 0; line-height: 1.6; }
+  .good b { color: #2e7d4f; }
+  .weak b { color: #b03a2e; }
+  .box { margin-top: 22px; background: #fff; border-radius: 14px; padding: 16px 20px; border: 1px solid var(--line); font-size: 14px; line-height: 1.8; }
+  .box h3 { font-size: 15px; margin: 0 0 6px; }
+  .box ul { margin: 0; padding-left: 1.2em; }
+  .ask { margin-top: 18px; background: #fff7e0; border: 1px solid #ecd9a3; border-radius: 14px; padding: 14px 20px; font-size: 14px; line-height: 1.8; }
+  .ask h3 { margin: 0 0 4px; font-size: 15px; }
+</style>
+</head>
+<body>
+  <h1>v40 スマホのホーム画面のアイコン</h1>
+  <p class="lead">ブラウザの「ホーム画面に追加」で置くアイコンです。押すと、いつものブラウザで作成ツールが開きます（ログインも PDF の保存も今と同じ）。<br />パソコンのブラウザのタブに出る小さな印（いまは別の印のまま）も、同じものにそろえます。</p>
+
+  <div class="cards">
+    <div class="card">
+      <h2>案A　白地に紺の枠</h2>
+      <p class="sub">ツールの右上の「卒」の印と同じ形</p>
+      <div class="big"><div class="icon a"><div class="frame"></div><span class="k">卒</span></div></div>
+      <div class="home" data-v="a"></div>
+      <p class="good"><b>よいところ</b>　ツールの中の印と同じなので、開いたときにつながる。</p>
+      <p class="good weak"><b>弱いところ</b>　白いアイコンが多いと、少し目立ちにくい。</p>
+    </div>
+    <div class="card">
+      <h2>案B　紺地に白い「卒」<span class="rec">おすすめ</span></h2>
+      <p class="sub">色を反対にして、字を大きく</p>
+      <div class="big"><div class="icon b"><span class="k">卒</span></div></div>
+      <div class="home" data-v="b"></div>
+      <p class="good"><b>よいところ</b>　ホーム画面でいちばん見つけやすい。</p>
+      <p class="good weak"><b>弱いところ</b>　ツールの中の印とは、色が反対になる。</p>
+    </div>
+    <div class="card">
+      <h2>案C　紺地に「卒」と「報告書」</h2>
+      <p class="sub">何のアイコンか、字でも分かる</p>
+      <div class="big"><div class="icon c"><span class="k">卒</span><span class="s">報告書</span></div></div>
+      <div class="home" data-v="c"></div>
+      <p class="good"><b>よいところ</b>　「卒業式」などのアプリと見分けやすい。</p>
+      <p class="good weak"><b>弱いところ</b>　小さく置くと「報告書」の字が細かい。</p>
+    </div>
+  </div>
+
+  <div class="box">
+    <h3>アイコンの下の名前</h3>
+    <ul>
+      <li>上の絵のホーム画面は、左上の2つがこのツールのアイコンです（名前は、左が「卒業制作報告書」、その右が「卒制報告書」）。ほかは、ほかのアプリの見本です。</li>
+      <li>スマホのアイコンの下は6字ほどしか入らないため、「卒業制作報告書」は「卒業制作報…」のように切れることがあります（機種による）。</li>
+      <li>名前は、置くときに学生が自分で変えることもできます。</li>
+    </ul>
+  </div>
+
+  <div class="ask">
+    <h3>決めていただきたいこと</h3>
+    1. アイコンは 案A・案B・案C のどれにしますか。<br />
+    2. アイコンの下の名前は「卒業制作報告書」と「卒制報告書」のどちらにしますか。
+  </div>
+
+  <script>
+    // 各案のホーム画面：自分のアイコン（名前2通り）と、ほかのアプリの見本
+    const names = ['卒業制作報告書', '卒制報告書']
+    const others = ['カメラ', '写真', 'Gmail', 'カレンダー', 'ドライブ', '天気']
+    document.querySelectorAll('.home').forEach((home) => {
+      const v = home.dataset.v
+      const big = home.closest('.card').querySelector('.icon').outerHTML
+      const cells = []
+      names.forEach((n) => cells.push(`<div class="app"><div class="ic">${big}</div><div class="lbl">${n}</div></div>`))
+      others.forEach((n) => cells.push(`<div class="app"><div class="ic dummy"></div><div class="lbl">${n}</div></div>`))
+      home.innerHTML = cells.join('')
+    })
+  </script>
+</body>
+</html>
