@@ -1523,3 +1523,31 @@ button.row { cursor: pointer; }
 /* 写しと仮の表示を入れる枠は、紙面と一緒にスクロールするよう、紙面の表示枠の中に置く（紙面より上に重ねる） */
 .page-scroller > .overlay-clip { z-index: 2; }
 @media print { .page-scroller > .overlay-clip { display: none !important; } }
+
+/* ---- 試作：スマホで紙面に直接書く ---- */
+/* リンクの ?direct=1 で入る試作（app/phoneDirect.ts）。依頼者が、今の「下から出る書く欄」と比べるためのもの。ふだん（印なし）の画面・PDF・印刷は変えない。
+   段落・見出しは、PC と同じく紙面に重ねた書く欄で書く（紙面を拡大し、本文の幅を画面の幅に合わせる。1字 10px ほど）。書く欄の枠は紙面の表示枠の中（editor/overlayEditor.ts） */
+/* 試作の印：上の帯の下の細い段（紙面には重ねない） */
+.app.phone.phone-direct { grid-template-rows: 48px 22px minmax(0, 1fr) 62px; }
+.app.phone.phone-direct .stage { grid-row: 3; }
+.app.phone.phone-direct .p-nav { grid-row: 4; }
+.direct-badge { grid-row: 2; display: flex; align-items: center; justify-content: center; min-width: 0; background: var(--panel-bg); border-bottom: 1px solid var(--line); }
+.direct-badge span { padding: 1px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 700; letter-spacing: 0.04em; line-height: 1.5; white-space: nowrap; }
+/* キーボードのすぐ上の細い道具（「戻す」「やり直す」「図を入れる」「表を入れる」「完了」）。
+   キーボードを閉じているときは、下のタブの上に出す（タブを隠さない。下の書く欄と同じ）。押すものは 44px 四方以上。名前は折り返さない */
+.direct-bar { position: fixed; z-index: 30; left: 0; right: 0; bottom: max(var(--kb, 0px), 62px); box-sizing: border-box; padding: 3px 8px 4px; background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -6px 16px rgba(30, 25, 20, 0.1); }
+.direct-bar * { box-sizing: border-box; }
+.direct-bar .db-row { display: flex; align-items: center; gap: 2px; }
+.direct-bar .db-row button { flex: none; min-width: 44px; min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 2px 6px; border: 0; border-radius: 8px; background: none; color: var(--ink); font: inherit; font-size: 10.5px; line-height: 1.2; white-space: nowrap; }
+.direct-bar .db-row button svg { width: 20px; height: 20px; }
+.direct-bar .db-row button:disabled { color: #b5b7bc; }
+.direct-bar .db-row button.on { background: var(--accent-soft); color: var(--accent); }
+.direct-bar .db-row .db-done { margin-left: auto; flex-direction: row; padding: 0 18px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 700; border-radius: 10px; }
+/* 空の段落を書き始めるとき：ひな形の「ここに何を書くか」（紙面では小さくて読めないため。下の書く欄と同じ） */
+.direct-bar .db-hint { margin: 2px 4px 3px; font-size: 12px; line-height: 1.55; color: var(--muted); text-wrap: pretty; }
+.direct-bar .db-hint b { color: var(--ink); }
+/* メニューの「下の書く欄に戻す」 */
+.direct-off { margin: 14px 0 4px; padding: 10px 12px 12px; border-radius: 12px; background: var(--accent-soft); }
+.direct-off p { margin: 0 0 8px; font-size: 12.5px; color: var(--accent); }
+.direct-off .link-btn { width: 100%; min-height: 44px; font-size: 14px; white-space: nowrap; }
+@media print { .direct-badge, .direct-bar { display: none !important; } }

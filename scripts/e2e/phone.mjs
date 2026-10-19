@@ -12,6 +12,7 @@ import { tocLinksPhone } from './tocLinks.mjs'
 import { autoHeadingPhone } from './autoHeading.mjs'
 import { undoHeaderPhone } from './undoHeader.mjs'
 import { phoneLivePhone } from './phoneLive.mjs'
+import { phoneDirectPhone } from './phoneDirect.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -685,6 +686,9 @@ await withEdge(async (browser) => {
 
   // 打った字をその場で紙面に（組み直すのを待たずに、紙面の段落の位置に写しを出す。Enter・見出し・ページをまたぐ段落・PDF・1字ごとの時間。scripts/e2e/phoneLive.mjs）
   await phoneLivePhone(browser, check)
+
+  // 試作：スマホで紙面に直接書く（リンクの ?direct=1 で入る。印がなければ今までどおり。scripts/e2e/phoneDirect.mjs）
+  await phoneDirectPhone(browser, check)
 })
 
 /**

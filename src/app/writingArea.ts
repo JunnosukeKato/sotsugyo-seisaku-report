@@ -7,8 +7,11 @@ import type { ReportEditor } from '../editor/reportEditor'
  * どこに入るのか見えなかったため）。紙面を動かすのは編集の中核（editor/reportEditor.ts の revealEditing）
  */
 
-/** 書いている欄を隠しうるもののうち、画面の下に出しているもの（書く欄・削除の知らせ・紙面の下の帯・ページ送りなど） */
-const BOTTOM_COVERS = '.edit-sheet.open, .undo-toast, .page-band, .pager, .unzoom, .sel-bar > *'
+/**
+ * 書いている欄を隠しうるもののうち、画面の下に出しているもの（書く欄・削除の知らせ・紙面の下の帯・ページ送りなど）。
+ * .direct-bar：試作（紙面で直接書く）の、キーボードの上の道具（app/Phone.tsx）
+ */
+const BOTTOM_COVERS = '.edit-sheet.open, .undo-toast, .page-band, .pager, .unzoom, .sel-bar > *, .direct-bar'
 /** 上に出していることがあるもの（はじめての案内。書く欄を出している間は、画面の上） */
 const TOP_COVERS = '.guide .g-tip'
 
@@ -51,7 +54,7 @@ export function useKeepWritingVisible(editor: ReportEditor | null, editingId: st
     const resize = new ResizeObserver(check)
     // 案内を隠す・出す（書く欄との間に、欄を見せる高さがないとき。app/StartGuide.tsx の tucked）は、大きさが変わらないので、印の付け外しを見る
     const marks = new MutationObserver(check)
-    for (const el of document.querySelectorAll<HTMLElement>('.edit-sheet, .guide .g-tip')) {
+    for (const el of document.querySelectorAll<HTMLElement>('.edit-sheet, .guide .g-tip, .direct-bar')) {
       resize.observe(el)
       marks.observe(el, { attributes: true, attributeFilter: ['class'] })
     }

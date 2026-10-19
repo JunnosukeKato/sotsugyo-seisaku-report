@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from 'react'
+import { flushSync } from 'react-dom'
 import type { YearConfig } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { findEditable, type EditableKind } from '../editor/reportOps'
@@ -21,6 +22,7 @@ import { WordImportLink } from './WordImport'
  * スマホ版の画面（mockups/v7 案2「下から書く欄が出る」）。
  * 上：細い帯（名前・保存・戻す・やり直す・メニュー）／中：紙面（左右・上下にはらってめくる。上下は拡大していないとき）／下：タブ（ページ一覧・追加・チェック・PDF）
  * 紙面の段落をタップすると、画面の下から大きな文字の書く欄が出る。
+ * 試作（リンクの ?direct=1。app/phoneDirect.ts）：段落・見出しは、紙面を拡大して紙面の上でそのまま書き、キーボードのすぐ上に細い道具を出す（DirectBar）
  */
 
 const svg = (children: ReactNode) => (
@@ -104,7 +106,8 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
   }
   return (
     <>
-    <section className={`edit-sheet${snap.editingId ? ' open' : ''}`} aria-label="書く欄">
+    {/* 試作（紙面で直接書く）で、紙面に重ねた書く欄で書いている間は出さない（下の欄で書く表紙の項目・図表のタイトル・表のセルのときだけ出す） */}
+    <section className={`edit-sheet${snap.editingId && snap.sheet ? ' open' : ''}`} aria-label="書く欄">
       <header className="es-head">
         <span className="where">
           {pageName(snap)} ・ <b>{(id && FIELD_LABELS[id]) ?? (snap.editingKind ? KIND_LABELS[snap.editingKind] : '')}</b>を書いています
@@ -207,8 +210,79 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
   )
 }
 
+/**
+ * 試作（スマホで紙面に直接書く。app/phoneDirect.ts）：紙面に重ねた書く欄で書いている間、キーボードのすぐ上に出す細い道具。
+ * 「戻す」「やり直す」は、まず書く欄の中で打った字を戻す（キーボードは出たまま）。戻す字がなければ、下の書く欄と同じく原稿を戻す。
+ * 本文の段落なら「図を入れる」「表を入れる」。「完了」は書き終えて、紙面は拡大したまま（全体に戻すのは「ページ全体に戻す」）
+ */
+function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
+  const id = snap.editingId
+  const editable = id ? findEditable(snap.report, id) : undefined
+  // 空の段落を書き始めるとき：ひな形の「ここに何を書くか」（下の書く欄と同じ）
+  const hint = id && editable && !editable.text.trim() ? paragraphHint(snap.report, id) : undefined
+  const paragraph = snap.editingKind === 'paragraph'
+  const [tableSheet, setTableSheet] = useState(false)
+  // 書く欄の中で戻せなければ、原稿を戻す（書く欄はいったん閉じ、欄が残っていれば、組み直してから開き直す。下の書く欄と同じ）
+  const undoRedo = (typing: () => boolean, run: () => void) => {
+    if (typing()) return
+    run()
+    const still = id ? findEditable(editor.getSnapshot().report, id) : undefined
+    if (id && still) editor.openWhenReady(id, still.text.length)
+  }
+  return (
+    <>
+      <div className="direct-bar" role="toolbar" aria-label="書く道具">
+        {hint && (
+          <p className="db-hint">
+            <b>ここに書くこと：</b>
+            {hint}
+          </p>
+        )}
+        <div className="db-row">
+          <button onMouseDown={keepFocus} disabled={!snap.typingUndo && !snap.canUndo} onClick={() => undoRedo(() => editor.undoTyping(), () => editor.undo())}>
+            {Icon.undo}
+            <span>戻す</span>
+          </button>
+          <button onMouseDown={keepFocus} disabled={!snap.typingRedo && !snap.canRedo} onClick={() => undoRedo(() => editor.redoTyping(), () => editor.redo())}>
+            {Icon.redo}
+            <span>やり直す</span>
+          </button>
+          {paragraph && (
+            <button onMouseDown={keepFocus} onClick={() => void editor.addFigure()}>
+              {Icon.figure}
+              <span>図を入れる</span>
+            </button>
+          )}
+          {paragraph && (
+            <button className={tableSheet ? 'on' : undefined} onMouseDown={keepFocus} onClick={() => setTableSheet(true)}>
+              {Icon.table}
+              <span>表を入れる</span>
+            </button>
+          )}
+          <button className="db-done" onMouseDown={keepFocus} onClick={() => editor.finishEditing()}>
+            完了
+          </button>
+        </div>
+      </div>
+      {tableSheet && paragraph && (
+        <TableSizeSheet
+          onInsert={(size) => {
+            editor.addTable('blank', size)
+            setTableSheet(false)
+          }}
+          onMaterial={() => {
+            editor.addTable('material')
+            setTableSheet(false)
+          }}
+          onClose={() => setTableSheet(false)}
+        />
+      )}
+    </>
+  )
+}
+
 /** 「追加」の欄：本文のページなら段落・見出し・図・表を足す */
-function AddTools({ editor, snap, onDone }: { editor: ReportEditor; snap: EditorSnapshot; onDone: () => void }) {
+function AddTools({ editor, snap, onDone, direct }: { editor: ReportEditor; snap: EditorSnapshot; onDone: () => void; direct?: boolean }) {
   // 開いた直後で、まだ紙面が出ていない：どのページかが分からないので「本文のページで足せます」とは言わない（本文のページを開いていた学生が迷っていた）
   if (!snap.layout) return <p className="sheet-hint">紙面を準備しています。準備ができたら、ここから段落や見出しを足せます。</p>
   const kind = snap.layout.kinds[snap.page] ?? 'unknown'
@@ -224,7 +298,10 @@ function AddTools({ editor, snap, onDone }: { editor: ReportEditor; snap: Editor
     <button
       className="tb"
       onClick={() => {
-        onDone()
+        // 試作（紙面で直接書く）：足した見出しは、紙面の上ですぐ書き始める。先にこの欄を閉じ終えてから足す
+        // （閉じるときにフォーカスが下の「追加」に戻り、書き始めた見出しが閉じてしまうため）
+        if (direct) flushSync(onDone)
+        else onDone()
         run()
       }}
     >
@@ -263,8 +340,9 @@ function placeUndo(area: HTMLElement): void {
   const side = !!column
   if (column) area.style.right = `${Math.max(12, innerWidth - column.getBoundingClientRect().left + UNDO_GAP)}px`
   const a = area.getBoundingClientRect()
-  // 書く欄（.edit-sheet.open）を開いている間に出す知らせ（表の行・列を消せないわけ）は、書く欄の上に出す（キーボードに隠れないように）
-  const below = [...document.querySelectorAll<HTMLElement>(`.pager, .unzoom, .sel-bar > *, .edit-sheet.open${side ? '' : ', .page-band'}`)]
+  // 書く欄（.edit-sheet.open）を開いている間に出す知らせ（表の行・列を消せないわけ）は、書く欄の上に出す（キーボードに隠れないように）。
+  // 試作（紙面で直接書く）の、キーボードの上の道具（.direct-bar）の上にも
+  const below = [...document.querySelectorAll<HTMLElement>(`.pager, .unzoom, .sel-bar > *, .edit-sheet.open, .direct-bar${side ? '' : ', .page-band'}`)]
     .map((e) => e.getBoundingClientRect())
     .filter((r) => r.height > 0 && r.left < a.right && r.right > a.left)
   if (!below.length) return
@@ -295,10 +373,14 @@ interface Props {
   wordTodo?: (onPick: () => void) => ReactNode
   /** 増えたら、チェックの欄を開く（Word から写し終えたとき） */
   checkRequest?: number
+  /** 試作：スマホで紙面に直接書く（app/phoneDirect.ts）。使っている間は、上の帯の下に小さな印を出し、メニューに「下の書く欄に戻す」を出す */
+  direct?: boolean
+  /** 試作をやめる（メニューの「下の書く欄に戻す」） */
+  onDirectOff?: () => void
 }
 
 /** スマホ版の、紙面のまわりの部品（紙面そのものは App の .stage） */
-export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onHelp, sheetHostRef, onWordImport, wordTodo, checkRequest }: Props) {
+export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onHelp, sheetHostRef, onWordImport, wordTodo, checkRequest, direct, onDirectOff }: Props) {
   const [sheet, setSheet] = useState<SheetKind>(null)
   const close = () => setSheet(null)
   // checkRequest が増えたら、チェックの欄を開く（描く途中で合わせる。React の「前の値と比べて state を変える」書き方）
@@ -343,6 +425,12 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
           {PhoneIcon.menu}
         </button>
       </header>
+      {/* 試作の印（上の帯の下の細い段。紙面には重ねない。やめるのはメニューの「下の書く欄に戻す」） */}
+      {direct && (
+        <div className="direct-badge">
+          <span>試作：紙面で直接書く</span>
+        </div>
+      )}
 
       {snap.layout && !snap.zoomed && (
         <div className="pager">
@@ -389,6 +477,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
       </nav>
 
       <EditSheet editor={editor} snap={snap} hostRef={sheetHostRef} />
+      {snap.editingId && snap.onPaper && <DirectBar editor={editor} snap={snap} />}
 
       {sheet === 'pages' && (
         <Sheet title="ページ一覧" extra={<span className="pcount"><b>{snap.page + 1}</b> / {snap.pageCount}</span>} onClose={close}>
@@ -397,7 +486,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
       )}
       {sheet === 'add' && (
         <Sheet title="追加" onClose={close}>
-          <AddTools editor={editor} snap={snap} onDone={close} />
+          <AddTools editor={editor} snap={snap} onDone={close} direct={direct} />
         </Sheet>
       )}
       {sheet === 'check' && (
@@ -457,6 +546,21 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
                 onWordImport()
               }}
             />
+          )}
+          {/* 試作（紙面で直接書く）をやめて、今までの下の書く欄に戻す */}
+          {direct && onDirectOff && (
+            <div className="direct-off">
+              <p>いまは試作の「紙面で直接書く」です。</p>
+              <button
+                className="link-btn"
+                onClick={() => {
+                  close()
+                  onDirectOff()
+                }}
+              >
+                下の書く欄に戻す
+              </button>
+            </div>
           )}
           <SourceNotice />
         </Sheet>

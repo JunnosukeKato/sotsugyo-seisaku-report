@@ -19,6 +19,7 @@ import { Palette } from './app/Palette'
 import { PageBand } from './app/PageBand'
 import { TocNotice } from './app/TocNotice'
 import { PhoneChrome } from './app/Phone'
+import { readPhoneDirect, rememberPhoneDirect, useNoFocusZoom } from './app/phoneDirect'
 import { UndoBar } from './app/UndoBar'
 import { useUndoNotice } from './app/useUndoNotice'
 import { useKeyboardInset, useNarrow, useSwipe, useWheelPaging } from './app/uiShared'
@@ -231,6 +232,11 @@ export default function App() {
   const localAtStart = useRef<Report | null>(null)
   // スマホ（画面の幅が狭いとき）は、並べ方と書き方を変える
   const narrow = useNarrow()
+  // 試作：スマホで紙面に直接書く（リンクの ?direct=1 で入り、この端末に覚える。?direct=0・メニューの「下の書く欄に戻す」でやめる。app/phoneDirect.ts）
+  const [direct, setDirect] = useState(readPhoneDirect)
+  const phoneDirect = narrow && direct
+  // 試作の間、iPhone で書き始めるたびに画面が勝手に拡大されないようにする
+  useNoFocusZoom(phoneDirect)
   const panels = usePanelWidths()
   const hasLayout = !!snap?.layout
   useKeyboardInset()
@@ -239,10 +245,10 @@ export default function App() {
   useWheelPaging(stageRef, scrollerRef, editor, !dialog && !gate && !driveDialog && !tabLock.locked && !tourOn && guide !== 'course' && guide !== 'word')
   useEffect(() => {
     if (!editor || !hasLayout) return
-    editor.setSheetHost(narrow ? sheetHostRef.current : null)
+    editor.setSheetHost(narrow ? sheetHostRef.current : null, phoneDirect)
     // スマホ：書いている欄を、上の案内・下の書く欄・キーボードに隠れない所に見せる（app/writingArea.ts）
     editor.setVisibleArea(narrow ? writingArea : null)
-  }, [editor, narrow, hasLayout])
+  }, [editor, narrow, hasLayout, phoneDirect])
   useKeepWritingVisible(editor, snap?.editingId ?? null, narrow, guide)
   // PC：表示の大きさ（全体・拡大）も覚えて、開いたときに戻す（上の setSheetHost が「全体」にしたあとで戻すため、ここに置く）
   useRememberZoom(editor, snap, placeOpened && !tabLock.locked, narrow)
@@ -848,7 +854,7 @@ export default function App() {
     ) : null
 
   return (
-    <div className={`app${narrow ? ' phone' : ''}`} style={narrow ? undefined : panels.style}>
+    <div className={`app${narrow ? ' phone' : ''}${phoneDirect ? ' phone-direct' : ''}`} style={narrow ? undefined : panels.style}>
       {!narrow && (ready ? <PageColumn editor={editor} snap={snap} /> : <aside className="thumbs-col" />)}
       {/* 左右の欄の境目：つかんで動かすと幅が変わる。ダブルクリックで元の幅 */}
       {!narrow &&
@@ -923,6 +929,11 @@ export default function App() {
           onWordImport={openWord}
           wordTodo={wordTodo ? todoCard : undefined}
           checkRequest={checkRequest}
+          direct={phoneDirect}
+          onDirectOff={() => {
+            rememberPhoneDirect(false)
+            setDirect(false)
+          }}
         />
       ) : ready && help ? (
         // PC の使い方：右の欄がまるごと使い方に替わる（紙面と道具は、そのまま使える）
