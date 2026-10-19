@@ -1,3 +1,4 @@
+import { COVER_SUBTITLE, textUnits } from '../layout/document'
 import type { Course, TemplateBlock, WordCheck, YearConfig } from './types'
 
 /**
@@ -14,7 +15,7 @@ export interface ConfigProblem {
 /** 文字数・数の上限（管理ページのサーバー gas/admin-project/Code.js の LIMITS と同じ値にする） */
 export const LIMITS = { blocks: 100, name: 100, hint: 300, abstractExample: 500, notice: 1000, words: 300, word: 50, wordNote: 200 }
 
-const BLOCK_LABELS: Record<TemplateBlock['type'], string> = { chapter: '大見出し', subheading: '小見出し', paragraph: '説明', figure: '図', materialTable: '素材表' }
+const BLOCK_LABELS: Record<TemplateBlock['type'], string> = { chapter: '大見出し', subheading: '小見出し', paragraph: '説明', figure: '図の枠', materialTable: '素材表' }
 const BLOCK_TYPES = new Set<unknown>(Object.keys(BLOCK_LABELS))
 
 const isText = (v: unknown): v is string => typeof v === 'string'
@@ -27,6 +28,19 @@ const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v =
 function blockText(block: TemplateBlock): string {
   return block.type === 'chapter' || block.type === 'subheading' ? block.title : block.type === 'paragraph' ? block.hint : block.caption
 }
+
+/**
+ * ひな形の行の呼び名（例：3行目の説明「デザインの意図を書く…」）。どの行か見つけやすいよう、種類と書き出しを付ける
+ * （管理ページのサーバー gas/admin-project/Code.js の rowName_ と同じ言い方）
+ */
+export function templateRowName(index: number, type: TemplateBlock['type'], text: unknown): string {
+  const head = typeof text === 'string' ? text.trim() : ''
+  const preview = head ? `「${head.length > 12 ? `${head.slice(0, 12)}…` : head}」` : ''
+  return `${index + 1}行目の${BLOCK_LABELS[type]}${preview}`
+}
+
+/** 長すぎる文字の説明（例：が長すぎます（300字まで。今は312字）） */
+export const tooLong = (max: number, length: number) => `が長すぎます（${max}字まで。今は${length}字）`
 
 /**
  * 下書きのひな形の問題（なければ空。説明の先頭に「…の下書きのひな形」を付けて使う）。
@@ -44,8 +58,8 @@ export function templateProblems(template: unknown): string[] {
     const type = block.type as TemplateBlock['type']
     const text = block[type === 'chapter' || type === 'subheading' ? 'title' : type === 'paragraph' ? 'hint' : 'caption']
     const max = type === 'paragraph' ? LIMITS.hint : LIMITS.name
-    if (!isText(text)) problems.push(`の${i + 1}行目の形が正しくありません`)
-    else if (text.length > max) problems.push(`の${i + 1}行目が長すぎます（${max}字まで）`)
+    if (!isText(text)) problems.push(`の${templateRowName(i, type, null)}の形が正しくありません`)
+    else if (text.length > max) problems.push(`の${templateRowName(i, type, text)}${tooLong(max, text.length)}`)
     else blocks.push(block as unknown as TemplateBlock)
   })
   if (problems.length) return problems
@@ -61,7 +75,7 @@ export function templateProblems(template: unknown): string[] {
 function optionalTextProblem(value: unknown, max: number): string | null {
   if (value === undefined || value === null) return null
   if (!isText(value)) return 'の形が正しくありません'
-  if (value.length > max) return `が長すぎます（${max}字まで）`
+  if (value.length > max) return tooLong(max, value.length)
   return null
 }
 
@@ -85,7 +99,32 @@ function courseLabel(c: unknown, i: number): string {
   return isObject(c) && filled(c.name) ? c.name : `${i + 1}番目のコース`
 }
 
-export function validateConfig(config: YearConfig): ConfigProblem[] {
+/** 実在する日付か（YYYY-MM-DD。2027-02-30 や、年が6桁の 202801-12-20 などは違う） */
+export function isRealDate(value: unknown): value is string {
+  const m = isText(value) ? /^(\d{4})-(\d{2})-(\d{2})$/.exec(value) : null
+  if (!m) return false
+  const date = new Date(Date.UTC(Number(m[1]), Number(m[2]) - 1, Number(m[3])))
+  return date.getUTCFullYear() === Number(m[1]) && date.getUTCMonth() === Number(m[2]) - 1 && date.getUTCDate() === Number(m[3])
+}
+
+/** 「2027-01-20」→「2027年1月20日」 */
+const japaneseDate = (ymd: string) => ymd.replace(/^(\d{4})-(\d{2})-(\d{2})$/, (_, y: string, m: string, d: string) => `${y}年${Number(m)}月${Number(d)}日`)
+
+/**
+ * 表紙の題目の1行に入る字数の目安（全角を1、半角を0.5として数える）。表紙の題目は、サブタイトルと同じ幅144.2mm・22pt で、
+ * 小さくせずに1行で組む（src/layout/documentCss.ts の .cover .title）。全角の字（漢字）は 22pt の幅なので、18.6字分をこえると入らない
+ */
+export const COVER_TITLE_UNITS = COVER_SUBTITLE.widthMm / ((COVER_SUBTITLE.maxPt * 25.4) / 72)
+
+export interface ValidateOptions {
+  /**
+   * 今日の日付（YYYY-MM-DD）。渡したときだけ、最終締切が今日より前なら確認を出す（管理ページだけが渡す。
+   * 学生のツールが設定を読み込むときは渡さない。日によって結果が変わらないように）
+   */
+  today?: string
+}
+
+export function validateConfig(config: YearConfig, options: ValidateOptions = {}): ConfigProblem[] {
   const problems: ConfigProblem[] = []
   const error = (field: string, message: string) => problems.push({ field, message, severity: 'error' })
   const warning = (field: string, message: string) => problems.push({ field, message, severity: 'warning' })
@@ -96,7 +135,16 @@ export function validateConfig(config: YearConfig): ConfigProblem[] {
 
   if (!Number.isInteger(config.fiscalYear) || config.fiscalYear < 2000 || config.fiscalYear > 2100) error('fiscalYear', '年度は西暦4桁で入力してください')
   if (!filled(config.commonTitle)) error('commonTitle', '共通の題目を入力してください')
-  if (!isText(config.deadline) || !/^\d{4}-\d{2}-\d{2}$/.test(config.deadline)) error('deadline', '最終締切の日付を入力してください')
+  else if (textUnits(config.commonTitle) > COVER_TITLE_UNITS)
+    // 字数からの見積もり（かな・かっこは漢字より少し細いので、目安をこえても入ることがある。見本で確かめてもらう）
+    warning('commonTitle', `共通の題目が長いため、表紙の1行に収まらないおそれがあります（表紙の題目は1行で、全角18字ほどまで。今は${Math.ceil(textUnits(config.commonTitle))}字分）。右の見本の表紙で、はみ出していないか確かめてください`)
+  const fiscalYear = Number.isInteger(config.fiscalYear) ? config.fiscalYear : null
+  if (!filled(config.deadline)) error('deadline', '最終締切の日付を入力してください')
+  else if (!isRealDate(config.deadline)) error('deadline', `最終締切の日付が正しくありません（例：${fiscalYear ? fiscalYear + 1 : 2028}/01/20）`)
+  else if (fiscalYear && (config.deadline < `${fiscalYear}-04-01` || config.deadline > `${fiscalYear + 1}-03-31`))
+    // 前の年度からコピーした日付のままのことがあるので、年度の期間（4月1日〜翌年3月31日）の外なら確かめてもらう
+    warning('deadline', `最終締切（${japaneseDate(config.deadline)}）が、${fiscalYear}年度（${fiscalYear}年4月1日〜${fiscalYear + 1}年3月31日）の外です。前の年度の日付のままでないか確かめてください`)
+  else if (options.today && config.deadline < options.today) warning('deadline', `最終締切（${japaneseDate(config.deadline)}）が、今日より前です`)
   for (const [field, label] of [
     ['reportName', '報告書の名前'],
     ['university', '大学名'],

@@ -3,28 +3,66 @@ import { Icon } from '../app/icons'
 import { useDialogFocus } from '../app/useDialogFocus'
 import { DEFAULT_WORD_CHECKS } from '../checker/textRules'
 import type { Course, WordCheck, YearConfig } from '../config'
-import { validateConfig } from '../config/validate'
+import { LIMITS, tooLong, validateConfig } from '../config/validate'
 import { HelpView } from '../help/HelpView'
 import { TEACHER_TOPICS } from '../help/helpTopics'
 import { ADMIN_GUIDE_URL, TEACHER_GUIDE_URL, TEACHER_HELP_IMAGES } from '../help/links'
+import { halfDigits } from '../layout/document'
+import { describeChanges, mergeEdits, sameConfig, shortChanges } from './changes'
 import { MembersDialog } from './Members'
 import { Preview } from './Preview'
 import { isMockServer, roleOf, server, type AdminState, type HistoryRow, type TemplateSet, type YearRow } from './server'
 import { TemplateEditor } from './TemplateEditor'
 import { templateSummary } from './templateText'
+import { useLeaveGuard } from './useLeaveGuard'
 import { WordsEditor } from './WordsEditor'
 import { wordSummary } from './wordsText'
+import { deliveryNote, newYearNotice, publishConfirmText, saveButtonLabel, saveConfirmText, savedMessage, templateFootNote } from './yearText'
 
 /**
  * 管理ページ（案2：設定と見本を並べる型）。デザインは mockups/admin-2.html。
  * 毎年変わる設定（共通の題目、コース、指導教員、締切など）を編集し、学生のツールに公開する。
  * コースごとの「下書きのひな形」は、コースのカードの「編集する」から編集する（mockups/v8 案1）。
  * 「書き間違えやすい語」は、ボタンから開く窓で編集する（mockups/v17 案3）。
- * 「先生」として登録された人には、ひな形と書き間違えやすい語だけを編集できる画面（TeacherView）を出す。
+ * 「先生」として登録された人には、ひな形・お知らせ・書き間違えやすい語だけを編集できる画面（TeacherView）を出す。
  */
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
+type Notice = { kind: 'ok' | 'ng'; text: string }
+
+/**
+ * 変更履歴の i 番目の記録で、1つ前の記録から何が変わったか（短く。いちばん古い記録は、比べる相手がないので空）。
+ * 一覧は新しい順なので、1つ前の記録は i + 1 番目
+ */
+function historyChanges(history: HistoryRow[], i: number): string {
+  return history[i + 1] ? shortChanges(describeChanges(history[i + 1].config, history[i].config)) : ''
+}
+
+/** 最後に開いた年度（このブラウザに、年度の数字だけを覚える。次に開いたとき、その年度から） */
+const LAST_YEAR_KEY = 'sotsugyo-admin-year'
+function lastYear(): number | null {
+  try {
+    const year = Number(localStorage.getItem(LAST_YEAR_KEY))
+    return Number.isInteger(year) && year > 0 ? year : null
+  } catch {
+    return null
+  }
+}
+function rememberYear(year: number): void {
+  try {
+    localStorage.setItem(LAST_YEAR_KEY, String(year))
+  } catch {
+    // 覚えられなくても、次は公開中の年度から開くだけ
+  }
+}
+
+/** 今日の日付（YYYY-MM-DD。この端末の日付） */
+function today(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
 
 function splitTemplate(template: string): [string, string] {
   const i = template.indexOf('{input}')
@@ -36,7 +74,7 @@ function WordsSection({ words, onOpen }: { words: WordCheck[]; onOpen: () => voi
   return (
     <>
       <h2 className="words-head">書き間違えやすい語</h2>
-      <p className="hint words-hint">学生のセルフチェックで指摘し、「直す」で正しい語に置き換えられるようにします。</p>
+      <p className="hint words-hint">学生のセルフチェックで指摘し、正しい語を示します（直すのは学生自身です）。</p>
       <button className="words-btn" onClick={onOpen}>
         書き間違えやすい語の一覧を編集<span>{wordSummary(words)}</span>
       </button>
@@ -72,11 +110,11 @@ function HelpButton({ open, onClick }: { open: boolean; onClick: () => void }) {
  * 先生用の使い方の欄（右の端に重ねる）。画面の写真と印刷用の手引きは、学生用ツールといっしょに GitHub Pages で公開している
  * （管理ページは Apps Script に置くので、学生用ツールの URL から読む。src/help/links.ts。開発中だけは、開発サーバーの public/help/ から読む）
  */
-function AdminHelp({ onClose }: { onClose: () => void }) {
+function AdminHelp({ onClose, admin = false }: { onClose: () => void; admin?: boolean }) {
   return (
     <HelpView
       topics={TEACHER_TOPICS}
-      who="teacher"
+      who={admin ? 'admin' : 'teacher'}
       imageBase={import.meta.env.DEV ? '/help/' : TEACHER_HELP_IMAGES}
       guides={[
         { label: '先生用', href: TEACHER_GUIDE_URL },
@@ -98,12 +136,38 @@ function Field({ label, children, hint }: { label: string; children: ReactNode; 
   )
 }
 
-function TextInput({ value, onChange, placeholder, type = 'text' }: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string }) {
-  return <input className="in" type={type} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} />
+function TextInput({ value, onChange, placeholder, type = 'text', max }: { value: string; onChange: (v: string) => void; placeholder?: string; type?: string; max?: string }) {
+  return <input className="in" type={type} value={value} placeholder={placeholder} max={max} onChange={(e) => onChange(e.target.value)} />
 }
 
+/**
+ * 数の欄。入力の途中は空にできる（消して打ち直すときに「0」が入って「0600」にならないように）。
+ * 空のあいだは設定を変えず、欄を離れると設定の値を出し直す
+ */
 function NumberInput({ value, onChange }: { value: number; onChange: (v: number) => void }) {
-  return <input className="in num" type="number" value={value} onChange={(e) => onChange(Number(e.target.value))} />
+  const [text, setText] = useState(String(value))
+  const [shown, setShown] = useState(value)
+  // 年度の切り替え・変更履歴の読み込みなどで値が変わったら、表示を合わせる
+  if (value !== shown) {
+    setShown(value)
+    setText(String(value))
+  }
+  return (
+    <input
+      className="in num"
+      type="number"
+      value={text}
+      onChange={(e) => {
+        setText(e.target.value)
+        const n = Number(e.target.value)
+        if (e.target.value.trim() !== '' && Number.isFinite(n)) {
+          setShown(n)
+          onChange(n)
+        }
+      }}
+      onBlur={() => setText(String(value))}
+    />
+  )
 }
 
 function CourseCard({
@@ -213,11 +277,12 @@ function TemplateRow({ course, onEdit }: { course: Course; onEdit: () => void })
 }
 
 /** コースのカードの「このコースの学生へのお知らせ」（mockups/v21 案A。管理者と先生が書く） */
-function NoticeField({ course, onChange }: { course: Course; onChange: (notice: string) => void }) {
+function NoticeField({ course, onChange }: { course: Course; onChange: (notice: string | undefined) => void }) {
   return (
     <label className="notice-field">
       <span className="l">このコースの学生へのお知らせ（任意）</span>
-      <textarea className="in" rows={2} value={course.notice ?? ''} placeholder="例：12月4日（金）の中間発表では、本文の下書きを印刷して持ってきてください" onChange={(e) => onChange(e.target.value)} />
+      {/* 書いてから消したときは「お知らせなし」に戻す（空の文字のまま残すと、保存していない変更があるように見えるため） */}
+      <textarea className="in" rows={2} value={course.notice ?? ''} placeholder="例：12月4日（金）の中間発表では、本文の下書きを印刷して持ってきてください" onChange={(e) => onChange(e.target.value || undefined)} />
       <span className="hint">このコースの学生のツールの、セルフチェック欄の上に表示されます。インターネット上の誰でも読めます。個人の情報（連絡先など）は書かないでください</span>
     </label>
   )
@@ -246,7 +311,7 @@ export function AdminApp() {
   const [year, setYear] = useState<number | null>(null)
   const [draft, setDraft] = useState<YearConfig | null>(null)
   const [busy, setBusy] = useState(false)
-  const [message, setMessage] = useState<{ kind: 'ok' | 'ng'; text: string } | null>(null)
+  const [message, setMessage] = useState<Notice | null>(null)
   const [focusedCourse, setFocusedCourse] = useState(0)
   const [dialog, setDialog] = useState<'newYear' | 'history' | 'members' | null>(null)
   const [editingTemplate, setEditingTemplate] = useState<number | null>(null)
@@ -257,8 +322,10 @@ export function AdminApp() {
   const [help, setHelp] = useState(false)
 
   const row: YearRow | undefined = state?.years.find((y) => y.year === year)
-  const dirty = !!row && !!draft && !same(row.config, draft)
-  const problems = useMemo(() => (draft ? validateConfig(draft) : []), [draft])
+  // 意味の同じ書き方の違い（空のお知らせとお知らせなし など）は、変更とみなさない
+  const dirty = !!row && !!draft && !sameConfig(row.config, draft)
+  // 最終締切が今日より前かは、終了した年度では確かめない（締切が過ぎているのが当たり前のため）
+  const problems = useMemo(() => (draft ? validateConfig(draft, { today: row && row.status !== '終了' ? today() : undefined }) : []), [draft, row])
   const errors = problems.filter((p) => p.severity === 'error')
 
   const select = useCallback((s: AdminState, y: number) => {
@@ -266,6 +333,7 @@ export function AdminApp() {
     setYear(target?.year ?? null)
     setDraft(target ? clone(target.config) : null)
     setFocusedCourse(0)
+    if (target) rememberYear(target.year)
   }, [])
 
   useEffect(() => {
@@ -273,30 +341,60 @@ export function AdminApp() {
       .getState()
       .then((s) => {
         setState(s)
-        const published = s.years.find((y) => y.status === '公開中') ?? s.years[0]
-        if (published) select(s, published.year)
+        // 前に開いていた年度から（なければ公開中の年度）
+        const last = lastYear()
+        const start = s.years.find((y) => y.year === last) ?? s.years.find((y) => y.status === '公開中') ?? s.years[0]
+        if (start) select(s, start.year)
       })
       .catch((e) => setMessage({ kind: 'ng', text: `読み込めませんでした：${String(e?.message ?? e)}` }))
   }, [select])
 
-  useEffect(() => {
-    const warn = (e: BeforeUnloadEvent) => {
-      if (dirty) e.preventDefault()
-    }
-    window.addEventListener('beforeunload', warn)
-    return () => window.removeEventListener('beforeunload', warn)
-  }, [dirty])
+  useLeaveGuard(dirty)
 
-  const run = async (label: string, fn: () => Promise<AdminState>, nextYear?: number) => {
+  /**
+   * 保存・公開が断られたとき：この画面を開いたあとに、別のタブ（またはほかの人）がこの年度を保存していたなら、
+   * 最新の内容を読み込み、自分が変えた項目だけを入れ直して画面に出す（保存はしない。確かめてから、もう一度押してもらう）。
+   * 同じ項目を両方で変えていたら、入れ直さずに読み込み直しを頼む。保存されていなかった（ほかの理由で断られた）なら null
+   */
+  const recoverConflict = async (base: YearRow, mine: YearConfig, verb: string, button: string): Promise<Notice | null> => {
+    const latest = await server.getState()
+    const fresh = latest.years.find((y) => y.year === base.year)
+    if (!fresh || fresh.updatedAt === base.updatedAt) return null
+    if (sameConfig(fresh.config, mine)) {
+      // 自分の内容がもう保存されていた（公開の前の保存だけが済んだなど）：最新の状態にして、元のエラーを出す
+      setState(latest)
+      select(latest, base.year)
+      return null
+    }
+    const by = String(fresh.updatedBy ?? '').toLowerCase() === String(latest.user ?? '').toLowerCase() ? '別のタブかウィンドウで、この年度の設定が保存されていた' : `ほかの人（${fresh.updatedBy}）が、この年度の設定を保存していた`
+    const merged = mergeEdits(base.config, mine, fresh.config)
+    if (merged.conflicts.length)
+      return { kind: 'ng', text: `${verb}しませんでした。この画面を開いたあとに${by}ためです。同じ項目（${merged.conflicts.join('、')}）がそちらでも変わっているため、自動では入れ直せません。ページを読み込み直してから、もう一度変更してください` }
+    const changes = describeChanges(base.config, mine)
+    setState(latest)
+    setYear(base.year)
+    setDraft(merged.config)
+    return {
+      kind: 'ng',
+      text: `${verb}しませんでした。この画面を開いたあとに${by}ためです。その内容を読み込み、${changes.length ? `あなたの変更（${shortChanges(changes, 5)}）を入れ直しました` : '最新の内容にしました'}。確かめてから、もう一度「${button}」を押してください`,
+    }
+  }
+
+  /** サーバーの操作。recover を渡すと、別のタブ・ほかの人が先に保存していて断られたときに、自分の変更を入れ直す */
+  const run = async (label: string, fn: () => Promise<AdminState>, options: { nextYear?: number; recover?: { verb: string; button: string } } = {}) => {
+    // 押したときの年度と内容（断られたときに、最新の内容と合わせるため）
+    const base = row
+    const mine = draft
     setBusy(true)
     setMessage(null)
     try {
       const s = await fn()
       setState(s)
-      select(s, nextYear ?? year!)
+      select(s, options.nextYear ?? year!)
       setMessage({ kind: 'ok', text: label })
     } catch (e) {
-      setMessage({ kind: 'ng', text: `できませんでした：${String((e as Error)?.message ?? e)}` })
+      const recovered = base && mine && options.recover ? await recoverConflict(base, mine, options.recover.verb, options.recover.button).catch(() => null) : null
+      setMessage(recovered ?? { kind: 'ng', text: `できませんでした：${String((e as Error)?.message ?? e)}` })
     } finally {
       setBusy(false)
     }
@@ -326,13 +424,14 @@ export function AdminApp() {
         dirty={dirty}
         busy={busy}
         message={message}
+        onMessage={setMessage}
         onSelectYear={(y) => select(state, y)}
         onSave={(templates, words, notices) =>
           // ひな形・お知らせ・書き間違えやすい語を、まとめて1回で保存する（途中で失敗して一部だけ保存されないように）
           // 画面を開いたときの更新日時も送る（そのあとにほかの先生などが保存していたら、その変更を消さないよう保存しない）
-          void run(row.status === '公開中' ? '保存し、学生のツールに反映しました' : '保存しました', () =>
-            server.saveTeacherEdits(row.year, { templates, notices, ...(words ? { words } : {}) }, row.updatedAt),
-          )
+          void run(savedMessage(row.status, 'teacher'), () => server.saveTeacherEdits(row.year, { templates, notices, ...(words ? { words } : {}) }, row.updatedAt), {
+            recover: { verb: '保存', button: saveButtonLabel(row.status) },
+          })
         }
       />
     )
@@ -348,22 +447,30 @@ export function AdminApp() {
   }
   const publishedIds = new Set(state.years.filter((y) => y.status !== '準備中').flatMap((y) => y.config.courses.map((c) => c.id)))
   const isPublished = row.status === '公開中'
+  const saveLabel = saveButtonLabel(row.status)
 
   const save = () => {
-    if (isPublished && errors.length) return setMessage({ kind: 'ng', text: '公開中の年度は、エラーを直してから保存してください' })
-    if (isPublished && !confirm('この年度は学生に公開中です。保存すると、すぐに学生のツールに反映されます。保存しますか？')) return
-    void run(isPublished ? '保存し、学生のツールに反映しました' : '保存しました', () => server.saveYear(draft, row.updatedAt))
+    // 公開中の年度と、終了した年度（その年度に書き始めた学生が今も読む）は、エラーがあると学生のツールで使えないので保存しない
+    if (row.status !== '準備中' && errors.length)
+      return setMessage({ kind: 'ng', text: isPublished ? '公開中の年度は、エラーを直してから保存してください' : '終了した年度も、この年度に書き始めた学生が使っているため、エラーを直してから保存してください' })
+    const text = saveConfirmText(row.status, row.year, describeChanges(row.config, draft))
+    if (text && !confirm(text)) return
+    void run(savedMessage(row.status, 'admin'), () => server.saveYear(draft, row.updatedAt), { recover: { verb: '保存', button: saveLabel } })
   }
   const publish = () => {
     if (errors.length) return setMessage({ kind: 'ng', text: 'エラーを直してから公開してください' })
     const current = state.years.find((y) => y.status === '公開中')
-    if (!confirm(`${draft.fiscalYear}年度の設定を学生に公開しますか？${current ? `\n今公開中の${current.year}年度は「終了」になります。` : ''}`)) return
+    if (!confirm(publishConfirmText(draft, current?.year ?? null, dirty))) return
     // 画面を開いたあとにほかの人が保存していたら、見ていない内容を公開しないよう、公開せずに知らせる
-    void run(`${draft.fiscalYear}年度を学生に公開しました`, async () => {
-      let updatedAt = row.updatedAt
-      if (dirty) updatedAt = (await server.saveYear(draft, row.updatedAt)).years.find((y) => y.year === draft.fiscalYear)?.updatedAt ?? updatedAt
-      return server.publishYear(draft.fiscalYear, updatedAt)
-    })
+    void run(
+      `${draft.fiscalYear}年度を学生に公開しました。まだ書き始めていない学生は、この年度の設定で書き始めます（学生がツールを開き直すと、1分ほどで届きます）`,
+      async () => {
+        let updatedAt = row.updatedAt
+        if (dirty) updatedAt = (await server.saveYear(draft, row.updatedAt)).years.find((y) => y.year === draft.fiscalYear)?.updatedAt ?? updatedAt
+        return server.publishYear(draft.fiscalYear, updatedAt)
+      },
+      { recover: { verb: '公開', button: 'この年度を学生に公開' } },
+    )
   }
 
   return (
@@ -405,6 +512,8 @@ export function AdminApp() {
         <button
           className="btn"
           onClick={() => {
+            // 新年度は保存されている内容からコピーするので、保存していない変更は入らない（年度を切り替えるときと同じく確かめる）
+            if (dirty && !confirm('保存していない変更があります。新年度は保存されている内容からコピーして作るため、この変更は入りません。破棄して新年度を作成しますか？')) return
             setNewYear(String(Math.max(...state.years.map((y) => y.year)) + 1))
             setDialog('newYear')
           }}
@@ -412,7 +521,7 @@ export function AdminApp() {
           新年度を作成
         </button>
         <button className="btn" disabled={busy || !dirty} onClick={save}>
-          {isPublished ? '保存して学生に反映' : '保存'}
+          {saveLabel}
         </button>
         {!isPublished && (
           <button className="btn primary" disabled={busy} onClick={publish}>
@@ -439,7 +548,8 @@ export function AdminApp() {
             <TextInput value={draft.commonTitle} onChange={(v) => set({ commonTitle: v })} placeholder="例：卒業イベント「シンドバッド」について" />
           </Field>
           <Field label="最終締切">
-            <TextInput type="date" value={draft.deadline} onChange={(v) => set({ deadline: v })} />
+            {/* max を付けると、年の欄に5桁以上を打てなくなる（「2028」と打つと月の欄に移る。付けないと「202801」のような年になる） */}
+            <TextInput type="date" max="9999-12-31" value={draft.deadline} onChange={(v) => set({ deadline: v })} />
           </Field>
           <Field label="手順書のリンク（任意）" hint="学生のツールの上部に「手順書」ボタンとして表示されます">
             <TextInput value={draft.handbookUrl ?? ''} onChange={(v) => set({ handbookUrl: v })} placeholder="https://drive.google.com/…" />
@@ -562,17 +672,18 @@ export function AdminApp() {
           <Preview config={draft} courseId={draft.courses[focusedCourse]?.id ?? draft.courses[0]?.id ?? ''} />
         </section>
       </main>
-      {help && <AdminHelp onClose={() => setHelp(false)} />}
+      {help && <AdminHelp admin onClose={() => setHelp(false)} />}
 
       {editingTemplate !== null && draft.courses[editingTemplate] && (
         <TemplateEditor
           course={draft.courses[editingTemplate]}
           config={draft}
+          footNote={templateFootNote(row.status)}
           onClose={() => setEditingTemplate(null)}
           onApply={(template, abstractExample) => {
             setCourse(editingTemplate, { ...draft.courses[editingTemplate], template, abstractExample })
             setEditingTemplate(null)
-            setMessage({ kind: 'ok', text: 'ひな形を反映しました。「保存」を押すと学生のツールに届きます' })
+            setMessage({ kind: 'ok', text: `ひな形を反映しました。${deliveryNote(row.status, 'admin')}` })
           }}
         />
       )}
@@ -584,7 +695,7 @@ export function AdminApp() {
           onApply={(wordChecks) => {
             set({ wordChecks })
             setEditingWords(false)
-            setMessage({ kind: 'ok', text: '書き間違えやすい語を反映しました。「保存」を押すと学生のツールに届きます' })
+            setMessage({ kind: 'ok', text: `書き間違えやすい語を反映しました。${deliveryNote(row.status, 'admin')}` })
           }}
         />
       )}
@@ -593,19 +704,23 @@ export function AdminApp() {
 
       {dialog === 'newYear' && (
         <Modal title="新年度を作成" onClose={() => setDialog(null)}>
-          <p className="lead">今表示している{draft.fiscalYear}年度の設定をコピーして、新しい年度を作ります。作った年度は「準備中」になり、公開するまで学生には見えません。</p>
+          {/* コピーするのは、保存されている設定（保存していない変更は入らない。作成の前に確かめている） */}
+          <p className="lead">{row.year}年度の、保存されている設定をコピーして、新しい年度を作ります。作った年度は「準備中」になり、公開するまで学生には見えません。</p>
           <Field label="新しい年度">
-            <TextInput value={newYear} onChange={(v) => setNewYear(v.replace(/[^0-9]/g, ''))} />
+            {/* 全角の数字（２０２７）も受け付ける（日本語入力のまま打っても消えないように） */}
+            <TextInput value={newYear} onChange={(v) => setNewYear(v.replace(/[^0-9０-９]/g, ''))} />
           </Field>
           <div className="row-buttons">
             <span className="spacer" />
             <button onClick={() => setDialog(null)}>やめる</button>
             <button
               className="primary"
-              disabled={!/^\d{4}$/.test(newYear)}
+              disabled={!/^\d{4}$/.test(halfDigits(newYear))}
               onClick={() => {
+                const n = Number(halfDigits(newYear))
                 setDialog(null)
-                void run(`${newYear}年度を作成しました`, () => server.createYear(draft.fiscalYear, Number(newYear)), Number(newYear))
+                // 作ったあと、前の年度のままの項目（題目・締切・お知らせなど）を知らせる
+                void run(newYearNotice(row.config, n), () => server.createYear(row.year, n), { nextYear: n })
               }}
             >
               作成する
@@ -624,10 +739,14 @@ export function AdminApp() {
                 <li key={i}>
                   <span>
                     {new Date(h.at).toLocaleString('ja-JP')}　{h.action}
-                    <small>{h.user}</small>
+                    <small>
+                      {h.user}
+                      {historyChanges(history, i) && `　変更：${historyChanges(history, i)}`}
+                    </small>
                   </span>
                   <button
                     onClick={() => {
+                      if (dirty && !confirm('保存していない変更があります。破棄して、この時点の内容を読み込みますか？')) return
                       setDraft(clone(h.config))
                       setDialog(null)
                       setMessage({ kind: 'ok', text: 'この時点の内容を読み込みました。確認して保存すると元に戻ります' })
@@ -646,8 +765,8 @@ export function AdminApp() {
 }
 
 /**
- * 先生の画面：コースの一覧と「下書きのひな形」、書き間違えやすい語の編集だけ。
- * 保存はひな形と書き間違えやすい語だけを送る（ほかの設定はサーバー側でも変えられない）
+ * 先生の画面：コースの一覧と「下書きのひな形」「お知らせ」、書き間違えやすい語の編集だけ。
+ * 保存はひな形・お知らせ・書き間違えやすい語だけを送る（ほかの設定はサーバー側でも変えられない）
  */
 function TeacherView({
   state,
@@ -657,6 +776,7 @@ function TeacherView({
   dirty,
   busy,
   message,
+  onMessage,
   onSelectYear,
   onSave,
 }: {
@@ -666,7 +786,9 @@ function TeacherView({
   setDraft: (c: YearConfig) => void
   dirty: boolean
   busy: boolean
-  message: { kind: 'ok' | 'ng'; text: string } | null
+  message: Notice | null
+  /** 画面の上の知らせ（ひな形を反映した、など） */
+  onMessage: (message: Notice | null) => void
   onSelectYear: (year: number) => void
   /** words は、書き間違えやすい語を変えたときだけ（変えていなければ null） */
   /** notices は、書き換えたコースのお知らせだけ（コースの ID → お知らせ） */
@@ -691,7 +813,12 @@ function TeacherView({
       const before = row.config.courses.find((x) => x.id === c.id)
       if ((c.notice ?? '') !== (before?.notice ?? '')) notices[c.id] = c.notice ?? ''
     })
-    if (isPublished && !confirm('この年度は学生に公開中です。保存すると、すぐに学生のツールに反映されます（すでに書き始めた学生の原稿は変わりません）。保存しますか？')) return
+    // 長すぎるお知らせは、送る前に知らせる（サーバーでも同じ言葉で断られる）
+    const long = draft.courses.find((c) => c.id in notices && notices[c.id].length > LIMITS.notice)
+    if (long) return onMessage({ kind: 'ng', text: `「${long.name}」のお知らせ${tooLong(LIMITS.notice, notices[long.id].length)}` })
+    // 学生に届く年度（公開中・終了）は、何が変わるかを示して確かめる
+    const text = saveConfirmText(row.status, row.year, describeChanges(row.config, draft))
+    if (text && !confirm(text)) return
     onSave(templates, words, notices)
   }
   return (
@@ -719,7 +846,7 @@ function TeacherView({
         <span className="spacer" />
         <span className="user">{state.user}（先生）</span>
         <button className="btn primary" disabled={busy || !dirty} onClick={save}>
-          {isPublished ? '保存して学生に反映' : '保存'}
+          {saveButtonLabel(row.status)}
         </button>
       </header>
       <main className="teacher-main">
@@ -750,6 +877,7 @@ function TeacherView({
           onApply={(wordChecks) => {
             setDraft({ ...draft, wordChecks })
             setEditingWords(false)
+            onMessage({ kind: 'ok', text: `書き間違えやすい語を反映しました。${deliveryNote(row.status, 'teacher')}` })
           }}
         />
       )}
@@ -757,10 +885,12 @@ function TeacherView({
         <TemplateEditor
           course={draft.courses[editing]}
           config={draft}
+          footNote={templateFootNote(row.status)}
           onClose={() => setEditing(null)}
           onApply={(template, abstractExample) => {
             setDraft({ ...draft, courses: draft.courses.map((c, j) => (j === editing ? { ...c, template, abstractExample } : c)) })
             setEditing(null)
+            onMessage({ kind: 'ok', text: `ひな形を反映しました。${deliveryNote(row.status, 'teacher')}` })
           }}
         />
       )}

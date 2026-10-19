@@ -2,6 +2,7 @@
 import { readFileSync } from 'node:fs'
 import { createContext, runInContext } from 'node:vm'
 import { beforeEach, describe, expect, it } from 'vitest'
+import * as rules from '../src/admin/serverRules'
 import initialConfig from '../src/config/2026.json'
 
 type Cell = string | number | Date
@@ -425,20 +426,21 @@ describe('管理ページ（admin-project）', () => {
     const save = (edits: object) => () => gas.saveTeacherEdits(2026, edits)
     const template = (blocks: unknown) => ({ templates: { [id]: { template: blocks, abstractExample: '' } } })
     const chapter = { type: 'chapter', title: '概要' }
-    expect(save(template([{ type: 'chapter' }]))).toThrow(/1行目の形が正しくありません/)
-    expect(save(template([{ type: 'chapter', title: ' ' }]))).toThrow(/1行目の名前が空です/)
+    // 行は、番号と種類と書き出しで示す（どの行か見つけやすいように）
+    expect(save(template([{ type: 'chapter' }]))).toThrow(/1行目の大見出しの形が正しくありません/)
+    expect(save(template([{ type: 'chapter', title: ' ' }]))).toThrow(/1行目の大見出しの名前が空です/)
     expect(save(template([{ type: 'paragraph', hint: '説明' }, chapter]))).toThrow(/大見出しから始めて/)
-    expect(save(template([chapter, { type: 'figure', caption: 3 }]))).toThrow(/2行目の形が正しくありません/)
-    expect(save(template([chapter, { type: 'paragraph' }]))).toThrow(/2行目の形が正しくありません/)
+    expect(save(template([chapter, { type: 'figure', caption: 3 }]))).toThrow(/2行目の図の枠の形が正しくありません/)
+    expect(save(template([chapter, { type: 'paragraph' }]))).toThrow(/2行目の説明の形が正しくありません/)
     expect(save(template([chapter, { type: 'image', caption: '写真' }]))).toThrow(/2行目の形が正しくありません/)
     expect(save(template([chapter, null]))).toThrow(/2行目の形が正しくありません/)
-    expect(save(template([chapter, { type: 'subheading', title: 'あ'.repeat(101) }]))).toThrow(/長すぎます（100字まで）/)
-    expect(save(template([chapter, { type: 'paragraph', hint: 'あ'.repeat(301) }]))).toThrow(/長すぎます（300字まで）/)
+    expect(save(template([chapter, { type: 'subheading', title: 'あ'.repeat(101) }]))).toThrow('「映画・舞台衣装デザイナー」のひな形の2行目の小見出し「ああああああああああああ…」が長すぎます（100字まで。今は101字）')
+    expect(save(template([chapter, { type: 'paragraph', hint: 'あ'.repeat(301) }]))).toThrow(/2行目の説明「あ+…」が長すぎます（300字まで。今は301字）/)
     expect(save(template(Array.from({ length: 101 }, () => chapter)))).toThrow(/多すぎます/)
     expect(save({ templates: { [id]: { template: [chapter], abstractExample: 1 } } })).toThrow(/抄録の書き出し例の形が正しくありません/)
     expect(save({ templates: { [id]: 'x' } })).toThrow(/形が正しくありません/)
     expect(save({ notices: { [id]: 5 } })).toThrow(/お知らせの形が正しくありません/)
-    expect(save({ notices: { [id]: 'あ'.repeat(1001) } })).toThrow(/お知らせが長すぎます/)
+    expect(save({ notices: { [id]: 'あ'.repeat(1200) } })).toThrow('「映画・舞台衣装デザイナー」のお知らせが長すぎます（1000字まで。今は1200字）')
     expect(save({ words: 'x' })).toThrow(/書き間違えやすい語の形が正しくありません/)
     expect(save({ words: [{ wrong: 1, right: '身頃' }] })).toThrow(/1行目の形が正しくありません/)
     expect(save({ words: [null] })).toThrow(/1行目の形が正しくありません/)
@@ -456,7 +458,7 @@ describe('管理ページ（admin-project）', () => {
     const gas = load('admin-project')
     gas.setup()
     const course = { ...initialConfig.courses[0], template: [{ type: 'paragraph' }] }
-    expect(() => gas.saveYear({ ...initialConfig, courses: [course] })).toThrow(/ひな形の1行目の形が正しくありません/)
+    expect(() => gas.saveYear({ ...initialConfig, courses: [course] })).toThrow(/ひな形の1行目の説明の形が正しくありません/)
     expect(() => gas.saveYear({ ...initialConfig, courses: [{ ...initialConfig.courses[0], advisors: [1] }] })).toThrow(/形が正しくありません/)
     expect(() => gas.saveYear({ ...initialConfig, fiscalYear: 20260 })).toThrow(/年度が正しくありません/)
     // 準備中の年度は、題目が空などの途中の状態でも保存できる（細かい確認は画面で行う）
@@ -507,6 +509,115 @@ describe('管理ページ（admin-project）', () => {
     const sheet = spreadsheet.getSheetByName('管理者')!
     sheet.rows = [['メールアドレス', 'メモ'], ['kato@example.ac.jp', '']]
     expect(gas.getState()).toMatchObject({ isAdmin: true, role: 'admin' })
+  })
+
+  it('間違えて作った準備中の年度は削除できる（一度でも公開した年度・先生は削除できない）', () => {
+    const gas = load('admin-project')
+    gas.setup()
+    const years = () => gas.getState().years.map((y: { year: number; status: string }) => `${y.year}:${y.status}`)
+    gas.createYear(2026, 2028)
+    expect(() => gas.deleteYear(2026)).toThrow('2026年度は、学生に公開したことがあるため削除できません（削除できるのは、一度も公開していない「準備中」の年度だけです）')
+    gas.addMember('sensei@example.ac.jp', '先生')
+    user = 'sensei@example.ac.jp'
+    expect(() => gas.deleteYear(2028)).toThrow(/管理者だけ/)
+    user = 'kato@example.ac.jp'
+    // 画面を開いたあとにほかの人が保存していたら、消さない
+    expect(() => gas.deleteYear(2028, '2026-10-01T00:00:00.000Z')).toThrow(/この画面を開いたあとに/)
+    expect(gas.deleteYear(2028).years.map((y: { year: number }) => y.year)).toEqual([2026])
+    expect(years()).toEqual(['2026:公開中'])
+    // 変更履歴には「削除」を残す（消した内容は、その行から写せる）
+    expect(gas.getHistory(2028).map((h: { action: string }) => h.action)).toEqual(['削除', '2026年度からコピーして作成'])
+    expect(() => gas.deleteYear(2028)).toThrow(/2028年度の設定がありません/)
+    // 公開して「終了」になった年度も、公開したことがあるので消さない（状態を手で準備中に戻しても）
+    gas.createYear(2026, 2027)
+    gas.publishYear(2027)
+    sheetRows('年度設定').find((r) => r[0] === 2026)![1] = '準備中'
+    expect(() => gas.deleteYear(2026)).toThrow(/公開したことがある/)
+    expect(() => gas.deleteYear(2027)).toThrow(/公開したことがある/)
+  })
+
+  it('画面を開いたあとに保存したのが自分（別のタブ）なら、そう伝える', () => {
+    const gas = load('admin-project')
+    gas.setup()
+    const opened = '2026-10-01T00:00:00.000Z'
+    sheetRows('年度設定')[1][3] = new Date(opened)
+    gas.saveYear({ ...initialConfig, deadline: '2027-01-21' }, opened)
+    expect(() => gas.saveYear({ ...initialConfig, deadline: '2027-01-22' }, opened)).toThrow('この画面を開いたあとに、別のタブかウィンドウで（kato@example.ac.jp で）この年度の設定を保存しました。')
+    gas.addMember('sensei@example.ac.jp', '先生')
+    user = 'sensei@example.ac.jp'
+    expect(() => gas.saveTeacherEdits(2026, { notices: {} }, opened)).toThrow('この画面を開いたあとに、ほかの人（kato@example.ac.jp）がこの年度の設定を保存しました。')
+  })
+
+  it('試験用サーバー（src/admin/serverRules.ts）は、保存の前の確かめとエラーの言葉が本番と同じ', () => {
+    const gas = load('admin-project')
+    /** 投げたエラーの言葉か、返した値（JSON） */
+    const outcome = (fn: () => unknown) => {
+      try {
+        return JSON.stringify(fn())
+      } catch (e) {
+        return `エラー：${(e as Error).message}`
+      }
+    }
+    const chapter = { type: 'chapter', title: '概要' }
+    const templates: unknown[] = [
+      'x',
+      [],
+      [chapter, { type: 'paragraph', hint: '' }, { type: 'materialTable', caption: '使用素材表', extra: 1 }],
+      [{ type: 'chapter' }],
+      [{ type: 'chapter', title: ' ' }],
+      [{ type: 'paragraph', hint: '説明' }, chapter],
+      [chapter, { type: 'figure', caption: 3 }],
+      [chapter, { type: 'image', caption: '写真' }],
+      [chapter, null],
+      [chapter, { type: 'subheading', title: 'あ'.repeat(101) }],
+      [chapter, { type: 'paragraph', hint: `  ${'い'.repeat(320)}` }],
+      [chapter, { type: 'figure', caption: '図'.repeat(5) + 'x'.repeat(100) }],
+      Array.from({ length: 101 }, () => chapter),
+    ]
+    for (const t of templates) expect(outcome(() => rules.cleanTemplate(t, '衣装'))).toBe(outcome(() => gas.cleanTemplate_(t, '衣装')))
+    const words: unknown[] = [
+      'x',
+      [{ wrong: ' 見頃 ', right: '身頃', note: '説明', severity: 'error' }, { wrong: '', right: '空' }, { wrong: '同じ', right: '同じ' }, { wrong: '記事', right: '生地', severity: 'what' }],
+      [{ wrong: 1, right: '身頃' }],
+      [null],
+      [{ wrong: 'あ'.repeat(51), right: '身頃' }],
+      [{ wrong: '見頃', right: '身頃', note: 'あ'.repeat(201) }],
+      Array.from({ length: 301 }, () => ({ wrong: '見頃', right: '身頃' })),
+    ]
+    for (const w of words) expect(outcome(() => rules.cleanWords(w))).toBe(outcome(() => gas.cleanWords_(w)))
+    const course = initialConfig.courses[0]
+    const configs: unknown[] = [
+      null,
+      [],
+      initialConfig,
+      { ...initialConfig, fiscalYear: 20260 },
+      { ...initialConfig, courses: 'x' },
+      { ...initialConfig, courses: [{ ...course, advisors: [1] }] },
+      { ...initialConfig, courses: [{ ...course, name: '', id: '' }] },
+      { ...initialConfig, courses: [{ ...course, abstractExample: 'あ'.repeat(600) }] },
+      { ...initialConfig, courses: [{ ...course, notice: 'あ'.repeat(1200) }] },
+      { ...initialConfig, courses: [{ ...course, notice: 5 }] },
+      { ...initialConfig, courses: [{ ...course, template: [{ type: 'paragraph' }] }] },
+      { ...initialConfig, wordChecks: [{ wrong: 1 }] },
+      { ...initialConfig, commonTitle: 'あ'.repeat(46000) },
+    ]
+    for (const c of configs) expect(outcome(() => rules.checkConfig(c))).toBe(outcome(() => gas.checkConfig_(c)))
+    // コースのひな形・お知らせを書き換える（書き換えたあとの設定も同じ）
+    const edits: [unknown, unknown][] = [
+      [{ [course.id]: { template: [chapter], abstractExample: '本制作報告書は、' }, nothing: { template: [] } }, { [course.id]: 'お知らせ', nothing: 'x' }],
+      [{ [course.id]: { template: [chapter], abstractExample: 'あ'.repeat(600) } }, { [course.id]: null }],
+      [{ [course.id]: 'x' }, { [course.id]: 'あ'.repeat(1200) }],
+      [{ [course.id]: { template: [chapter] } }, { [course.id]: 7 }],
+    ]
+    for (const [t, n] of edits) {
+      const a = JSON.parse(JSON.stringify(initialConfig))
+      const b = JSON.parse(JSON.stringify(initialConfig))
+      expect(outcome(() => rules.applyTemplates(a, t as never))).toBe(outcome(() => gas.applyTemplates_(b, t)))
+      expect(outcome(() => rules.applyNotices(a, n as never))).toBe(outcome(() => gas.applyNotices_(b, n)))
+      expect(a).toEqual(b)
+    }
+    expect(rules.changedMessage('Kato@example.ac.jp', 'kato@example.ac.jp')).toBe(gas.changedMessage_('Kato@example.ac.jp', 'kato@example.ac.jp'))
+    expect(rules.changedMessage('sensei@example.ac.jp', 'kato@example.ac.jp')).toBe(gas.changedMessage_('sensei@example.ac.jp', 'kato@example.ac.jp'))
   })
 })
 

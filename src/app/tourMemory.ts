@@ -1,8 +1,11 @@
+import type { GuideStep } from './StartGuide'
+
 /**
  * 指差し確認（Tour.tsx）を、この端末で見たかを覚えておく。
  * 端末（ブラウザ）ごとに1回だけ出す（別の端末では、もう一度出る）。
  * 出したとき（shown）にも覚える：前は見終えた（とばした）ときだけ覚えていたため、出ている間に読み込み直すと、また初めから出ていた。
- * 覚えるのは「出した・見終えた」だけ（原稿の文字は入れない）
+ * 覚えるのは「出した・見終えた」だけ（原稿の文字は入れない）。
+ * はじめての案内の、途中の段階もここで覚える（下の rememberGuide）
  */
 
 const TOUR_KEY = 'sotsugyo-seisaku-report-tour'
@@ -54,4 +57,39 @@ export function firstOpenInTab(): boolean {
     freshOpen = true
   }
   return freshOpen
+}
+
+/**
+ * はじめての案内（StartGuide.tsx）を出している段階。案内を閉じず・終えずに、読み込み直したりタブを閉じたりしたとき、
+ * 次に開いたら続きから出すために覚える（前は、「Word で書き始めていますか？」で読み込み直すと、表紙の案内に戻らず、指差し確認が出ていた）。
+ * 案内を閉じた（「あとで入力する」）・終えた（「表紙ができました」）ら消す。覚えるのは段階の名前だけ（原稿の文字は入れない）
+ */
+const GUIDE_KEY = 'sotsugyo-seisaku-report-guide'
+
+/** 案内を出している段階を覚える */
+export function rememberGuide(step: GuideStep): void {
+  try {
+    localStorage.setItem(GUIDE_KEY, step)
+  } catch {
+    // 覚えておけなくても、続けられる（次に開いたとき、案内の続きが出ないだけ）
+  }
+}
+
+/** 閉じず・終えずに残っている案内の段階（なければ null） */
+export function guideLeftAt(): GuideStep | null {
+  try {
+    const v = localStorage.getItem(GUIDE_KEY)
+    return v === 'course' || v === 'word' || v === 'studentId' || v === 'name' || v === 'subtitle' ? v : null
+  } catch {
+    return null
+  }
+}
+
+/** 案内を閉じた・終えた（続きを出さない） */
+export function forgetGuide(): void {
+  try {
+    localStorage.removeItem(GUIDE_KEY)
+  } catch {
+    // 覚えておけなくても、続けられる
+  }
 }

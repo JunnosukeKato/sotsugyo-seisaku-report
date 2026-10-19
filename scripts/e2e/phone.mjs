@@ -183,13 +183,13 @@ await withEdge(async (browser) => {
   await page.waitForSelector('.sheet .meters')
   await shot('5-check')
   check('「チェック」で、セルフチェックが下から出る', (await page.$$('.sheet .issue')).length > 0)
-  // エラーと警告の意味は、一覧の上に1行（指摘ごとの札「手順書」「補助」はない。mockups/v31 案1）。スマホの幅で横にはみ出さない
+  // エラーと要確認の意味は、一覧の上に1行（指摘ごとの札「手順書」「補助」はない。mockups/v31 案1）。スマホの幅で横にはみ出さない
   const phoneLegend = await page.evaluate(() => {
     const el = document.querySelector('.sheet .sev-legend')
     const r = el?.getBoundingClientRect()
     return { text: el?.textContent ?? '', inside: !!r && r.left >= 0 && r.right <= innerWidth, chips: document.querySelectorAll('.sheet .issue .src').length, fontSize: el ? parseFloat(getComputedStyle(el).fontSize) : 0 }
   })
-  check('チェックの欄の一覧の上に「エラー：直してから出す」「警告：できれば直す」が出て、札（手順書・補助）はない', phoneLegend.text.includes('エラー：直してから出す') && phoneLegend.text.includes('警告：できれば直す') && phoneLegend.inside && phoneLegend.chips === 0 && phoneLegend.fontSize >= 13, JSON.stringify(phoneLegend))
+  check('チェックの欄の一覧の上に「エラー：直してから出す」「要確認：確かめて、必要なら直す」が出て、札（手順書・補助）はない', phoneLegend.text.includes('エラー：直してから出す') && phoneLegend.text.includes('要確認：確かめて、必要なら直す') && phoneLegend.inside && phoneLegend.chips === 0 && phoneLegend.fontSize >= 13, JSON.stringify(phoneLegend))
   await page.click('.sheet-close')
 
   // ページ一覧
@@ -511,7 +511,7 @@ await withEdge(async (browser) => {
  * スマホの見やすさ（mockups/v32 ④ 案A）：
  * - 紙面の中の小さな案内とボタン（抄録の「先生の許可が出た」・作品写真の空いている枠・まだ書いていない欄）を、紙面の下の帯に、ふつうの文字の大きさで出す。紙面には小さな印だけ
  * - 横向きでは、帯は紙面の右（紙面が小さくなりすぎない）
- * - 小さいボタン（「直す」「完了」「あとで入力する」「＋引用・参考文献を入れる」・ページ送り・「ページ全体に戻す」）は高さ 44px 以上
+ * - 小さいボタン（「完了」「あとで入力する」「＋引用・参考文献を入れる」・ページ送り・「ページ全体に戻す」）は高さ 44px 以上（指摘の「直す」はなくした。学生が自分で直す）
  * - 残りの小さいボタン（書く欄の道具・案内の「本文へ進む」・引用・参考文献の窓のボタン）も、見た目の高さ 44px 以上（v32 の直し。
  *   削除の知らせの［戻す］・「＋ ここに続きを書く」・「とばす」は上の流れの中で、PDF の窓は iphoneShareCheck で確かめる）
  * - 縦向きでも横向きでも、画面が横にはみ出さない。横向きでは抄録の印を「→」に
@@ -607,7 +607,7 @@ async function bandCheck(browser) {
   await page.evaluate(() => window.__editor.finishEditing())
   await ready()
 
-  // 見本の原稿：抄録はまだ（先生の許可が出る前）・作品写真は2枚（上下）で下の枠が空いている・本文に「見頃」（指摘の「直す」が出る）
+  // 見本の原稿：抄録はまだ（先生の許可が出る前）・作品写真は2枚（上下）で下の枠が空いている・本文に「見頃」（書き間違えやすい語のエラー。直し方を書き、「このままにする」は出ない）
   await page.evaluate(setupWriting)
   await page.evaluate(() =>
     window.__editor.update((r) => ({
@@ -749,7 +749,7 @@ async function bandCheck(browser) {
   await page.click('.edit-sheet .done')
   await ready()
 
-  // ページ送り・「ページ全体に戻す」・「＋引用・参考文献を入れる」・指摘の「直す」は高さ 44px 以上
+  // ページ送り・「ページ全体に戻す」・「＋引用・参考文献を入れる」は高さ 44px 以上
   const pagerH = await height('.pager button')
   await page.evaluate(() => window.__editor.setZoom(true))
   await wait(300)
@@ -785,13 +785,27 @@ async function bandCheck(browser) {
   await wait(300)
   check('引用・参考文献の窓のボタン（削除・＋書籍を追加・やめる・反映するなど）と種類の選択は、見た目も高さ 44px 以上', refsDialogH >= 44 && refsDialog.length >= 6, JSON.stringify(refsDialog))
   await page.evaluate(() => [...document.querySelectorAll('.p-nav button')].find((b) => b.textContent.includes('チェック')).click())
-  await page.waitForSelector('.sheet .issue .fix')
+  await page.waitForSelector('.sheet .issue')
   await wait(300)
-  const fixH = await height('.sheet .issue .fix')
+  // チェックの欄の指摘：「直す」のボタンはなく、直し方を書く。先生が決めた書き間違えやすい語のエラー（見頃）は「このままにする」にできない
+  const phoneIssues = await page.evaluate(() => {
+    const rows = [...document.querySelectorAll('.sheet .issue')]
+    const mikoro = rows.find((li) => li.textContent.includes('「見頃」ではなく「身頃」と書く'))
+    return {
+      fix: document.querySelectorAll('.sheet .issue .fix').length,
+      fixText: rows.flatMap((li) => [...li.querySelectorAll('button')]).filter((b) => b.textContent.trim() === '直す').length,
+      mikoro: mikoro ? { error: mikoro.classList.contains('error'), detail: mikoro.querySelector('.detail')?.textContent ?? '', keep: !!mikoro.querySelector('.keep') } : null,
+    }
+  })
   await page.screenshot({ path: `${OUT}/16-buttons-44.png` })
   await page.click('.sheet-close')
   await wait(300)
-  check('ページ送り・「ページ全体に戻す」・「＋引用・参考文献を入れる」・指摘の「直す」は、高さ 44px 以上', pagerH >= 44 && unzoomH >= 44 && refsH >= 44 && fixH >= 44, JSON.stringify({ pagerH, unzoomH, refsH, fixH }))
+  check('ページ送り・「ページ全体に戻す」・「＋引用・参考文献を入れる」は、高さ 44px 以上', pagerH >= 44 && unzoomH >= 44 && refsH >= 44, JSON.stringify({ pagerH, unzoomH, refsH }))
+  check(
+    'スマホのチェックの欄にも「直す」のボタンはなく、直し方を書く。「見頃」（書き間違えやすい語のエラー）は「このままにする」が出ない',
+    phoneIssues.fix === 0 && phoneIssues.fixText === 0 && phoneIssues.mikoro?.error && phoneIssues.mikoro.detail.startsWith('「見頃」→「身頃」') && !phoneIssues.mikoro.keep,
+    JSON.stringify(phoneIssues),
+  )
 
   // 横向き（844×390）：帯は紙面の右。紙面は小さくなりすぎず、画面は横にはみ出さない
   await page.setViewport(LANDSCAPE)

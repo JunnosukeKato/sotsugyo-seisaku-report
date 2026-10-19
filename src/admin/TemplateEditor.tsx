@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useDialogFocus } from '../app/useDialogFocus'
 import type { Course, TemplateBlock, YearConfig } from '../config'
+import { LIMITS, templateRowName, tooLong } from '../config/validate'
 import { bodyContentHtml } from '../layout/bodyHtml'
 import { reportCss } from '../layout/reportCss'
 import { bodyFromTemplate, DEFAULT_TEMPLATE } from '../model/template'
+import { useLeaveGuard } from './useLeaveGuard'
 
 /**
  * コースの「下書きのひな形」を編集する画面（mockups/v8 案1：コースのカードから開く）。
@@ -33,13 +35,21 @@ function numbers(blocks: TemplateBlock[]): string[] {
   })
 }
 
-function problemsOf(blocks: TemplateBlock[]): string[] {
+/**
+ * 「反映する」の前に直してもらうこと（空の名前・長すぎる文字など）。保存のときにサーバーで断られる前に、窓の中で知らせる
+ * （上限は src/config/validate.ts の LIMITS。サーバーの gas/admin-project/Code.js と同じ値）
+ */
+function problemsOf(blocks: TemplateBlock[], abstractExample: string): string[] {
   const problems: string[] = []
+  if (abstractExample.trim().length > LIMITS.abstractExample) problems.push(`抄録の書き出し例${tooLong(LIMITS.abstractExample, abstractExample.trim().length)}`)
   if (blocks.length === 0) problems.push('大見出しを1つ以上入れてください')
   else if (blocks[0].type !== 'chapter') problems.push('いちばん上は大見出しにしてください')
+  if (blocks.length > LIMITS.blocks) problems.push(`行が多すぎます（${LIMITS.blocks}行まで。今は${blocks.length}行）`)
   blocks.forEach((b, i) => {
     const empty = b.type === 'chapter' || b.type === 'subheading' ? !b.title.trim() : b.type === 'figure' || b.type === 'materialTable' ? !b.caption.trim() : false
     if (empty) problems.push(`${i + 1}行目の${KIND_LABELS[b.type]}の名前が空です`)
+    const max = b.type === 'paragraph' ? LIMITS.hint : LIMITS.name
+    if (textOf(b).length > max) problems.push(`${templateRowName(i, b.type, textOf(b))}${tooLong(max, textOf(b).length)}`)
   })
   return problems
 }
@@ -100,6 +110,8 @@ function TemplatePreview({ blocks }: { blocks: TemplateBlock[] }) {
 interface Props {
   course: Course
   config: YearConfig
+  /** いちばん下の案内（「反映する」の後、どうすれば学生に届くか。年度の状態で変わる。yearText.ts の templateFootNote） */
+  footNote: string
   onApply: (template: TemplateBlock[], abstractExample: string) => void
   onClose: () => void
 }
@@ -119,14 +131,24 @@ function startBlocks(template: unknown): TemplateBlock[] {
   })
 }
 
-export function TemplateEditor({ course, config, onApply, onClose }: Props) {
+export function TemplateEditor({ course, config, footNote, onApply, onClose }: Props) {
   const [rows, setRows] = useState(() => withKeys(startBlocks(course.template)))
   const [abstractExample, setAbstractExample] = useState(course.abstractExample ?? '')
   const [selected, setSelected] = useState(0)
   const [focusKey, setFocusKey] = useState<number | null>(null)
   const blocks = rows.map((r) => r.block)
   const nums = numbers(blocks)
-  const problems = problemsOf(blocks)
+  const problems = problemsOf(blocks, abstractExample)
+  // 開いたときの内容（直したかどうかを見るため）
+  const [initial] = useState(() => JSON.stringify([startBlocks(course.template), course.abstractExample ?? '']))
+  const changed = JSON.stringify([blocks, abstractExample]) !== initial
+  // 直して「反映する」を押していないあいだは、タブを閉じる・読み込み直すときに確かめる
+  useLeaveGuard(changed)
+  /** 「×」「やめる」・Esc：直していたら、消えてよいか確かめてから閉じる */
+  const close = () => {
+    if (changed && !confirm('直した内容は反映されずに消えます。閉じますか？')) return
+    onClose()
+  }
   const inputs = useRef(new Map<number, HTMLInputElement>())
 
   useEffect(() => {
@@ -154,14 +176,24 @@ export function TemplateEditor({ course, config, onApply, onClose }: Props) {
   }
 
   const dialogRef = useRef<HTMLDivElement>(null)
-  useDialogFocus(dialogRef)
+  // 日本語の変換中に Esc（変換の取り消し）を押したときは、窓を閉じる確かめを出さない
+  const composing = useRef(false)
+  useDialogFocus(dialogRef, () => !composing.current && close())
   return (
-    // 書きかけのひな形が消えないよう、窓の外を押しても閉じない（「×」「やめる」「反映する」だけ）
+    // 書きかけのひな形が消えないよう、窓の外を押しても閉じない（「×」「やめる」・Esc は、直していたら確かめてから閉じる）
     <div className="modal-backdrop">
-      <div className="modal tpl-modal" role="dialog" aria-modal="true" aria-label={`${course.name} コースの下書きのひな形`} ref={dialogRef}>
+      <div
+        className="modal tpl-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-label={`${course.name} コースの下書きのひな形`}
+        ref={dialogRef}
+        onCompositionStart={() => (composing.current = true)}
+        onCompositionEnd={() => (composing.current = false)}
+      >
         <header>
           <h2>{course.name || '（名前のないコース）'} コース　下書きのひな形</h2>
-          <button className="close" onClick={onClose} aria-label="閉じる">
+          <button className="close" onClick={close} aria-label="閉じる">
             ×
           </button>
         </header>
@@ -242,10 +274,11 @@ export function TemplateEditor({ course, config, onApply, onClose }: Props) {
           </div>
         </div>
         <footer className="tpl-foot">
-          <span className="hint">「反映する」の後、上の「保存」で学生のツールに届きます。すでに書き始めた学生の原稿は変わりません。</span>
+          <span className="hint">{footNote}</span>
           <span className="spacer" />
-          <button onClick={onClose}>やめる</button>
-          <button className="primary" disabled={problems.length > 0} onClick={() => onApply(blocks, abstractExample.trim())}>
+          <button onClick={close}>やめる</button>
+          {/* 押せないときは、理由（左の欄のいちばん下の赤い字と同じ）を、ボタンに重ねたときにも出す */}
+          <button className="primary" disabled={problems.length > 0} title={problems.join('\n') || undefined} onClick={() => onApply(blocks, abstractExample.trim())}>
             反映する
           </button>
         </footer>

@@ -390,7 +390,7 @@ export function paragraphEmpty(report: Report, id: string): boolean {
 
 /**
  * 何も書いていない、ひな形の説明もない段落か（Enter を押して何も書かなかったときなどにできる段落）。
- * 小見出し・図・表をそこで入れるときは、その段落と置き換える（空の段落を残さない）。セルフチェックの「直す」でも消せる
+ * 小見出し・図・表をそこで入れるときは、その段落と置き換える（空の段落を残さない）
  */
 export function isBlankParagraph(report: Report, id: string): boolean {
   return paragraphEmpty(report, id) && !findParagraph(report, id)?.hint
@@ -645,29 +645,4 @@ export function linkWrittenRef(report: Report, paragraphId: string, targetId: st
   // 自動で入れた（図n）を除く（手で書いた番号の方を残す）
   const kept = content.filter((x, i) => !(x.type === 'ref' && x.targetId === targetId && x.withParens && paragraph.content.includes(x) && parenthetical(content, i)))
   return mapBody(report, (b) => (b.id === paragraphId ? { ...paragraph, content: mergeTexts(kept) } : b))
-}
-
-/**
- * 「直す」で、手で書いた図表の番号（段落の文字位置 start から end）を、replacement（「表1」「（表1）」）にして図表へつなげる。
- * 同じ段落に、その図表への（図n）（自動で入れたもの）がほかにもあれば、二重になるので除く（「表1に示す（表1）。」→「表1に示す。」）
- */
-export function linkManualRef(report: Report, paragraphId: string, start: number, end: number, replacement: string): Report {
-  const text = findEditable(report, paragraphId)?.text
-  if (text === undefined) return report
-  const next = setText(report, paragraphId, text.slice(0, start) + replacement + text.slice(end))
-  const paragraph = findParagraph(next, paragraphId)
-  if (!paragraph) return next
-  const num = numbering(next)
-  // つなげた参照（start の位置にある参照）
-  let pos = 0
-  let linked: InlineNode | undefined
-  for (const node of paragraph.content) {
-    if (node.type === 'ref' && pos === start) linked = node
-    pos += contentToText([node], num).length
-  }
-  if (linked?.type !== 'ref') return next
-  const targetId = linked.targetId
-  const content = paragraph.content.filter((x, i) => x === linked || !(x.type === 'ref' && x.targetId === targetId && parenthetical(paragraph.content, i)))
-  if (content.length === paragraph.content.length) return next
-  return mapBody(next, (b) => (b.id === paragraphId ? { ...paragraph, content: mergeTexts(content) } : b))
 }

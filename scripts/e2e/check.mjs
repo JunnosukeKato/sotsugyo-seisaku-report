@@ -209,7 +209,7 @@ await withEdge(async (browser) => {
     const texts = await findingTexts(page)
     await page.screenshot({ path: `${OUT}/c2-loaded-pc.png` })
     check('Word を入れると：名前で分からない抄録の Word（abstract-final.docx）は中身から抄録に入る', loaded.abstract.some((x) => x.includes('abstract-final.docx')), JSON.stringify(loaded.abstract))
-    check('指摘がパートごとに出る（エラー・警告の数）。札「手順書」「補助」はなく、一覧の上に「エラー：直してから出す」「警告：できれば直す」', /^\d+エラー\d+警告$/.test(t) && !t.startsWith('0') && loaded.groups.join(',') === '抄録,目次,本文' && loaded.chips === 0 && loaded.sevLegend.includes('エラー：直してから出す') && loaded.sevLegend.includes('警告：できれば直す'), `${t} ${loaded.groups}`)
+    check('指摘がパートごとに出る（エラー・要確認の数）。札「手順書」「補助」はなく、一覧の上に「エラー：直してから出す」「要確認：確かめて、必要なら直す」', /^\d+エラー\d+要確認$/.test(t) && !t.startsWith('0') && loaded.groups.join(',') === '抄録,目次,本文' && loaded.chips === 0 && loaded.sevLegend.includes('エラー：直してから出す') && loaded.sevLegend.includes('要確認：確かめて、必要なら直す'), `${t} ${loaded.groups}`)
     check('抄録：600〜900字・「である」調（指摘した文字に印）', texts.some((x) => x.includes('抄録は600〜900字にする')) && (await page.$('.issue mark')) !== null && texts.some((x) => x.includes('巻きました')))
     check('目次：ひな形と違う余白（左 30mm）と、本文にない見出し「まとめ」', texts.some((x) => x.includes('左 30mm')) && texts.some((x) => x.includes('目次にだけある：「まとめ」')))
     check('ツールの中でしか意味のない指摘（抄録はまだ書いていない・作品写真を入れる）は出さない', !texts.some((x) => /まだ書いていない|作品写真を入れる|コースが選ばれていない/.test(x)))

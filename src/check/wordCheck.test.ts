@@ -215,6 +215,15 @@ describe('Word のチェック（学生用ツールのセルフチェックと�
     expect(sentence.snippets?.at(-1)).toBe(`衣装を作った😊。${'あ'.repeat(20)}`)
   })
 
+  it('先生が決めた書き間違えやすい語は、学生用ツールと同じ重さで出す（エラーの語はエラー。このページには「このままにする」がない）', async () => {
+    const words = { ...config, wordChecks: [{ wrong: '見頃', right: '身頃', severity: 'error' as const }, { wrong: '記事', right: '生地', severity: 'warning' as const }] }
+    const body = makeDocx({ body: [p('Ⅰ．企画・立案'), p('　前見頃の記事を選んだ。')].join('') })
+    const reading = await readWord({ body: file(body, '04_本文.docx') }, words)
+    const { findings } = wordFindings(reading, words, {})
+    expect(by(findings, 'word-見頃')).toEqual([expect.objectContaining({ part: 'body', severity: 'error', detail: '→「身頃」' })])
+    expect(by(findings, 'word-記事')).toEqual([expect.objectContaining({ part: 'body', severity: 'warning', detail: '→「生地」' })])
+  })
+
   it('グラフ・Word の図形の図は、Word に画像があるので「画像が入っていない」と言わない', async () => {
     const emf = new Uint8Array(88)
     emf.set([1, 0, 0, 0], 0)

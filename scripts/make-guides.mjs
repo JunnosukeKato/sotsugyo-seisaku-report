@@ -674,7 +674,7 @@ async function studentShots(browser, config, images) {
   await sleep(500)
   await ready(page)
 
-  // ---- セルフチェック：わざと誤りを入れる（エラー・警告・「直す」・「このままにする（確認済み）」） ----
+  // ---- セルフチェック：わざと誤りを入れる（エラー・警告・押すとその箇所へ移る指摘・「このままにする（確認済み）」）。「直す」のボタンはない（学生が自分で直す） ----
   await setParagraph(page, 'p7', CHECK_TEXT)
   await sleep(500)
   await ready(page)
@@ -701,7 +701,8 @@ async function studentShots(browser, config, images) {
     await capture(page, 'g-check', { x: sec.x, y: sec.y, w: sec.w, h: issues.y + issues.h - sec.y + 6 }, [
       { n: 1, box: await page.evaluate(rectFirst, '.side .issue.error .dot'), at: 'l' },
       { n: 2, box: await page.evaluate(rectFirst, '.side .issue.warning .dot'), at: 'l' },
-      { n: 3, box: await page.evaluate(rectFirst, '.side .issue .fix'), at: 'r' },
+      // 3：指摘の題（押すと、その箇所へ移る）
+      { n: 3, box: await page.evaluate(rectFirst, '.side .issue.error .go .ttl'), at: 'r' },
       { n: 4, box: await page.evaluate(rectFirst, '.side .issue .keep'), at: 'l' },
     ])
     await page.setViewport(PC)

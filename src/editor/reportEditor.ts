@@ -1,6 +1,5 @@
 import { findCourse, subtitleInputOnly, type YearConfig } from '../config'
 import { checkReportDetailed, type ReportFinding } from '../checker/reportChecks'
-import { applyFix } from '../checker/textRules'
 import { FIELD_IDS } from '../layout/document'
 import type { LayoutInfo, PageKind } from '../layout/measure'
 import { FIGURE_MAX_PX, fitFigureSize, importImage, PHOTO_MAX_PX } from '../model/images'
@@ -1180,21 +1179,6 @@ export class ReportEditor {
     }
     this.frozen = kept
     this.frozenStyle.textContent = kept.map((f) => f.hidden).join('\n')
-  }
-
-  applyFinding(finding: ReportFinding): void {
-    if (!finding.blockId || finding.replacement === undefined) return
-    this.commitForChange()
-    const editable = ops.findEditable(this.report, finding.blockId)
-    if (!editable) return
-    // 空の段落（ひな形の説明のないもの）：「直す」で段落ごと消す（画面の下に「段落を削除しました［戻す］」が出る）
-    if (finding.ruleId === 'paragraph-empty') {
-      if (ops.isBlankParagraph(this.report, finding.blockId)) this.removeBlock(finding.blockId)
-      return
-    }
-    // 手で書いた図表の番号をつなげるときは、同じ段落に自動で入れた（図n）があれば除く（二重にしない）
-    if (finding.ruleId === 'manual-ref') return this.update((r) => ops.linkManualRef(r, finding.blockId!, finding.start!, finding.end!, finding.replacement!))
-    this.update((r) => ops.setText(r, finding.blockId!, applyFix(editable.text, { ...finding, start: finding.start!, end: finding.end! })))
   }
 
   // ---- 入力欄 ----

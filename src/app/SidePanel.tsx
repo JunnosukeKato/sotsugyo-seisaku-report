@@ -90,6 +90,29 @@ export function PageColumn({ editor, snap }: { editor: ReportEditor; snap: Edito
   )
 }
 
+/** 親から受け継ぐ文字の設定（紙面の複製に写すもの） */
+const INHERITED = [
+  'font-family', 'font-size', 'font-weight', 'font-style', 'font-variant', 'font-feature-settings', 'font-kerning',
+  'line-height', 'letter-spacing', 'word-spacing', 'white-space', 'text-align', 'text-align-last', 'text-indent', 'text-transform',
+  'color', 'word-break', 'line-break', 'overflow-wrap', 'hyphens', 'writing-mode', 'direction', 'text-orientation',
+]
+
+/** 組版エンジンが紙面の外側（.paper-part）に置く値。紙面の中の文字の大きさの計算に使う */
+const ENGINE_VARS = ['--viv-layoutUnitAdj', '--viv-outputScale']
+
+/**
+ * 紙面の要素が親から受け継いでいる文字の設定（と組版エンジンの値）を、複製に写す。
+ * 複製は一覧のボタンの中に置くので、写さないとボタンの設定（12px・折り返さない）を受け継ぎ、
+ * 抄録のように大きさや行の高さを親から受け継ぐ段落が、折り返さずに紙の外へはみ出していた（2026-10-19、依頼者の画面で見つかった）
+ */
+function copyInherited(from: HTMLElement, to: HTMLElement): void {
+  const cs = getComputedStyle(from)
+  for (const name of [...INHERITED, ...ENGINE_VARS]) {
+    const value = cs.getPropertyValue(name)
+    if (value) to.style.setProperty(name, value)
+  }
+}
+
 /** ページ一覧。紙面を縮小した本物の見た目を出し、エラーのあるページに赤い点を付ける */
 export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; snap: EditorSnapshot; onPick?: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
@@ -115,7 +138,14 @@ export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; sna
           const clone = page.cloneNode(true) as HTMLElement
           clone.className = 'mini-page'
           clone.removeAttribute('id')
-          for (const el of clone.querySelectorAll('[id]')) el.removeAttribute('id')
+          copyInherited(page, clone)
+          // ID は同じものが2つにならないよう外す。組版エンジンは、文書全体の文字の大きさ・行の高さを ID に結び付けて決めているので、
+          // 外す前に、その要素の受け継ぐ設定を写しておく（複製と元は同じ形なので、同じ順に並ぶ）
+          const originals = page.querySelectorAll<HTMLElement>('[id]')
+          clone.querySelectorAll<HTMLElement>('[id]').forEach((el, k) => {
+            if (originals[k]) copyInherited(originals[k], el)
+            el.removeAttribute('id')
+          })
           box.replaceChildren(clone)
         })
       })
@@ -181,9 +211,12 @@ function activeKind(f: ReportFinding, snap: EditorSnapshot): 'here' | 'block' | 
   return snap.caret >= f.start && snap.caret <= f.end ? 'here' : 'block'
 }
 
+/**
+ * 指摘の1行。直すのは学生が自分でする（前の「直す」のボタンはなくした。押すとその箇所へ移り、直し方は detail に書いてある）
+ */
 function Issue({ finding, editor, onPick, active }: { finding: ReportFinding; editor: ReportEditor; onPick?: () => void; active?: 'here' | 'block' | null }) {
   return (
-    // 行のどこを押しても、その箇所へ移る（「直す」「このままにする」は、それぞれの働きだけ）
+    // 行のどこを押しても、その箇所へ移る（「このままにする」は、その働きだけ）
     <li
       className={`issue ${finding.severity}${active ? ` active ${active}` : ''}`}
       onClick={() => {
@@ -195,24 +228,12 @@ function Issue({ finding, editor, onPick, active }: { finding: ReportFinding; ed
     >
       <i className="dot" />
       {/* キーボードでは、題名の部分のボタンに Tab で移り、Enter でその箇所へ（押すと上の li の onClick が働く） */}
-      <button type="button" className="go" aria-label={`${finding.severity === 'error' ? 'エラー' : '警告'}：${finding.title}${finding.detail ? `（${finding.detail}）` : ''}`}>
+      <button type="button" className="go" aria-label={`${finding.severity === 'error' ? 'エラー' : '要確認'}：${finding.title}${finding.detail ? `（${finding.detail}）` : ''}`}>
         <span className="ttl">{finding.title}</span>
         {finding.detail && <span className="detail">{finding.detail}</span>}
       </button>
-      {finding.replacement !== undefined ? (
-        <button
-          className="fix"
-          onClick={(e) => {
-            e.stopPropagation()
-            editor.applyFinding(finding)
-          }}
-        >
-          直す
-        </button>
-      ) : (
-        <span />
-      )}
-      {/* 手順書のルールではない補助の指摘は、学生が確かめて「このままにする」にできる（mockups/v22 ① 案A） */}
+      {/* 手順書のルールではない補助の指摘は、学生が確かめて「このままにする」にできる（mockups/v22 ① 案A）。
+          書き間違えやすい語のエラーには目印（key）がないので出ない（checker/reportChecks.ts） */}
       {finding.key && (
         <button
           className="keep"
@@ -229,8 +250,8 @@ function Issue({ finding, editor, onPick, active }: { finding: ReportFinding; ed
 }
 
 /**
- * エラーと警告の意味（指摘の一覧の上。1つずつの札「手順書」「補助」の代わり。提出前チェックと同じ形。mockups/v31 案1）。
- * 補助の指摘にもエラーがあり、札と色が食い違って分かりにくかったため。印は指摘の一覧と同じ（エラー：× の丸、警告：! のひし形）
+ * エラーと要確認の意味（指摘の一覧の上。1つずつの札「手順書」「補助」の代わり。提出前チェックと同じ形。mockups/v31 案1）。
+ * 補助の指摘にもエラーがあり、札と色が食い違って分かりにくかったため。印は指摘の一覧と同じ（エラー：× の丸、要確認：! のひし形）
  */
 function SeverityLegend() {
   return (
@@ -244,7 +265,7 @@ function SeverityLegend() {
       <span>
         <i className="dot warning" aria-hidden="true" />
         <span>
-          <b className="w">警告</b>：できれば直す
+          <b className="w">要確認</b>：確かめて、必要なら直す
         </span>
       </span>
     </p>
@@ -357,14 +378,14 @@ export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEdit
   )
 }
 
-/** エラーと警告の件数 */
+/** エラーと要確認の件数 */
 export function Tally({ snap }: { snap: EditorSnapshot }) {
   const errors = snap.findings.filter((f) => f.severity === 'error').length
   // 紙面を組み終えるまでは、件数を出さない（ページ数などのチェックが加わって、数が変わるため）
   if (snap.pageChecksPending) return <span className="tally">確かめています…</span>
   return (
     <span className="tally">
-      <b className="e">{errors}</b> エラー　<b className="w">{snap.findings.length - errors}</b> 警告
+      <b className="e">{errors}</b> エラー　<b className="w">{snap.findings.length - errors}</b> 要確認
     </span>
   )
 }

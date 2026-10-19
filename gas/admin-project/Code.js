@@ -9,7 +9,7 @@
  * ウェブアプリとして公開する（実行するユーザー：自分、アクセス：大学のドメイン内）。
  * 「管理者」シートに載っている人だけが使える。
  *   管理者 … 年度の設定をすべて変更・公開できる。先生を登録できる
- *   先生   … どのコースの「下書きのひな形」も編集できる（ほかの設定は変えられない）
+ *   先生   … どのコースの「下書きのひな形」「お知らせ」と、「書き間違えやすい語」を編集できる（ほかの設定は変えられない）
  * 学生のツールへの配信は、別のプロジェクト（gas/api-project）が担う。
  *
  * このファイルは app/gas/admin-project/Code.js が元。scripts/build-gas.mjs で初期値を埋め込んで gas-dist に出力する。
@@ -25,8 +25,9 @@ const ROLE_ADMIN = '管理者'
 const ROLE_TEACHER = '先生'
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+$/
 
-/** 下書きのひな形の部品の種類 */
+/** 下書きのひな形の部品の種類と、その呼び名（管理ページのひな形の窓と同じ） */
 const BLOCK_TYPES = ['chapter', 'subheading', 'paragraph', 'figure', 'materialTable']
+const BLOCK_LABELS = { chapter: '大見出し', subheading: '小見出し', paragraph: '説明', figure: '図の枠', materialTable: '素材表' }
 /** 文字数・数の上限（学生のツールの src/config/validate.ts の LIMITS と同じ値にする） */
 const LIMITS = { blocks: 100, name: 100, hint: 300, abstractExample: 500, notice: 1000, words: 300, word: 50, wordNote: 200 }
 
@@ -204,9 +205,9 @@ function cleanTemplate_(template, courseName) {
   if (!Array.isArray(template)) throw new Error(label + 'の形が正しくありません')
   if (template.length > LIMITS.blocks) throw new Error(label + 'の部品が多すぎます（' + LIMITS.blocks + '個まで）')
   const cleaned = template.map((block, i) => {
-    const row = label + 'の' + (i + 1) + '行目'
-    if (!block || typeof block !== 'object' || BLOCK_TYPES.indexOf(block.type) < 0) throw new Error(row + 'の形が正しくありません')
+    if (!block || typeof block !== 'object' || BLOCK_TYPES.indexOf(block.type) < 0) throw new Error(label + 'の' + (i + 1) + '行目の形が正しくありません')
     const key = block.type === 'chapter' || block.type === 'subheading' ? 'title' : block.type === 'paragraph' ? 'hint' : 'caption'
+    const row = label + 'の' + rowName_(i, block.type, block[key])
     const text = checkText_(block[key], key === 'hint' ? LIMITS.hint : LIMITS.name, row)
     // 段落の説明は空でもよい（大見出し・小見出し・図・表の名前は空にしない）
     if (key !== 'hint' && !text.trim()) throw new Error(row + 'の名前が空です')
@@ -218,10 +219,20 @@ function cleanTemplate_(template, courseName) {
   return cleaned
 }
 
+/**
+ * ひな形の行の呼び名（例：3行目の説明「デザインの意図を書く…」）。どの行か見つけやすいよう、種類と書き出しを付ける
+ * （学生のツールの src/config/validate.ts の templateRowName と同じ言い方）
+ */
+function rowName_(index, type, text) {
+  const head = typeof text === 'string' ? text.trim() : ''
+  const preview = head ? '「' + (head.length > 12 ? head.slice(0, 12) + '…' : head) + '」' : ''
+  return (index + 1) + '行目の' + BLOCK_LABELS[type] + preview
+}
+
 /** 文字の項目を確かめる（文字でない・長すぎるときはエラー） */
 function checkText_(value, max, label) {
   if (typeof value !== 'string') throw new Error(label + 'の形が正しくありません')
-  if (value.length > max) throw new Error(label + 'が長すぎます（' + max + '字まで）')
+  if (value.length > max) throw new Error(label + 'が長すぎます（' + max + '字まで。今は' + value.length + '字）')
   return value
 }
 
@@ -384,6 +395,37 @@ function createYear(fromYear, newYear) {
   })
 }
 
+/**
+ * 準備中の年度を削除する（管理者だけ）。間違えて作った年度を消すため。一度も学生に公開したことのない年度だけ消せる
+ * （公開中・終了の年度や、変更履歴に「公開」がある年度は、学生が使っている・使ったことがあるので消さない）。
+ * 変更履歴には「削除」の行を残す（消した内容は、その行の設定から写せる）
+ */
+function deleteYear(year, expectedUpdatedAt) {
+  return withLock_(() => {
+    const user = requireAdmin_()
+    const sheet = sheet_(SHEET_YEARS)
+    const rowIndex = findYearRow_(year)
+    if (rowIndex < 0) throw new Error(year + '年度の設定がありません')
+    if (sheet.getRange(rowIndex, 2).getValue() !== STATUS_DRAFT || wasPublished_(year)) {
+      throw new Error(Number(year) + '年度は、学生に公開したことがあるため削除できません（削除できるのは、一度も公開していない「準備中」の年度だけです）')
+    }
+    checkNotChanged_(sheet, rowIndex, expectedUpdatedAt)
+    const config = parseConfig_(sheet.getRange(rowIndex, 3).getValue(), year)
+    sheet.deleteRow(rowIndex)
+    appendHistory_(user, year, '削除', config)
+    return getState()
+  })
+}
+
+/** その年度を、これまでに学生に公開したことがあるか（変更履歴に「公開」か「初期設定」（setup で公開中として入れた）の行がある） */
+function wasPublished_(year) {
+  return sheet_(SHEET_HISTORY)
+    .getDataRange()
+    .getValues()
+    .slice(1)
+    .some((r) => r[2] !== '' && Number(r[2]) === Number(year) && (r[3] === '公開' || r[3] === '初期設定'))
+}
+
 function getHistory(year) {
   requireTeacher_()
   const values = sheet_(SHEET_HISTORY).getDataRange().getValues().slice(1)
@@ -469,11 +511,13 @@ function isoOf_(value) {
 function checkNotChanged_(sheet, rowIndex, expectedUpdatedAt) {
   if (!expectedUpdatedAt) return
   const [updatedAt, updatedBy] = sheet.getRange(rowIndex, 4, 1, 2).getValues()[0]
-  if (isoOf_(updatedAt) !== expectedUpdatedAt) {
-    throw new Error(
-      'この画面を開いたあとに、ほかの人（' + updatedBy + '）がこの年度の設定を保存しました。そのまま保存すると、その変更が消えてしまうため、保存しませんでした。ページを読み込み直してから、もう一度変更してください',
-    )
-  }
+  if (isoOf_(updatedAt) !== expectedUpdatedAt) throw new Error(changedMessage_(updatedBy, Session.getActiveUser().getEmail()))
+}
+
+/** 画面を開いたあとに保存されていたときの説明。保存したのが自分なら、別のタブ・ウィンドウで保存したと伝える（試験用サーバーと同じ言葉） */
+function changedMessage_(updatedBy, user) {
+  const who = String(updatedBy || '').toLowerCase() === String(user || '').toLowerCase() ? '別のタブかウィンドウで（' + updatedBy + ' で）' : 'ほかの人（' + updatedBy + '）が'
+  return 'この画面を開いたあとに、' + who + 'この年度の設定を保存しました。そのまま保存すると、その変更が消えてしまうため、保存しませんでした。ページを読み込み直してから、もう一度変更してください'
 }
 
 /** 役割の欄の読み方：「管理者」「先生」のどちらか（空欄は管理者）。それ以外（書き間違いなど）は null */

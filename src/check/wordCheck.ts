@@ -15,9 +15,9 @@ import { abstractParagraphs, blockLines, bodyHeadings, findCourseId, headingDiff
  * 提出前チェック：Word（学科のひな形で書いたもの）を確かめる。学生用ツールのセルフチェック（checker/reportChecks.ts）と同じ決まり・同じ言い回し。
  * - 本文・表紙：「Word から読み込む」と同じ読み取り（import/wordImport.ts）でツールの原稿の形にして、セルフチェックに通す
  * - 抄録：02_抄録.docx の、上の決まった行より下の段落を、原稿の抄録にする（字数 600〜900 などのチェックが働く）
- * - 目次：目次の見出しと、本文の見出しが合っているか（警告）
+ * - 目次：目次の見出しと、本文の見出しが合っているか（要確認）
  * - ページ設定：余白・文字数と行数・文字の大きさが、ひな形のままか（docxSettings.ts）
- * ツールの中でしか意味のない指摘（「抄録はまだ書いていない」・作品写真のページ・「直す」を押すように言うものなど）は出さないか、言い換える。
+ * ツールの中でしか意味のない指摘（「抄録はまだ書いていない」・作品写真のページ・ツールの図表とつなげるように言うものなど）は出さないか、言い換える。
  * Word を読むのは、ファイルが変わったときだけ（PDF を入れ替えても読み直さない）。チェックは PDF のページの数を使うので、そのたびにする
  */
 
@@ -187,7 +187,7 @@ const PART_OF_AREA: Record<Area, PartId> = { cover: 'cover', abstract: 'abstract
 
 /**
  * 出さない指摘：ツールの中でしか意味がないもの。
- * abstract-not-started（抄録を書き始める前の決まり）・photos-*（ツールの作品写真のページ）・manual-ref（「直す」で図とつなげる）・
+ * abstract-not-started（抄録を書き始める前の決まり）・photos-*（ツールの作品写真のページ）・manual-ref（ツールの図表とつなげる）・
  * paragraph-empty（Word で書いていない小見出しに、読み取りが足した空の段落）
  */
 const DROPPED = new Set(['abstract-not-started', 'photos-required', 'photos-empty-slot', 'manual-ref', 'paragraph-empty'])

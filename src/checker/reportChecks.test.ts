@@ -5,7 +5,6 @@ import type { LayoutInfo } from '../layout/measure'
 import { demoReport } from '../model/demoReport'
 import type { Report } from '../model/types'
 import { abstractCharCount, checkReport, checkReportDetailed } from './reportChecks'
-import { applyFix } from './textRules'
 
 const layout = (over: Partial<LayoutInfo> = {}): LayoutInfo => ({
   kinds: [],
@@ -104,10 +103,10 @@ describe('checkReport', () => {
     expect(ids(r)).not.toContain('cover-field-fit')
   })
 
-  it('氏名の姓と名の間が半角の空白なら、全角に直せる', () => {
+  it('氏名の姓と名の間が半角の空白なら、全角にするように知らせる', () => {
     const r = { ...cleanReport(), basicInfo: { ...cleanReport().basicInfo, name: '文化 花子' } }
     const f = checkReport(r, currentConfig, layout()).find((x) => x.ruleId === 'name-space')
-    expect(f).toMatchObject({ blockId: 'basic:name', start: 2, end: 3, replacement: '　' })
+    expect(f).toMatchObject({ blockId: 'basic:name', start: 2, end: 3, detail: '半角の空白 → 全角の空白（例：文化　花子）' })
     expect(ids({ ...r, basicInfo: { ...r.basicInfo, name: '文化　花子' } }, layout())).not.toContain('name-space')
   })
 
@@ -172,20 +171,20 @@ describe('改ページ', () => {
 })
 
 describe('手で書いた図表の番号', () => {
-  it('図とつながっていない（図n）はエラー。その番号の図があれば「直す」でつなげられる', () => {
+  it('図とつながっていない（図n）はエラー。その番号の図があれば、番号を半角で打ち直すとつながる（直し方を detail に書く）', () => {
     let r = demoReport()
     // 全角の数字で書くと、図とつながらずに文字のまま残る
     r = ops.setText(r, 'p1', '袖を大きくした（図１）。')
     const f = checkReport(r, currentConfig).find((x) => x.ruleId === 'manual-ref')
     expect(f?.severity).toBe('error')
-    expect(f?.replacement).toBe('（図1）')
-    // 「直す」：番号を半角にして確定すると、図へのつながりになる
+    expect(f?.detail).toBe('番号を半角の数字で打ち直すと、図1とつながります（つながると、図を足したり消したりしても番号が自動でそろいます）')
+    // 学生が番号を半角にして書くと、図へのつながりになる
     const fixed = ops.setText(r, 'p1', '袖を大きくした（図1）。')
     expect(fixed.body.flatMap((c) => c.blocks).find((b) => b.id === 'p1')).toMatchObject({ content: expect.arrayContaining([expect.objectContaining({ type: 'ref' })]) })
     expect(checkReport(fixed, currentConfig).some((x) => x.ruleId === 'manual-ref' && x.blockId === 'p1')).toBe(false)
   })
 
-  it('ない番号の（図n）は「図がない」と知らせ、図を入れるよう案内する（「直す」はない）', () => {
+  it('ない番号の（図n）は「図がない」と知らせ、図を入れるよう案内する', () => {
     const r = ops.setText(demoReport(), 'p1', '袖を大きくした（図9）。')
     const findings = checkReport(r, currentConfig).filter((x) => x.blockId === 'p1')
     const missing = findings.find((x) => x.ruleId === 'reference-missing')
@@ -208,6 +207,30 @@ describe('確認済み（補助の指摘を、学生がこのままにする）'
     expect(findings.some((f) => f.ruleId === 'sentence-end' && f.blockId === 'p1')).toBe(false)
     expect(findings.some((f) => f.ruleId === 'desu-masu' && f.blockId === 'p1')).toBe(true)
     expect(acknowledged.map((f) => f.ruleId)).toEqual(['sentence-end'])
+  })
+
+  it('書き間違えやすい語のエラーは「このままにする」にできない（前に確認済みにしていても隠れず、エラーに数える）。注意の語はできる', () => {
+    const config = {
+      ...currentConfig,
+      wordChecks: [
+        { wrong: '見頃', right: '身頃', severity: 'error' as const },
+        { wrong: '記事', right: '生地', severity: 'warning' as const },
+      ],
+    }
+    const r = ops.setText(demoReport(), 'p1', '前見頃の記事を選んだ。')
+    const before = checkReport(r, config).filter((f) => f.blockId === 'p1')
+    const error = before.find((f) => f.ruleId === 'word-見頃')
+    const warning = before.find((f) => f.ruleId === 'word-記事')
+    expect(error).toMatchObject({ severity: 'error', source: 'supplementary', replacement: '身頃' })
+    expect(error?.key).toBeUndefined()
+    expect(error).not.toHaveProperty('locked')
+    expect(warning?.key).toBe('word-記事|p1|記事')
+    // 前の版で「確認済み」にした目印（同じ形）が原稿に残っていても、エラーの語は隠れない
+    const acked = { ...r, acknowledged: ['word-見頃|p1|見頃', warning!.key!] }
+    const { findings, acknowledged } = checkReportDetailed(acked, config)
+    expect(findings.filter((f) => f.blockId === 'p1' && f.ruleId.startsWith('word-')).map((f) => f.ruleId)).toEqual(['word-見頃'])
+    expect(acknowledged.map((f) => f.ruleId)).toEqual(['word-記事'])
+    expect(checkReport(acked, config).some((f) => f.ruleId === 'word-見頃' && f.severity === 'error')).toBe(true)
   })
 })
 
@@ -253,7 +276,7 @@ describe('書き間違えやすい語', () => {
 
 describe('図・表を消したあとの本文（文が崩れたまま0件にしない）', () => {
   it('文の中の参照は「図?」として残り、エラーになる（提出用の PDF を書き出せない）', () => {
-    // 「直す」で手で書いた「図1」を図につなげてから、図を消した
+    // 手で書いた「図1」が図につながってから、図を消した
     const linked = ops.setText(cleanReport(), 'p2', 'デザイン画を図1に示す。')
     const removed = ops.removeFigure(linked, 'f1')
     expect(ops.findEditable(removed, 'p2')?.text).toBe('デザイン画を図?に示す。')
@@ -264,18 +287,16 @@ describe('図・表を消したあとの本文（文が崩れたまま0件にし
 })
 
 describe('図表の番号の二重（ツールで書いているときだけの指摘）', () => {
-  it('「直す」は、手で書いた形のままつなげる（「表1に示す」を「（表1）に示す」にしない）', () => {
-    let r = cleanReport()
-    r = { ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 'p3' ? { ...b, content: [{ type: 'text' as const, text: '表１に使用した素材をまとめる。' }] } : b)) })) }
-    expect(checkReport(r, currentConfig).find((x) => x.ruleId === 'manual-ref')?.replacement).toBe('表1')
-  })
-
-  it('同じ段落に同じ表への参照が2つあると、エラーにする。「直す」で添えてあるだけの（表1）を取る', () => {
+  it('同じ段落に同じ表への参照が2つあると、エラーにする。添えてあるだけの（表1）に下線を引き、それを消すように書く', () => {
     const r = ops.setText(cleanReport(), 'p3', '使用した素材を（表1）に示す（表1）。')
     const f = checkReportDetailed(r, currentConfig, layout()).findings.find((x) => x.ruleId === 'duplicate-ref')
-    expect(f).toMatchObject({ severity: 'error', blockId: 'p3', start: 14, end: 18, replacement: '', key: 'duplicate-ref|p3|t1' })
+    expect(f).toMatchObject({ severity: 'error', blockId: 'p3', start: 14, end: 18, key: 'duplicate-ref|p3|t1' })
+    expect(f).not.toHaveProperty('replacement')
     expect(f?.title).toBe('同じ段落に「表1」が2つある')
-    const fixed = ops.setText(r, 'p3', applyFix(ops.findEditable(r, 'p3')!.text, { ...f!, start: f!.start!, end: f!.end! }))
+    expect(f?.detail).toContain('下線の（表1）を消して1つにします')
+    // 学生が、下線の（表1）を消す
+    const text = ops.findEditable(r, 'p3')!.text
+    const fixed = ops.setText(r, 'p3', text.slice(0, f!.start!) + text.slice(f!.end!))
     expect(ops.findEditable(fixed, 'p3')?.text).toBe('使用した素材を（表1）に示す。')
     expect(checkReportDetailed(fixed, currentConfig, layout()).findings.some((x) => x.ruleId === 'duplicate-ref')).toBe(false)
   })
@@ -290,11 +311,12 @@ describe('図表の番号の二重（ツールで書いているときだけの�
     expect(checkReportDetailed(plain, currentConfig, layout()).findings.some((x) => x.ruleId === 'duplicate-ref')).toBe(false)
   })
 
-  it('サブタイトルに決まり文句まで入力していたら、エラーにして「直す」で取る', () => {
+  it('サブタイトルに決まり文句まで入力していたら、エラーにして、残す部分を detail に書く', () => {
     const r = { ...cleanReport(), basicInfo: { ...cleanReport().basicInfo, subtitleInput: '―海の王女の衣装制作―' } }
     const f = checkReportDetailed(r, currentConfig, layout()).findings.find((x) => x.ruleId === 'subtitle-fixed-text')
-    expect(f).toMatchObject({ severity: 'error', area: 'cover', blockId: 'basic:subtitleInput', start: 0, end: 11, replacement: '海の王女' })
+    expect(f).toMatchObject({ severity: 'error', area: 'cover', blockId: 'basic:subtitleInput', start: 0, end: 11 })
     expect(f?.detail).toContain('「―〇〇の衣装制作―」')
+    expect(f?.detail).toContain('「海の王女」だけを残し')
     const ok = { ...r, basicInfo: { ...r.basicInfo, subtitleInput: '海の王女' } }
     expect(checkReportDetailed(ok, currentConfig, layout()).findings).toEqual([])
   })
@@ -310,7 +332,7 @@ describe('図表の番号の二重（ツールで書いているときだけの�
 describe('見出しに手で書いた番号（自動で付く「ⅰ．」と二重になる。ツールで書いているときだけの指摘）', () => {
   const finding = (r: Report, id: string) => checkReportDetailed(r, currentConfig, layout()).findings.find((x) => x.ruleId === 'heading-number' && x.blockId === id)
 
-  it('小見出し・大見出しの初めの「（1）」「1.」「①」「ⅰ．」「Ⅰ．」「第1章」などを警告し、「直す」で取る（後ろの空白も）', () => {
+  it('小見出し・大見出しの初めの「（1）」「1.」「①」「ⅰ．」「Ⅰ．」「第1章」などを警告し、消す番号を detail に書く（下線は後ろの空白まで）', () => {
     for (const [title, rest] of [
       ['（1）担当衣装のキャラクター', '担当衣装のキャラクター'],
       ['(2) デザイン説明', 'デザイン説明'],
@@ -324,12 +346,14 @@ describe('見出しに手で書いた番号（自動で付く「ⅰ．」と二�
     ]) {
       const r = ops.setText(cleanReport(), 's1', title)
       const f = finding(r, 's1')
-      expect(f, title).toMatchObject({ severity: 'warning', source: 'supplementary', area: 'body', start: 0, replacement: '', title: '小見出しに番号を手で書いている' })
-      expect(applyFix(title, { ...f!, start: f!.start!, end: f!.end! })).toBe(rest)
+      expect(f, title).toMatchObject({ severity: 'warning', source: 'supplementary', area: 'body', start: 0, title: '小見出しに番号を手で書いている' })
+      expect(f?.detail, title).toContain(`「${title.slice(0, f!.end!).trim()}」を消します`)
+      // 下線のところを消すと、番号のない見出しになる
+      expect(title.slice(f!.end!), title).toBe(rest)
     }
     const chapter = finding(ops.setText(cleanReport(), 'c1', '第1章　企画・立案'), 'c1')
     expect(chapter).toMatchObject({ title: '大見出しに番号を手で書いている', end: 4 })
-    expect(chapter?.detail).toContain('「直す」で「第1章」を取ります')
+    expect(chapter?.detail).toContain('「第1章」を消します')
     expect(finding(ops.setText(cleanReport(), 'c1', 'Ⅰ．企画・立案'), 'c1')?.detail).toContain('（Ⅰ．）は自動で付く')
   })
 
@@ -348,13 +372,12 @@ describe('見出しに手で書いた番号（自動で付く「ⅰ．」と二�
 })
 
 describe('空の段落（Enter を押して何も書かなかったときなどに残るもの）', () => {
-  it('ひな形の説明のない空の段落は「直す」（replacement）が付き、説明のある段落には付かない', () => {
+  it('ひな形の説明のない空の段落は「空の段落がある」（「削除」で消すように書く）、説明のある段落は「まだ書いていない段落がある」', () => {
     let r = ops.insertAfter(cleanReport(), 'p4', { type: 'paragraph', id: 'pe', content: [{ type: 'text', text: '' }] })
     r = ops.insertAfter(r, 'pe', { type: 'paragraph', id: 'ph', content: [{ type: 'text', text: '' }], hint: '工夫した点を書く' })
     const found = checkReport(r, currentConfig, layout()).filter((f) => f.ruleId === 'paragraph-empty')
-    expect(found.find((f) => f.blockId === 'pe')).toMatchObject({ title: '空の段落がある', replacement: '', detail: '「直す」で、この空の段落を消します' })
+    expect(found.find((f) => f.blockId === 'pe')).toMatchObject({ title: '空の段落がある', detail: '「削除」で、この空の段落を消します' })
     const hinted = found.find((f) => f.blockId === 'ph')
     expect(hinted).toMatchObject({ title: 'まだ書いていない段落がある', detail: '工夫した点を書く' })
-    expect(hinted?.replacement).toBeUndefined()
   })
 })

@@ -27,10 +27,15 @@ export interface ReportFinding {
   blockId?: string
   start?: number
   end?: number
+  /**
+   * 直し方の文字（文章のルールの指摘。textRules の replacement）。ツールに「直す」のボタンはなく（学生が自分で直す。直し方は detail に書く）、
+   * 提出前チェックのページが、指摘の説明「→「身頃」」を作るのに使う
+   */
   replacement?: string
   /**
    * 学生が「このままにする（確認済み）」にできる指摘（手順書のルールではない、文章の補助のチェック）の目印。
-   * 規則・場所・指摘した文字で決まるので、文を書き足しても同じ指摘なら同じ目印になる
+   * 規則・場所・指摘した文字で決まるので、文を書き足しても同じ指摘なら同じ目印になる。
+   * 書き間違えやすい語のエラー（TextFinding.locked）には付けない（前に「確認済み」にしていても、目印がないので隠れない）
    */
   key?: string
 }
@@ -82,7 +87,7 @@ export function checkReportDetailed(report: Report, config: YearConfig, layout?:
 /**
  * 見出しの初めに手で書いた番号（「（1）」「1.」「1．」「①」「ⅰ．」「Ⅰ．」「i.」「一、」「第1章」など）。
  * 見出しの番号（Ⅰ．ⅰ．）はツールが自動で付けるため、目次と PDF で「ⅰ．（1）素材」と二重になる。
- * 「3.5mm」のような数は番号にしない（「.」のすぐ後ろが数字のとき）。番号の後ろの空白も含める（「直す」で一緒に取る）
+ * 「3.5mm」のような数は番号にしない（「.」のすぐ後ろが数字のとき）。番号の後ろの空白も含める（指摘の下線を、消すところまで引く）
  */
 export const HEADING_NUMBER =
   /^[\s　]*(?:[（(](?:[0-9０-９]{1,3}|[一二三四五六七八九十]{1,3}|[ⅰ-ⅻⅠ-Ⅻ]|[ivxIVX]{1,4}|[a-zA-Zａ-ｚＡ-Ｚ])[）)]|[①-⑳⑴-⒇❶-❿]|[0-9０-９]{1,3}(?:[.．\-－][0-9０-９]{1,3})*(?:[.．](?![0-9０-９])|[、,，)）]|[\s　]+)|[ⅰ-ⅻⅠ-Ⅻ](?:[.．、,，]|[\s　]+)?|[一二三四五六七八九十]{1,3}[、．.]|[ivxIVX]{1,4}[.．)）]|第[0-9０-９一二三四五六七八九十]{1,3}[章節項])[\s　]*/
@@ -105,8 +110,7 @@ export function toolFindings(report: Report, config: YearConfig): ReportFinding[
         blockId: 'basic:subtitleInput',
         start: 0,
         end: input.length,
-        replacement: only,
-        detail: `表紙には「${before}〇〇${after ?? ''}」の前後が自動で付きます。〇〇の部分だけにします（「直す」で前後を取ります）`,
+        detail: `表紙には「${before}〇〇${after ?? ''}」の前後が自動で付きます。〇〇の部分の「${only}」だけを残し、前後を消します`,
       }),
     )
   }
@@ -129,7 +133,7 @@ export function toolFindings(report: Report, config: YearConfig): ReportFinding[
       if (list.length < 2 || !list.some((r) => r.withParens)) continue
       const kind = num.tableIds.has(targetId) ? '表' : '図'
       const label = `${kind}${num.numbers.get(targetId)}`
-      // 「直す」では、文末などに添えてあるだけの（図1）を1つ取る（文の中の（図1）を取ると文が崩れるので、そのときは直さない）
+      // 直し方：文末などに添えてあるだけの（図1）を1つ消す（文の中の（図1）を消すと文が崩れるので、そのときはどちらかを消すように言う）
       const extra = [...list].reverse().find((r) => r.trailing)
       const at = extra ?? list[list.length - 1]
       findings.push({
@@ -137,18 +141,17 @@ export function toolFindings(report: Report, config: YearConfig): ReportFinding[
         severity: 'error',
         source: 'supplementary',
         title: `同じ段落に「${label}」が2つある`,
-        detail: `${extra ? `「直す」で（${label}）を1つ取ります。` : 'どちらかを消して1つにします。'}同じ${kind}をわざと2回指しているなら「このままにする」を押します`,
+        detail: `${extra ? `下線の（${label}）を消して1つにします。` : 'どちらかを消して1つにします。'}同じ${kind}をわざと2回指しているなら「このままにする」を押します`,
         area: 'body',
         blockId: block.id,
         start: at.start,
         end: at.end,
-        ...(extra ? { replacement: '' } : {}),
         key: `duplicate-ref|${block.id}|${targetId}`,
       })
     }
   }
 
-  // 見出しに手で書いた番号：「直す」で取る（番号は自動で付く）。番号のように見えるだけの見出しなら「このままにする」
+  // 見出しに手で書いた番号：学生が消す（番号は自動で付く）。番号のように見えるだけの見出しなら「このままにする」
   for (const e of editables(report)) {
     if (e.kind !== 'chapter' && e.kind !== 'subheading') continue
     const m = HEADING_NUMBER.exec(e.text)
@@ -160,12 +163,11 @@ export function toolFindings(report: Report, config: YearConfig): ReportFinding[
       severity: 'warning',
       source: 'supplementary',
       title: `${name}に番号を手で書いている`,
-      detail: `${name}の番号（${e.kind === 'chapter' ? 'Ⅰ．' : 'ⅰ．'}）は自動で付くので、目次と PDF で二重になります。「直す」で「${number}」を取ります`,
+      detail: `${name}の番号（${e.kind === 'chapter' ? 'Ⅰ．' : 'ⅰ．'}）は自動で付くので、目次と PDF で二重になります。「${number}」を消します`,
       area: 'body',
       blockId: e.id,
       start: 0,
       end: m[0].length,
-      replacement: '',
       key: `heading-number|${e.id}|${number}`,
     })
   }
@@ -183,9 +185,10 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   // ---- 文章のルール ----
   for (const e of list) {
     const area = AREA_OF_KIND[e.kind]
-    for (const f of checkText(e.text, words) as TextFinding[]) {
+    for (const { locked, ...f } of checkText(e.text, words) as TextFinding[]) {
       if (SENTENCE_RULES.includes(f.ruleId) && !SENTENCE_KINDS.includes(e.kind)) continue
-      const key = f.source === 'supplementary' ? `${f.ruleId}|${e.id}|${e.text.slice(f.start, f.end)}` : undefined
+      // 書き間違えやすい語のエラー（locked）は「このままにする」にできない（直すまで提出用の PDF を書き出せない）
+      const key = f.source === 'supplementary' && !locked ? `${f.ruleId}|${e.id}|${e.text.slice(f.start, f.end)}` : undefined
       findings.push({ ...f, area, blockId: e.id, ...(key ? { key } : {}) })
     }
   }
@@ -208,7 +211,7 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   if (halfSpace >= 0) {
     const end = basicInfo.name.slice(halfSpace).search(/[^ ]/) + halfSpace
     findings.push(
-      guide('name-space', 'warning', '姓と名の間は全角の空白にする', 'cover', { blockId: 'basic:name', start: halfSpace, end, replacement: '　', detail: '半角の空白 → 全角の空白（例：文化　花子）' }),
+      guide('name-space', 'warning', '姓と名の間は全角の空白にする', 'cover', { blockId: 'basic:name', start: halfSpace, end, detail: '半角の空白 → 全角の空白（例：文化　花子）' }),
     )
   }
   // 氏名に数字や「学籍番号」：学籍番号の欄の文までいっしょに入っている（2行ぶんを氏名の欄に貼り付けたなど）。表紙とファイル名がおかしくなる
@@ -312,7 +315,7 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   }
 
   // 書き忘れ：まだ何も書いていない段落（ひな形の「書くことの説明」だけが残っている段落）。
-  // 説明のない空の段落（Enter を押して何も書かなかったときなどに残るもの）は、「直す」でその段落を消せる（replacement は目印。消すのは編集の中核）
+  // 説明のない空の段落（Enter を押して何も書かなかったときなどに残るもの）は、学生が「削除」で消す（指摘を押すとその段落が開き、道具・書く欄に「削除」が出る）
   for (const block of report.body.flatMap((c) => c.blocks)) {
     if (block.type === 'paragraph' && !contentToText(block.content, num).trim()) {
       findings.push({
@@ -320,10 +323,9 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
         severity: 'warning',
         source: 'supplementary',
         title: block.hint ? 'まだ書いていない段落がある' : '空の段落がある',
-        detail: block.hint ?? '「直す」で、この空の段落を消します',
+        detail: block.hint ?? '「削除」で、この空の段落を消します',
         area: 'body',
         blockId: block.id,
-        ...(block.hint ? {} : { replacement: '' }),
       })
     }
   }
@@ -359,13 +361,11 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
             severity: 'error',
             source: 'supplementary',
             title: `${kind}の番号を手で書いている`,
-            detail: `「直す」で${kind}${n}とつなげます（つなげると、${kind}を足したり消したりしても番号が自動でそろいます）`,
+            detail: `番号を半角の数字で打ち直すと、${kind}${n}とつながります（つながると、${kind}を足したり消したりしても番号が自動でそろいます）`,
             area: 'body',
             blockId: block.id,
             start: offset + m.index,
             end: offset + m.index + m[0].length,
-            // 書いた形のままつなげる（「表1に示す」を「（表1）に示す」にしない）
-            replacement: m[1] ? `（${kind}${n}）` : `${kind}${n}`,
           })
         }
       }

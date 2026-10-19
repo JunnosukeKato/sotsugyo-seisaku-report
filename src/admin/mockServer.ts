@@ -1,11 +1,12 @@
 import { currentConfig, type YearConfig } from '../config'
-import { LIMITS, templateProblems } from '../config/validate'
 import type { AdminServer, AdminState, HistoryRow, Member, YearRow } from './server'
+import { applyNotices, applyTemplates, changedMessage, checkConfig, cleanWords } from './serverRules'
 
 /**
- * 開発用の試験サーバー（ブラウザ内だけで動く）。本番の gas/admin-project/Code.js と同じ振る舞いをまねる。
+ * 開発用の試験サーバー（ブラウザ内だけで動く）。本番の gas/admin-project/Code.js と同じ振る舞いをまねる
+ * （保存の前の確かめとエラーの言葉は serverRules.ts で Code.js と同じにしている）。
  * 年度設定はこのブラウザの localStorage に保存する。
- * admin.html?as=teacher で開くと、先生（ひな形だけ編集できる）として振る舞う。
+ * admin.html?as=teacher で開くと、先生（ひな形・お知らせ・書き間違えやすい語だけ編集できる）として振る舞う。
  */
 
 const KEY = 'sotsugyo-admin-mock'
@@ -62,11 +63,9 @@ export function createMockServer(): AdminServer {
     if (!row) throw new Error(`${year}年度の設定がありません`)
     return row
   }
-  /** 画面を開いたあとに、ほかの人が保存していたら止める（本番の checkNotChanged_ と同じ） */
+  /** 画面を開いたあとに、ほかの人（別のタブの自分）が保存していたら止める（本番の checkNotChanged_ と同じ） */
   const checkNotChanged = (row: YearRow, expectedUpdatedAt?: string) => {
-    if (expectedUpdatedAt && row.updatedAt !== expectedUpdatedAt) {
-      throw new Error(`この画面を開いたあとに、ほかの人（${row.updatedBy}）がこの年度の設定を保存しました。そのまま保存すると、その変更が消えてしまうため、保存しませんでした。ページを読み込み直してから、もう一度変更してください`)
-    }
+    if (expectedUpdatedAt && row.updatedAt !== expectedUpdatedAt) throw new Error(changedMessage(row.updatedBy, USER))
   }
   /** 有効な管理者が0人になる変更は断る（本番の keepAdmin_ と同じ） */
   const keepAdmin = (list: Member[]) => {
@@ -74,6 +73,23 @@ export function createMockServer(): AdminServer {
   }
   const record = (store: Store, year: number, action: string, config: YearConfig) =>
     store.history.push({ at: new Date().toISOString(), user: USER, year, action, config: clone(config) })
+  /**
+   * 年度の設定を読み、fn で書き換えて保存し、変更履歴に残す（本番の editYear_ と同じ。先生も使える）。
+   * fn の中や書き換えたあとの確かめで誤りが見つかったら、何も保存しない
+   */
+  const editYear = (year: number, expectedUpdatedAt: string | undefined, fn: (config: YearConfig) => string) => {
+    const store = load()
+    requireTeacher(store)
+    const row = findYear(store, year)
+    checkNotChanged(row, expectedUpdatedAt)
+    const config = clone(row.config)
+    const action = fn(config)
+    checkConfig(config)
+    Object.assign(row, { config, updatedAt: new Date().toISOString(), updatedBy: USER })
+    record(store, year, action, config)
+    save(store)
+    return state(store)
+  }
 
   return {
     async getState() {
@@ -84,6 +100,7 @@ export function createMockServer(): AdminServer {
       await wait()
       const store = load()
       requireAdmin(store)
+      checkConfig(config)
       const row = store.years.find((y) => y.year === config.fiscalYear)
       if (row) checkNotChanged(row, expectedUpdatedAt)
       if (row) Object.assign(row, { config, updatedAt: new Date().toISOString(), updatedBy: USER })
@@ -110,107 +127,74 @@ export function createMockServer(): AdminServer {
       await wait()
       const store = load()
       requireAdmin(store)
-      if (!/^[1-9]\d{3}$/.test(String(newYear))) throw new Error('新しい年度は、西暦4桁の数字で入力してください')
-      if (store.years.some((y) => y.year === newYear)) throw new Error(`${newYear}年度はすでにあります`)
-      const from = store.years.find((y) => y.year === fromYear)!
-      const config: YearConfig = { ...clone(from.config), fiscalYear: newYear }
-      store.years.push({ year: newYear, status: '準備中', config, updatedAt: new Date().toISOString(), updatedBy: USER })
-      record(store, newYear, `${fromYear}年度からコピーして作成`, config)
+      if (!/^[1-9]\d{3}$/.test(String(newYear).trim())) throw new Error('新しい年度は、西暦4桁の数字で入力してください')
+      const year = Number(newYear)
+      if (store.years.some((y) => y.year === year)) throw new Error(`${year}年度はすでにあります`)
+      const from = findYear(store, fromYear)
+      const config: YearConfig = { ...clone(from.config), fiscalYear: year }
+      store.years.push({ year, status: '準備中', config, updatedAt: new Date().toISOString(), updatedBy: USER })
+      record(store, year, `${Number(fromYear)}年度からコピーして作成`, config)
+      save(store)
+      return state(store)
+    },
+    async deleteYear(year, expectedUpdatedAt) {
+      await wait()
+      const store = load()
+      requireAdmin(store)
+      const row = findYear(store, year)
+      // 本番の deleteYear と同じく、一度も公開したことのない「準備中」の年度だけ消せる
+      if (row.status !== '準備中' || store.history.some((h) => h.year === year && (h.action === '公開' || h.action === '初期設定'))) {
+        throw new Error(`${year}年度は、学生に公開したことがあるため削除できません（削除できるのは、一度も公開していない「準備中」の年度だけです）`)
+      }
+      checkNotChanged(row, expectedUpdatedAt)
+      store.years = store.years.filter((y) => y !== row)
+      record(store, year, '削除', row.config)
       save(store)
       return state(store)
     },
     async getHistory(year) {
       await wait()
-      return load()
-        .history.filter((h) => h.year === year)
+      const store = load()
+      requireTeacher(store)
+      return store.history
+        .filter((h) => h.year === year)
         .reverse()
+        .slice(0, 50)
     },
     async saveTeacherEdits(year, edits, expectedUpdatedAt) {
       await wait()
-      const store = load()
-      requireTeacher(store)
-      const row = findYear(store, year)
-      checkNotChanged(row, expectedUpdatedAt)
-      const done: string[] = []
-      const templates = edits.templates ?? {}
-      const notices = edits.notices ?? {}
-      const tNames: string[] = []
-      const nNames: string[] = []
-      // 本番と同じく、崩れたひな形・長すぎるお知らせは保存しない（どれか1つでもあれば、何も保存しない）
-      for (const course of row.config.courses) {
-        const problem = templates[course.id] && templateProblems(templates[course.id].template)[0]
-        if (problem) throw new Error(`「${course.name}」のひな形${problem}`)
-        if (course.id in notices && (typeof notices[course.id] !== 'string' || notices[course.id].length > LIMITS.notice)) throw new Error(`「${course.name}」のお知らせが正しくありません`)
-      }
-      for (const course of row.config.courses) {
-        const t = templates[course.id]
-        if (t) {
-          Object.assign(course, { template: t.template, abstractExample: t.abstractExample })
-          tNames.push(course.name)
+      return editYear(year, expectedUpdatedAt, (config) => {
+        if (!edits || typeof edits !== 'object') throw new Error('保存する内容の形が正しくありません')
+        const done: string[] = []
+        if (edits.templates && typeof edits.templates === 'object' && Object.keys(edits.templates).length) done.push(`下書きのひな形を保存（${applyTemplates(config, edits.templates).join('・')}）`)
+        if (edits.notices && typeof edits.notices === 'object' && Object.keys(edits.notices).length) done.push(`お知らせを保存（${applyNotices(config, edits.notices).join('・')}）`)
+        if (edits.words !== undefined && edits.words !== null) {
+          config.wordChecks = cleanWords(edits.words)
+          done.push(`書き間違えやすい語を保存（${config.wordChecks.length}語）`)
         }
-        if (course.id in notices) {
-          course.notice = notices[course.id]
-          nNames.push(course.name)
-        }
-      }
-      if (tNames.length) done.push(`下書きのひな形を保存（${tNames.join('・')}）`)
-      if (nNames.length) done.push(`お知らせを保存（${nNames.join('・')}）`)
-      if (edits.words) {
-        // 本番と同じく、決まった項目だけにして、空の行・同じ語の行は捨てる
-        row.config.wordChecks = edits.words
-          .map((w) => ({ wrong: w.wrong.trim(), right: w.right.trim(), note: (w.note ?? '').trim(), severity: w.severity === 'warning' ? ('warning' as const) : ('error' as const) }))
-          .filter((w) => w.wrong && w.right && w.wrong !== w.right)
-        done.push(`書き間違えやすい語を保存（${row.config.wordChecks.length}語）`)
-      }
-      Object.assign(row, { updatedAt: new Date().toISOString(), updatedBy: USER })
-      record(store, year, done.join('・') || '保存（変更なし）', row.config)
-      save(store)
-      return state(store)
+        return done.join('・') || '保存（変更なし）'
+      })
     },
     async saveNotices(year, notices) {
       await wait()
-      const store = load()
-      requireTeacher(store)
-      const row = findYear(store, year)
-      const names: string[] = []
-      for (const course of row.config.courses) {
-        if (!(course.id in notices)) continue
-        course.notice = notices[course.id]
-        names.push(course.name)
-      }
-      Object.assign(row, { updatedAt: new Date().toISOString(), updatedBy: USER })
-      record(store, year, `お知らせを保存（${names.join('・')}）`, row.config)
-      save(store)
-      return state(store)
+      return editYear(year, undefined, (config) => {
+        if (!notices || typeof notices !== 'object') throw new Error('お知らせの形が正しくありません')
+        return `お知らせを保存（${applyNotices(config, notices).join('・')}）`
+      })
     },
     async saveWordChecks(year, words) {
       await wait()
-      const store = load()
-      requireTeacher(store)
-      const row = findYear(store, year)
-      row.config.wordChecks = words
-      Object.assign(row, { updatedAt: new Date().toISOString(), updatedBy: USER })
-      record(store, year, `書き間違えやすい語を保存（${words.length}語）`, row.config)
-      save(store)
-      return state(store)
+      return editYear(year, undefined, (config) => {
+        config.wordChecks = cleanWords(words)
+        return `書き間違えやすい語を保存（${config.wordChecks.length}語）`
+      })
     },
     async saveTemplates(year, templates) {
       await wait()
-      const store = load()
-      requireTeacher(store)
-      const row = findYear(store, year)
-      const names: string[] = []
-      for (const course of row.config.courses) {
-        const t = templates[course.id]
-        if (!t) continue
-        course.template = t.template
-        course.abstractExample = t.abstractExample
-        names.push(course.name)
-      }
-      Object.assign(row, { updatedAt: new Date().toISOString(), updatedBy: USER })
-      record(store, year, `下書きのひな形を保存（${names.join('・')}）`, row.config)
-      save(store)
-      return state(store)
+      return editYear(year, undefined, (config) => {
+        if (!templates || typeof templates !== 'object') throw new Error('ひな形の形が正しくありません')
+        return `下書きのひな形を保存（${applyTemplates(config, templates).join('・')}）`
+      })
     },
     async getMembers() {
       await wait()

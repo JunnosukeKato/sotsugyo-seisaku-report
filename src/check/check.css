@@ -376,7 +376,7 @@ button.pg { cursor: pointer; }
   .popover button { padding: 13px 12px; font-size: 15px; }
 }
 
-/* ---- mockups/v31：作品写真を6枚まで（案A）・エラーと警告の意味（案1）・入れたときの知らせ ---- */
+/* ---- mockups/v31：作品写真を6枚まで（案A）・エラーと要確認の意味（案1）・入れたときの知らせ ---- */
 .add-notes li.info { background: var(--accent-soft); color: #33406f; }
 .add-notes li.info .st.ok { background: var(--accent); }
 /* 「写真 4枚」は切らずに出し、入りきらなければ「（6枚まで）」を次の行へ */

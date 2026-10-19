@@ -1151,7 +1151,7 @@ interface PanelProps {
   ref: React.Ref<HTMLElement>
 }
 
-/** エラーと警告の意味（指摘の一覧の上。1つずつの札「手順書」「補助」の代わり。mockups/v31 案1） */
+/** エラーと要確認の意味（指摘の一覧の上。1つずつの札「手順書」「補助」の代わり。mockups/v31 案1） */
 function SeverityLegend() {
   return (
     <p className="sev-legend">
@@ -1164,7 +1164,7 @@ function SeverityLegend() {
       <span>
         <Wn />
         <span>
-          <b className="w">警告</b>：できれば直す
+          <b className="w">要確認</b>：確かめて、必要なら直す
         </span>
       </span>
     </p>
@@ -1174,7 +1174,7 @@ function SeverityLegend() {
 function Tally({ errors, warnings }: { errors: number; warnings: number }) {
   return (
     <span className="tally">
-      <b className={errors ? 'e' : 'z'}>{errors}</b> エラー　<b className={warnings ? 'w' : 'z'}>{warnings}</b> 警告
+      <b className={errors ? 'e' : 'z'}>{errors}</b> エラー　<b className={warnings ? 'w' : 'z'}>{warnings}</b> 要確認
     </span>
   )
 }
@@ -1190,7 +1190,7 @@ function Issue({ f, sel, pages, onPick }: { f: CheckFinding; sel: boolean; pages
     <li className={`issue${f.severity === 'warning' ? ' warning' : ''}${sel ? ' sel' : ''}`} data-finding={f.id}>
       <i className="dot" />
       {/* 指摘を押すと、そのページに枠が付く（キーボードでは、このボタンに Tab で移る） */}
-      <button type="button" className="go" aria-pressed={sel} aria-label={`${f.severity === 'error' ? 'エラー' : '警告'}：${f.title}。${f.page ? `${PART_NAMES[f.part]}${pages > 1 ? ` ${f.page}ページ目` : ''}` : PART_NAMES[f.part]}${f.quote ? `。${f.quote.join('')}` : ''}${f.detail ? `。${f.detail}` : ''}`} onClick={onPick}>
+      <button type="button" className="go" aria-pressed={sel} aria-label={`${f.severity === 'error' ? 'エラー' : '要確認'}：${f.title}。${f.page ? `${PART_NAMES[f.part]}${pages > 1 ? ` ${f.page}ページ目` : ''}` : PART_NAMES[f.part]}${f.quote ? `。${f.quote.join('')}` : ''}${f.detail ? `。${f.detail}` : ''}`} onClick={onPick}>
         <span className="ttl">{f.title}</span>
         <span className="detail">
           <Where f={f} pages={pages} />

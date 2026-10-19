@@ -126,12 +126,12 @@ interface Props {
   onBuilt?: (pdf: BuiltPdf) => void
 }
 
-/** 警告の一覧で、はじめに見せる数（多いときは「ほか◯件」で開く） */
+/** 要確認の一覧で、はじめに見せる数（多いときは「ほか◯件」で開く） */
 const WARNINGS_SHOWN = 5
 
 /**
- * 提出前の確かめで出す警告の一覧（エラーの一覧と同じ形。押すと、その場所へ移る）。
- * 前は「警告が10件あります」とだけ出て、何の警告かが分からなかった
+ * 提出前の確かめで出す要確認の一覧（エラーの一覧と同じ形。押すと、その場所へ移る）。
+ * 前は「警告が10件あります」とだけ出て、何の指摘かが分からなかった（「警告」は 2026-10-19 に「要確認」に言い換えた）
  */
 function WarningList({ warnings, editor, onClose }: { warnings: ReportFinding[]; editor: ReportEditor; onClose: () => void }) {
   const [all, setAll] = useState(false)
@@ -433,7 +433,7 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
   return (
     <Modal key="start" title="提出用のPDFを書き出す" onClose={onClose}>
       <p className="lead">
-        エラーはありません{warnings > 0 ? `（警告が${warnings}件あります。内容を確認してください）` : ''}。最後に、次のことを確認してください。
+        エラーはありません{warnings > 0 ? `（要確認が${warnings}件あります。内容を確かめてください）` : ''}。最後に、次のことを確認してください。
       </p>
       {warnings > 0 && <WarningList warnings={warningList} editor={editor} onClose={onClose} />}
       {editor.getSnapshot().report.abstract.started === false && (

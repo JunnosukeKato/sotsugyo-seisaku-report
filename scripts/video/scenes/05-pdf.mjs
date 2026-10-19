@@ -1,5 +1,5 @@
 // 動画 5：PDF を出す（下書き・提出用）（パソコン）
-// 下書きを見せるため、見本の原稿の段落の終わりの「。」を消してから録る（エラー1件。「直す」で直せる）
+// 下書きを見せるため、見本の原稿の段落の終わりの「。」を消してから録る（エラー1件。段落の終わりに「。」を打って直す）
 export const meta = {
   number: '5',
   label: 'PDF を出す（下書き・提出用）',
@@ -9,6 +9,7 @@ export const meta = {
     draft: 'エラーが残っていても、「下書き」の透かし入りの PDF を保存できます（提出には使えません）',
     draftDone: '保存した PDF を、印刷して先生に見せます',
     fixFirst: '提出用は、エラーを0件にしてから書き出します',
+    fixType: '項目を押してその場所へ移り、段落の終わりに「。」を打ちます',
     final: 'もう一度「PDFを書き出す」を押し、3つを確かめてチェックを入れます',
     save: '「PDF を保存する」を押すと、提出用の PDF ができます',
     saved: 'ファイル名には、学籍番号と氏名が入ります。この1ファイルを提出します',
@@ -45,13 +46,27 @@ export async function run({ page, rec, h }) {
   await h.clickEl(page, '.modal .close', null, { pause: 600 })
   await h.sleep(600)
 
-  // 3. エラーを直す
+  // 3. エラーを直す（「直す」ボタンはない。項目を押してその場所へ移り、自分で「。」を打つ）
   rec.mark('fixFirst', { focus: await exportArea(h, page) })
-  await h.sleep(1800)
-  await h.clickEl(page, '.side .sec.check .fix', null, { pause: 800 })
-  await h.sleep(500)
+  await h.sleep(2200)
+  await h.clickEl(page, '.side .sec.check li .go', null, { pause: 800 })
+  await h.sleep(600)
   await h.ready(page)
+  const p13 = await h.blockRect(page, 'p13')
+  rec.mark('fixType', { focus: { ...p13, y: p13.y - 30, h: p13.h + 60 } })
   await h.sleep(1500)
+  const end = await h.endOfBlock(page, 'p13')
+  await h.clickAt(page, end.x + 2, end.y, { pause: 700 })
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p13', { timeout: 30000 })
+  await page.keyboard.press('End')
+  await h.sleep(600)
+  await h.typeSlow(page, '。', 200)
+  await h.sleep(900)
+  await page.keyboard.press('Escape')
+  await h.ready(page)
+  const left = await page.evaluate(() => window.__editor.getSnapshot().findings.filter((f) => f.severity === 'error').length)
+  if (left) throw new Error(`エラーが残っています（${left}件）`)
+  await h.sleep(1200)
 
   // 4. 提出用：3つを確かめる
   await h.clickEl(page, '.side .export', null, { pause: 700 })

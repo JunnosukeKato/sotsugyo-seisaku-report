@@ -9,6 +9,7 @@ import { withEdge } from '../poc/edge.mjs'
 import { stubConfig } from './configStub.mjs'
 import { firstTimeV3Pc, firstTimeV3Word } from './firstTimeV3.mjs'
 import { editorFixesV3Pc } from './editorFixesV3.mjs'
+import { teacherTrialPc } from './teacherTrialFixes.mjs'
 import { setupWriting } from './sampleReport.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
@@ -444,14 +445,14 @@ await withEdge(async (browser) => {
   check('抄録の文字数と行数が測れる', s.layout.abstractLines >= 15 && s.layout.abstractLines <= 23, `${s.layout.abstractLines}行`)
   check('抄録の字数の指摘が消える', !s.findings.some((f) => f.ruleId.startsWith('abstract')))
 
-  // ---- 本文：誤りを含む文を書き、修正ボタンで直す ----
+  // ---- 本文：誤りを含む文を書き、指摘を押してその段落へ移り、書いてある直し方のとおりに自分で直す（「直す」のボタンはない） ----
   const firstParagraph = s.report.body[0].blocks.find((b) => b.type === 'paragraph').id
   await clickBlock(firstParagraph)
   await typeAndCommit('私は１５世紀の衣装を製作した。', 'Escape')
   s = await snap()
   const ruleIds = s.findings.filter((f) => f.blockId === firstParagraph).map((f) => f.ruleId)
   check('本文の誤りを見つける', ['first-person', 'digit-fullwidth', 'seisaku'].every((r) => ruleIds.includes(r)), ruleIds.join(','))
-  // エラーと警告の意味は、一覧の上に1行で出す（指摘ごとの札「手順書」「補助」はなくした。提出前チェックと同じ。mockups/v31 案1）
+  // エラーと要確認の意味は、一覧の上に1行で出す（指摘ごとの札「手順書」「補助」はなくした。提出前チェックと同じ。mockups/v31 案1）
   const legend = await page.evaluate(() => ({
     text: document.querySelector('.side .sec.check .sev-legend')?.textContent ?? '',
     aboveList: !!document.querySelector('.side .sec.check .sev-legend + .igroup'),
@@ -459,17 +460,28 @@ await withEdge(async (browser) => {
     chips: document.querySelectorAll('.side .issue .src').length,
     chipText: /手順書|補助/.test([...document.querySelectorAll('.side .issue .ttl')].map((t) => t.textContent).join('')),
   }))
-  check('セルフチェックの一覧の上に「× エラー：直してから出す」「! 警告：できれば直す」が出て、指摘ごとの札（手順書・補助）はない', legend.text.includes('エラー：直してから出す') && legend.text.includes('警告：できれば直す') && legend.aboveList && legend.icons.join(',') === '"×","!"' && legend.chips === 0 && !legend.chipText, JSON.stringify(legend))
+  check('セルフチェックの一覧の上に「× エラー：直してから出す」「! 要確認：確かめて、必要なら直す」が出て、指摘ごとの札（手順書・補助）はない', legend.text.includes('エラー：直してから出す') && legend.text.includes('要確認：確かめて、必要なら直す') && legend.aboveList && legend.icons.join(',') === '"×","!"' && legend.chips === 0 && !legend.chipText, JSON.stringify(legend))
   await page.screenshot({ path: `${OUT}/1-findings.png` })
-  for (let i = 0; i < 3; i++) {
-    const fix = await page.$('.side .issue .fix')
-    if (!fix) break
-    await fix.click()
-    await ready()
-  }
+  const issueRows = await page.evaluate(() => ({
+    fix: document.querySelectorAll('.side .issue .fix').length,
+    fixText: [...document.querySelectorAll('.side .issue button')].filter((b) => b.textContent.trim() === '直す').length,
+    details: [...document.querySelectorAll('.side .issue .detail')].map((d) => d.textContent),
+  }))
+  check(
+    '指摘に「直す」のボタンはなく、直し方が書いてある（「私」→「筆者」・全角の「１５」→ 半角の「15」・「製作」→「制作」）',
+    issueRows.fix === 0 && issueRows.fixText === 0 && ['「私」→「筆者」', '全角の「１５」→ 半角の「15」', '「製作」→「制作」'].every((d) => issueRows.details.includes(d)),
+    JSON.stringify(issueRows),
+  )
+  // 指摘を押すと、その段落が開く（カーソルは指摘の所）。書いてあるとおりに自分で書き直す
+  await page.evaluate(() => [...document.querySelectorAll('.side .issue')].find((li) => li.textContent.includes('「私」→「筆者」')).click())
+  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 30000 }, firstParagraph)
+  await page.keyboard.down('Control')
+  await page.keyboard.press('a')
+  await page.keyboard.up('Control')
+  await typeAndCommit('筆者は15世紀の衣装を制作した。', 'Escape')
   s = await snap()
   const fixed = s.report.body[0].blocks.find((b) => b.id === firstParagraph).content.map((n) => n.text ?? '').join('')
-  check('［修正する］で直る', fixed === '筆者は15世紀の衣装を制作した。', fixed)
+  check('指摘を押してその段落へ移り、書いてあるとおりに直すと、指摘が消える', fixed === '筆者は15世紀の衣装を制作した。' && !s.findings.some((f) => f.blockId === firstParagraph && ['first-person', 'digit-fullwidth', 'seisaku'].includes(f.ruleId)), fixed)
 
   // ---- Enter で段落を分ける ----
   await clickBlock(firstParagraph)
@@ -509,9 +521,13 @@ await withEdge(async (browser) => {
   check('文末に「。」がない段落はエラーになり、カーソルを置くと右の一覧でその指摘が目立つ', !!endFinding && activeTitle.includes('文末に「。」を付ける'), activeTitle)
   await page.keyboard.press('Escape')
   await ready()
-  await page.evaluate((id) => { const f = window.__editor.getSnapshot().findings.find((x) => x.ruleId === 'sentence-end' && x.blockId === id); window.__editor.applyFinding(f) }, second)
-  await ready()
-  check('「直す」で文末に「。」が付く', (await paraText(second)) === '次の段落である。そして袖を広げた。', await paraText(second))
+  // 指摘には直し方（段落の終わりに「。」を打つ）が書いてある。指摘を押してその段落へ移り、終わりに「。」を打つ
+  const endDetail = await page.evaluate(() => [...document.querySelectorAll('.side .issue')].find((li) => li.textContent.includes('文末に「。」を付ける'))?.querySelector('.detail')?.textContent ?? '')
+  await page.evaluate(() => [...document.querySelectorAll('.side .issue')].find((li) => li.textContent.includes('文末に「。」を付ける')).click())
+  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 30000 }, second)
+  await page.keyboard.press('End')
+  await typeAndCommit('。', 'Escape')
+  check('文末の「。」の指摘は「段落の終わりに「。」を打つ」と書き、押して移った段落の終わりに「。」を打つと消える', endDetail === '段落の終わりに「。」を打つ' && (await paraText(second)) === '次の段落である。そして袖を広げた。' && !(await snap()).findings.some((x) => x.ruleId === 'sentence-end' && x.blockId === second), JSON.stringify({ endDetail, text: await paraText(second) }))
 
   // ---- 書いていて行が増えたら、紙面を組み直す前から、後ろの段落が下へずれて見える（入力欄に隠れない） ----
   await clickBlock(firstParagraph)
@@ -668,6 +684,22 @@ await withEdge(async (browser) => {
   check('図を削除してすぐ（組み直す前）に「改ページ」「段落」を押しても、何も入らない', !s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'pageBreak') && s.report.body.flatMap((c) => c.blocks).length === pressedDuring, String(pressedDuring))
   const refsLeft = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
   check('図を消すと、本文のその図への（図n）も消える', s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow').figures.length === 1 && refsLeft === 1)
+  // 図を押して選び、Delete キーで消せる（左の道具の「削除」と同じ。依頼者の要望）。元に戻すで戻る
+  {
+    const figBox = await page.evaluate(() => {
+      const r = document.querySelector('.page-viewport.front figure[data-figure-id] img').getBoundingClientRect()
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    })
+    await page.mouse.click(figBox.x, figBox.y)
+    await page.waitForFunction(() => window.__editor.getSnapshot().selection?.kind === 'figure', { timeout: 10000 })
+    await page.keyboard.press('Delete')
+    await ready()
+    const afterDelete = (await snap()).report.body.flatMap((c) => c.blocks).some((b) => b.type === 'figureRow')
+    await page.evaluate(() => window.__editor.undo())
+    await ready()
+    const afterUndo = (await snap()).report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow')?.figures.length
+    check('図を押して選び、Delete キーで消せる（元に戻すで戻る）', !afterDelete && afterUndo === 1, JSON.stringify({ afterDelete, afterUndo }))
+  }
 
   // ---- 前に入れた図を、もう一度指す：番号を（図1）と書くと、確定したときに図とつながる ----
   await clickBlock(firstParagraph)
@@ -679,17 +711,19 @@ await withEdge(async (browser) => {
   s = await snap()
   const refsNow = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
   check('（図1）と書くと、確定したときに図とつながる（番号が変わっても自動でそろう）', refsNow === 2 && !s.findings.some((x) => x.ruleId === 'figure-unreferenced' || x.ruleId === 'manual-ref'))
-  // 同じ段落に（図1）が2つ並んだ：二重になっているとエラーで知らせ、「直す」で1つにする
-  const dupFixed = await page.evaluate((id) => {
+  // 同じ段落に（図1）が2つ並んだ：二重になっているとエラーで知らせ、下線の（図1）を消すように書く。指摘を押すと、その（図1）の前にカーソルが来る
+  const dup = await page.evaluate((id) => {
     const f = window.__editor.getSnapshot().findings.find((x) => x.ruleId === 'duplicate-ref' && x.blockId === id)
-    if (!f) return null
-    window.__editor.applyFinding(f)
-    return f.severity
+    return f ? { severity: f.severity, detail: f.detail, start: f.start, end: f.end } : null
   }, firstParagraph)
+  await page.evaluate(() => [...document.querySelectorAll('.side .issue')].find((li) => li.textContent.includes('が2つある')).click())
+  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 30000 }, firstParagraph)
+  for (let k = 0; dup && k < dup.end - dup.start; k++) await page.keyboard.press('Delete')
+  await page.keyboard.press('Escape')
   await ready()
   s = await snap()
   const refsFixed = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
-  check('同じ段落に（図1）が2つあるとエラーになり、「直す」で1つにできる', dupFixed === 'error' && refsFixed === 1 && !s.findings.some((x) => x.ruleId === 'duplicate-ref'), `${dupFixed} ${refsFixed}`)
+  check('同じ段落に（図1）が2つあるとエラーになり、下線の（図1）を消して1つにできる（押すと、その前にカーソルが来る）', dup?.severity === 'error' && dup.detail.includes('下線の（図1）を消して1つにします') && refsFixed === 1 && !s.findings.some((x) => x.ruleId === 'duplicate-ref'), JSON.stringify({ dup, refsFixed }))
   await page.screenshot({ path: `${OUT}/2-figure.png` })
 
   // ---- 図・表は、文中の入れたい位置で入れる（書いていないときは押せない） ----
@@ -1273,18 +1307,21 @@ await withEdge(async (browser) => {
     }))
     check('ひな形の説明のある空の段落を開いて、何も書かずに閉じても、説明（「ここに書くこと」）は消えない', kept.hint === '工夫した点を書く' && kept.placeholder.includes('工夫した点を書く'), JSON.stringify(kept))
 
-    // 小見出しに手で書いた「（1）」：警告と「直す」（番号の「ⅰ．」は自動で付く）
+    // 小見出しに手で書いた「（1）」：警告で、消す番号を書く（番号の「ⅰ．」は自動で付く）。押すと見出しの初めにカーソルが来るので、自分で消す
     const headingFix = await page.evaluate(() => {
       const li = [...document.querySelectorAll('.side .issue')].find((x) => x.textContent.includes('小見出しに番号を手で書いている'))
-      const fix = li?.querySelector('.fix')
-      fix?.click()
-      return { shown: !!li, warning: !!li?.classList.contains('warning'), fix: !!fix }
+      const info = { shown: !!li, warning: !!li?.classList.contains('warning'), fix: !!li?.querySelector('.fix'), detail: li?.querySelector('.detail')?.textContent ?? '' }
+      li?.click()
+      return info
     })
+    await waitEditing(() => window.__editor.getSnapshot().editingId === 'fsN')
+    for (let k = 0; k < 3; k++) await page.keyboard.press('Delete')
+    await page.keyboard.press('Escape')
     await ready()
     const fixedTitle = (await blocksOf('fc1')).find((b) => b.id === 'fsN')?.title
-    check('小見出しに手で書いた「（1）」は警告になり、「直す」で取れる', headingFix.shown && headingFix.warning && headingFix.fix && fixedTitle === '素材', JSON.stringify({ headingFix, fixedTitle }))
+    check('小見出しに手で書いた「（1）」は警告になり、「「（1）」を消します」と書く（「直す」はない）。押して移り、自分で消すと番号のない見出しになる', headingFix.shown && headingFix.warning && !headingFix.fix && headingFix.detail.includes('「（1）」を消します') && fixedTitle === '素材', JSON.stringify({ headingFix, fixedTitle }))
 
-    // Enter を押して何も書かずに閉じた空の段落：「空の段落がある」の「直す」で消せる（「段落を削除しました［戻す］」が出る）
+    // Enter を押して何も書かずに閉じた空の段落：「空の段落がある」を押すとその段落が開き、道具の「削除」で消せる（「段落を削除しました［戻す］」が出る）
     await clickBlock('fpZ')
     await ctrlEnd()
     await page.keyboard.press('Enter')
@@ -1293,13 +1330,15 @@ await withEdge(async (browser) => {
     const emptyCount = (await blocksOf('fc2')).length
     const emptyFix = await page.evaluate(() => {
       const li = [...document.querySelectorAll('.side .issue')].find((x) => x.textContent.includes('空の段落がある'))
-      const fix = li?.querySelector('.fix')
-      fix?.click()
-      return { shown: !!li, fix: !!fix }
+      const info = { shown: !!li, fix: !!li?.querySelector('.fix'), detail: li?.querySelector('.detail')?.textContent ?? '' }
+      li?.click()
+      return info
     })
+    await waitEditing(() => { const s = window.__editor.getSnapshot(); return s.editingKind === 'paragraph' && s.editingId !== 'fpZ' })
+    await clickPaletteButton('削除')
     await ready()
     const afterEmpty = { blocks: (await blocksOf('fc2')).map(textOf), toast: await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? '') }
-    check('何も書かずに残った空の段落は「空の段落がある」の「直す」で消せ、「段落を削除しました［戻す］」が出る', emptyCount === 2 && emptyFix.shown && emptyFix.fix && JSON.stringify(afterEmpty.blocks) === JSON.stringify(['まとめた。']) && afterEmpty.toast.includes('段落を削除しました'), JSON.stringify({ emptyCount, emptyFix, afterEmpty }))
+    check('何も書かずに残った空の段落は「空の段落がある」（「削除」で消すと書く）。押してその段落へ移り、道具の「削除」で消すと、「段落を削除しました［戻す］」が出る', emptyCount === 2 && emptyFix.shown && !emptyFix.fix && emptyFix.detail === '「削除」で、この空の段落を消します' && JSON.stringify(afterEmpty.blocks) === JSON.stringify(['まとめた。']) && afterEmpty.toast.includes('段落を削除しました'), JSON.stringify({ emptyCount, emptyFix, afterEmpty }))
 
     // 文の途中で「図を入れる」：（図n）はカーソルの位置ではなく、その文の終わり（「。」の前）に入る
     await page.evaluate(() => window.__editor.openWhenReady('fpA', 8))
@@ -1761,6 +1800,9 @@ await withEdge(async (browser) => {
 
   // ---- はじめて使う学生の試し（3回目：パソコン）で見つかった、紙面と書く欄まわりの直し（scripts/e2e/editorFixesV3.mjs） ----
   await editorFixesV3Pc(browser, check)
+
+  // ---- はじめて使う先生の試しで見つかったこと（書き間違えやすい語のエラー・はじめての案内の続き。scripts/e2e/teacherTrialFixes.mjs） ----
+  await teacherTrialPc(browser, check)
 })
 
 /**

@@ -26,7 +26,7 @@ import { SidePanel, PageColumn } from './app/SidePanel'
 import { StartGuide, type GuideStep } from './app/StartGuide'
 import { TabLockedOverlay } from './app/TabLock'
 import { Tour } from './app/Tour'
-import { firstOpenInTab, markTourSeen, markTourShown, tourSeen } from './app/tourMemory'
+import { firstOpenInTab, forgetGuide, guideLeftAt, markTourSeen, markTourShown, rememberGuide, tourSeen } from './app/tourMemory'
 import { useTabLock } from './app/useTabLock'
 import { useTokenRenewal } from './app/useTokenRenewal'
 import { useAutosave } from './app/useAutosave'
@@ -245,12 +245,32 @@ export default function App() {
   // 今年度だけ、コースが決まっている新しい原稿は、Word で書き始めているかを聞くところから。
   // 案内を出さないとき（書き始めている原稿を開いた）は、この端末でまだ見ていなければ、指差し確認を出す
   // （このツールに指差し確認ができる前に、案内を終えていた学生にも1回。ログインやどの原稿で続けるかが決まってから呼ばれる）。
-  // ただし、このタブで書いている途中に読み込み直したときは出さない（次に開いたときに出す。tourMemory.ts の firstOpenInTab）
+  // ただし、このタブで書いている途中に読み込み直したときは出さない（次に開いたときに出す。tourMemory.ts の firstOpenInTab）。
+  // 案内を閉じず・終えずに読み込み直した（タブを閉じた）原稿は、表紙の項目がまだ空いていれば、案内の続きから出す
+  // （「Word で書き始めていますか？」の途中ならそこから、ほかは空いている最初の項目から。tourMemory.ts の guideLeftAt）
   const startGuide = useCallback((cfg: YearConfig, report: Report, isNew: boolean) => {
     if (!findCourse(cfg, report.basicInfo.courseId)) setGuide('course')
     else if (isNew) setGuide(wordImportOffered(cfg) ? 'word' : report.basicInfo.studentId.trim() ? 'name' : 'studentId')
-    else if (!tourSeen() && firstOpenInTab()) setTourWanted(true)
+    else {
+      // コースを選ぶ段階で止まっていた（コースの一覧を読めなかったなど）ときは、続きを出さない（コースは、その案内の外で決まっている）
+      const left = guideLeftAt()
+      const empty = firstEmptyCoverStep(report)
+      if (left && left !== 'course' && empty) setGuide(left === 'word' && wordImportOffered(cfg) ? 'word' : empty)
+      else {
+        if (left) forgetGuide()
+        if (!tourSeen() && firstOpenInTab()) setTourWanted(true)
+      }
+    }
   }, [])
+
+  // 案内を出している段階を、この端末に覚える（閉じた・終えたら消す。開いた直後の、まだ案内を出していないときは消さない）
+  const guideShown = useRef(false)
+  useEffect(() => {
+    if (guide && guide !== 'done') {
+      guideShown.current = true
+      rememberGuide(guide)
+    } else if (guideShown.current) forgetGuide()
+  }, [guide])
 
   /** 学生のアカウントなら、表紙の学籍番号が空のときだけ、メールアドレスの学籍番号を入れる（学生は直せる） */
   const prefillStudentId = useCallback(
@@ -636,6 +656,13 @@ export default function App() {
       } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
         e.preventDefault()
         editor.prevPage()
+      } else if (e.key === 'Delete' || e.key === 'Backspace') {
+        // 図・表・改ページ・作品写真を選んでいるとき（書いていないとき）は、Delete（Mac は delete）で消す。左の道具の「削除」「外す」と同じ（依頼者の要望。2026-10-19）
+        const sel = editor.getSnapshot().selection
+        if (!sel || (sel.kind === 'photos' && sel.index === undefined)) return
+        e.preventDefault()
+        if (sel.kind === 'photos') editor.removePhoto(sel.index!)
+        else editor.removeSelected()
       }
     }
     window.addEventListener('keydown', onKey)
@@ -1056,6 +1083,8 @@ export default function App() {
             autosave.stop()
             await clearAll()
             setWordTodo(null)
+            // 案内の途中の段階も消す（次にこの端末を使う人の原稿で、続きを出さないように）
+            forgetGuide()
             drive.forget()
             location.reload()
           }}

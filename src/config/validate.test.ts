@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { currentConfig } from '.'
 import { bodyFromTemplate, courseTemplate, DEFAULT_TEMPLATE } from '../model/template'
 import type { TemplateBlock, YearConfig } from './types'
-import { repairConfig, templateProblems, validateConfig } from './validate'
+import { COVER_TITLE_UNITS, repairConfig, templateProblems, validateConfig } from './validate'
 
 const errors = (c: YearConfig) => validateConfig(c).filter((p) => p.severity === 'error').map((p) => p.field)
 /** 崩れた値（型の決まりから外れたもの）を入れるため */
@@ -48,6 +48,46 @@ describe('validateConfig', () => {
       ['warning', 'wordChecks.2'],
     ])
   })
+
+  it('最終締切は実在する日付だけ（年が6桁・2月30日などはエラー。分かる言葉で）', () => {
+    const deadline = (d: string) => validateConfig({ ...currentConfig, deadline: d }).filter((p) => p.field === 'deadline')
+    for (const bad of ['202801-12-20', '2027-02-30', '2027-13-01', '2027/01/20', '2027-1-20']) {
+      expect(deadline(bad)).toEqual([{ field: 'deadline', severity: 'error', message: '最終締切の日付が正しくありません（例：2027/01/20）' }])
+    }
+    expect(deadline('')).toEqual([expect.objectContaining({ severity: 'error', message: '最終締切の日付を入力してください' })])
+    expect(deadline('2027-01-20')).toEqual([])
+    expect(deadline('2027-03-31')).toEqual([])
+    expect(deadline('2026-04-01')).toEqual([])
+  })
+
+  it('最終締切が年度の期間の外（前の年度の日付のままなど）なら確認を出す（公開は止めない）', () => {
+    const deadline = (d: string) => validateConfig({ ...currentConfig, fiscalYear: 2027, deadline: d }).filter((p) => p.field === 'deadline')
+    expect(deadline('2027-01-20')).toEqual([
+      { field: 'deadline', severity: 'warning', message: '最終締切（2027年1月20日）が、2027年度（2027年4月1日〜2028年3月31日）の外です。前の年度の日付のままでないか確かめてください' },
+    ])
+    expect(deadline('2028-04-01')).toEqual([expect.objectContaining({ severity: 'warning' })])
+    expect(deadline('2028-01-19')).toEqual([])
+  })
+
+  it('最終締切が今日より前かは、今日の日付を渡したとき（管理ページ）だけ確かめる（学生のツールでは日によって結果が変わらない）', () => {
+    const config = { ...currentConfig, deadline: '2026-10-01' }
+    expect(validateConfig(config)).toEqual([])
+    expect(validateConfig(config, { today: '2026-10-19' })).toEqual([{ field: 'deadline', severity: 'warning', message: '最終締切（2026年10月1日）が、今日より前です' }])
+    expect(validateConfig(config, { today: '2026-10-01' })).toEqual([])
+    // 初期値（2027年1月20日締切）は、今日の日付を渡しても問題なし
+    expect(validateConfig(currentConfig, { today: '2026-10-19' })).toEqual([])
+  })
+
+  it('共通の題目が表紙の1行（144.2mm・22pt。全角18.6字分）に収まらなければ確認を出す', () => {
+    const title = (t: string) => validateConfig({ ...currentConfig, commonTitle: t }).filter((p) => p.field === 'commonTitle')
+    expect(COVER_TITLE_UNITS).toBeCloseTo(18.58, 1)
+    // 2026年度の題目（18字）は収まる
+    expect(title(currentConfig.commonTitle)).toEqual([])
+    expect(title('あ'.repeat(18))).toEqual([])
+    expect(title('あ'.repeat(18) + 'A')).toEqual([])
+    expect(title('あ'.repeat(19))).toEqual([expect.objectContaining({ severity: 'warning', message: expect.stringContaining('表紙の1行に収まらないおそれがあります（表紙の題目は1行で、全角18字ほどまで。今は19字分）') })])
+    expect(title('卒業イベント「シンドバッドと七つの海の冒険」について')).toEqual([expect.objectContaining({ severity: 'warning' })])
+  })
 })
 
 describe('崩れた設定（管理ページのサーバーを通らずに書かれたものなど）', () => {
@@ -56,11 +96,12 @@ describe('崩れた設定（管理ページのサーバーを通らずに書か�
     expect(templateProblems([chapter, { type: 'paragraph', hint: '' }])).toEqual([])
     expect(templateProblems([])).toEqual([])
     expect(templateProblems('x')).toEqual(['の形が正しくありません'])
-    expect(templateProblems([{ type: 'chapter' }])).toEqual(['の1行目の形が正しくありません'])
-    expect(templateProblems([chapter, { type: 'paragraph' }])).toEqual(['の2行目の形が正しくありません'])
-    expect(templateProblems([chapter, { type: 'figure', caption: 3 }])).toEqual(['の2行目の形が正しくありません'])
+    expect(templateProblems([{ type: 'chapter' }])).toEqual(['の1行目の大見出しの形が正しくありません'])
+    expect(templateProblems([chapter, { type: 'paragraph' }])).toEqual(['の2行目の説明の形が正しくありません'])
+    expect(templateProblems([chapter, { type: 'figure', caption: 3 }])).toEqual(['の2行目の図の枠の形が正しくありません'])
     expect(templateProblems([chapter, { type: 'toString', title: 'x' }, null])).toEqual(['の2行目の形が正しくありません', 'の3行目の形が正しくありません'])
-    expect(templateProblems([chapter, { type: 'paragraph', hint: 'あ'.repeat(301) }])).toEqual(['の2行目が長すぎます（300字まで）'])
+    // 長すぎる行は、種類と書き出しと字数で示す（サーバーの言葉と同じ）
+    expect(templateProblems([chapter, { type: 'paragraph', hint: 'あ'.repeat(301) }])).toEqual(['の2行目の説明「ああああああああああああ…」が長すぎます（300字まで。今は301字）'])
     expect(templateProblems(Array.from({ length: 101 }, () => chapter))).toEqual(['の部品が多すぎます（100個まで）'])
     expect(templateProblems([{ type: 'paragraph', hint: '説明' }])).toEqual(['は、大見出しから始めてください', 'に大見出しがありません'])
   })
@@ -73,7 +114,7 @@ describe('崩れた設定（管理ページのサーバーを通らずに書か�
     expect(errors(messy)).toEqual(expect.arrayContaining(['abstract.heading', 'cover.heading', 'courses.0', 'courses.1', 'wordChecks.0']))
     expect(errors(broken({ ...currentConfig, courses: 'x' }))).toEqual(['courses'])
     expect(errors(withTemplate([{ type: 'chapter' }, { type: 'paragraph' }]))).toEqual(['courses.0', 'courses.0'])
-    expect(validateConfig(withTemplate([{ type: 'paragraph' }])).map((p) => p.message)).toEqual(['「映画・舞台衣装デザイナー」の下書きのひな形の1行目の形が正しくありません'])
+    expect(validateConfig(withTemplate([{ type: 'paragraph' }])).map((p) => p.message)).toEqual(['「映画・舞台衣装デザイナー」の下書きのひな形の1行目の説明の形が正しくありません'])
   })
 
   it('学生のツールでは、崩れたコースのひな形・お知らせだけを使わず、設定全体は捨てない', () => {

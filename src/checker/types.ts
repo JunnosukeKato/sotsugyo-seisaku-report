@@ -30,6 +30,6 @@ export interface Finding {
   severity: Severity
   message: string
   location: FindingLocation
-  /** 自動修正できる場合の置き換え後の文字列 */
+  /** 直し方の文字（置き換え後の文字列） */
   replacement?: string
 }

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { applyFix, checkText } from './textRules'
+import { checkText, type TextFinding } from './textRules'
+
+/**
+ * 指摘の直し方（replacement）を文字列に当てる。ツールには「直す」のボタンはない（学生が自分で直す）が、直し方の文字は
+ * 提出前チェックのページで「→「15」」のように出すので、正しい形になるかをここで確かめる
+ */
+const applyFix = (text: string, f: Pick<TextFinding, 'start' | 'end' | 'replacement'>) => (f.replacement === undefined ? text : text.slice(0, f.start) + f.replacement + text.slice(f.end))
 
 const ids = (text: string) => checkText(text).map((f) => f.ruleId)
 const fixAll = (text: string) => {
@@ -115,12 +121,47 @@ describe('図表の参照', () => {
 })
 
 describe('体言止め（暫定版）', () => {
-  it('文末が名詞のときに警告する', () => {
+  const taigen = (text: string) => checkText(text).filter((f) => f.ruleId === 'taigen-dome')
+  /** 体言止めの下線の文字（最後の1字と句点） */
+  const marked = (text: string) => taigen(text).map((f) => text.slice(f.start, f.end))
+
+  it('文末が名詞のときはエラーにする（手順書のルール）', () => {
     expect(ids('帯には海の青と砂の金。')).toEqual(['taigen-dome'])
+    expect(taigen('帯には海の青と砂の金。')).toEqual([expect.objectContaining({ severity: 'error', source: 'guide', detail: '文末を「〜である」「〜した」などで終える' })])
+    expect(marked('袖を縫った。帯は砂の金。')).toEqual(['金。'])
   })
 
-  it('図の参照の前で文が終わっていれば指摘しない', () => {
+  it('図の参照の前で文が終わっていれば指摘しない。参照の前が名詞なら指摘する', () => {
     expect(ids('帽子を制作した（図7）。')).toEqual([])
+    expect(marked('帽子の素材は綿（図7）。')).toEqual(['）。'])
+  })
+
+  it('「」『』の中の文（引用）は見ない。外の文の終わりは見る', () => {
+    expect(taigen('「夢と冒険。」と書かれている。')).toEqual([])
+    expect(taigen('監督は「軽やかな衣装。夢のある舞台。」と語った。')).toEqual([])
+    expect(marked('「夢と冒険。」という言葉が、作品のテーマ。')).toEqual(['マ。'])
+  })
+
+  it('（）の中の文（補足）は見ない。文末に添えた補足は除いて、その前の字で決める', () => {
+    expect(taigen('袖を縫った。（写真は筆者撮影。）')).toEqual([])
+    expect(taigen('袖を縫った（写真は筆者撮影）。')).toEqual([])
+    expect(taigen('袖を縫った(写真は筆者撮影。)')).toEqual([])
+    expect(marked('素材は綿（コットン）。')).toEqual(['）。'])
+  })
+
+  it('括弧が重なっていても、いちばん外の文だけを見る', () => {
+    expect(taigen('監督は「作品『夢。』を見てほしい。（初日の挨拶。）」と語った。')).toEqual([])
+    expect(taigen('題名は「海（うみ。）」とした。')).toEqual([])
+  })
+
+  it('」』で終わる文（作品名で終える）は、名詞で終えているのと同じなので指摘する（「〜である。」と書く）', () => {
+    expect(marked('作品名は『シンドバッド』。')).toEqual(['』。'])
+    expect(marked('テーマは「再生」。')).toEqual(['」。'])
+    expect(taigen('作品名は『シンドバッド』である。')).toEqual([])
+  })
+
+  it('閉じ忘れた括弧があっても、後ろの文は見る', () => {
+    expect(marked('「夢と冒険と書いた。帯は砂の金。')).toEqual(['金。'])
   })
 })
 
@@ -165,6 +206,17 @@ describe('変換を間違えやすい語', () => {
     const f = checkText('前見頃に芯地(仮)を貼り、ダーツを縫った。', words).filter((x) => x.ruleId.startsWith('word-'))
     expect(f.map((x) => [x.ruleId, x.severity, x.replacement, x.detail])).toEqual([['word-芯地(仮)', 'warning', '芯地', '「芯地(仮)」→「芯地」（仮は書かない）']])
     expect(checkText('前見頃を縫った。', []).some((x) => x.ruleId.startsWith('word-'))).toBe(false)
+  })
+
+  it('エラーの語だけ「このままにする」にできない印（locked）が付く（注意の語・ほかの補助のチェックには付かない）', () => {
+    const words = [
+      { wrong: '見頃', right: '身頃', severity: 'error' as const },
+      { wrong: '記事', right: '生地', severity: 'warning' as const },
+    ]
+    const f = checkText('前見頃の記事を選んだ', words)
+    expect(f.find((x) => x.ruleId === 'word-見頃')?.locked).toBe(true)
+    expect(f.find((x) => x.ruleId === 'word-記事')?.locked).toBeUndefined()
+    expect(f.find((x) => x.ruleId === 'sentence-end')?.locked).toBeUndefined()
   })
 })
 

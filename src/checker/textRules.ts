@@ -14,10 +14,15 @@ export interface TextFinding {
   title: string
   start: number
   end: number
-  /** 自動修正できる場合の置き換え後の文字列 */
+  /** 直し方の文字（置き換え後の文字列）。学生が自分で直す（「直す」のボタンはない）。提出前チェックのページが「→「15」」と出すのに使う */
   replacement?: string
   /** 「全角の『１５』→ 半角の『15』」のような説明 */
   detail?: string
+  /**
+   * 補助のチェックでも、学生が「このままにする（確認済み）」にできない指摘。
+   * 書き間違えやすい語のうち、重さが「エラー」の語（管理ページで「エラーは PDF の書き出しを止める」と決めた語。確認済みにして書き出せないように）
+   */
+  locked?: true
 }
 
 interface TextRule {
@@ -25,6 +30,8 @@ interface TextRule {
   severity: Severity
   source: 'guide' | 'supplementary'
   title: string
+  /** 指摘を「このままにする」にできない（TextFinding.locked） */
+  locked?: true
   /** title：指摘ごとに題を変えるとき（「1文が長すぎる（182字）」など）。なければ規則の題 */
   find: (text: string) => (Omit<TextFinding, 'ruleId' | 'severity' | 'source' | 'title'> & { title?: string })[]
 }
@@ -45,6 +52,30 @@ export function quoted(text: string, index: number): boolean {
   }
   return depth > 0
 }
+
+/**
+ * 文字ごとに、括弧（「」『』（）()）の中か。対になっている括弧だけを数える（閉じ忘れた括弧の後ろを、ずっと括弧の中にしないように）。
+ * 全角と半角の丸括弧は、混ざっていても対にする（「（写真は筆者撮影。)」）
+ */
+function bracketed(text: string): boolean[] {
+  const inside: boolean[] = Array<boolean>(text.length).fill(false)
+  const open: { c: string; i: number }[] = []
+  const pair: Record<string, string> = { '」': '「', '』': '『', '）': '（' }
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i] === '(' ? '（' : text[i] === ')' ? '）' : text[i]
+    if (c === '「' || c === '『' || c === '（') open.push({ c, i })
+    else if (pair[c]) {
+      const k = open.map((o) => o.c).lastIndexOf(pair[c])
+      if (k < 0) continue
+      for (let j = open[k].i + 1; j < i; j++) inside[j] = true
+      open.length = k
+    }
+  }
+  return inside
+}
+
+/** 文末に添えた括弧（「（図1）」「（コットン）」）。体言止めは、これを除いてから見る */
+const TRAILING_PAREN = /[（(][^（()）]*[）)]$/
 
 const KATAKANA = 'ァ-ヶ'
 const KANJI = '\\u3400-\\u9fff々'
@@ -182,7 +213,7 @@ export const TEXT_RULES: TextRule[] = [
     find: (text) => {
       const t = text.replace(/[\s　]+$/, '')
       if (!t || /[。！？!?]$/.test(t)) return []
-      return [{ start: t.length - 1, end: t.length, replacement: `${t[t.length - 1]}。`, detail: '段落の終わりに「。」がない' }]
+      return [{ start: t.length - 1, end: t.length, replacement: `${t[t.length - 1]}。`, detail: '段落の終わりに「。」を打つ' }]
     },
   },
   {
@@ -194,17 +225,33 @@ export const TEXT_RULES: TextRule[] = [
     find: (text) => matches(text, /。{2,}/g).map(({ start, end }) => ({ start, end, replacement: '。', detail: '「。」を1つにする' })),
   },
   {
+    // 手順書のルールなのでエラー（「このままにする」はない）。
+    // 文は、括弧の外の「。」で区切る。「」『』の中（引用・作品名）と（）の中（補足）の「。」は、書き手の文の終わりではないので見ない
+    // （「夢と冒険。」と書かれている。／（写真は筆者撮影。）は指摘しない。外の文の終わりは見る）。
+    // 文末に添えた（図1）や（補足）は除いてから、その前の字で決める（「綿（コットン）。」は体言止め、「縫った（図1）。」はよい）。
+    // 文末が」』で終わる文（「作品名は『シンドバッド』。」）は、名詞で終えているのと同じなので指摘する（「〜である。」と書く）
     id: 'taigen-dome',
-    severity: 'warning',
+    severity: 'error',
     source: 'guide',
     title: '体言止めを使わない',
-    find: (text) =>
-      matches(text, /[^。]+。/g).flatMap(({ match, start, end }) => {
-        const body = match[0].slice(0, -1).replace(/[（(][図表][\s　]*\d+[）)]$/, '')
-        const nounLike = new RegExp(`([${KANJI}${KATAKANA}ーA-Za-z0-9０-９]|こと|もの|ところ|ため)$`)
+    find: (text) => {
+      const inside = bracketed(text)
+      const nounLike = new RegExp(`([${KANJI}${KATAKANA}ーA-Za-z0-9０-９」』]|こと|もの|ところ|ため)$`)
+      const found: { start: number; end: number; detail: string }[] = []
+      let from = 0
+      for (let i = 0; i < text.length; i++) {
+        if (text[i] !== '。' || inside[i]) continue
+        const sentence = { start: from, end: i + 1 }
+        from = i + 1
+        // 文末に添えた括弧（（図1）・（補足））を、後ろから除く
+        let body = text.slice(sentence.start, i).replace(/[\s　]+$/, '')
+        for (let m = TRAILING_PAREN.exec(body); m; m = TRAILING_PAREN.exec(body)) body = body.slice(0, m.index).replace(/[\s　]+$/, '')
+        if (!body.trim() || !nounLike.test(body)) continue
         // 下線は文全体ではなく文末（最後の1字と句点）だけに引く
-        return nounLike.test(body) ? [{ start: Math.max(start, end - 2), end, detail: '文末を「〜である」「〜した」などで終える' }] : []
-      }),
+        found.push({ start: Math.max(sentence.start, sentence.end - 2), end: sentence.end, detail: '文末を「〜である」「〜した」などで終える' })
+      }
+      return found
+    },
   },
   {
     id: 'placeholder',
@@ -272,7 +319,7 @@ export const TEXT_RULES: TextRule[] = [
       }),
   },
   {
-    // 絵文字（findEmoji と同じもの）。「直す」で取る
+    // 絵文字（findEmoji と同じもの）。学生が消す
     id: 'emoji',
     severity: 'error',
     source: 'supplementary',
@@ -297,7 +344,10 @@ export const TEXT_RULES: TextRule[] = [
 
 export const DEFAULT_WORD_CHECKS: WordCheck[] = MISCONVERSIONS.map(([wrong, right, note, severity]) => ({ wrong, right, note, severity }))
 
-/** 書き間違えやすい語のルール（「直す」で正しい語にする） */
+/**
+ * 書き間違えやすい語のルール（正しい語を detail に出し、学生が直す）。
+ * 重さが「エラー」の語は「このままにする」にできない（locked。直すまで提出用の PDF を書き出せない）。「注意」の語は、正しく使っていれば「このままにする」にできる
+ */
 function wordRules(words: WordCheck[]): TextRule[] {
   return words
     .filter((w) => w.wrong && w.right && w.wrong !== w.right)
@@ -305,6 +355,7 @@ function wordRules(words: WordCheck[]): TextRule[] {
       id: `word-${w.wrong}`,
       severity: w.severity,
       source: 'supplementary',
+      ...(w.severity === 'error' ? { locked: true as const } : {}),
       title: `「${w.wrong}」ではなく「${w.right}」と書く`,
       find: (text: string) =>
         matches(text, new RegExp(w.wrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')).map(({ start, end }) => ({
@@ -319,12 +370,6 @@ function wordRules(words: WordCheck[]): TextRule[] {
 /** 1つの文字列にすべてのルールを当てる（書き間違えやすい語は words）。位置の順に並べて返す */
 export function checkText(text: string, words: WordCheck[] = DEFAULT_WORD_CHECKS): TextFinding[] {
   return [...TEXT_RULES, ...wordRules(words)].flatMap((rule) =>
-    rule.find(text).map((f) => ({ ruleId: rule.id, severity: rule.severity, source: rule.source, title: rule.title, ...f })),
+    rule.find(text).map((f) => ({ ruleId: rule.id, severity: rule.severity, source: rule.source, title: rule.title, ...(rule.locked ? { locked: rule.locked } : {}), ...f })),
   ).sort((a, b) => a.start - b.start || a.end - b.end)
-}
-
-/** 指摘の自動修正を文字列に当てる */
-export function applyFix(text: string, finding: TextFinding): string {
-  if (finding.replacement === undefined) return text
-  return text.slice(0, finding.start) + finding.replacement + text.slice(finding.end)
 }

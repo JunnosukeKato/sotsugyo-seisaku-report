@@ -17,8 +17,11 @@ type View = { kind: 'list' } | { kind: 'topic'; id: string; from: 'list' | 'sear
 
 interface Props {
   topics: HelpTopic[]
-  /** student：学生用ツール、teacher：管理ページ（見本の言葉と、相談する相手の言い方を変える） */
-  who: 'student' | 'teacher'
+  /**
+   * student：学生用ツール、teacher：管理ページの先生、admin：管理ページの管理者（見本の言葉と、相談する相手の言い方を変える）。
+   * 先生と管理者は、同じ先生用の項目を読む（管理者には「先生・管理者用」と出し、相談する相手を管理者にしない）
+   */
+  who: 'student' | 'teacher' | 'admin'
   /** 画面の写真の置き場所（末尾は /） */
   imageBase: string
   /** 一覧のいちばん下の「印刷用の手引き（PDF）」。label は2つ以上あるときの名前（先生用・管理者用） */
@@ -102,7 +105,7 @@ export function HelpView({ topics, who, imageBase, guides, variant, onClose, onT
     <div className="help-top">
       <div className="help-head">
         <h2 className="help-title" id={titleId} ref={headingRef} tabIndex={-1} data-autofocus>
-          {Icon.help}使い方{who === 'teacher' && <small>先生用</small>}
+          {Icon.help}使い方{who !== 'student' && <small>{who === 'admin' ? '先生・管理者用' : '先生用'}</small>}
         </h2>
         {sheet ? (
           <button className="help-close close" onClick={onClose} aria-label="使い方を閉じる">
@@ -121,7 +124,7 @@ export function HelpView({ topics, who, imageBase, guides, variant, onClose, onT
           value={query}
           enterKeyHint="search"
           aria-label="言葉で探す"
-          placeholder={who === 'teacher' ? '言葉で探す（例：反映 されない）' : '言葉で探す（例：PDF 出ない）'}
+          placeholder={who !== 'student' ? '言葉で探す（例：反映 されない）' : '言葉で探す（例：PDF 出ない）'}
           onChange={(e) => {
             setQuery(e.target.value)
             // 項目を開いているときに言葉を入れたら、探した結果に戻る
@@ -234,7 +237,7 @@ function TopicList({ topics, who, guides, onOpen }: { topics: HelpTopic[]; who: 
         </div>
       ))}
       <div className="help-foot">
-        <p>それでも困ったら、{who === 'teacher' ? '管理者' : '担当の先生'}に相談してください。</p>
+        <p>{who === 'admin' ? 'それでも困ったら、ほかの管理者に相談するか、docs/引き継ぎ手順.md を見てください。' : `それでも困ったら、${who === 'teacher' ? '管理者' : '担当の先生'}に相談してください。`}</p>
         {guides.length === 1 ? (
           <a className="help-pdf" href={guides[0].href} target="_blank" rel="noreferrer">
             印刷用の手引き（PDF）
@@ -261,7 +264,7 @@ function TopicList({ topics, who, guides, onOpen }: { topics: HelpTopic[]; who: 
 function Results({ topics, query, who, onOpen }: { topics: HelpTopic[]; query: string; who: Props['who']; onOpen: (id: string) => void }) {
   const { terms, hits } = searchTopics(topics, query)
   const words = query.split(/[\s　、,・]+/).filter(Boolean)
-  const example = who === 'teacher' ? '反映・ひな形' : '保存・ログイン'
+  const example = who !== 'student' ? '反映・ひな形' : '保存・ログイン'
   const firstPartial = hits.findIndex((h) => h.found.length < terms.length)
   return (
     <>

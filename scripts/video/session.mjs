@@ -42,6 +42,29 @@ export const endOfBlock = (page, id) =>
     return last ? { x: last.right - 4, y: last.top + last.height / 2 } : null
   }, id)
 
+/** 現在の紙面のページで、ブロックの中の文字（はじめに見つかったもの）の範囲（CSS px）。クリックで、その文字の後ろから書くのに使う */
+export const textRect = (page, id, text) =>
+  page.evaluate(
+    (id, text) => {
+      const els = [...document.querySelectorAll(`.page-viewport.front [data-vivliostyle-page-container].is-current [data-block-id="${id}"]`)]
+      for (const el of els) {
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+        for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+          const at = node.textContent.indexOf(text)
+          if (at < 0) continue
+          const range = document.createRange()
+          range.setStart(node, at)
+          range.setEnd(node, at + text.length)
+          const r = range.getBoundingClientRect()
+          return { x: r.left, y: r.top, w: r.width, h: r.height }
+        }
+      }
+      return null
+    },
+    id,
+    text,
+  )
+
 /** 要素の範囲（CSS px。text があれば、その文字を含むもの）。なければ null */
 export const rectOf = (page, selector, text) =>
   page.evaluate(

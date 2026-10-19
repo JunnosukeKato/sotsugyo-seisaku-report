@@ -34,7 +34,7 @@ export function locateFindings(findings: CheckFinding[], pdfs: Partial<Record<Pa
   })
 }
 
-/** ページごとの指摘の数と、エラーがあるか（ページの絵の丸。赤＝エラーあり、茶＝警告だけ） */
+/** ページごとの指摘の数と、エラーがあるか（ページの絵の丸。赤＝エラーあり、茶＝要確認だけ） */
 export function pagePins(findings: CheckFinding[]): Map<string, { count: number; error: boolean }> {
   const pins = new Map<string, { count: number; error: boolean }>()
   for (const f of findings) {

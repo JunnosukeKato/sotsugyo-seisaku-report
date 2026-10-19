@@ -387,15 +387,6 @@ describe('図表の番号を手で書いていたとき（二重にしない）'
     plain = ops.addTableBelow(plain, 'pa', blankTable('t1', ops.newId))
     expect(ops.linkWrittenRef(plain, 'pa', 't1')).toBeNull()
   })
-
-  it('「直す」で手で書いた番号をつなげると、同じ段落の自動の（表1）は除く（「（表1）に示す（表1）。」にしない）', () => {
-    // 前の版で、表を入れたときに（表1）が足されていた段落
-    let r = ops.insertRef(base('使用した素材を表1に示す。'), 'pa', 13, 't1')
-    r = ops.addTableBelow(r, 'pa', blankTable('t1', ops.newId))
-    const fixed = ops.linkManualRef(r, 'pa', 7, 9, '表1')
-    expect(paraText(fixed, 'pa')).toBe('使用した素材を表1に示す。')
-    expect(refs(fixed, 'pa')).toEqual([{ type: 'ref', targetId: 't1', withParens: false }])
-  })
 })
 
 describe('ひな形の説明（hint）と、抄録を書き始めたか（started）を保つ', () => {

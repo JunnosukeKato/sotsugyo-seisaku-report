@@ -153,8 +153,7 @@ body.resizing .page-viewport { pointer-events: none; }
 .overlay-frozen > div { box-sizing: border-box; text-justify: inter-character; text-autospace: normal; text-spacing-trim: normal; min-height: 1em; }
 /* キーボードで書き終えたとき、隠している欄の代わりに、仮の表示にフォーカスの目印を付ける（紙面の欄の目印と同じ見た目） */
 .overlay-frozen > div.focus-ring { outline: calc(2px / var(--s)) solid var(--accent); outline-offset: calc(3px / var(--s)); }
-/* 書いている段落の左の余白に、細い線を出す（枠は出さない。mockups/v10 案2）。見出しや表のセルなど1行の欄は、カーソルだけ */
-.overlay-editor[data-kind='paragraph']:not(.in-sheet)::before { content: ''; position: absolute; left: -16px; top: 2px; bottom: 2px; width: 3px; border-radius: 2px; background: var(--accent); opacity: 0.55; }
+/* 書いている段落の左の余白の細い線（mockups/v10 案2）は、紛らわしいのでなくした（依頼者の判断。2026-10-19）。書いている所は、カーソルで分かる */
 
 /* 段落などを足す位置 */
 .insert-marker { position: absolute; z-index: 7; height: 0; border-top: 3px solid var(--accent); padding-top: 2px; text-align: right; font-size: 11px; font-weight: 700; color: var(--accent); pointer-events: none; }
@@ -292,7 +291,7 @@ body.resizing .page-viewport { pointer-events: none; }
 .issue .dot::before, .sev-legend .dot::before { content: '×'; }
 .issue.warning .dot, .sev-legend .dot.warning { background: var(--warn); border-radius: 3px; transform: rotate(45deg) scale(0.86); }
 .issue.warning .dot::before, .sev-legend .dot.warning::before { content: '!'; transform: rotate(-45deg); }
-/* エラーと警告の意味（指摘の一覧の上。1つずつの札「手順書」「補助」の代わり。提出前チェックと同じ形。mockups/v31 案1） */
+/* エラーと要確認の意味（指摘の一覧の上。1つずつの札「手順書」「補助」の代わり。提出前チェックと同じ形。mockups/v31 案1） */
 .sev-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 12px 0 0; padding: 7px 12px; border-radius: 9px; background: var(--chip-bg); font-size: 12px; line-height: 1.6; color: #3f4249; }
 .sev-legend > span { display: inline-flex; align-items: center; gap: 6px; }
 .sev-legend .dot { flex: none; width: 14px; height: 14px; margin: 0; font-size: 10px; }
@@ -306,8 +305,6 @@ body.resizing .page-viewport { pointer-events: none; }
 .issue .ttl, .issue .detail { display: block; }
 .issue .ttl { font-size: 13px; font-weight: 700; line-height: 1.5; }
 .issue .detail { font-size: 12.5px; color: var(--muted); margin-top: 2px; line-height: 1.6; }
-.issue .fix { align-self: center; border: 1px solid var(--accent); background: transparent; color: var(--accent); border-radius: 999px; padding: 3px 12px; font-size: 11.5px; white-space: nowrap; }
-.issue .fix:hover { background: var(--accent); color: var(--accent-ink); }
 .empty { margin-top: 12px; font-size: 13px; color: var(--ok); line-height: 1.6; }
 
 /* 書き出し */
@@ -675,8 +672,7 @@ body.resizing .page-viewport { pointer-events: none; }
 /* はじめての案内の見出し（開いたときに移る場所。押すものではないので、枠は出さない） */
 .g-tip h2[tabindex]:focus { outline: none; }
 /* 小さいボタンも、指で押しやすいよう、押せる範囲だけを広げる */
-.issue .fix, .pager button, .sheet-close, .icon-btn { position: relative; }
-.issue .fix::after { content: ''; position: absolute; inset: -10px -8px; }
+.pager button, .sheet-close, .icon-btn { position: relative; }
 .pager button::after, .sheet-close::after { content: ''; position: absolute; inset: -4px; }
 /* 書く欄の「完了」・案内の「あとで入力する」・「引用・参考文献を入れる」・窓の中のボタン・「手順書」「バックアップ」：高さ 44px ほどまで広げる
    （となりのボタンと重ならないよう、横には広げないか、少しだけ。枠線のあるボタンは、枠線の内側から測るので 1px 多めに） */
@@ -945,9 +941,8 @@ body.resizing .page-viewport { pointer-events: none; }
 .page-viewport [data-photo-slot].whole img { cursor: pointer; touch-action: auto; }
 
 /* ---- v32 ④ スマホの見やすさ（mockups/v32 ④ 案A）。スマホの並べ方（.app.phone）だけで、PC は変えない ---- */
-/* 小さいボタン（指摘の「直す」・書く欄の「完了」・案内の「あとで入力する」・「＋引用・参考文献を入れる」・ページ送り・「ページ全体に戻す」）を、見た目も高さ 44px 以上に */
+/* 小さいボタン（書く欄の「完了」・案内の「あとで入力する」・「＋引用・参考文献を入れる」・ページ送り・「ページ全体に戻す」）を、見た目も高さ 44px 以上に */
 .app.phone .pager button { width: 44px; height: 44px; }
-.app.phone .issue .fix { min-height: 44px; padding: 0 16px; font-size: 13px; }
 .app.phone .es-head .done { min-height: 44px; padding: 0 20px; }
 .app.phone .add-refs, .app.phone .g-later { display: inline-flex; align-items: center; min-height: 44px; }
 .app.phone .unzoom { min-height: 44px; }
@@ -1186,6 +1181,6 @@ p.check-pending { margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: va
 /* サブタイトルが、コースの決まった形と違う（表紙にどう出るか） */
 .word-sub-off { margin: -6px 0 14px; padding: 8px 12px; border-radius: 8px; background: var(--error-soft); color: var(--error); font-size: 12.5px; line-height: 1.7; }
 .word-status .word-choose { margin: 10px 0 0; font-size: 13px; color: var(--error); }
-/* 提出用の PDF の窓の、警告の一覧（エラーの一覧と同じ形） */
+/* 提出用の PDF の窓の、要確認の一覧（エラーの一覧と同じ形） */
 .warning-list { margin: -6px 0 14px; }
 .warning-list .more button { font-size: 13px; }

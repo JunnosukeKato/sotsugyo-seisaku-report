@@ -69,6 +69,11 @@ describe('言葉で探す：項目を探す', () => {
   it('先生用：「反映 されない」で「保存と反映」が先に出る', () => {
     expect(ids(searchTopics(TEACHER_TOPICS, '反映 されない').hits)[0]).toBe('t-publish')
   })
+
+  it('先生用：学生によく聞かれること（保存・PDF・別のパソコン）と、途中の締切で探せる', () => {
+    for (const q of ['保存されていない', 'PDF 出せない', '別のパソコン', '大学のパソコン']) expect(ids(searchTopics(TEACHER_TOPICS, q).hits)[0], q).toBe('t-faq')
+    expect(ids(searchTopics(TEACHER_TOPICS, '途中の締切').hits)).toEqual(expect.arrayContaining(['t-year', 't-notice']))
+  })
 })
 
 describe('言葉で探す：印を付ける', () => {
@@ -91,10 +96,19 @@ describe('言葉で探す：印を付ける', () => {
 describe('使い方の項目', () => {
   const all = [...STUDENT_TOPICS, ...TEACHER_TOPICS]
 
-  it('学生用は18項目、先生用は10項目。id は重ならない', () => {
+  it('学生用は18項目、先生用は11項目。id は重ならない', () => {
     expect(STUDENT_TOPICS).toHaveLength(18)
-    expect(TEACHER_TOPICS).toHaveLength(10)
+    expect(TEACHER_TOPICS).toHaveLength(11)
     expect(new Set(all.map((t) => t.id)).size).toBe(all.length)
+  })
+
+  it('先生用：管理者だけの項目は、題に（管理者だけ）と書く。保存のボタンは、公開中と準備中の両方の名前を書く', () => {
+    for (const id of ['t-year', 't-newyear', 't-members']) expect(TEACHER_TOPICS.find((t) => t.id === id)?.title, id).toContain('（管理者だけ）')
+    const text = (id: string) => JSON.stringify(TEACHER_TOPICS.find((t) => t.id === id))
+    for (const id of ['t-year', 't-publish', 't-template']) {
+      expect(text(id), id).toContain('保存して学生に反映')
+      expect(text(id), id).toContain('準備中')
+    }
   })
 
   it('1つの項目は短く：手順は3つまで、補足は3つまで。ひとことか補足がある', () => {

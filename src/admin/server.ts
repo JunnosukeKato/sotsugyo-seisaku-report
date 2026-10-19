@@ -25,7 +25,7 @@ export interface HistoryRow {
   config: YearConfig
 }
 
-/** 管理者：年度の設定をすべて変更・公開できる。先生：どのコースの下書きのひな形も編集できる */
+/** 管理者：年度の設定をすべて変更・公開できる。先生：どのコースの下書きのひな形・お知らせと、書き間違えやすい語を編集できる */
 export type Role = 'admin' | 'teacher' | null
 
 export interface AdminState {
@@ -56,6 +56,8 @@ export interface AdminServer {
   /** expectedUpdatedAt：画面を開いたときの更新日時（そのあとにほかの人が保存していたら、見ていない内容を公開しないよう、公開せずに知らせる） */
   publishYear(year: number, expectedUpdatedAt?: string): Promise<AdminState>
   createYear(fromYear: number, newYear: number): Promise<AdminState>
+  /** 一度も公開していない「準備中」の年度を削除する（間違えて作った年度を消すため。管理者だけ） */
+  deleteYear(year: number, expectedUpdatedAt?: string): Promise<AdminState>
   getHistory(year: number): Promise<HistoryRow[]>
   saveTemplates(year: number, templates: TemplateSet): Promise<AdminState>
   /** コースのお知らせを保存する（管理者・先生）。notices はコースの ID → お知らせ */
@@ -99,6 +101,7 @@ function appsScriptServer(): AdminServer {
     saveYear: (config, expectedUpdatedAt) => call('saveYear', config, expectedUpdatedAt ?? null),
     publishYear: (year, expectedUpdatedAt) => call('publishYear', year, expectedUpdatedAt ?? null),
     createYear: (fromYear, newYear) => call('createYear', fromYear, newYear),
+    deleteYear: (year, expectedUpdatedAt) => call('deleteYear', year, expectedUpdatedAt ?? null),
     getHistory: (year) => call('getHistory', year),
     saveTemplates: (year, templates) => call('saveTemplates', year, templates),
     saveWordChecks: (year, words) => call('saveWordChecks', year, words),
@@ -113,3 +116,7 @@ function appsScriptServer(): AdminServer {
 
 export const server: AdminServer = window.google?.script ? appsScriptServer() : createMockServer()
 export const isMockServer = !window.google?.script
+
+// 開発中（試験用サーバー）だけ、自動テスト（scripts/e2e/admin.mjs）から試験用サーバーを直接呼べるようにする
+// （画面にまだボタンのない操作＝準備中の年度の削除などを確かめるため）
+if (import.meta.env.DEV && isMockServer) Object.assign(window, { __adminServer: server })
