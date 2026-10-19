@@ -193,6 +193,44 @@ function NumberInput({ value, onChange }: { value: number; onChange: (v: number)
   )
 }
 
+/**
+ * 空にできる数の欄（空は「なし」＝ null。作品写真のページ数の上限：空なら上限なし。mockups/v38）。
+ * 入力の途中の扱いは NumberInput と同じ
+ */
+function OptionalNumberInput({ value, onChange, placeholder }: { value: number | null; onChange: (v: number | null) => void; placeholder?: string }) {
+  const show = (v: number | null) => (v === null ? '' : String(v))
+  const [text, setText] = useState(show(value))
+  const [shown, setShown] = useState(value)
+  if (value !== shown) {
+    setShown(value)
+    setText(show(value))
+  }
+  return (
+    <input
+      className="in num"
+      type="number"
+      min={1}
+      step={1}
+      value={text}
+      placeholder={placeholder}
+      onChange={(e) => {
+        setText(e.target.value)
+        if (e.target.value.trim() === '') {
+          setShown(null)
+          onChange(null)
+          return
+        }
+        const n = Number(e.target.value)
+        if (Number.isFinite(n)) {
+          setShown(n)
+          onChange(n)
+        }
+      }}
+      onBlur={() => setText(show(value))}
+    />
+  )
+}
+
 function CourseCard({
   course,
   index,
@@ -710,8 +748,8 @@ export function AdminApp() {
               <Field label="1ページあたりの画像の目安">
                 <NumberInput value={draft.body.imagesPerPageGuide} onChange={(v) => set({ body: { ...draft.body, imagesPerPageGuide: v } })} />
               </Field>
-              <Field label="作品写真の上限（枚）">
-                <NumberInput value={draft.workPhotos.maxImages} onChange={(v) => set({ workPhotos: { maxImages: v } })} />
+              <Field label="作品写真のページ数の上限" hint="空なら上限なし（1ページに写真4枚まで）">
+                <OptionalNumberInput value={draft.workPhotos?.maxPages ?? null} placeholder="上限なし" onChange={(v) => set({ workPhotos: { maxPages: v } })} />
               </Field>
               <Field label="学籍番号の形式（正規表現。空なら確認しない）">
                 <TextInput value={draft.studentIdPattern ?? ''} onChange={(v) => set({ studentIdPattern: v.trim() ? v : null })} placeholder="例：^\d{2}FA[A-Z]?\d{3,4}$" />

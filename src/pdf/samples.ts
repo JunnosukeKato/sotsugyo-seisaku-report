@@ -78,7 +78,7 @@ export async function demoSample(): Promise<Sample> {
       return b
     }),
   }))
-  return { report: { ...report, body, workPhotos: { layout: 2, imageIds: ['demo-ph1', 'demo-ph2'] } }, images }
+  return { report: { ...report, body, workPhotos: [{ layout: 2, imageIds: ['demo-ph1', 'demo-ph2'] }] }, images }
 }
 
 /** 長い見本の文（衣装制作の報告書らしい文を、決まった順に組み合わせる） */
@@ -182,7 +182,10 @@ export async function longSample(): Promise<Sample> {
         ...base.references,
         { type: 'book', id: 'lref3', author: '文化太郎', title: '舞台衣装の技法', publisher: '文化出版', year: '2018', pages: '45-60' },
       ],
-      workPhotos: { layout: 6, columns: 2, imageIds: ['long-ph1', 'long-ph2', 'long-ph3', 'long-ph4', 'long-ph5', 'long-ph6'] },
+      workPhotos: [
+        { layout: 4, imageIds: ['long-ph1', 'long-ph2', 'long-ph3', 'long-ph4'] },
+        { layout: 2, columns: 1, imageIds: ['long-ph5', 'long-ph6'] },
+      ],
     },
     images,
   }

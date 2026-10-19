@@ -14,7 +14,7 @@ export const meta = {
     photos: '作品写真のページでは、左で写真の並べ方を選びます',
     photoAdd: '空いている枠をクリックして、写真を選びます',
     fit: '写真が枠で切れるときは、「全体を入れる（切らない）」を押します',
-    end: '作品写真は、6枚まで入れられます',
+    end: '作品写真は1ページに4枚まで。多いときは「＋ 写真のページを足す」',
   },
 }
 
@@ -146,7 +146,7 @@ export async function run({ page, rec, h }) {
   const [chooser] = await Promise.all([page.waitForFileChooser(), page.mouse.click(sc.x, sc.y)])
   await h.sleep(900)
   await chooser.accept([resolve('docs/guide-images/sample/process.jpg')])
-  await page.waitForFunction(() => !!window.__editor.getSnapshot().report.workPhotos.imageIds[1], { timeout: 30000 })
+  await page.waitForFunction(() => !!window.__editor.getSnapshot().report.workPhotos[0].imageIds[1], { timeout: 30000 })
   await h.ready(page)
   await h.sleep(1200)
 

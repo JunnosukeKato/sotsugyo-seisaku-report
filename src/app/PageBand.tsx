@@ -32,7 +32,7 @@ const Mark = {
 /** 帯に出すもの */
 type Band =
   | { kind: 'abstract' }
-  | { kind: 'photos'; text: string; index: number }
+  | { kind: 'photos'; text: string; page: number; index: number }
   | { kind: 'fields'; todo: BandTodo; text: string; sub: string | null; button: string }
 
 /** 紙面と帯の間・帯と下の道具の間（画面の px） */
@@ -43,8 +43,11 @@ function bandOf(editor: ReportEditor, snap: EditorSnapshot): Band | null {
   const kind = snap.layout?.kinds[snap.page]
   if (kind === 'abstract' && snap.report.abstract.started === false) return { kind: 'abstract' }
   if (kind === 'photos') {
-    const photo = photoBand(snap.report.workPhotos)
-    return photo && { kind: 'photos', ...photo }
+    // 何ページ目の作品写真か（mockups/v38 案A）
+    const page = snap.photoPage ?? 0
+    const photos = snap.report.workPhotos[page]
+    const photo = photos && photoBand(photos)
+    return photo ? { kind: 'photos', page, ...photo } : null
   }
   // まだ書いていない欄（空の欄は、紙面に仮の文字（data-placeholder）を出している）と、写真を入れていない図の枠。紙面の上から順に
   const page = editor.pageElements()[snap.page]
@@ -150,8 +153,8 @@ function BandView({ editor, band, inColumn }: { editor: ReportEditor; band: Band
           button: '写真を選ぶ',
           run: () => {
             // 紙面の空いている枠を押したときと同じ（写真を選ぶ画面を開く。何枚かまとめて選べる）
-            editor.select({ kind: 'photos' })
-            void editor.addPhotos(band.index)
+            editor.select({ kind: 'photos', page: band.page })
+            void editor.addPhotos(band.page, band.index)
           },
         }
       : { text: band.text, sub: band.sub, button: band.button, run: () => tapPaper(editor, band.todo) }

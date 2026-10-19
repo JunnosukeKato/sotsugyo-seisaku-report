@@ -217,7 +217,7 @@ export function ExportDialog({ editor, snap, config, onClose, onStart, onBuilt }
   const pdfUrls = useRef<string[]>([])
   const fileName = `${editor.pdfTitle}.pdf`
 
-  /** PDF に入れるページ（作品写真がまだなければ、空の作品写真のページを入れない。pdf/exportPages.ts） */
+  /** PDF に入れるページ（写真のない作品写真のページは入れない。pdf/exportPages.ts） */
   const pagesToExport = () => {
     const pages = editor.pageElements()
     const { report, layout } = editor.getSnapshot()
@@ -246,7 +246,7 @@ export function ExportDialog({ editor, snap, config, onClose, onStart, onBuilt }
   const print = () => {
     const title = document.title
     document.title = editor.pdfTitle
-    // 作品写真がまだなければ、空の作品写真のページは印刷しない（印刷が終わったら戻す）
+    // 写真のない作品写真のページは印刷しない（印刷が終わったら戻す）
     const kept = new Set(pagesToExport())
     const skipped = editor.pageElements().filter((p) => !kept.has(p) && !p.classList.contains('print-skip'))
     for (const p of skipped) p.classList.add('print-skip')

@@ -60,6 +60,12 @@ const PHOTO = resolve(`${OUT}/IMG_2041.png`)
 writeFileSync(PHOTO, png(300, 400, { figure: [47, 62, 117] }))
 const PHOTO2 = resolve(`${OUT}/IMG_2042.png`)
 writeFileSync(PHOTO2, png(400, 300, { figure: [181, 140, 40] }))
+// 作品写真の3〜5枚目（5枚で2ページになる：4枚ずつのページ。mockups/v38 案1）
+const MORE_PHOTOS = [3, 4, 5].map((n, i) => {
+  const path = resolve(`${OUT}/IMG_204${n}.png`)
+  writeFileSync(path, png(300 + i * 20, 400, { figure: [60 + i * 40, 90, 120] }))
+  return path
+})
 const NEW_BODY_PDF = resolve(`${OUT}/04_本文.pdf`)
 writeFileSync(NEW_BODY_PDF, readFileSync(`${FIX}/word-sample-body.pdf`))
 // 作り直した PDF は、本文の Word より新しい
@@ -301,7 +307,7 @@ await withEdge(async (browser) => {
     await page.waitForFunction(() => document.querySelector('[aria-label="作品写真"] .pf .fname')?.textContent === '写真 2枚', { timeout: 120000, polling: 100 })
     await settled(page)
     const photo = await page.evaluate(() => ({ img: !!document.querySelector('[aria-label="作品写真"] .pg img'), no: document.querySelector('[aria-label="作品写真"] figure')?.textContent, small: document.querySelector('.m-file small')?.textContent, label: document.querySelector('[aria-label="作品写真"] .p-f')?.textContent, errors: !!document.querySelector('.read-errors') }))
-    check('「写真を入れる」から写真を2枚入れると、「写真 2枚（6枚まで）」で、1ページ（最後の7ページ目）に並ぶ', photo.img && photo.no === '7' && photo.small === '7ページ' && !!photo.label?.startsWith('写真 2枚（6枚まで）') && !photo.errors, JSON.stringify(photo))
+    check('「写真を入れる」から写真を2枚入れると、「写真 2枚（1ページ4枚まで）」で、1ページ（最後の7ページ目）に並ぶ', photo.img && photo.no === '7' && photo.small === '7ページ' && !!photo.label?.startsWith('写真 2枚（1ページ4枚まで）') && !photo.errors, JSON.stringify(photo))
     // 「並べ替え・外す」：2枚が並び、↓ で順番が変わる
     await page.click('[aria-label="作品写真"] .pf-link')
     await page.waitForSelector('.photo-menu')
@@ -312,6 +318,38 @@ await withEdge(async (browser) => {
     await page.keyboard.press('Escape')
     await wait(150)
     check('作品写真の「並べ替え・外す」：写真の一覧が出て、順番を変えられる', before.join() === 'IMG_2041.png,IMG_2042.png' && after.join() === 'IMG_2042.png,IMG_2041.png' && !(await page.$('.photo-menu')), JSON.stringify({ before, after }))
+    // 「写真を足す」から3枚足して5枚にする：入れた順に4枚ずつ、2ページ（7・8ページ目）に並ぶ（mockups/v38 案1。年度の設定にページ数の上限はない）
+    await page.click('[aria-label="作品写真"] .pf-link')
+    await page.waitForSelector('.photo-menu .pm-add')
+    const [moreChooser] = await Promise.all([page.waitForFileChooser(), page.click('.photo-menu .pm-add')])
+    await moreChooser.accept(MORE_PHOTOS)
+    await page.waitForFunction(() => document.querySelector('[aria-label="作品写真"] .pf .fname')?.textContent === '写真 5枚・2ページ', { timeout: 120000, polling: 100 })
+    await settled(page)
+    const five = await page.evaluate(() => ({
+      label: document.querySelector('[aria-label="作品写真"] .p-f')?.textContent,
+      nos: [...document.querySelectorAll('[aria-label="作品写真"] figure')].map((f) => f.textContent),
+      imgs: document.querySelectorAll('[aria-label="作品写真"] .pg img').length,
+      small: document.querySelector('.m-file small')?.textContent,
+    }))
+    await page.screenshot({ path: `${OUT}/c2-photos-five-pc.png` })
+    check('作品写真を5枚にすると「写真 5枚・2ページ（1ページ4枚まで）」で、7・8ページ目の2ページに並ぶ（全部で8ページ）', !!five.label?.startsWith('写真 5枚・2ページ（1ページ4枚まで）') && five.nos.join() === '7,8' && five.imgs === 2 && five.small === '8ページ', JSON.stringify(five))
+    await page.click('[aria-label="作品写真"] .pf-link')
+    await page.waitForSelector('.photo-menu')
+    await wait(300)
+    const menu = await page.evaluate(() => ({
+      title: document.querySelector('.photo-menu .popover-title')?.textContent,
+      rows: [...document.querySelectorAll('.photo-menu li')].map((li) => (li.classList.contains('pm-page') ? `[${li.textContent}]` : li.querySelector('.fn')?.textContent)),
+      hint: document.querySelector('.photo-menu .pm-hint')?.textContent,
+      add: !!document.querySelector('.photo-menu .pm-add'),
+    }))
+    await page.screenshot({ path: `${OUT}/c2-photos-five-menu.png` })
+    await page.keyboard.press('Escape')
+    await wait(150)
+    check(
+      '「並べ替え・外す」の窓：上に「5枚・2ページ（1ページに4枚まで）」、ページの区切り「1ページ目 4枚」「2ページ目 1枚」、下に「4枚ずつ、この順にページに並べます。」。上限がないので「写真を足す」は出たまま',
+      menu.title === '作品写真5枚・2ページ（1ページに4枚まで）' && menu.rows.join() === '[1ページ目4枚],IMG_2042.png,IMG_2041.png,IMG_2043.png,IMG_2044.png,[2ページ目1枚],IMG_2045.png' && menu.hint?.startsWith('4枚ずつ、この順にページに並べます。') && menu.add,
+      JSON.stringify(menu),
+    )
 
     // ---- まとめて保存する ----
     await page.click('.merge .btn.big')
@@ -324,8 +362,8 @@ await withEdge(async (browser) => {
     const result = await page.evaluate(() => ({ title: document.querySelector('.c-saved .r-title')?.textContent, file: document.querySelector('.c-saved .pdf-file b')?.textContent, small: document.querySelector('.c-saved .pdf-file small')?.textContent, bar: !!document.querySelector('.merge'), focus: document.activeElement?.classList.contains('c-saved') }))
     await page.screenshot({ path: `${OUT}/c2-done-pc.png` })
     check('写真を入れたあとの確かめの窓には、「作品写真も…」は出ない', sub2 === null, String(sub2))
-    check('「このまままとめる」：「ダウンロード」に保存し、「保存しました」とファイル名・ページの数・大きさを出す', result.title === '保存しました' && result.file === FILE_NAME && /^7ページ・[\d.]+(MB|KB)　「ダウンロード」のフォルダ$/.test(result.small) && !result.bar && result.focus, JSON.stringify(result))
-    check('保存した PDF：7ページ（透かしなし・名前はそのまま）、表紙 → 抄録 → 目次 → 本文 → 作品写真（写真2枚を1ページに）の順、どのページも A4', !!saved && saved.count === 7 && /学籍番号/.test(saved.pages[0].text) && /抄録/.test(saved.pages[1].text) && /^目次/.test(saved.pages[2].text) && /企画・立案/.test(saved.pages[3].text) && /使用素材/.test(saved.pages[4].text) && /制作過程/.test(saved.pages[5].text) && saved.pages[6].text === '' && saved.pages[6].images === 2 && saved.pages.every((p) => p.w === 595 && p.h === 842) && !saved.pages.some((p) => p.text.includes('下書き')), JSON.stringify(saved?.pages.map((p) => p.text.slice(0, 12))))
+    check('「このまままとめる」：「ダウンロード」に保存し、「保存しました」とファイル名・ページの数・大きさを出す', result.title === '保存しました' && result.file === FILE_NAME && /^8ページ・[\d.]+(MB|KB)　「ダウンロード」のフォルダ$/.test(result.small) && !result.bar && result.focus, JSON.stringify(result))
+    check('保存した PDF：8ページ（透かしなし・名前はそのまま）、表紙 → 抄録 → 目次 → 本文 → 作品写真（写真5枚を、入れた順に4枚＋1枚の2ページに）の順、どのページも A4', !!saved && saved.count === 8 && /学籍番号/.test(saved.pages[0].text) && /抄録/.test(saved.pages[1].text) && /^目次/.test(saved.pages[2].text) && /企画・立案/.test(saved.pages[3].text) && /使用素材/.test(saved.pages[4].text) && /制作過程/.test(saved.pages[5].text) && saved.pages[6].text === '' && saved.pages[6].images === 4 && saved.pages[7].text === '' && saved.pages[7].images === 1 && saved.pages.every((p) => p.w === 595 && p.h === 842) && !saved.pages.some((p) => p.text.includes('下書き')), JSON.stringify(saved?.pages.map((p) => [p.text.slice(0, 12), p.images])))
 
     // ---- はじめから（確かめの窓が出る。窓の外を押しても閉じない） ----
     await page.evaluate(() => [...document.querySelectorAll('.c-saved .btn')].find((b) => b.textContent === 'はじめから').click())

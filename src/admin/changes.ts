@@ -38,7 +38,7 @@ const DETAIL_LABELS: [string, string][] = [
   ['abstract.maxLines', '抄録の行数'],
   ['body.minPages', '本文の最低ページ数'],
   ['body.imagesPerPageGuide', '1ページあたりの画像の目安'],
-  ['workPhotos.maxImages', '作品写真の上限'],
+  ['workPhotos.maxPages', '作品写真のページ数の上限'],
   ['studentIdPattern', '学籍番号の形式'],
   ['fiscalYear', '年度'],
 ]
@@ -70,6 +70,8 @@ function normTop(key: string, value: unknown): unknown {
   if (key === 'handbookUrl') return value === '' ? undefined : value
   if (key === 'driveSave') return value === 'required' ? undefined : value
   if (key === 'studentIdPattern') return value === '' || value === undefined ? null : value
+  // 前の版の設定の作品写真の枚数の上限は、もう使わない（ページ数の上限 maxPages に変えた。mockups/v38）。比べない
+  if (key === 'workPhotos.maxImages') return undefined
   if (key === 'wordChecks') return words(value)
   return value
 }

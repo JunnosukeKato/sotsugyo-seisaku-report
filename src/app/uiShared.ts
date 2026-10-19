@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import type { PageKind } from '../layout/measure'
+import { photoPageAt, photoPageName } from '../model/photos'
 import { BAND_SIDE_QUERY } from './bandText'
 
 /** 画面の部品で共有する定数と、画面の幅・キーボード・指の動きを扱うフック */
@@ -25,6 +26,8 @@ export function pageName(snap: EditorSnapshot, index = snap.page): string {
   const kind = kinds[index]
   if (!kind) return ''
   if (kind === 'body') return `本文 ${kinds.slice(0, index + 1).filter((k) => k === 'body').length}ページ`
+  // 作品写真が何ページかあるときは「作品写真 2」（mockups/v38 案A）
+  if (kind === 'photos') return photoPageName(photoPageAt(kinds, index) ?? 0, kinds.filter((k) => k === 'photos').length)
   return PAGE_CONTEXT[kind].name
 }
 

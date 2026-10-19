@@ -5,7 +5,8 @@ describe('2026年度の設定', () => {
   it('手順書の基準値と一致している', () => {
     expect(currentConfig.abstract).toMatchObject({ minChars: 600, maxChars: 900, minLines: 15, maxLines: 23 })
     expect(currentConfig.body.minPages).toBe(5)
-    expect(currentConfig.workPhotos.maxImages).toBe(6)
+    // 作品写真は何ページでもよい（ページ数の上限なし。mockups/v38：依頼者の判断）
+    expect(currentConfig.workPhotos.maxPages).toBeNull()
     expect(currentConfig.commonTitle).toBe('卒業イベント「シンドバッド」について')
   })
 

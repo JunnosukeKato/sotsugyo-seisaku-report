@@ -1,6 +1,6 @@
 import { clampPercent, photoGrid } from './photos'
 import { fromMaterialTable } from './table'
-import type { BodyBlock, InlineNode, ParagraphBlock, Reference, Report } from './types'
+import type { BodyBlock, InlineNode, ParagraphBlock, Reference, Report, WorkPhotoLayout, WorkPhotoPage } from './types'
 import { DATA_FORMAT_VERSION } from './types'
 
 /**
@@ -85,9 +85,13 @@ function migrateAbstract(abstract: Raw): Report['abstract'] {
   return written ? { paragraphs } : { paragraphs, started: false }
 }
 
-/** 作品写真：3枚の並べ方はなくしたため、4枚にする（写真は残る） */
-function migratePhotos(photos: Raw): Report['workPhotos'] {
-  const layout = photos.layout === 3 ? 4 : (([1, 2, 4, 6] as const).find((n) => n === photos.layout) ?? 1)
+/**
+ * 作品写真の1ページ（前の版の原稿は、作品写真が1ページだけで、この形のまま workPhotos に入っていた）。
+ * 3枚の並べ方はなくしたため4枚にする。6枚の並べ方もなくしたため（mockups/v38）、4枚にして、5・6枚目の写真は次のページに移す
+ * （写真は消さない。次のページは、移した写真の数に合わせて1枚か2枚（上下）にする。空いている枠を作らないため）
+ */
+function migratePhotoPage(photos: Raw): WorkPhotoPage[] {
+  const raw = photos.layout === 3 ? 4 : photos.layout
   const imageIds = Array.isArray(photos.imageIds) ? (photos.imageIds as unknown[]).map((x) => (typeof x === 'string' ? x : '')) : []
   const positions = Array.isArray(photos.positions)
     ? (photos.positions as unknown[]).map((p) => {
@@ -95,11 +99,38 @@ function migratePhotos(photos: Raw): Report['workPhotos'] {
         return q && typeof q.x === 'number' && typeof q.y === 'number' ? { x: clampPercent(q.x), y: clampPercent(q.y) } : null
       })
     : undefined
-  // 並べ方は、その枚数で選べるものだけ残す（なければ既定の並べ方）
-  const columns = typeof photos.columns === 'number' && photoGrid({ layout, columns: photos.columns }).columns === photos.columns ? photos.columns : undefined
   // 「全体を入れる（切らない）」（mockups/v32 ③）。前の版の原稿にはないので、今までどおり、どの写真も枠いっぱいに切り抜く
   const whole = Array.isArray(photos.whole) ? (photos.whole as unknown[]).map((x) => x === true) : []
-  return { layout, imageIds, ...(columns ? { columns } : {}), ...(positions ? { positions } : {}), ...(whole.some(Boolean) ? { whole } : {}) }
+  /** 写真ごとに並べて持つ値を、枠の番号 indexes の分だけ取り出して1ページにする */
+  const page = (layout: WorkPhotoLayout, indexes: number[], columns?: number): WorkPhotoPage => {
+    const w = indexes.map((i) => whole[i] === true)
+    return {
+      layout,
+      imageIds: indexes.map((i) => imageIds[i] ?? ''),
+      ...(columns ? { columns } : {}),
+      ...(positions ? { positions: indexes.map((i) => positions[i] ?? null) } : {}),
+      ...(w.some(Boolean) ? { whole: w } : {}),
+    }
+  }
+  const all = (from: number) => Array.from({ length: Math.max(0, imageIds.length - from) }, (_, i) => from + i)
+  if (raw === 6) {
+    // 1ページ目：1〜4枚目の枠（と、前の版でも隠れていた7枚目から後ろ）。2ページ目：5・6枚目の枠の写真
+    const first = page(4, [0, 1, 2, 3, ...all(6)])
+    const moved = [4, 5].filter((i) => imageIds[i])
+    if (moved.length === 0) return [first]
+    return [first, moved.length === 2 ? page(2, moved, 1) : page(1, moved)]
+  }
+  const layout = ([1, 2, 4] as const).find((n) => n === raw) ?? 1
+  // 並べ方は、その枚数で選べるものだけ残す（なければ既定の並べ方）
+  const columns = typeof photos.columns === 'number' && photoGrid({ layout, columns: photos.columns }).columns === photos.columns ? photos.columns : undefined
+  return [page(layout, all(0), columns)]
+}
+
+/** 作品写真のページの並び（前の版の原稿は1ページの形。ページがなければ、空の1ページ） */
+function migratePhotos(photos: unknown): WorkPhotoPage[] {
+  // ページの並び（新しい形）の中の、ページでないもの（壊れた値）は捨てる
+  const pages = Array.isArray(photos) ? list(photos.filter((p) => obj(p) === p)).flatMap(migratePhotoPage) : migratePhotoPage(obj(photos))
+  return pages.length ? pages : [{ layout: 1, imageIds: [] }]
 }
 
 export function migrateReport(input: unknown): Report {
@@ -113,7 +144,6 @@ export function migrateReport(input: unknown): Report {
 
   const basic = (raw.basicInfo ?? {}) as Raw
   const abstract = (raw.abstract ?? {}) as Raw
-  const photos = (raw.workPhotos ?? {}) as Raw
   return {
     formatVersion: DATA_FORMAT_VERSION,
     fiscalYear: typeof raw.fiscalYear === 'number' ? raw.fiscalYear : 0,
@@ -122,7 +152,7 @@ export function migrateReport(input: unknown): Report {
     body: migrateBody(list(raw.body)),
     references: migrateReferences(raw.references),
     ...(Array.isArray(raw.acknowledged) ? { acknowledged: (raw.acknowledged as unknown[]).filter((k): k is string => typeof k === 'string') } : {}),
-    workPhotos: migratePhotos(photos),
+    workPhotos: migratePhotos(raw.workPhotos),
     updatedAt: str(raw.updatedAt) || new Date().toISOString(),
   }
 }

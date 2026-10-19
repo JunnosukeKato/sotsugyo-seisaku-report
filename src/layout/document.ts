@@ -275,19 +275,24 @@ ${items}
 
 /**
  * 作品写真：枠いっぱいに切り抜いて並べる。切り抜く位置は学生が写真をつかんで動かして決める。
- * 「全体を入れる（切らない）」にした写真（whole）は、枠の中に全体を入れる（まわりは白。mockups/v32 ③ 案A）
+ * 「全体を入れる（切らない）」にした写真（whole）は、枠の中に全体を入れる（まわりは白。mockups/v32 ③ 案A）。
+ * ページごとに1つの <section>（何ページ目か：data-photo-page。0 から。mockups/v38 案A）。並べ方はページごとに違ってよい
  */
 function photosHtml(report: Report, options: DocumentRenderOptions): string {
-  const grid = photoGrid(report.workPhotos)
-  const slots = shownPhotos(report.workPhotos)
-    .map(({ imageId, position, whole }, i) => {
-      // 全体を入れる写真は切り抜かないので、切り抜く位置は使わない（真ん中に置く）
-      const at = position && !whole ? ` style="object-position:${position.x}% ${position.y}%"` : ''
-      const img = imageId && options.photoSrc ? `<img src="${escapeHtml(options.photoSrc(imageId))}"${at} alt="">` : ''
-      return `<div class="slot${img ? '' : ' empty-slot'}${img && whole ? ' whole' : ''}" data-photo-slot="${i}">${img}</div>`
+  return report.workPhotos
+    .map((page, k) => {
+      const grid = photoGrid(page)
+      const slots = shownPhotos(page)
+        .map(({ imageId, position, whole }, i) => {
+          // 全体を入れる写真は切り抜かないので、切り抜く位置は使わない（真ん中に置く）
+          const at = position && !whole ? ` style="object-position:${position.x}% ${position.y}%"` : ''
+          const img = imageId && options.photoSrc ? `<img src="${escapeHtml(options.photoSrc(imageId))}"${at} alt="">` : ''
+          return `<div class="slot${img ? '' : ' empty-slot'}${img && whole ? ' whole' : ''}" data-photo-slot="${i}">${img}</div>`
+        })
+        .join('')
+      return `<section class="photos grid-${grid.columns}x${grid.rows}" data-photo-page="${k}">${slots}</section>`
     })
-    .join('')
-  return `<section class="photos grid-${grid.columns}x${grid.rows}">${slots}</section>`
+    .join('\n')
 }
 
 /** HTML 文書の形（中身 body のまわり。報告書全体でも、一部だけでも同じ） */

@@ -67,7 +67,7 @@ export function demoReport(): Report {
       { type: 'book', id: 'ref1', author: '文化花子', title: '中東の服飾史', publisher: '文化出版', year: '2020', pages: '17-24' },
       { type: 'web', id: 'ref2', siteTitle: 'シンドバッド - Wikipedia', url: 'https://ja.wikipedia.org/wiki/シンドバッド', accessedOn: '2026-08-18' },
     ],
-    workPhotos: { layout: 2, imageIds: [] },
+    workPhotos: [{ layout: 2, imageIds: [] }],
     updatedAt: '2026-10-05T00:00:00.000Z',
   }
 }

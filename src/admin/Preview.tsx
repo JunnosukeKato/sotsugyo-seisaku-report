@@ -18,7 +18,7 @@ function sampleReport(config: YearConfig, courseId: string): Report {
     abstract: { paragraphs: [{ type: 'paragraph', id: 'a', content: [{ type: 'text', text: `${config.abstract.openingExample}……（学生が入力する抄録の本文）` }] }] },
     body: [],
     references: [],
-    workPhotos: { layout: 1, imageIds: [] },
+    workPhotos: [{ layout: 1, imageIds: [] }],
     updatedAt: '',
   }
 }

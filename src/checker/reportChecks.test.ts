@@ -42,7 +42,7 @@ function cleanReport(): Report {
             : b,
       ),
     })),
-    workPhotos: { layout: 2, imageIds: ['ph1', 'ph2'] },
+    workPhotos: [{ layout: 2, imageIds: ['ph1', 'ph2'] }],
   }
   return r
 }
@@ -379,5 +379,22 @@ describe('空の段落（Enter を押して何も書かなかったときなど�
     expect(found.find((f) => f.blockId === 'pe')).toMatchObject({ title: '空の段落がある', detail: '「削除」で、この空の段落を消します' })
     const hinted = found.find((f) => f.blockId === 'ph')
     expect(hinted).toMatchObject({ title: 'まだ書いていない段落がある', detail: '工夫した点を書く' })
+  })
+})
+
+describe('作品写真が何ページかあるときの指摘（mockups/v38 案A）', () => {
+  const photoFindings = (workPhotos: Report['workPhotos']) =>
+    checkReport({ ...cleanReport(), workPhotos }, currentConfig).filter((f) => f.area === 'photos').map((f) => ({ ruleId: f.ruleId, detail: f.detail, photoPage: f.photoPage }))
+
+  it('空いている枠は、写真の入っているページごとに「2ページ目：4枚の配置に3枚」。写真のないページは「作品写真の2ページ目が空」', () => {
+    expect(photoFindings([{ layout: 4, imageIds: ['a', 'b', 'c'] }, { layout: 4, imageIds: [] }, { layout: 2, imageIds: ['x', 'y'] }])).toEqual([
+      { ruleId: 'photos-empty-slot', detail: '1ページ目：4枚の配置に3枚', photoPage: 0 },
+      { ruleId: 'photos-empty-page', detail: '写真を入れるか、このページを消す（空のページは PDF に入りません）', photoPage: 1 },
+    ])
+  })
+
+  it('1ページだけなら今までどおり（ページの番号を付けない）。どのページにも写真がなければ「作品写真を入れる」だけ', () => {
+    expect(photoFindings([{ layout: 4, imageIds: ['a'] }])).toEqual([{ ruleId: 'photos-empty-slot', detail: '4枚の配置に1枚', photoPage: undefined }])
+    expect(photoFindings([{ layout: 4, imageIds: [] }, { layout: 1, imageIds: [] }]).map((f) => f.ruleId)).toEqual(['photos-required'])
   })
 })

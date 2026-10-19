@@ -90,7 +90,7 @@ describe('migrateReport', () => {
   it('欠けている項目を既定値で補う', () => {
     const r = migrateReport({ formatVersion: 1, body: [], basicInfo: { name: '文化 花子' } })
     expect(r.basicInfo).toEqual({ studentId: '', name: '文化 花子', courseId: '', subtitleInput: '' })
-    expect(r.workPhotos).toEqual({ layout: 1, imageIds: [] })
+    expect(r.workPhotos).toEqual([{ layout: 1, imageIds: [] }])
   })
 
   it('細工したファイルや壊れたファイルでも、形を確かめてから使う（紙面に HTML を入れられない・画面が止まらない）', () => {
@@ -173,9 +173,9 @@ describe('自動保存（IndexedDB）', () => {
     expect(snapshots.filter((s) => !s.keep)).toHaveLength(20)
   })
 
-  it('報告書で使っている写真の ID を集める', () => {
-    const report = { ...demoReport(), workPhotos: { layout: 2 as const, imageIds: ['ph1'] } }
-    expect(usedImageIds(report)).toEqual(['ph1'])
+  it('報告書で使っている写真の ID を集める（作品写真は、どのページの写真も）', () => {
+    const report = { ...demoReport(), workPhotos: [{ layout: 2 as const, imageIds: ['ph1'] }, { layout: 1 as const, imageIds: ['ph2'] }] }
+    expect(usedImageIds(report)).toEqual(['ph1', 'ph2'])
   })
 
   it('控えに名前を付けられる（「Word を読み込む前」。バックアップの控えの一覧に出す）', async () => {

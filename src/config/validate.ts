@@ -174,7 +174,9 @@ export function validateConfig(config: YearConfig, options: ValidateOptions = {}
   const body: Partial<YearConfig['body']> = isObject(config.body) ? config.body : {}
   if (!(isNumber(body.minPages) && body.minPages > 0)) error('body.minPages', '本文の最低ページ数を入力してください')
   const photos: Partial<YearConfig['workPhotos']> = isObject(config.workPhotos) ? config.workPhotos : {}
-  if (!(isNumber(photos.maxImages) && photos.maxImages > 0)) error('workPhotos.maxImages', '作品写真の上限を入力してください')
+  // 作品写真のページ数の上限：空（null）は上限なし。入れるなら1以上の整数
+  if (!(photos.maxPages === null || photos.maxPages === undefined || (isNumber(photos.maxPages) && Number.isInteger(photos.maxPages) && photos.maxPages > 0)))
+    error('workPhotos.maxPages', '作品写真のページ数の上限は、1以上の整数にしてください（空にすると上限なし）')
   if (config.studentIdPattern !== null && config.studentIdPattern !== undefined) {
     try {
       if (!isText(config.studentIdPattern)) throw new Error()
@@ -232,6 +234,7 @@ function courseProblems(course: Course): string[] {
  *   - コースの下書きのひな形が崩れていたら、そのコースは標準のひな形にする
  *   - 抄録の書き出し例・お知らせが崩れていたら、出さない
  *   - 書き間違えやすい語は、形の崩れた行だけを外す（一覧そのものが崩れていたら、ツールに入っている一覧を使う）
+ *   - 作品写真のページ数の上限がない（前の版の設定。枚数の上限 maxImages は使わない）・崩れていたら、上限なし
  * それ以外の問題（題目がないなど）は直さない（validateConfig でエラーになり、前に読み込んだ設定か初期値を使う）
  */
 export function repairConfig(config: YearConfig): YearConfig {
@@ -249,6 +252,9 @@ export function repairConfig(config: YearConfig): YearConfig {
   const words: unknown = config.wordChecks
   const wordChecks = words === undefined || words === null ? undefined : Array.isArray(words) ? (words.slice(0, LIMITS.words).filter((w) => !wordShapeProblem(w)) as WordCheck[]) : undefined
   const repaired: YearConfig = { ...config, courses }
+  // 作品写真：前の版の設定の枚数の上限（maxImages）は使わない。ページ数の上限がない・崩れているときは、上限なし（mockups/v38：依頼者の判断）
+  const maxPages: unknown = isObject(config.workPhotos) ? config.workPhotos.maxPages : undefined
+  repaired.workPhotos = { maxPages: isNumber(maxPages) && Number.isInteger(maxPages) && maxPages > 0 ? maxPages : null }
   if (wordChecks) repaired.wordChecks = wordChecks
   else delete repaired.wordChecks
   return repaired

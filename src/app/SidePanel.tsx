@@ -4,6 +4,7 @@ import { exportNote, type ProgressRow } from '../checker/progress'
 import type { ReportFinding } from '../checker/reportChecks'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import type { PageKind } from '../layout/measure'
+import { photoPageName } from '../model/photos'
 import { Icon } from './icons'
 import { AREA_LABELS, AREA_ORDER, daysUntil, formatDeadline } from './labels'
 import { checkSummary, goToTarget } from './checkSummary'
@@ -138,7 +139,10 @@ export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; sna
   const ref = useRef<HTMLDivElement>(null)
   const kinds = snap.layout?.kinds ?? []
   let body = 0
-  const names = kinds.map((k) => (k === 'body' ? `${SHORT_NAMES.body} ${++body}` : SHORT_NAMES[k]))
+  // 作品写真が何ページかあるときは「作品写真 1」「作品写真 2」（mockups/v38 案A）
+  let photo = 0
+  const photos = kinds.filter((k) => k === 'photos').length
+  const names = kinds.map((k) => (k === 'body' ? `${SHORT_NAMES.body} ${++body}` : k === 'photos' ? photoPageName(photo++, photos) : SHORT_NAMES[k]))
   const errorPages = new Set(snap.findings.filter((f) => f.severity === 'error').map((f) => editor.pageOfFinding(f)))
   // 見ているページ（見開きなら、並べている2ページとも選んだ印）
   const shown = new Set(shownPages(snap))

@@ -213,7 +213,7 @@ describe('ドライブに送るとき（原稿を消さない・混ぜない）'
 
   it('ドライブで写真をゴミ箱に入れていても、この端末から消す前に送り直す', async () => {
     await putImage({ id: 'ph1', blob: new Blob(['x'], { type: 'image/jpeg' }), widthPx: 1, heightPx: 1 })
-    const report: Report = { ...written('花子'), workPhotos: { layout: 1, imageIds: ['ph1'] } }
+    const report: Report = { ...written('花子'), workPhotos: [{ layout: 1, imageIds: ['ph1'] }] }
     const drive = await loggedIn()
     await drive.resolve(report)
     drive.activate(report)

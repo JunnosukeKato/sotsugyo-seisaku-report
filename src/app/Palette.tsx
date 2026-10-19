@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
-import { PHOTO_ARRANGEMENTS, photoGrid } from '../model/photos'
+import { PHOTO_ARRANGEMENTS, photoGrid, photoPageName } from '../model/photos'
+import { SELECTION_TEXTS } from '../editor/selectionBar'
 import { Icon } from './icons'
 import { TableSizeMenu } from './TableSize'
 import { keepFocus, PAGE_CONTEXT } from './uiShared'
@@ -173,28 +174,54 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
   const kind = snap.layout?.kinds[snap.page]
 
   if (kind === 'photos') {
-    const current = photoGrid(report.workPhotos)
+    // 何ページ目の作品写真か（写真を押して選んでいれば、その写真のページ。mockups/v38 案A）
+    const page = selection?.kind === 'photos' ? selection.page : (snap.photoPage ?? 0)
+    const photos = report.workPhotos[page] ?? report.workPhotos[0]
+    const current = photoGrid(photos)
     // 押して選んだ写真（写真が入っている枠だけ。図と同じく「差し替え」「外す」を出す。mockups/v23 ⑧ 案A）
-    const photo = selection?.kind === 'photos' && selection.index !== undefined && selection.index < report.workPhotos.layout && report.workPhotos.imageIds[selection.index] ? selection.index : null
+    const photo = selection?.kind === 'photos' && selection.index !== undefined && selection.index < photos.layout && photos.imageIds[selection.index] ? selection.index : null
     const photoTools = photo !== null && (
       <div className="group ctx">
         <div className="ctx-label">{phone ? `この写真（${photo + 1}枚目）` : 'この写真'}</div>
-        <Tool label="差し替え" icon={Icon.replace} title={`${photo + 1}枚目の写真を選び直す`} onClick={() => void editor.setPhoto(photo)} />
+        <Tool label="差し替え" icon={Icon.replace} title={`${photo + 1}枚目の写真を選び直す`} onClick={() => void editor.setPhoto(page, photo)} />
         <Tool
           label="外す"
           icon={Icon.remove}
           danger
           title={`${photo + 1}枚目の写真を外す（枠を空にする）`}
-          onClick={() => editor.removePhoto(photo)}
+          onClick={() => editor.removePhoto(page, photo)}
         />
-        <WholeSwitch on={report.workPhotos.whole?.[photo] === true} index={photo} onToggle={(on) => editor.setPhotoWhole(photo, on)} />
+        <WholeSwitch on={photos.whole?.[photo] === true} index={photo} onToggle={(on) => editor.setPhotoWhole(page, photo, on)} />
       </div>
     )
     if (phone && photoTools) return photoTools
+    // 写真のページを足す・消す（mockups/v38 案A）。ページ数の上限（学科の設定）に達していたら足せない。1ページだけのときは消せない
+    const pageCount = report.workPhotos.length
+    const canAdd = editor.canAddPhotoPage()
+    const max = editor.maxPhotoPages
+    const pageTools = (
+      <>
+        <Tool
+          label={phone ? 'ページを\n足す' : '写真の\nページを足す'}
+          icon={Icon.photoPageAdd}
+          title={canAdd ? '作品写真のページを、このページの後ろに1つ足す（このページと同じ並べ方）' : `作品写真は${max}ページまでです`}
+          disabled={!canAdd}
+          onClick={() => void editor.addPhotoPage(page)}
+        />
+        <Tool
+          label={phone ? 'ページを\n消す' : 'この\nページを消す'}
+          icon={Icon.remove}
+          danger
+          title={pageCount > 1 ? 'このページを、中の写真ごと消す（「戻す」で戻せます）' : '作品写真のページが1つだけのときは、消せません'}
+          disabled={pageCount <= 1}
+          onClick={() => void editor.removePhotoPage(page)}
+        />
+      </>
+    )
     return (
       <>
         {photoTools}
-        <div className="group ctx">
+        <div className="group ctx photo-arrange">
           <div className="ctx-label">並べ方</div>
           <div className="layouts">
             {PHOTO_ARRANGEMENTS.map((a) => (
@@ -203,7 +230,7 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
                 className={`lay${current === a ? ' on' : ''}`}
                 aria-pressed={current === a}
                 title={`${a.label}（写真をつかんで動かすと、見える位置を変えられます）`}
-                onClick={() => editor.setPhotoLayout(a.layout, a.columns)}
+                onClick={() => editor.setPhotoLayout(page, a.layout, a.columns)}
               >
                 <span className="lay-grid" style={{ gridTemplate: `repeat(${a.rows}, 1fr) / repeat(${a.columns}, 1fr)` }}>
                   {Array.from({ length: a.layout }, (_, i) => (
@@ -215,8 +242,30 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
               </button>
             ))}
           </div>
-          <div className="ctx-note">写真をつかんで動かすと、見える位置を変えられます</div>
+          {/* 並べ方の枠の中は1行6字ほど。言葉の切れ目で折り返す（1字だけ次の行に残らないように） */}
+          <div className="ctx-note">
+            写真は、
+            <br />
+            つかんで
+            <br />
+            見える所を
+            <br />
+            変えられます
+          </div>
+          {/* スマホ：並べ方の横に、区切りの線と「ページを足す」「ページを消す」（下の道具は1列に並べるため） */}
+          {phone && (
+            <>
+              <span className="photo-pages-sep" aria-hidden="true" />
+              {pageTools}
+            </>
+          )}
         </div>
+        {!phone && (
+          <div className="group ctx photo-pages">
+            <div className="ctx-label">ページ</div>
+            {pageTools}
+          </div>
+        )}
       </>
     )
   }
@@ -322,7 +371,20 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
     )
   }
 
+  // 紙面で文を選んでいる：コピー・切り取り・削除（Ctrl+C・Ctrl+X・Delete と同じ。mockups/v36 案B）
+  if (!editingId && snap.textRange) {
+    return (
+      <div className="group ctx sel-tools">
+        <div className="ctx-label">{SELECTION_TEXTS.group}</div>
+        <Tool label={SELECTION_TEXTS.copy.label} icon={Icon.copy} title={SELECTION_TEXTS.copy.title()} onClick={() => editor.copySelection()} />
+        <Tool label={SELECTION_TEXTS.cut.label} icon={Icon.cut} title={SELECTION_TEXTS.cut.title()} onClick={() => editor.cutSelection()} />
+        <Tool label={SELECTION_TEXTS.remove.label} icon={Icon.remove} danger title={SELECTION_TEXTS.remove.title()} onClick={() => editor.deleteSelection()} />
+      </div>
+    )
+  }
   if (!editingId) return null
+  // 紙面でコピーしたまとまりがあるときの「貼り付け」（Ctrl+V と同じ。コピーしていないときは出さない）
+  const paste = snap.pasteReady && <Tool label={SELECTION_TEXTS.paste.label} icon={Icon.paste} title={SELECTION_TEXTS.paste.title()} onClick={() => editor.pasteFromTool()} />
   const remove = () => {
     if (editingKind === 'chapter' && !confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（「元に戻す」で戻せます）')) return
     editor.removeBlock(editingId)
@@ -331,6 +393,7 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
     return (
       <div className="group ctx">
         <div className="ctx-label">この段落</div>
+        {paste}
         <Tool label="削除" icon={Icon.remove} danger title="この段落を削除" onClick={remove} />
       </div>
     )
@@ -339,6 +402,7 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
     return (
       <div className="group ctx">
         <div className="ctx-label">この段落</div>
+        {paste}
         <Tool label="削除" icon={Icon.remove} danger title="この段落を削除" onClick={remove} />
       </div>
     )
@@ -366,7 +430,8 @@ export function Palette({ editor, snap, onReferences }: Props) {
   return (
     <nav className={`palette${onObject ? ' compact' : ''}`} aria-label="道具">
       <div className="p-head">
-        <b>{context.name}</b>
+        {/* 作品写真が何ページかあるときは「作品写真 2」（mockups/v38 案A） */}
+        <b className={kind === 'photos' ? 'photo-name' : undefined}>{kind === 'photos' && snap.photoPage !== null ? photoPageName(snap.photoPage, snap.report.workPhotos.length) : context.name}</b>
         <span>{context.hint}</span>
       </div>
       {kind === 'body' && !onObject && (
@@ -385,7 +450,18 @@ export function Palette({ editor, snap, onReferences }: Props) {
               onClick={() => void editor.addFigure()}
             />
             <TableMenu editor={editor} disabled={!writing} />
-            {!writing && <div className="ctx-note">図・表は、文中の入れたい位置をクリックしてから押します</div>}
+            {/* 道具の幅（1行6字ほど）で、言葉の切れ目で折り返す（1字だけ次の行に残らないように） */}
+            {!writing && (
+              <div className="ctx-note">
+                図・表は、
+                <br />
+                入れたい所を
+                <br />
+                クリックして
+                <br />
+                から押します
+              </div>
+            )}
           </div>
         </>
       )}

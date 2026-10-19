@@ -138,7 +138,11 @@ describe('本文のページの数と、PDF から分かる指摘', () => {
     expect(by('body', 'body-pages')).toMatchObject({ severity: 'error', title: '本文はA4で5ページ以上にする', detail: '現在 3ページ（PDF のページの数）' })
     expect(by('body', 'figures-per-page')).toMatchObject({ severity: 'warning', detail: '画像 7枚・本文 3ページ（目安は6枚まで）' })
     expect(by('abstract', 'abstract-one-page')).toMatchObject({ severity: 'error', detail: '現在 2ページ' })
-    expect(by('photo', 'photo-one-page')).toMatchObject({ severity: 'error' })
+    // 作品写真は何ページでもよい（年度の設定のページ数の上限がなければ、何も言わない。mockups/v38）
+    expect(list.filter((f) => f.part === 'photo')).toEqual([])
+    const limited = pdfFindings({ photo }, { ...config, workPhotos: { maxPages: 1 } })
+    expect(limited.find((f) => f.ruleId === 'photo-pages')).toMatchObject({ severity: 'error', title: '作品写真は1ページまでにする', detail: '今 2ページ' })
+    expect(pdfFindings({ photo }, { ...config, workPhotos: { maxPages: 2 } }).filter((f) => f.part === 'photo')).toEqual([])
     // 表紙は1ページ（4つを1つにまとめた PDF を入れたとき）
     expect(by('cover', 'cover-one-page')).toBeUndefined()
     const merged = pdfFindings({ cover: { pages: [fakePage(['表紙']), fakePage(['抄録']), fakePage(['目次'])] } }, config)

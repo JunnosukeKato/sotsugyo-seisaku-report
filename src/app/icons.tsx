@@ -44,6 +44,8 @@ export const Icon = {
     </>,
   ),
   pageBreak: svg(<path d="M6 3.5h12v6H6zM6 14.5h12v6H6zM3 12h2M7.5 12h2M12 12h2M16.5 12h2" />),
+  /** 作品写真のページを足す（紙に ＋。mockups/v38 案A） */
+  photoPageAdd: svg(<path d="M6.5 3.5h11a1.5 1.5 0 011.5 1.5v14a1.5 1.5 0 01-1.5 1.5h-11A1.5 1.5 0 015 19V5a1.5 1.5 0 011.5-1.5zM12 8.8v6.6M8.7 12.1h6.6" />),
   colAdd: svg(<path d="M4 5h9v14H4zM8.5 5v14M17.5 9v6M14.5 12h6" />),
   colRemove: svg(<path d="M4 5h9v14H4zM8.5 5v14M14.5 12h6" />),
   image: svg(<path d="M4.5 5.5h15v13h-15zM4.5 15.5l4-4 3.5 3.5 2.5-2.5 5 4M15 9.5h.01" />),
@@ -120,4 +122,25 @@ export const Icon = {
   ),
   minus: svg(<path d="M6 12h12" />),
   plus: svg(<path d="M12 5v14M5 12h14" />),
+  // 紙面で選んだ文の道具（mockups/v36。editor/selectionBar.ts の帯も同じ線）
+  copy: svg(
+    <>
+      <rect x="8.5" y="8.5" width="11" height="11.5" rx="1.6" />
+      <path d="M15.5 8.5V5.6A1.6 1.6 0 0013.9 4H5.6A1.6 1.6 0 004 5.6v8.3a1.6 1.6 0 001.6 1.6h2.9" />
+    </>,
+  ),
+  cut: svg(
+    <>
+      <circle cx="6.5" cy="17.5" r="2.5" />
+      <circle cx="17.5" cy="17.5" r="2.5" />
+      <path d="M8.3 15.7L18 4.5M15.7 15.7L6 4.5" />
+    </>,
+  ),
+  paste: svg(
+    <>
+      <path d="M9 5H7.2A1.7 1.7 0 005.5 6.7v12.6A1.7 1.7 0 007.2 21h9.6a1.7 1.7 0 001.7-1.7V6.7A1.7 1.7 0 0016.8 5H15" />
+      <rect x="9" y="3.5" width="6" height="3" rx="1" />
+      <path d="M9 12h6M9 15.5h4" />
+    </>,
+  ),
 }

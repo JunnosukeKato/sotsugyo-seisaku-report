@@ -145,7 +145,7 @@ export function summarize(report: Report): { chars: number; figures: number; pho
   return {
     chars: blocks.reduce((n, b) => n + (b.type === 'paragraph' ? b.content.reduce((m, x) => m + (x.type === 'text' ? x.text.length : 0), 0) : 0), 0),
     figures: blocks.reduce((n, b) => n + (b.type === 'figureRow' ? b.figures.filter((f) => f.imageId).length : 0), 0),
-    photos: report.workPhotos.imageIds.filter(Boolean).length,
+    photos: report.workPhotos.reduce((n, p) => n + p.imageIds.filter(Boolean).length, 0),
   }
 }
 

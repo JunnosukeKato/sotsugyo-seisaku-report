@@ -190,7 +190,7 @@ const PART_OF_AREA: Record<Area, PartId> = { cover: 'cover', abstract: 'abstract
  * abstract-not-started（抄録を書き始める前の決まり）・photos-*（ツールの作品写真のページ）・manual-ref（ツールの図表とつなげる）・
  * paragraph-empty（Word で書いていない小見出しに、読み取りが足した空の段落）
  */
-const DROPPED = new Set(['abstract-not-started', 'photos-required', 'photos-empty-slot', 'manual-ref', 'paragraph-empty'])
+const DROPPED = new Set(['abstract-not-started', 'photos-required', 'photos-empty-slot', 'photos-empty-page', 'manual-ref', 'paragraph-empty'])
 
 /** 指摘した文字がこれより長いとき（1文が長すぎる、など）は、指摘した文字の初めと終わりだけを出す */
 const LONG_QUOTE = 40

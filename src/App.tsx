@@ -679,7 +679,7 @@ export default function App() {
         const sel = editor.getSnapshot().selection
         if (!sel || (sel.kind === 'photos' && sel.index === undefined)) return
         e.preventDefault()
-        if (sel.kind === 'photos') editor.removePhoto(sel.index!)
+        if (sel.kind === 'photos') editor.removePhoto(sel.page, sel.index!)
         else editor.removeSelected()
       }
     }

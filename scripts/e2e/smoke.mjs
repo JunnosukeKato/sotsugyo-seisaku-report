@@ -12,6 +12,7 @@ import { editorFixesV3Pc } from './editorFixesV3.mjs'
 import { teacherTrialPc } from './teacherTrialFixes.mjs'
 import { rangeSelectPc } from './rangeSelect.mjs'
 import { writingWrapPc } from './writingWrap.mjs'
+import { photoPagesPc } from './photoPages.mjs'
 import { setupWriting } from './sampleReport.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
@@ -1073,7 +1074,7 @@ await withEdge(async (browser) => {
   const toolDisabled = (label) => page.evaluate((label) => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes(label))?.disabled, label)
   check('段落を書いていないときは「図を入れる」「表を入れる」を押せない', (await toolDisabled('図を入れる')) === true && (await toolDisabled('表を入れる')) === true)
   const paletteNote = await page.evaluate(() => { const n = [...document.querySelectorAll('.palette .ctx-note')].find((e) => e.textContent.includes('図・表')); return n && getComputedStyle(n).display !== 'none' ? n.textContent : '' })
-  check('押せないときは、その理由（入れたい位置をクリックしてから）が道具に出る', paletteNote.includes('入れたい位置をクリック'), paletteNote)
+  check('押せないときは、その理由（入れたい所をクリックしてから）が道具に出る', paletteNote.includes('入れたい所をクリック'), paletteNote)
   await clickBlock(firstParagraph)
   await page.keyboard.press('End')
   await clickPaletteButton('表を入れる')
@@ -1318,11 +1319,11 @@ await withEdge(async (browser) => {
     const b = await slotBox(i)
     const [photoChooser] = await Promise.all([page.waitForFileChooser(), page.mouse.click(b.x, b.y)])
     await photoChooser.accept([pngPath])
-    await page.waitForFunction((i) => !!window.__editor.getSnapshot().report.workPhotos.imageIds[i], {}, i)
+    await page.waitForFunction((i) => !!window.__editor.getSnapshot().report.workPhotos[0].imageIds[i], {}, i)
     await ready()
   }
   const photoFit = await page.evaluate(() => getComputedStyle(document.querySelector('.page-viewport.front [data-photo-slot="0"] img')).objectFit)
-  check('作品写真を2枚（上下）で入れると、枠いっぱいに切り抜いて載る', (await snap()).report.workPhotos.imageIds.filter(Boolean).length === 2 && photoFit === 'cover', photoFit)
+  check('作品写真を2枚（上下）で入れると、枠いっぱいに切り抜いて載る', (await snap()).report.workPhotos[0].imageIds.filter(Boolean).length === 2 && photoFit === 'cover', photoFit)
   // 1枚目をつかんで下へ動かす（ファイルを選ぶ画面は開かない）
   let chooserOpened = false
   const onChooser = () => (chooserOpened = true)
@@ -1335,13 +1336,13 @@ await withEdge(async (browser) => {
   await pause()
   await ready()
   page.off('filechooser', onChooser)
-  const moved = (await snap()).report.workPhotos.positions?.[0]
+  const moved = (await snap()).report.workPhotos[0].positions?.[0]
   check('作品写真をつかんで動かすと、見える位置が変わる（写真は選び直さない）', !!moved && moved.y < 50 && moved.x === 50 && !chooserOpened, JSON.stringify(moved))
   await chooseArrangement('1枚')
   const oneShown = await page.evaluate(() => document.querySelectorAll('.page-viewport.front [data-photo-slot]').length)
   await chooseArrangement('2枚（上下')
   s = await snap()
-  check('1枚にしてから2枚に戻すと、2枚目の写真も戻る（1枚目から順に載る）', oneShown === 1 && s.report.workPhotos.imageIds.filter(Boolean).length === 2 && !s.findings.some((f) => f.ruleId.startsWith('photos')), String(oneShown))
+  check('1枚にしてから2枚に戻すと、2枚目の写真も戻る（1枚目から順に載る）', oneShown === 1 && s.report.workPhotos[0].imageIds.filter(Boolean).length === 2 && !s.findings.some((f) => f.ruleId.startsWith('photos')), String(oneShown))
   // 入っている写真を押すと、その写真を選び（写真を選ぶ画面は出さない）、道具の「外す」で枠を空にできる（mockups/v23 ⑧ 案A）
   chooserOpened = false
   page.on('filechooser', onChooser)
@@ -1354,18 +1355,18 @@ await withEdge(async (browser) => {
     tools: [...document.querySelectorAll('.palette .group.ctx')][0]?.textContent ?? '',
     marked: !!document.querySelector('.page-viewport.front [data-photo-slot="0"].is-selected'),
   }))
-  check('入っている作品写真を押すと、その写真を選び、道具に「この写真：差し替え／外す」が出る（写真を選ぶ画面は出ない）', photoTools.sel?.index === 0 && photoTools.label === 'この写真' && photoTools.tools.includes('差し替え') && photoTools.tools.includes('外す') && photoTools.marked && !chooserOpened, JSON.stringify(photoTools))
+  check('入っている作品写真を押すと、その写真を選び、道具に「この写真：差し替え／外す」が出る（写真を選ぶ画面は出ない）', photoTools.sel?.index === 0 && photoTools.sel?.page === 0 && photoTools.label === 'この写真' && photoTools.tools.includes('差し替え') && photoTools.tools.includes('外す') && photoTools.marked && !chooserOpened, JSON.stringify(photoTools))
   page.off('filechooser', onChooser)
   await page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('外す')).click())
   await pause(300)
   await ready()
   s = await snap()
-  check('「外す」で枠が空になり、セルフチェックに空いている枠の注意が出る', s.report.workPhotos.imageIds[0] === '' && s.findings.some((f) => f.ruleId === 'photos-empty-slot') && !(await page.$('.page-viewport.front [data-photo-slot="0"] img')), JSON.stringify(s.report.workPhotos.imageIds))
+  check('「外す」で枠が空になり、セルフチェックに空いている枠の注意が出る', s.report.workPhotos[0].imageIds[0] === '' && s.findings.some((f) => f.ruleId === 'photos-empty-slot') && !(await page.$('.page-viewport.front [data-photo-slot="0"] img')), JSON.stringify(s.report.workPhotos))
   await page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('元に戻す')).click())
   await pause(300)
   await ready()
   s = await snap()
-  check('「元に戻す」で、外した写真が戻る', s.report.workPhotos.imageIds.filter(Boolean).length === 2 && !s.findings.some((f) => f.ruleId.startsWith('photos')), JSON.stringify(s.report.workPhotos.imageIds))
+  check('「元に戻す」で、外した写真が戻る', s.report.workPhotos[0].imageIds.filter(Boolean).length === 2 && !s.findings.some((f) => f.ruleId.startsWith('photos')), JSON.stringify(s.report.workPhotos))
 
   // ---- 自動保存：読み込み直しても残っている ----
   await new Promise((r) => setTimeout(r, 1500))
@@ -2337,6 +2338,9 @@ await withEdge(async (browser) => {
   // ---- 作品写真の「全体を入れる（切らない）」（mockups/v32 ③ 案A） ----
   await photoWholeCheck(browser)
 
+  // ---- 作品写真の何ページか（mockups/v38 案A：ページを足す・消す・ページごとの並べ方・選んだ写真を全部入れる・空のページは PDF に入らない。scripts/e2e/photoPages.mjs） ----
+  await photoPagesPc(browser, check)
+
   // ---- はじめて使う学生の試し（3回目：Word から移す学生・パソコン）で見つかったこと（scripts/e2e/firstTimeV3.mjs） ----
   await firstTimeV3Pc(browser, check)
   await firstTimeV3Word(browser, check)
@@ -2386,7 +2390,7 @@ async function photoWholeCheck(browser) {
   await ready()
   await page.evaluate(setupWriting)
   // 上の枠に縦長の全身の写真（枠いっぱいだと頭と裾が切れる）、下の枠に横長の写真（2枚・上下）
-  await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: { layout: 2, columns: 1, imageIds: ['g-photo1', 'g-mood'] } })))
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: [{ layout: 2, columns: 1, imageIds: ['g-photo1', 'g-mood'] }] })))
   await pause(500)
   await ready()
   // 見本の原稿（章・図・表あり）でも、分けて組んだ紙面が、報告書全体を1つの文書として組んだ紙面と同じ。
@@ -2415,7 +2419,8 @@ async function photoWholeCheck(browser) {
       const img = slot?.querySelector('img')
       return { whole: !!slot?.classList.contains('whole'), fit: img ? getComputedStyle(img).objectFit : null, cursor: img ? getComputedStyle(img).cursor : null }
     }, i)
-  const model = () => page.evaluate(() => window.__editor.getSnapshot().report.workPhotos)
+  // 作品写真の1ページ目（何ページかにできるようになった：mockups/v38）
+  const model = () => page.evaluate(() => window.__editor.getSnapshot().report.workPhotos[0])
   const clickSwitch = async () => {
     await page.click('.palette .photo-sw')
     await pause(300)
@@ -2498,7 +2503,7 @@ async function photoWholeCheck(browser) {
   const undone = await slotState(0)
   const m3 = await model()
   check('「元に戻す」で、枠いっぱいに切った写真に戻る', !undone.whole && undone.fit === 'cover' && !m3.whole, JSON.stringify({ undone, whole: m3.whole }))
-  await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
+  await page.evaluate(() => window.__editor.select({ kind: 'photos', page: 0, index: 0 }))
   await pause(300)
   await clickSwitch()
 
@@ -2525,11 +2530,11 @@ async function photoWholeCheck(browser) {
   })
   const replacePath = join(tmpdir(), 'sotsugyo-e2e-whole.png')
   writeFileSync(replacePath, Buffer.from(png, 'base64'))
-  await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
+  await page.evaluate(() => window.__editor.select({ kind: 'photos', page: 0, index: 0 }))
   await pause(300)
   const [chooser] = await Promise.all([page.waitForFileChooser(), page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('差し替え')).click())])
   await chooser.accept([replacePath])
-  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos.imageIds[0] !== 'g-photo1', { timeout: 20000 })
+  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos[0].imageIds[0] !== 'g-photo1', { timeout: 20000 })
   await pause(300)
   await ready()
   const replaced = await slotState(0)

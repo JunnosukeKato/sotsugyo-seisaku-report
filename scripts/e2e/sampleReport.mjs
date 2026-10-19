@@ -92,7 +92,7 @@ export async function setupWriting() {
       },
     ],
     references: [],
-    workPhotos: { layout: 1, imageIds: ['g-photo1'] },
+    workPhotos: [{ layout: 1, imageIds: ['g-photo1'] }],
     acknowledged: [],
   })
 }

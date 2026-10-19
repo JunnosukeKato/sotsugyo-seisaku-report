@@ -7,6 +7,7 @@ import { stubConfig } from './configStub.mjs'
 import { firstTimeV3Phone } from './firstTimeV3.mjs'
 import { editorFixesV3Phone } from './editorFixesV3.mjs'
 import { rangeSelectPhone } from './rangeSelect.mjs'
+import { photoPagesPhone } from './photoPages.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -498,7 +499,7 @@ await withEdge(async (browser) => {
     g.fillStyle = '#4a6a8a'
     g.fillRect(0, 0, 300, 400)
     window.__editor.addImages([{ id: 'e2e-photo', blob: await c.convertToBlob({ type: 'image/png' }), widthPx: 300, heightPx: 400 }])
-    window.__editor.update((r) => ({ ...r, workPhotos: { layout: 1, columns: 1, imageIds: ['e2e-photo'] } }))
+    window.__editor.update((r) => ({ ...r, workPhotos: [{ layout: 1, columns: 1, imageIds: ['e2e-photo'] }] }))
   })
   await ready()
   await page.evaluate(() => window.__editor.goToArea('photos'))
@@ -514,10 +515,10 @@ await withEdge(async (browser) => {
   await page.evaluate(() => [...document.querySelectorAll('.sel-bar .tb')].find((b) => b.textContent.includes('外す')).click())
   await ready()
   s = await snap()
-  check('「外す」で枠が空になり、「作品写真を外しました［戻す］」が出る', s.report.workPhotos.imageIds[0] === '' && (await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? '')).includes('作品写真を外しました'))
+  check('「外す」で枠が空になり、「作品写真を外しました［戻す］」が出る', s.report.workPhotos[0].imageIds[0] === '' && (await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? '')).includes('作品写真を外しました'))
   await page.click('.undo-toast button')
   await ready()
-  check('知らせの「戻す」で、外した写真が戻る', (await snap()).report.workPhotos.imageIds[0] === 'e2e-photo')
+  check('知らせの「戻す」で、外した写真が戻る', (await snap()).report.workPhotos[0].imageIds[0] === 'e2e-photo')
   await page.evaluate(() => window.__editor.goToPage(0, 'none'))
   await ready()
 
@@ -650,6 +651,9 @@ await withEdge(async (browser) => {
 
   // 段落をまたいで選ぶのはパソコンだけ：指で押すと、今までどおり書く欄が開く（scripts/e2e/rangeSelect.mjs）
   await rangeSelectPhone(browser, check)
+
+  // 作品写真の何ページか（mockups/v38 案A）：下の道具の「ページを足す」「ページを消す」（scripts/e2e/photoPages.mjs）
+  await photoPagesPhone(browser, check)
 })
 
 /**
@@ -759,7 +763,7 @@ async function bandCheck(browser) {
       ...r,
       basicInfo: { ...r.basicInfo, studentId: '00ZZ0123' },
       abstract: { ...r.abstract, started: false },
-      workPhotos: { layout: 2, columns: 1, imageIds: ['g-photo1', ''] },
+      workPhotos: [{ layout: 2, columns: 1, imageIds: ['g-photo1', ''] }],
       body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 'p7' ? { ...b, content: [{ type: 'text', text: '二回目の仮縫いでは、見頃の丈も確かめた。' }] } : b)) })),
     })),
   )
@@ -850,13 +854,13 @@ async function bandCheck(browser) {
   )
 
   // 作品写真を押すと、下の道具にスイッチ「全体を入れる（切らない）」（mockups/v32 ③ 案A）。入れると枠の中に全体が入る
-  await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
+  await page.evaluate(() => window.__editor.select({ kind: 'photos', page: 0, index: 0 }))
   await wait(400)
   const swH = await height('.sel-bar .photo-sw')
   await page.tap('.sel-bar .photo-sw')
   await wait(300)
   await ready()
-  const phoneWhole = await page.evaluate(() => ({ fit: getComputedStyle(document.querySelector('.page-viewport.front [data-photo-slot="0"] img')).objectFit, checked: document.querySelector('.sel-bar .photo-sw')?.getAttribute('aria-checked'), whole: window.__editor.getSnapshot().report.workPhotos.whole }))
+  const phoneWhole = await page.evaluate(() => ({ fit: getComputedStyle(document.querySelector('.page-viewport.front [data-photo-slot="0"] img')).objectFit, checked: document.querySelector('.sel-bar .photo-sw')?.getAttribute('aria-checked'), whole: window.__editor.getSnapshot().report.workPhotos[0].whole }))
   await page.screenshot({ path: `${OUT}/14-photo-whole.png` })
   check('スマホ：写真を押すと下の道具にスイッチ「全体を入れる（切らない）」が出て（高さ 44px 以上）、入れると枠の中に全体が入る', swH >= 44 && phoneWhole.fit === 'contain' && phoneWhole.checked === 'true' && phoneWhole.whole?.[0] === true, JSON.stringify({ swH, phoneWhole }))
   await page.evaluate(() => window.__editor.select(null))
@@ -975,7 +979,7 @@ async function bandCheck(browser) {
   check('横向き：作品写真の帯も紙面の右で、画面の中に収まり、下の道具に重ならない', landPhoto.shown && landPhoto.rightOfPage && landPhoto.inside && !landPhoto.overlapsBar && !landPhoto.scrollX, JSON.stringify(landPhoto))
   // 横向き：作品写真を外したときの知らせも、ページ送り・下の道具・紙面の右の帯に重ならない（戻すと写真も戻る）
   // （横向きでは、選んだ写真の道具は紙面の右の列に出る。mockups/v33 案A）
-  await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
+  await page.evaluate(() => window.__editor.select({ kind: 'photos', page: 0, index: 0 }))
   await wait(300)
   await page.evaluate(() => [...document.querySelectorAll('.page-side .tb')].find((b) => b.textContent.includes('外す')).click())
   await ready()
@@ -985,7 +989,7 @@ async function bandCheck(browser) {
   await page.click('.undo-toast button')
   await ready()
   await wait(300)
-  const photoBack = await page.evaluate(() => window.__editor.getSnapshot().report.workPhotos.imageIds[0])
+  const photoBack = await page.evaluate(() => window.__editor.getSnapshot().report.workPhotos[0].imageIds[0])
   check('横向き：作品写真を外したときの知らせは、ページ送り・下の道具・紙面の右の帯に重ならない（［戻す］で戻る）', landUndo.shown && landUndo.covers.length === 0 && landUndo.inside && landUndo.buttonH >= 44 && photoBack === 'g-photo1', JSON.stringify({ landUndo, photoBack }))
   await page.evaluate(() => window.__editor.select(null))
   await wait(300)
@@ -1010,7 +1014,7 @@ async function bandCheck(browser) {
   writeFileSync(pngPath, Buffer.from(png, 'base64'))
   const [chooser] = await Promise.all([page.waitForFileChooser({ timeout: 10000 }), page.tap('.page-band button')])
   await chooser.accept([pngPath])
-  await page.waitForFunction(() => !!window.__editor.getSnapshot().report.workPhotos.imageIds[1], { timeout: 20000 })
+  await page.waitForFunction(() => !!window.__editor.getSnapshot().report.workPhotos[0].imageIds[1], { timeout: 20000 })
   await ready()
   await wait(300)
   const afterPhoto = await band()
@@ -1577,7 +1581,7 @@ async function sideToolsCheck(browser) {
   // 見本の原稿。作品写真は2枚（上下）で、どちらの枠にも写真がある
   const { setupWriting } = await import('./sampleReport.mjs')
   await page.evaluate(setupWriting)
-  await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: '00ZZ0123' }, workPhotos: { layout: 2, columns: 1, imageIds: ['g-photo1', 'g-process'] } })))
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: '00ZZ0123' }, workPhotos: [{ layout: 2, columns: 1, imageIds: ['g-photo1', 'g-process'] }] })))
   await wait(500)
   await ready()
   const turnTo = async (vp) => {
@@ -1593,7 +1597,8 @@ async function sideToolsCheck(browser) {
     await ready()
     await wait(400)
   }
-  const photos = () => page.evaluate(() => window.__editor.getSnapshot().report.workPhotos)
+  // 作品写真の1ページ目（何ページかにできるようになった：mockups/v38）
+  const photos = () => page.evaluate(() => window.__editor.getSnapshot().report.workPhotos[0])
   /** 右の列のようす：並べ方・選んだ写真の道具の位置と大きさ、紙面・帯・ページ送りとの重なり、画面の横のはみ出し */
   const side = () =>
     page.evaluate(() => {
@@ -1657,13 +1662,13 @@ async function sideToolsCheck(browser) {
   await ready()
   await wait(300)
   const coverW = await page.evaluate(() => Math.round(document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current').getBoundingClientRect().width * 10) / 10)
-  // 何も選んでいないとき：6つの並べ方が右の列に3列×2段。下の道具には出さない
+  // 何も選んでいないとき：4つの並べ方（6枚はなくした：mockups/v38）と「ページを足す」「ページを消す」が右の列に3列×2段。下の道具には出さない
   await showPhotos()
   const land = await side()
   await page.screenshot({ path: `${OUT}/20-side-layouts.png` })
   check(
-    '横向き：作品写真のページの6つの並べ方は、紙面の右の列に3列×2段（絵の下に1行の名前・高さ 44px 以上・いまの「2枚 上下」に印と aria-pressed）。下の道具には出さない',
-    placed(land) && land.label.join() === '並べ方' && land.lays.length === 6 && land.lays.map((l) => l.split(':')[0]).join() === '1枚,2枚左右,2枚上下,4枚,6枚2列,6枚3列' && land.rows === 2 && land.cols === 3 && land.oneLine && land.pressedOk && land.lays[2].includes(':on:true'),
+    '横向き：作品写真のページの4つの並べ方と「ページを足す」「ページを消す」は、紙面の右の列に3列×2段（絵の下に1行の名前・高さ 44px 以上・いまの「2枚 上下」に印と aria-pressed）。下の道具には出さない',
+    placed(land) && land.label.join() === '並べ方' && land.lays.length === 4 && land.lays.map((l) => l.split(':')[0]).join() === '1枚,2枚左右,2枚上下,4枚' && land.tools.length === 2 && land.rows === 2 && land.cols === 3 && land.oneLine && land.pressedOk && land.lays[2].includes(':on:true'),
     JSON.stringify(land),
   )
   check('横向き：紙面はほかのページと同じ大きさのままで、ページ送りに隠れず、並べ方にも重ならない（画面は横にはみ出さない）', land.pageW === coverW && !land.pageCovered && !land.overPage && !land.scrollX, JSON.stringify({ coverW, pageW: land.pageW, pageCovered: land.pageCovered, overPage: land.overPage }))
@@ -1680,14 +1685,14 @@ async function sideToolsCheck(browser) {
   await tapButton('.page-side .lay', '2枚上下')
 
   // 下の枠が空いているとき：帯「下の枠に、まだ写真がありません［写真を選ぶ］」が同じ列の上に出て、帯も並べ方も全部見える
-  await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: { ...r.workPhotos, imageIds: ['g-photo1', ''] } })))
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: [{ ...r.workPhotos[0], imageIds: ['g-photo1', ''] }] })))
   await ready()
   await showPhotos()
   const withBand = await side()
   await page.screenshot({ path: `${OUT}/20c-side-band.png` })
   check(
     '横向き：空いている枠があるときは、帯が並べ方と同じ右の列の上に出て（帯のボタンは高さ 44px 以上）、帯も並べ方も全部見え、どちらも紙面に重ならない',
-    placed(withBand) && withBand.bandInColumn && withBand.band.includes('下の枠に、まだ写真がありません') && withBand.bandButtonH >= 44 && withBand.bandAbove && withBand.lays.length === 6,
+    placed(withBand) && withBand.bandInColumn && withBand.band.includes('下の枠に、まだ写真がありません') && withBand.bandButtonH >= 44 && withBand.bandAbove && withBand.lays.length === 4,
     JSON.stringify(withBand),
   )
 
@@ -1715,15 +1720,15 @@ async function sideToolsCheck(browser) {
   await showPhotos()
   const small = await side()
   await page.screenshot({ path: `${OUT}/20e-side-800x360.png` })
-  await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
+  await page.evaluate(() => window.__editor.select({ kind: 'photos', page: 0, index: 0 }))
   await wait(400)
   const smallChosen = await side()
   await page.screenshot({ path: `${OUT}/20f-side-800x360-photo.png` })
   await page.evaluate(() => window.__editor.select(null))
   await wait(300)
   check(
-    '800×360 の横向きでも、帯と並べ方（3列×2段）・選んだ写真の道具が右の列に全部見え（高さ 44px 以上）、紙面・帯・ページ送りに重ならず、紙面はページ送りに隠れない（横にはみ出さない）',
-    placed(small) && small.bandInColumn && small.bandAbove && small.rows === 2 && small.cols === 3 && small.oneLine && placed(smallChosen) && smallChosen.tools.length === 3 && smallChosen.bandAbove,
+    '800×360 の横向きでも、帯と並べ方・「ページを足す」「ページを消す」（3列×2段）・選んだ写真の道具が右の列に全部見え（高さ 44px 以上）、紙面・帯・ページ送りに重ならず、紙面はページ送りに隠れない（横にはみ出さない）',
+    placed(small) && small.bandInColumn && small.bandAbove && small.rows === 2 && small.cols === 3 && small.tools.length === 2 && small.oneLine && placed(smallChosen) && smallChosen.tools.length === 3 && smallChosen.bandAbove,
     JSON.stringify({ small, smallChosen }),
   )
 
@@ -1732,12 +1737,12 @@ async function sideToolsCheck(browser) {
   await showPhotos()
   const portrait = await page.evaluate(() => ({ side: !!document.querySelector('.page-side'), label: document.querySelector('.sel-bar .ctx-label')?.textContent, lays: document.querySelectorAll('.sel-bar .lay').length }))
   await page.screenshot({ path: `${OUT}/20g-portrait.png` })
-  await page.evaluate(() => window.__editor.select({ kind: 'photos', index: 0 }))
+  await page.evaluate(() => window.__editor.select({ kind: 'photos', page: 0, index: 0 }))
   await wait(400)
   const portraitChosen = await page.evaluate(() => ({ side: !!document.querySelector('.page-side'), label: document.querySelector('.sel-bar .ctx-label')?.textContent, tools: [...document.querySelectorAll('.sel-bar .tb')].map((b) => b.textContent.trim()) }))
   check(
     '縦向きは今までどおり：並べ方は下の道具に出て、写真を選ぶと下の道具が「この写真（1枚目）」に替わる（右の列は出さない）',
-    !portrait.side && portrait.label === '並べ方' && portrait.lays === 6 && !portraitChosen.side && portraitChosen.label === 'この写真（1枚目）' && portraitChosen.tools.join() === '差し替え,外す',
+    !portrait.side && portrait.label === '並べ方' && portrait.lays === 4 && !portraitChosen.side && portraitChosen.label === 'この写真（1枚目）' && portraitChosen.tools.join() === '差し替え,外す',
     JSON.stringify({ portrait, portraitChosen }),
   )
   await context.close()

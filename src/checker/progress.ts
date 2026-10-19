@@ -1,5 +1,6 @@
 import type { YearConfig } from '../config'
 import type { LayoutInfo } from '../layout/measure'
+import { photoCount } from '../model/photos'
 import type { ParagraphBlock, Report } from '../model/types'
 import { abstractCharCount, type Area, type ReportFinding } from './reportChecks'
 
@@ -16,6 +17,7 @@ import { abstractCharCount, type Area, type ReportFinding } from './reportChecks
  * - body-pages：本文のページが足りない
  * - paragraph-empty：ひな形の段落（書くことの説明がある段落）を、まだ書いていない。説明のない空の段落（Enter を押して残ったもの）は直すところ
  * - photos-required：作品写真がまだ1枚もない
+ * - photos-empty-page：作品写真が何ページかあるとき、写真のないページがある（足したまま。空のページは PDF に入らない。mockups/v38 案A）
  * - abstract-not-started：抄録は先生の許可のあと（灰色の「先生の許可のあと」。まだの数にも数えない。書き出す PDF には、抄録のページが入らない）
  * - abstract-length・abstract-lines：書き始めた抄録が、まだ短い（字数・行数が足りない）。多すぎるときは直すところ
  * - figure-image・swatch-image・table-cell-empty：図の枠・素材表の生地見本に、まだ写真を入れていない／表のセルがまだ空（ひな形の図の枠と素材表は、書き始めたときから空）
@@ -26,6 +28,7 @@ export const NOT_YET_RULES = [
   'body-pages',
   'paragraph-empty',
   'photos-required',
+  'photos-empty-page',
   'abstract-not-started',
   'abstract-length',
   'abstract-lines',
@@ -67,6 +70,7 @@ export function notYetTester(ctx: ProgressContext): (f: ReportFinding) => boolea
       case 'required-field':
       case 'body-pages':
       case 'photos-required':
+      case 'photos-empty-page':
       case 'abstract-not-started':
       case 'figure-image':
       case 'swatch-image':
@@ -168,11 +172,15 @@ export function progressRows(findings: ReportFinding[], ctx: ProgressContext, pe
     rows.push({ id: 'figuresTables', label: '図・表', state: 'todo', value: '空いている所 ', strong: String(count), target: at(holes[0]) })
   }
 
-  // 作品写真
-  const photos = report.workPhotos.imageIds.slice(0, report.workPhotos.layout).filter(Boolean).length
+  // 作品写真（何ページかあるときは「6枚（2ページ）」。写真のないページがあれば「2ページ目が空です」。mockups/v38 案A）
+  const photos = photoCount(report.workPhotos)
+  const pages = report.workPhotos.length
   const noPhotos = of('photos-required')
+  const emptyPages = of('photos-empty-page')
   if (noPhotos.length) rows.push({ id: 'photos', label: '作品写真', state: 'todo', value: 'まだ', target: at(noPhotos[0]) })
-  else rows.push({ id: 'photos', label: '作品写真', state: 'done', value: `${photos}枚`, target: { kind: 'area', area: 'photos' } })
+  else if (emptyPages.length)
+    rows.push({ id: 'photos', label: '作品写真', state: 'todo', value: `${emptyPages.map((f) => (f.photoPage ?? 0) + 1).join('・')}ページ目が空です`, target: at(emptyPages[0]) })
+  else rows.push({ id: 'photos', label: '作品写真', state: 'done', value: pages > 1 ? `${photos}枚（${pages}ページ）` : `${photos}枚`, target: { kind: 'area', area: 'photos' } })
 
   // 抄録（先生の許可の前は、灰色の「先生の許可のあと」。書き始めたら、字数・行数が足りない間は「あと」）
   const abstractArea: ProgressTarget = { kind: 'area', area: 'abstract' }

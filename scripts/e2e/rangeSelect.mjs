@@ -351,6 +351,258 @@ export async function rangeSelectPc(browser, check) {
   const keyCopy = await page.evaluate(() => window.__copied.at(-1) ?? '')
   await page.screenshot({ path: `${OUT}/8-shift-down.png` })
   check('段落を選ぶ：書く欄で Shift+↓ を続けて押すと、段落の終わりから次の段落へ、選ぶ範囲が広がる', !st.editing && st.paperSelected && keyCopy.startsWith(textOf('p14').slice(3)) && keyCopy.includes('\n' + textOf('p15').slice(0, 4)), JSON.stringify({ editing: st.editing, keyCopy: keyCopy.slice(0, 50) }))
+  const keyBar = await page.evaluate(() => !document.querySelector('.range-bar').hidden)
+  check('選んだ文のボタン：書く欄から Shift+↓ で選び広げたときも、選んだ所の上に帯が出る', keyBar)
+  await context.close()
+  await selectionButtonsPc(browser, check)
+}
+
+/** 選んだ文のボタン（mockups/v36：案B 左の道具の「選んだ文」・案A 選んだ所の上の帯と、書く欄の近くの「貼り付け」）。画面の写真は poc-output/v36-impl/ */
+async function selectionButtonsPc(browser, check) {
+  const SHOTS = 'poc-output/v36-impl'
+  mkdirSync(SHOTS, { recursive: true })
+  const { context, page, ready } = await openSample(browser, { viewport: { width: 1366, height: 768 } })
+  const original = await state(page)
+  const ui = () =>
+    page.evaluate(() => {
+      const bar = document.querySelector('.range-bar')
+      const chip = document.querySelector('.range-chip')
+      const group = document.querySelector('.palette .group.ctx.sel-tools')
+      const sel = getSelection()
+      const lines = sel.rangeCount ? [...sel.getRangeAt(0).getClientRects()].filter((r) => r.width > 1 && r.height > 2) : []
+      const b = bar.getBoundingClientRect()
+      const overlap = !bar.hidden && lines.some((r) => r.left < b.right && r.right > b.left && r.top < b.bottom && r.bottom > b.top)
+      const top = lines.length ? Math.min(...lines.map((r) => r.top)) : 0
+      const bottom = lines.length ? Math.max(...lines.map((r) => r.bottom)) : 0
+      return {
+        bar: !bar.hidden,
+        below: bar.classList.contains('below'),
+        barTop: b.top,
+        barBottom: b.bottom,
+        selTop: top,
+        selBottom: bottom,
+        overlap,
+        labels: [...bar.querySelectorAll('button')].map((x) => `${x.textContent}|${x.getAttribute('aria-label')}`),
+        group: group ? [...group.querySelectorAll('.tb')].map((x) => `${x.textContent}|${x.title}`) : null,
+        chip: !chip.hidden,
+        chipLabel: chip.getAttribute('aria-label'),
+        pasteTool: [...document.querySelectorAll('.palette .group.ctx .tb')].some((x) => x.textContent === '貼り付け'),
+      }
+    })
+  const selectP3P4 = async () => {
+    await page.evaluate(() => getSelection().removeAllRanges())
+    await showBlock(page, ready, 'p3')
+    await drag(page, await charPoint(page, 'p3', 5), await charPoint(page, 'p4', 10))
+    await wait(150)
+  }
+  const clickTool = (selector, label) => page.evaluate((selector, label) => [...document.querySelectorAll(selector)].find((b) => b.textContent === label)?.click(), selector, label)
+
+  // ---- なぞっている途中は帯を出さず、離すと選んだ所のすぐ上に出る。左の道具に「選んだ文」 ----
+  await showBlock(page, ready, 'p3')
+  const from = await charPoint(page, 'p3', 5)
+  const to = await charPoint(page, 'p4', 10)
+  await page.mouse.move(from.x, from.y)
+  await page.mouse.down()
+  await page.mouse.move(to.x, to.y, { steps: 8 })
+  await wait(120)
+  const during = await ui()
+  await page.mouse.up()
+  await wait(200)
+  let u = await ui()
+  await page.mouse.move(5, 5)
+  await page.screenshot({ path: `${SHOTS}/1-selection-bar-palette.png` })
+  check('選んだ文のボタン：なぞっている途中は帯を出さず、マウスを離すと、選んだ文の1行目のすぐ上に帯が出る（選んだ文に重ならない）', !during.bar && u.bar && !u.below && u.barBottom <= u.selTop && !u.overlap, JSON.stringify({ during: during.bar, u }))
+  check(
+    '選んだ文のボタン：帯は「コピー」「切り取り」「削除」（読み上げの名前と、キーの押し方の説明付き）。左の道具に「選んだ文」（同じ3つ）',
+    u.labels.join(',') === 'コピー|選んだ文をコピー（Ctrl+C）,切り取り|選んだ文を切り取る（Ctrl+X）。書く欄で貼り付けると、そこへ動きます,削除|選んだ文を削除（Delete）' &&
+      u.group?.map((x) => x.split('|')[0]).join(',') === 'コピー,切り取り,削除' &&
+      u.group[0].includes('Ctrl+C'),
+    JSON.stringify({ labels: u.labels, group: u.group }),
+  )
+
+  // ---- 右クリックは、ブラウザのいつものメニュー（このツールのメニューは出さない） ----
+  const context1 = await page.evaluate((x, y) => {
+    let prevented = null
+    const watch = (e) => setTimeout(() => (prevented = e.defaultPrevented))
+    window.addEventListener('contextmenu', watch, { once: true })
+    const target = document.elementFromPoint(x, y)
+    target.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true, cancelable: true, clientX: x, clientY: y, button: 2 }))
+    return new Promise((r) => setTimeout(() => r({ prevented, menus: document.querySelectorAll('[role="menu"]').length }), 50))
+  }, to.x, to.y)
+  check('選んだ文のボタン：右クリックは、ブラウザのいつものメニューのまま（このツールのメニューは出さない）', context1.prevented === false && context1.menus === 0, JSON.stringify(context1))
+
+  // ---- Esc で帯を隠す（選んだ文と、左の道具の「選んだ文」はそのまま） ----
+  await page.keyboard.press('Escape')
+  await wait(100)
+  u = await ui()
+  check('選んだ文のボタン：Esc で帯が隠れる（選んだ文と、左の道具の「選んだ文」はそのまま）', !u.bar && !!u.group, JSON.stringify(u))
+
+  // ---- 帯の「コピー」：Ctrl+C と同じ文がクリップボードに入る ----
+  await selectP3P4()
+  await ctrl(page, 'c')
+  await wait(100)
+  const byKey = await page.evaluate(() => window.__copied.at(-1) ?? '')
+  await page.evaluate(() => navigator.clipboard.writeText(''))
+  await page.click('.range-bar button.copy')
+  await wait(150)
+  // パソコンのクリップボードは、改行を CR LF にして返すことがある（貼り付けるときは同じ文として扱う：rangeOps.ts の sameClipText）
+  const lf = (t) => t.replace(/\r\n/g, '\n')
+  const byBar = lf(await page.evaluate(() => navigator.clipboard.readText()))
+  u = await ui()
+  check('選んだ文のボタン：帯の「コピー」は、Ctrl+C と同じ文をクリップボードに入れる（選んだ文は外れない）', byBar === byKey && byKey.length > 20 && u.bar && (await state(page)).paperSelected, JSON.stringify({ same: byBar === byKey, byBar: byBar.slice(-30), byKey: byKey.slice(-30), bar: u.bar }))
+  await page.evaluate(() => navigator.clipboard.writeText(''))
+  await selectP3P4()
+  await clickTool('.palette .sel-tools .tb', 'コピー')
+  await wait(150)
+  const byPalette = lf(await page.evaluate(() => navigator.clipboard.readText()))
+  check('選んだ文のボタン：左の道具の「コピー」も、Ctrl+C と同じ文をクリップボードに入れる', byPalette === byKey, JSON.stringify({ byPalette: byPalette.slice(-30), byKey: byKey.slice(-30) }))
+
+  // ---- 「切り取り」「削除」は、Ctrl+X・Delete と同じ（同じ知らせ。元に戻す1回で戻る） ----
+  const runAndUndo = async (how) => {
+    await selectP3P4()
+    await how()
+    await wait(300)
+    const after = await state(page)
+    await ready()
+    await ctrl(page, 'z')
+    await ready()
+    return { body: after.body, notice: after.notice, undone: (await state(page)).body === original.body }
+  }
+  const cutKey = await runAndUndo(() => ctrl(page, 'x'))
+  const cutBar = await runAndUndo(() => page.click('.range-bar button.cut'))
+  const cutPalette = await runAndUndo(() => clickTool('.palette .sel-tools .tb', '切り取り'))
+  check(
+    '選んだ文のボタン：帯・左の道具の「切り取り」は、Ctrl+X と同じ（同じ原稿・「切り取りました［戻す］」・元に戻す1回で戻る）',
+    cutBar.body === cutKey.body && cutPalette.body === cutKey.body && cutBar.notice === cutKey.notice && cutKey.notice.includes('切り取りました') && cutBar.undone && cutPalette.undone,
+    JSON.stringify({ notice: cutBar.notice }),
+  )
+  const delKey = await runAndUndo(() => page.keyboard.press('Delete'))
+  const delBar = await runAndUndo(() => page.click('.range-bar button.remove'))
+  const delPalette = await runAndUndo(() => clickTool('.palette .sel-tools .tb', '削除'))
+  check(
+    '選んだ文のボタン：帯・左の道具の「削除」は、Delete と同じ（同じ原稿・「選んだ文を削除しました［戻す］」・元に戻す1回で戻る）',
+    delBar.body === delKey.body && delPalette.body === delKey.body && delBar.notice === delKey.notice && delKey.notice.includes('選んだ文を削除しました') && delBar.undone && delPalette.undone,
+    JSON.stringify({ notice: delBar.notice }),
+  )
+
+  // ---- 選ぶのをやめる（ふつうに押す）と、帯と「選んだ文」は消える ----
+  await selectP3P4()
+  const p13 = await (async () => {
+    await showBlock(page, ready, 'p13')
+    return charPoint(page, 'p13', 6)
+  })()
+  await page.mouse.click(p13.x, p13.y)
+  await wait(300)
+  u = await ui()
+  check('選んだ文のボタン：選ぶのをやめると（ほかを押した・ページを替えた）、帯と左の道具の「選んだ文」は消える', !u.bar && !u.group, JSON.stringify(u))
+  await page.keyboard.press('Escape')
+  await ready()
+
+  // ---- 貼り付け：コピーしたあと書く欄を開くと、カーソルの近くに「貼り付け」。押すと Ctrl+V と同じ ----
+  const pasteBy = async (how) => {
+    await selectP3P4()
+    await ctrl(page, 'c')
+    await wait(100)
+    await showBlock(page, ready, 'p13')
+    const at = await charPoint(page, 'p13', 6)
+    await page.mouse.click(at.x, at.y)
+    await wait(300)
+    const before = await ui()
+    if (how === 'chip') await page.screenshot({ path: `${SHOTS}/2-paste-chip.png` })
+    if (how === 'key') await ctrl(page, 'v')
+    else if (how === 'chip') await page.click('.range-chip')
+    else await clickTool('.palette .group.ctx .tb', '貼り付け')
+    await wait(300)
+    const afterUi = await ui()
+    await page.keyboard.press('Escape')
+    await ready()
+    // 貼り付けた図・段落の新しい ID（時刻から作る）は、比べるときに除く
+    const body = (await state(page)).body.replace(/"(p|f|r|t|s|pb|row|cell)-[a-z0-9]+-\d+"/g, '"(新しいID)"')
+    await ctrl(page, 'z')
+    await ready()
+    return { before, afterUi, body, undone: (await state(page)).body === original.body }
+  }
+  const pasteKey = await pasteBy('key')
+  const pasteChip = await pasteBy('chip')
+  const pastePalette = await pasteBy('palette')
+  check(
+    '選んだ文のボタン：コピーしたあと書く欄を開くと、カーソルの近くに「貼り付け」が出て、左の道具の「この段落」にも「貼り付け」が出る',
+    pasteChip.before.chip && pasteChip.before.chipLabel?.includes('Ctrl+V') && pasteChip.before.pasteTool,
+    JSON.stringify(pasteChip.before),
+  )
+  check(
+    '選んだ文のボタン：書く欄の近くの「貼り付け」・左の道具の「貼り付け」は、Ctrl+V と同じ（同じ原稿・元に戻す1回で戻る）。使ったあとは、近くの「貼り付け」は消える',
+    pasteChip.body === pasteKey.body && pastePalette.body === pasteKey.body && pasteChip.body !== original.body && pasteChip.undone && pastePalette.undone && !pasteChip.afterUi.chip,
+    JSON.stringify({ chipAfter: pasteChip.afterUi.chip, chip: pasteChip.body === pasteKey.body, palette: pastePalette.body === pasteKey.body, changed: pasteChip.body !== original.body, undo: [pasteChip.undone, pastePalette.undone] }),
+  )
+  // 書き始めると、近くの「貼り付け」は消える。コピーしていなければ、左の道具に「貼り付け」は出ない
+  await selectP3P4()
+  await ctrl(page, 'c')
+  await showBlock(page, ready, 'p14')
+  const p14 = await charPoint(page, 'p14', 4)
+  await page.mouse.click(p14.x, p14.y)
+  await wait(300)
+  const chipShown = (await ui()).chip
+  await page.keyboard.type('あ')
+  await wait(200)
+  const chipAfterTyping = (await ui()).chip
+  await page.keyboard.press('Escape')
+  await ready()
+  await ctrl(page, 'z')
+  await ready()
+  check('選んだ文のボタン：書く欄で書き始めると、近くの「貼り付け」は消える', chipShown && !chipAfterTyping, JSON.stringify({ chipShown, chipAfterTyping }))
+
+  // ---- 拡大の表示：スクロールすると帯は隠れる。見えている所の上の端で選ぶと、帯は選んだ文の下に出る ----
+  await page.evaluate(() => window.__editor.setView('zoom'))
+  await ready()
+  await showBlock(page, ready, 'p3')
+  // ページのいちばん下までスクロールして、見えている所のいちばん上の行から選ぶ（帯は、上に入らない）
+  const topLine = await page.evaluate(() => {
+    const scroller = document.querySelector('.page-scroller')
+    scroller.scrollTop = scroller.scrollHeight
+    const s = scroller.getBoundingClientRect()
+    const page = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current').getBoundingClientRect()
+    // 見えている所の上の端から下へ、最初の文字の行
+    for (let y = s.top + 2; y < s.top + 80; y += 2) {
+      const pos = document.caretPositionFromPoint(page.left + page.width * 0.4, y)
+      if (pos?.offsetNode?.nodeType === 3 && pos.offsetNode.parentElement.closest('p[data-block-id]')) {
+        const r = document.createRange()
+        r.setStart(pos.offsetNode, Math.min(pos.offset, pos.offsetNode.length - 1))
+        r.setEnd(pos.offsetNode, Math.min(pos.offset + 1, pos.offsetNode.length))
+        const b = r.getClientRects()[0]
+        if (b && b.top >= s.top) return { x: b.left + 2, y: b.top + b.height / 2, end: { x: page.left + page.width * 0.6, y: b.top + 140 } }
+      }
+    }
+    return null
+  })
+  await wait(300)
+  await drag(page, topLine, topLine.end)
+  await wait(150)
+  u = await ui()
+  await page.mouse.move(5, 5)
+  await page.screenshot({ path: `${SHOTS}/3-bar-flipped-top.png` })
+  check('選んだ文のボタン：拡大の表示で、見えている所の上の端で選ぶと、帯は選んだ文の最後の行のすぐ下に出る（選んだ文に重ならない）', u.bar && u.below && u.barTop >= u.selBottom && !u.overlap, JSON.stringify(u))
+  await page.evaluate(() => {
+    document.querySelector('.page-scroller').scrollTop -= 60
+  })
+  await wait(150)
+  u = await ui()
+  check('選んだ文のボタン：スクロールすると、帯は隠れる', !u.bar, JSON.stringify(u))
+  // 見開き：右のページで選んでも出る
+  await page.evaluate(() => window.__editor.setView('spread'))
+  await ready()
+  await showBlock(page, ready, 'p14')
+  const spreadPage = await page.evaluate(() => ({ p13: window.__editor.pageOfBlock('p13'), p14: window.__editor.pageOfBlock('p14'), page: window.__editor.getSnapshot().page }))
+  await drag(page, await charPoint(page, 'p14', 2), await charPoint(page, 'p15', 6))
+  await wait(150)
+  u = await ui()
+  await page.mouse.move(5, 5)
+  await page.screenshot({ path: `${SHOTS}/4-spread.png` })
+  check('選んだ文のボタン：見開きでも、選んだ所のすぐ上に帯が出る', u.bar && !u.overlap && !!u.group, JSON.stringify({ spreadPage, u }))
+  await page.evaluate(() => window.__editor.setView('fit'))
+  await wait(200)
+  u = await ui()
+  check('選んだ文のボタン：表示の大きさを変えると、帯は隠れる', !u.bar, JSON.stringify(u))
   await context.close()
 }
 
@@ -366,8 +618,8 @@ export async function rangeSelectPhone(browser, check) {
   const at = await charPoint(page, 'p3', 6)
   await page.touchscreen.tap(at.x, at.y)
   await wait(500)
-  const st = await page.evaluate(() => ({ editing: window.__editor.getSnapshot().editingId, sheet: window.__editor.getSnapshot().sheet, paper: window.__editor.hasPaperSelection() }))
-  check('段落を選ぶ（スマホ）：指で押すと、今までどおり書く欄が開く（紙面で選ぶ仕組みは使わない）', st.editing === 'p3' && st.sheet && !st.paper, JSON.stringify(st))
+  const st = await page.evaluate(() => ({ editing: window.__editor.getSnapshot().editingId, sheet: window.__editor.getSnapshot().sheet, paper: window.__editor.hasPaperSelection(), bar: !document.querySelector('.range-bar')?.hidden, chip: !document.querySelector('.range-chip')?.hidden }))
+  check('段落を選ぶ（スマホ）：指で押すと、今までどおり書く欄が開く（紙面で選ぶ仕組みは使わない。選んだ文の帯・「貼り付け」も出さない）', st.editing === 'p3' && st.sheet && !st.paper && !st.bar && !st.chip, JSON.stringify(st))
   await context.close()
 }
 

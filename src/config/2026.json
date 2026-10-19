@@ -23,7 +23,7 @@
     "imagesPerPageGuide": 2
   },
   "workPhotos": {
-    "maxImages": 6
+    "maxPages": null
   },
   "studentIdPattern": null,
   "courses": [

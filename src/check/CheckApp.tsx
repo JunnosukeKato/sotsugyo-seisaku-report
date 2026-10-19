@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
 import { Modal } from '../app/dialogs'
 import { useDialogFocus } from '../app/useDialogFocus'
@@ -8,7 +8,7 @@ import type { BuiltPdf, SaveMode } from '../pdf/exportPdf'
 import { CheckIcon as I } from './icons'
 import { locateFindings, pagePins } from './locate'
 import { chooseThumbWidth, isNotedRow, pageSlots, type PageSlot, type Segment } from './pageGrid'
-import { MAX_PHOTOS } from './pageFit'
+import { maxPhotos, PHOTOS_PER_PAGE, photoPages } from './pageFit'
 import { abstractLines, bodyPages, classifyPdf, pdfFindings, pdfLooksLike, pdfOks, type PdfFacts } from './pdfFacts'
 import {
   PART_NAMES,
@@ -62,10 +62,10 @@ interface Entry {
   message?: string
   /** PDF から分かったこと */
   facts?: PdfFacts
-  /** 作品写真の写真（並べた順。6枚まで。A4 の1ページに並べる。file は1枚目） */
+  /** 作品写真の写真（並べた順。入れた順に4枚ずつ A4 のページに並べる。file は1枚目。mockups/v38 案1） */
   photos?: PhotoItem[]
-  /** 写真を並べたページの絵（data URL） */
-  pageImage?: string
+  /** 写真を並べたページの絵（ページごと。data URL） */
+  pageImages?: string[]
   /** ページの小さな絵（URL。作れなかったページは空） */
   thumbs: string[]
   /** 中身からはっきり分かるパート（入れた場所と違えば知らせる。言えなければ null） */
@@ -94,7 +94,7 @@ const mergeEntry = (slots: Slots, part: PartId): Entry | null => {
   const e = slots[keyOf(part, 'pdf')]
   return e && e.state === 'ready' ? e : null
 }
-const pagesOf = (e: Entry | null) => (e ? (e.facts?.pages.length ?? (e.photos?.length ? 1 : 0)) : 0)
+const pagesOf = (e: Entry | null) => (e ? (e.facts?.pages.length ?? (e.photos ? photoPages(e.photos).length : 0)) : 0)
 
 /**
  * 読めなかった Word の知らせ。入れた場所と中身が違う Word（例：本文に入れた表紙の Word）は、「中身が〇〇のようです」の指摘を出すので、
@@ -180,6 +180,9 @@ const STALE = (
 
 export function CheckApp() {
   const [config, setConfig] = useState<YearConfig>(currentConfig)
+  /** 作品写真のページ数の上限（年度の設定。null は上限なし）。ファイルを入れる処理（落としたときにも使う）から、いつも新しい設定を読むため */
+  const maxPagesRef = useRef<number | null>(null)
+  maxPagesRef.current = config.workPhotos?.maxPages ?? null
   const [slots, setSlotsState] = useState<Slots>({})
   const slotsRef = useRef<Slots>({})
   const docs = useRef(new Map<number, PDFDocumentProxy>())
@@ -309,7 +312,7 @@ export function CheckApp() {
         setReading({ done: i + 1, total: list.length })
         continue
       }
-      // 作品写真の写真：入れてある写真の後ろに足す（6枚まで。並べ方は枚数で決まる）
+      // 作品写真の写真：入れてある写真の後ろに足す（4枚ずつのページに並べる。並べ方は枚数で決まる。ページ数の上限は年度の設定。null は上限なし）
       if (entry.photos) {
         const cur = slotsRef.current['photo:pdf']
         const have = cur?.photos ?? []
@@ -317,8 +320,9 @@ export function CheckApp() {
         if (have.some((p) => p.file.name === file.name && p.file.size === file.size && p.file.lastModified === file.lastModified)) {
           info(`「${file.name}」は、もう入っています。`)
           releasePhoto(item)
-        } else if (have.length >= MAX_PHOTOS) {
-          warn(`「${file.name}」：作品写真は${MAX_PHOTOS}枚までです。入れるときは、「並べ替え・外す」から、どれかを外してください。`)
+        } else if (have.length >= maxPhotos(maxPagesRef.current)) {
+          const max = maxPagesRef.current ?? 0
+          warn(`「${file.name}」：作品写真は${max * PHOTOS_PER_PAGE}枚（${max}ページ）までです。入れるときは、「並べ替え・外す」から、どれかを外してください。`)
           releasePhoto(item)
           refused++
         } else {
@@ -391,7 +395,8 @@ export function CheckApp() {
     } else {
       const { photoPageImage } = await loadPhoto()
       const base = cur?.photos ? cur : null
-      commit({ ...slotsRef.current, 'photo:pdf': { id: base?.id ?? ++nextId.current, file: list[0].file, kind: 'image', state: 'ready', thumbs: [], photos: list, pageImage: photoPageImage(list.map((p) => p.photo)) } })
+      const pageImages = photoPages(list).map((page) => photoPageImage(page.map((p) => p.photo)))
+      commit({ ...slotsRef.current, 'photo:pdf': { id: base?.id ?? ++nextId.current, file: list[0].file, kind: 'image', state: 'ready', thumbs: [], photos: list, pageImages } })
     }
     if (announce) filesChanged()
   }
@@ -455,7 +460,7 @@ export function CheckApp() {
     const input = fileInput.current
     if (!input) return
     input.accept = accept
-    // 作品写真は、何枚かまとめて選べる（6枚まで）
+    // 作品写真は、何枚かまとめて選べる（入れた順に4枚ずつのページに並べる）
     input.multiple = !target || target.part === 'photo'
     input.click()
   }
@@ -756,9 +761,9 @@ export function CheckApp() {
         return [
           <span key="photos" className="pf photos">
             <button type="button" className="fname" aria-haspopup="dialog" onClick={open}>
-              写真 {e.photos.length}枚
+              {photoCountText(e.photos.length)}
             </button>
-            <span className="pf-sub">（{MAX_PHOTOS}枚まで）</span>
+            <span className="pf-sub">（1ページ{PHOTOS_PER_PAGE}枚まで）</span>
           </span>,
           <button key="menu" type="button" className="link pf-link" aria-haspopup="dialog" onClick={open}>
             並べ替え・外す
@@ -834,7 +839,7 @@ export function CheckApp() {
     }
     const pageKey = `${it.part}:${it.k}`
     const pin = pins.get(pageKey)
-    const src = e.photos ? e.pageImage : e.thumbs[it.k - 1]
+    const src = e.photos ? e.pageImages?.[it.k - 1] : e.thumbs[it.k - 1]
     // 絵を作っている途中（まだ作っていない）か、作れなかった（白い紙のまま）
     const tried = e.thumbs.length >= it.k
     const label = `${p.name}${pagesOf(e) > 1 ? ` ${it.k}ページ目` : ''}（全体の${it.no}ページ目）${pin ? `：指摘${pin.count}件` : ''}`
@@ -1078,6 +1083,7 @@ export function CheckApp() {
       {photoMenu && slots['photo:pdf']?.photos && (
         <PhotoMenu
           photos={slots['photo:pdf'].photos}
+          max={maxPhotos(config.workPhotos?.maxPages ?? null)}
           rect={photoMenu}
           onMove={movePhoto}
           onRemove={removePhoto}
@@ -1628,8 +1634,14 @@ function HelpDialog({ onClose }: { onClose: () => void }) {
   )
 }
 
+/** 作品写真の枚数とページ数（「写真 5枚・2ページ」。1ページなら「写真 3枚」。入れた順に4枚ずつのページ。mockups/v38 案1）。photo：前に「写真 」を付ける */
+function photoCountText(count: number, photo = true): string {
+  const pages = Math.ceil(count / PHOTOS_PER_PAGE)
+  return `${photo ? '写真 ' : ''}${count}枚${pages > 1 ? `・${pages}ページ` : ''}`
+}
+
 /** 作品写真の「並べ替え・外す」の小さな窓（写真の順番を変える・外す・足す。mockups/v31 案A） */
-function PhotoMenu({ photos, rect, onMove, onRemove, onAdd, onClose }: { photos: PhotoItem[]; rect: DOMRect; onMove: (id: number, dir: -1 | 1) => void; onRemove: (id: number) => void; onAdd: () => void; onClose: () => void }) {
+function PhotoMenu({ photos, max, rect, onMove, onRemove, onAdd, onClose }: { photos: PhotoItem[]; max: number; rect: DOMRect; onMove: (id: number, dir: -1 | 1) => void; onRemove: (id: number) => void; onAdd: () => void; onClose: () => void }) {
   const ref = useRef<HTMLDivElement>(null)
   useDialogFocus(ref, onClose)
   useLayoutEffect(() => {
@@ -1645,11 +1657,18 @@ function PhotoMenu({ photos, rect, onMove, onRemove, onAdd, onClose }: { photos:
       <div className="popover photo-menu" ref={ref} role="dialog" aria-label="作品写真の並べ替え・外す" onMouseDown={(e) => e.stopPropagation()}>
         <div className="popover-title">
           <b>作品写真</b>
-          {photos.length}枚・{MAX_PHOTOS}枚まで（A4 の1ページに並べます）
+          {photoCountText(photos.length, false)}（1ページに{PHOTOS_PER_PAGE}枚まで）
         </div>
         <ol>
           {photos.map((p, i) => (
-            <li key={p.id}>
+            <Fragment key={p.id}>
+              {/* 何ページかになるときは、ページの区切り「1ページ目 4枚」（入れた順に4枚ずつ。mockups/v38 案1） */}
+              {photos.length > PHOTOS_PER_PAGE && i % PHOTOS_PER_PAGE === 0 && (
+                <li className="pm-page" aria-hidden="true">
+                  {i / PHOTOS_PER_PAGE + 1}ページ目<span>{Math.min(PHOTOS_PER_PAGE, photos.length - i)}枚</span>
+                </li>
+              )}
+            <li>
               <img src={p.photo.url} alt="" />
               <span className="pm-name">
                 {i + 1}. <FileName name={p.file.name} oneLine />
@@ -1664,9 +1683,10 @@ function PhotoMenu({ photos, rect, onMove, onRemove, onAdd, onClose }: { photos:
                 {I.x}
               </button>
             </li>
+            </Fragment>
           ))}
         </ol>
-        {photos.length < MAX_PHOTOS && (
+        {photos.length < max && (
           <button
             type="button"
             className="pm-add"
@@ -1678,7 +1698,7 @@ function PhotoMenu({ photos, rect, onMove, onRemove, onAdd, onClose }: { photos:
             {I.plus}写真を足す
           </button>
         )}
-        <p className="pm-hint">並べ方は枚数で決まります。写真は切らずに入れます。</p>
+        <p className="pm-hint">{PHOTOS_PER_PAGE}枚ずつ、この順にページに並べます。写真は切らずに入れます。</p>
       </div>
     </div>
   )

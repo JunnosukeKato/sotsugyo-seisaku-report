@@ -111,3 +111,12 @@ describe('mergeEdits（別のタブ・ほかの人が先に保存していたと
     expect(mergeEdits(base, clone(base), theirs)).toEqual({ config: theirs, conflicts: [] })
   })
 })
+
+describe('作品写真のページ数の上限（mockups/v38）', () => {
+  it('名前は「作品写真のページ数の上限」。空（null）と書いていない（前の版の設定）は同じ。前の版の枚数の上限（maxImages）は比べない', () => {
+    const old = { ...currentConfig, workPhotos: { maxImages: 6 } } as never
+    expect(describeChanges(old, { ...currentConfig, workPhotos: { maxPages: null } })).toEqual([])
+    expect(sameConfig(old, { ...currentConfig, workPhotos: { maxPages: null } })).toBe(true)
+    expect(describeChanges(old, { ...currentConfig, workPhotos: { maxPages: 3 } })).toEqual(['作品写真のページ数の上限'])
+  })
+})

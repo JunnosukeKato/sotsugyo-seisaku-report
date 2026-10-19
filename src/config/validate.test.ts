@@ -146,3 +146,22 @@ describe('崩れた設定（管理ページのサーバーを通らずに書か�
     expect(body[0].blocks[0]).not.toHaveProperty('hint')
   })
 })
+
+describe('作品写真のページ数の上限（mockups/v38：枚数の上限 maxImages をやめた）', () => {
+  it('空（null）は上限なし。入れるなら1以上の整数（0・小数・文字はエラー）', () => {
+    const errorsOf = (maxPages: unknown) => validateConfig({ ...currentConfig, workPhotos: { maxPages } as never }).filter((p) => p.field === 'workPhotos.maxPages' && p.severity === 'error')
+    expect(errorsOf(null)).toEqual([])
+    expect(errorsOf(3)).toEqual([])
+    expect(errorsOf(0)).toHaveLength(1)
+    expect(errorsOf(1.5)).toHaveLength(1)
+    expect(errorsOf('3')).toHaveLength(1)
+  })
+
+  it('前の版の設定（maxImages: 6 だけ）は、学生のツールでは上限なしで読む（maxImages は使わない）。崩れた値も上限なし', () => {
+    const old = { ...currentConfig, workPhotos: { maxImages: 6 } } as never
+    expect(validateConfig(old).filter((p) => p.severity === 'error')).toEqual([])
+    expect(repairConfig(old).workPhotos).toEqual({ maxPages: null })
+    expect(repairConfig({ ...currentConfig, workPhotos: { maxPages: 2 } }).workPhotos).toEqual({ maxPages: 2 })
+    expect(repairConfig({ ...currentConfig, workPhotos: { maxPages: -1 } } as never).workPhotos).toEqual({ maxPages: null })
+  })
+})

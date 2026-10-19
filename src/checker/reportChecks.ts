@@ -3,6 +3,7 @@ import { contentToText, editables, numbering, parenthetical, type EditableKind }
 import { COVER_SUBTITLE, OVERFLOW_RATIO, yearDigits } from '../layout/document'
 import type { LayoutInfo } from '../layout/measure'
 import type { Report } from '../model/types'
+import { pagePhotoCount } from '../model/photos'
 import { swatchColumn } from '../model/table'
 import { charCount, checkText, DEFAULT_WORD_CHECKS, EMOJI_TITLE, findEmoji, type TextFinding } from './textRules'
 import type { Severity } from './types'
@@ -25,6 +26,8 @@ export interface ReportFinding {
   area: Area
   /** 紙面上の位置（文字列の指摘のとき） */
   blockId?: string
+  /** 作品写真の何ページ目の指摘か（0 から。作品写真が何ページかあるとき。そのページへ移る。mockups/v38 案A） */
+  photoPage?: number
   start?: number
   end?: number
   /**
@@ -467,11 +470,20 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   })
 
   // ---- 作品写真 ----
-  // ページに載るのは先頭から layout 枚（枚数を減らしても、後ろの写真は消さずに残している）
-  const photos = report.workPhotos.imageIds.slice(0, report.workPhotos.layout).filter(Boolean)
-  if (photos.length === 0) findings.push(guide('photos-required', 'error', '作品写真を入れる', 'photos'))
-  else if (photos.length < report.workPhotos.layout)
-    findings.push(guide('photos-empty-slot', 'warning', '作品写真のページに空いている枠がある', 'photos', { detail: `${report.workPhotos.layout}枚の配置に${photos.length}枚` }))
+  // ページに載るのは先頭から layout 枚（枚数を減らしても、後ろの写真は消さずに残している）。
+  // 何ページかあるとき（mockups/v38 案A）：写真のないページは PDF に入らない（pdf/exportPages.ts）ので、まだのところで知らせる（photos-empty-page）。
+  // 空いている枠は、写真の入っているページだけ、ページごとに知らせる
+  const pages = report.workPhotos
+  const counts = pages.map(pagePhotoCount)
+  const many = pages.length > 1
+  if (counts.every((n) => n === 0)) findings.push(guide('photos-required', 'error', '作品写真を入れる', 'photos', many ? { photoPage: 0 } : {}))
+  else
+    pages.forEach((page, k) => {
+      const n = counts[k]
+      if (n === 0) findings.push(guide('photos-empty-page', 'warning', `作品写真の${k + 1}ページ目が空`, 'photos', { photoPage: k, detail: '写真を入れるか、このページを消す（空のページは PDF に入りません）' }))
+      else if (n < page.layout)
+        findings.push(guide('photos-empty-slot', 'warning', '作品写真のページに空いている枠がある', 'photos', { detail: `${many ? `${k + 1}ページ目：` : ''}${page.layout}枚の配置に${n}枚`, ...(many ? { photoPage: k } : {}) }))
+    })
 
   if (includeAcknowledged) return findings
   const acknowledged = new Set(report.acknowledged ?? [])

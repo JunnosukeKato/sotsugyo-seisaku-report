@@ -1,7 +1,7 @@
 import { A4, photoPixels, photoPlaces } from './pageFit'
 
 /**
- * 提出前チェック：作品写真（JPEG・PNG・端末が読めれば HEIC）を、A4 の1ページに置くための JPEG にする（6枚まで、1ページに並べる）。
+ * 提出前チェック：作品写真（JPEG・PNG・端末が読めれば HEIC）を、A4 のページに置くための JPEG にする（1ページに4枚まで並べる。pageFit.ts）。
  * ブラウザで読み（写真の向き（Exif）も直す）、大きすぎる写真は A4 で約 200dpi になる大きさまで縮める。白い紙に置く。
  * 読めない形（パソコンの Chrome・Edge の HEIC など）は PhotoError
  */
@@ -55,7 +55,7 @@ export async function preparePhoto(file: File): Promise<PreparedPhoto> {
   }
 }
 
-/** 作品写真のページの絵（JPEG の data URL。まとめる PDF と同じ並べ方。width：絵の幅の点の数） */
+/** 作品写真の1ページの絵（JPEG の data URL。photos はそのページの写真（4枚まで）。まとめる PDF と同じ並べ方。width：絵の幅の点の数） */
 export function photoPageImage(photos: PreparedPhoto[], width = 300): string {
   const scale = width / A4.width
   const canvas = document.createElement('canvas')

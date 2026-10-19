@@ -116,8 +116,8 @@ describe('引用・参考文献の書き方', () => {
 })
 
 describe('作品写真の「全体を入れる（切らない）」（mockups/v32 ③ 案A）', () => {
-  const photosOf = (workPhotos: ReturnType<typeof createReport>['workPhotos']) => {
-    const report = { ...createReport(currentConfig), workPhotos }
+  const photosOf = (page: ReturnType<typeof createReport>['workPhotos'][number]) => {
+    const report = { ...createReport(currentConfig), workPhotos: [page] }
     const html = buildReportDocument(report, currentConfig, { imageSrc: (id) => `img/${id}`, photoSrc: (id) => `photo/${id}`, figureSize: () => ({ widthMm: 60, heightMm: 45 }) })
     return html.slice(html.indexOf('<section class="photos'))
   }
@@ -185,5 +185,25 @@ describe('報告書を部分ごと（表紙・抄録・目次・章ごと・残�
     const chapters = parts.chapters.map((d) => strip(d).replace(/^<section class="body">\n/, '').replace(/\n<\/section>$/, ''))
     const tail = bodyOf(parts.tail).replace(/^<section class="body">\n/, '')
     expect(`${front}\n<section class="body">\n${[...chapters, tail].join('\n')}`).toBe(whole)
+  })
+})
+
+describe('作品写真の何ページか（mockups/v38 案A）', () => {
+  const html = (workPhotos: ReturnType<typeof createReport>['workPhotos']) =>
+    buildReportDocument({ ...createReport(currentConfig), workPhotos }, currentConfig, { imageSrc: (id) => `img/${id}`, photoSrc: (id) => `photo/${id}`, figureSize: () => ({ widthMm: 60, heightMm: 45 }) })
+
+  it('ページごとに作品写真の section を作り、何ページ目か（data-photo-page）と、ページごとの並べ方を付ける', () => {
+    const doc = html([
+      { layout: 4, imageIds: ['a', 'b', 'c', 'd'] },
+      { layout: 2, columns: 1, imageIds: ['e', 'f'] },
+    ])
+    expect(doc.match(/<section class="photos/g)).toHaveLength(2)
+    expect(doc).toContain('<section class="photos grid-2x2" data-photo-page="0">')
+    expect(doc).toContain('<section class="photos grid-1x2" data-photo-page="1"><div class="slot" data-photo-slot="0"><img src="photo/e" alt=""></div>')
+  })
+
+  it('組版の CSS に、6枚の並べ方（2×3・3×2）はない', () => {
+    expect(documentCss).not.toContain('grid-2x3')
+    expect(documentCss).not.toContain('grid-3x2')
   })
 })

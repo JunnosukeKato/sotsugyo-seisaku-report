@@ -6,7 +6,7 @@ import { FIGURE_MAX_PX, fitFigureSize, importImage, PHOTO_MAX_PX } from '../mode
 import { putImage, type StoredImage } from '../model/storage'
 import { skippedPages } from '../pdf/exportPages'
 import { applyCourseTemplate, bodyWritten } from '../model/template'
-import { changeArrangement, clampPercent, movePhoto, putPhoto, wholePhoto } from '../model/photos'
+import { addPhotoPage, canAddPhotoPage, changeArrangement, clampPercent, movePhoto, pageOfPhotoPage, pagePhotoCount, photoPageAt, photoSlots, placePhotos, putPhoto, removePhotoPage, updatePhotoPage, wholePhoto, type PhotoSlot } from '../model/photos'
 import { addColumn, addRow, blankTable, cellPosition, materialTable, removeColumn, removeRow, setCellImage } from '../model/table'
 import type { BodyBlock, Chapter, PhotoPosition, Report, TableBlock, WorkPhotoLayout } from '../model/types'
 import { ContinueRow, endsPageWithRoom, type ContinueTarget } from './continueRow'
@@ -19,6 +19,7 @@ import { ReportRenderer, type FirstShow, type PageEffect } from './reportRendere
 import { PLACEHOLDER_ATTR } from './pageView'
 import { copyRange, deleteRange, pasteClip, rangePieces, resolveRange, sameClipText, type Clip, type ModelPoint, type ModelRange } from './rangeOps'
 import { domPoint, paperPoint } from './rangeSelection'
+import { SelectionBar, type Bounds } from './selectionBar'
 import { changedPlace, type ChangedPlace, type NoticeBody, type RemovedWhat, type UndoNotice } from './undoNotice'
 import { submissionTitle } from '../model/fileName'
 
@@ -33,6 +34,8 @@ import { submissionTitle } from '../model/fileName'
 
 /** 作品写真をつかんで動かしている間の状態 */
 interface PhotoDrag {
+  /** 何ページ目の作品写真か（0 から） */
+  page: number
   index: number
   img: HTMLImageElement
   pointerId: number
@@ -45,11 +48,22 @@ interface PhotoDrag {
   moved: boolean
 }
 
+/** 紙面の作品写真の枠・ページ（の中の要素）が、何ページ目の作品写真か（0 から。layout/document.ts の data-photo-page） */
+function photoPageOf(el: Element): number {
+  return Number(el.closest<HTMLElement>('section.photos')?.dataset.photoPage) || 0
+}
+
+/** 紙面の、作品写真の page ページ目の index 枚目の枠（を探す CSS のセレクタ） */
+const photoSlotSelector = (page: number, index: number) => `section.photos[data-photo-page="${page}"] [data-photo-slot="${index}"]`
+
 export type Selection =
   | { kind: 'figure'; id: string }
   | { kind: 'table'; id: string }
-  /** 作品写真のページ。index：入っている写真を押して選んだとき、その写真（0 から。道具に「この写真：差し替え／外す」が出る） */
-  | { kind: 'photos'; index?: number }
+  /**
+   * 作品写真のページ。page：何ページ目の作品写真か（0 から。mockups/v38 案A）。
+   * index：入っている写真を押して選んだとき、その写真（0 から。道具に「この写真：差し替え／外す」が出る）
+   */
+  | { kind: 'photos'; page: number; index?: number }
   | { kind: 'pageBreak'; id: string }
   | null
 
@@ -73,6 +87,8 @@ export interface EditorSnapshot {
   /** 表示しているページ（0 から）とページ数。見開きのときは、並べた2ページのうち、書いている（最後に押した）方 */
   page: number
   pageCount: number
+  /** 表示しているページが何ページ目の作品写真か（0 から。作品写真のページでなければ null。mockups/v38 案A） */
+  photoPage: number | null
   /** 拡大して表示しているか */
   zoomed: boolean
   /** 見開き（いまのページと次のページを並べる。1–2、3–4…の組。PC だけ。mockups/v35 ③ 案A）で表示しているか */
@@ -87,6 +103,10 @@ export interface EditorSnapshot {
   caret: number | null
   /** 画面の下に出す、削除・戻したあとの知らせ（ほかを変えたら・書き始めたら null。mockups/v32 ② 案A） */
   notice: UndoNotice | null
+  /** 紙面で文を選んでいる（コピー・切り取り・削除できる範囲。左の道具に「選んだ文」を出す。mockups/v36 案B） */
+  textRange: boolean
+  /** 段落を書いていて、紙面でコピーしたまとまりがある（左の道具の「この段落」に「貼り付け」を出す） */
+  pasteReady: boolean
   /**
    * 紙面の情報（ページ数など）を使うチェックを、まだしていない（開いた直後で、紙面を組み終えていない）。
    * この間は、チェックの欄に「指摘はありません」と出さない（文字のチェックの指摘だけを出す）
@@ -237,8 +257,17 @@ export class ReportEditor {
     this.marker.textContent = 'ここに入ります'
     layer.append(this.marker)
     this.continueRow = new ContinueRow(layer, (id) => this.continueAfter(id))
+    // 紙面で選んだ文のすぐ上の帯「コピー・切り取り・削除」と、書く欄の近くの「貼り付け」（mockups/v36 案A。selectionBar.ts）
+    this.selectionBar = new SelectionBar(layer, {
+      copy: () => this.copySelection(),
+      cut: () => this.cutSelection(),
+      remove: () => this.deleteSelection(),
+      paste: () => this.pasteFromTool(),
+    })
     // 拡大してスクロールしたら、「＋ ここに続きを書く」も紙面に合わせて動かす
     scroller.addEventListener('scroll', () => {
+      // 選んだ文の帯は、スクロールしたら隠す（選び直す・マウスを離すと、また出る）
+      this.suppressSelectionBar()
       this.placeContinueRow()
       // 書き終えた欄の仮の表示も、紙面と一緒に動かす（前は外していたため、スマホで「完了」を押してページ全体の表示に戻ると、すぐ消えていた）
       this.realignFrozen()
@@ -246,6 +275,8 @@ export class ReportEditor {
 
     this.overlay = new OverlayEditor(layer, scroller, {
       onInput: (id, text) => {
+        // 書き始めたら、書く欄の近くの「貼り付け」は出さない
+        this.chipDismissed = true
         this.report = ops.setText(this.report, id, text)
         this.afterChange({ render: 'debounce', save: true })
         // カーソルがページの下からはみ出した（書き足して、段落が次のページへ続いた）：打つ手が止まるのを待たずに組み直し、次のページへ移る（followCaret）
@@ -328,6 +359,8 @@ export class ReportEditor {
 
     // 画面の大きさが変わって紙面の倍率・位置が変わったら、入力欄も合わせる
     this.stage = new PageStage(stage, () => {
+      // 表示の大きさ（全体・見開き・拡大）・画面の大きさが変わった：選んだ文の帯は隠す
+      this.suppressSelectionBar()
       // 見開きにした・やめた（台が狭くなって全体に戻したときも）：紙面に、並べるページの印を付け直す
       this.syncSpread()
       this.marker.hidden = true
@@ -356,6 +389,25 @@ export class ReportEditor {
         if (!this.turning && this.caretBelowContent() && this.renderer.pageView.pageOfOffset(this.overlay.blockId, caret) !== this.page) this.followCaret()
         this.notify()
       }
+    })
+    // 紙面で選んだ文の帯：選び直したら出す（マウスで選んでいる途中は出さず、離したら出す）。Esc で隠す
+    document.addEventListener('selectionchange', () => {
+      if (!this.mouseSelecting) this.barSuppressed = false
+      this.scheduleSelectionUi()
+    })
+    scroller.addEventListener('mousedown', (e) => {
+      if (e.button !== 0 || this.overlay.inSheet) return
+      this.mouseSelecting = true
+      this.selectionBar.hideBar()
+    })
+    window.addEventListener('mouseup', () => {
+      if (!this.mouseSelecting) return
+      this.mouseSelecting = false
+      this.barSuppressed = false
+      this.scheduleSelectionUi()
+    })
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.selectionBar.barShown) this.suppressSelectionBar()
     })
     scroller.addEventListener('click', (e) => this.onClick(e))
     // 段落をまたいで選ぶ：書いている欄から Shift+クリックで選ぶ・紙面で選んだ範囲をコピーする（PC）
@@ -414,6 +466,7 @@ export class ReportEditor {
       canRedo: this.history.canRedo && !(this.overlay.blockId && this.reportBeforeEdit && this.reportBeforeEdit !== this.report),
       page: this.page,
       pageCount: this.layout?.kinds.length ?? 0,
+      photoPage: this.layout ? photoPageAt(this.layout.kinds, this.page) : null,
       zoomed: this.stage.zoomed,
       spread: this.stage.spread,
       spreadFits: this.stage.spreadFits,
@@ -421,6 +474,8 @@ export class ReportEditor {
       sheet: this.overlay.inSheet,
       caret: this.overlay.blockId ? this.caretPos : null,
       notice: this.currentNotice,
+      textRange: this.textRange,
+      pasteReady: !!this.clip && !this.overlay.inSheet && (editable?.kind === 'paragraph' || editable?.kind === 'abstractParagraph'),
       pageChecksPending: !this.layout || this.provisional,
       pagesLeft: this.provisional || !this.layout ? this.pagesLeft : null,
       replacing: this.replacing !== null,
@@ -430,6 +485,7 @@ export class ReportEditor {
   }
 
   private notify(): void {
+    this.scheduleSelectionUi()
     this.version += 1
     for (const listener of this.listeners) listener()
     this.placeContinueRow()
@@ -819,7 +875,17 @@ export class ReportEditor {
       const page = this.renderer.pageView.pageOfOffset(finding.blockId, finding.start ?? 0)
       if (page >= 0) return page
     }
-    return this.layout?.kinds.indexOf(finding.area) ?? -1
+    return this.pageOfArea(finding.area, finding.photoPage)
+  }
+
+  /** 種類（表紙・抄録など）の最初のページ（0 から。なければ -1）。作品写真は photoPage ページ目（0 から。mockups/v38 案A） */
+  pageOfArea(area: string, photoPage?: number): number {
+    const kinds = this.layout?.kinds ?? []
+    if (area === 'photos' && photoPage !== undefined) {
+      const page = pageOfPhotoPage(kinds, photoPage)
+      if (page >= 0) return page
+    }
+    return kinds.indexOf(area as never)
   }
 
   /** 指摘の箇所へ移動する（文字の指摘なら入力欄を開く） */
@@ -870,6 +936,7 @@ export class ReportEditor {
     this.markSelection()
     // 紙面で選んでいた文字は、見えなくなるページにあれば選ぶのをやめる（見えないまま Delete で消してしまわないように）
     if (!samePair) this.clearPaperSelection()
+    this.suppressSelectionBar()
     const from = this.page
     // 紙面の欄にフォーカスがあったら、送った先のページの最初の欄に移す（前のページは隠れて、フォーカスが失われるため）
     const focused = this.paperFocus()
@@ -1742,14 +1809,16 @@ export class ReportEditor {
     }
     const slot = target.closest<HTMLElement>('[data-photo-slot]')
     if (slot) {
+      const page = photoPageOf(slot)
       const index = Number(slot.dataset.photoSlot)
       // 写真が入っている枠：その写真を選ぶ（道具の「差し替え」「外す」で操作する）。空の枠：すぐ写真を選ぶ（何枚かまとめて選べる）
-      if (this.report.workPhotos.imageIds[index]) return this.select({ kind: 'photos', index })
-      this.select({ kind: 'photos' })
-      void this.addPhotos(index)
+      if (this.report.workPhotos[page]?.imageIds[index]) return this.select({ kind: 'photos', page, index })
+      this.select({ kind: 'photos', page })
+      void this.addPhotos(page, index)
       return
     }
-    if (target.closest('section.photos')) return this.select({ kind: 'photos' })
+    const photoSection = target.closest<HTMLElement>('section.photos')
+    if (photoSection) return this.select({ kind: 'photos', page: photoPageOf(photoSection) })
     if (target.closest('section.references')) return this.callbacks.onReferencesClick()
     // スマホ：紙面の欄は小さく、少しずれて押すと開かなかった。指の幅ほどの近さにある欄を開く
     const near = this.overlay.inSheet && keyHit === undefined ? this.nearestEditable(x, y, 18) : null
@@ -1950,7 +2019,7 @@ export class ReportEditor {
     if (s?.kind === 'pageBreak') this.renderer.pageView.fragments(s.id)[0]?.classList.add('is-selected')
     // 選んだ作品写真（写真が入っている枠だけ）
     if (s?.kind === 'photos' && s.index !== undefined) {
-      const slot = this.viewport.querySelector<HTMLElement>(`[data-photo-slot="${s.index}"]`)
+      const slot = this.viewport.querySelector<HTMLElement>(photoSlotSelector(s.page, s.index))
       if (slot?.querySelector('img')) {
         slot.dataset.photoLabel = `${s.index + 1}枚目`
         slot.classList.add('is-selected')
@@ -2145,7 +2214,7 @@ export class ReportEditor {
   private showUndone(place: ChangedPlace): void {
     const view = this.renderer.pageView
     const targets = this.undoneElements(place)
-    const page = targets.length ? view.pageIndexOf(targets[0]) : place.kind === 'area' ? (this.layout?.kinds.indexOf(place.area) ?? -1) : -1
+    const page = targets.length ? view.pageIndexOf(targets[0]) : place.kind === 'area' ? this.pageOfArea(place.area, place.page) : -1
     if (page < 0) return
     const still = matchMedia('(prefers-reduced-motion: reduce)').matches
     const light = (here: HTMLElement[]) => {
@@ -2206,7 +2275,7 @@ export class ReportEditor {
       case 'table':
         return all(`.data-table[data-table-id="${CSS.escape(place.id)}"]`)
       case 'photo':
-        return all(`[data-photo-slot="${place.index}"]`)
+        return all(photoSlotSelector(place.page, place.index))
       case 'area':
         return []
     }
@@ -2616,6 +2685,103 @@ export class ReportEditor {
   /** 最後に紙面を押したものの種類（mouse・touch・pen。指で押したときは、選んだ文字があっても今までどおり書く欄を開く） */
   private pointerType = ''
 
+  // ---- 選んだ文の道具（mockups/v36：案B 左の道具の「選んだ文」・案A 選んだ所のすぐ上の帯と、書く欄の近くの「貼り付け」） ----
+
+  /** 紙面で選んだ文の帯・書く欄の近くの「貼り付け」（selectionBar.ts） */
+  private readonly selectionBar: SelectionBar
+  /** 紙面で、コピー・切り取り・削除できる範囲を選んでいる（スナップショットの textRange） */
+  private textRange = false
+  /** 紙面をマウスでなぞっている途中（帯は、離してから出す） */
+  private mouseSelecting = false
+  /** 帯を隠しておく（スクロールした・ページを替えた・表示の大きさを変えた・Esc。選び直すと、また出す） */
+  private barSuppressed = false
+  /** 書く欄の近くの「貼り付け」を、この書く欄では出さない（書き始めた）。出していた書く欄（別の欄を開いたら、また出す） */
+  private chipDismissed = false
+  private chipBlock: string | null = null
+  /** 貼り付けに使ったまとまり（そのまとまりでは、書く欄の近くの「貼り付け」を、もう出さない。左の道具の「貼り付け」は出す） */
+  private clipPasted: Clip | null = null
+  private selectionUiFrame = 0
+
+  /** 帯と「貼り付け」を出し直す（同じ描画の間に何度呼ばれても1回だけ） */
+  private scheduleSelectionUi(): void {
+    if (this.selectionUiFrame) return
+    this.selectionUiFrame = requestAnimationFrame(() => {
+      this.selectionUiFrame = 0
+      this.updateSelectionUi()
+    })
+  }
+
+  /** 帯を隠す（選び直すと、また出る） */
+  private suppressSelectionBar(): void {
+    this.barSuppressed = true
+    this.selectionBar.hideBar()
+  }
+
+  /** 見えている紙面のあたり（帯・「貼り付け」を置いてよい範囲。見開きなら2ページ） */
+  private visibleBounds(): Bounds | null {
+    const view = this.renderer.pageView
+    const pages = view.pages().filter((_, i) => this.isVisiblePage(i)).map((p) => p.getBoundingClientRect()).filter((r) => r.width > 0)
+    if (pages.length === 0) return null
+    const s = this.scroller.getBoundingClientRect()
+    return { top: Math.max(s.top, Math.min(...pages.map((r) => r.top))), bottom: Math.min(s.bottom, Math.max(...pages.map((r) => r.bottom))), left: Math.min(...pages.map((r) => r.left)), right: Math.max(...pages.map((r) => r.right)) }
+  }
+
+  /**
+   * 紙面で選んでいる範囲・書いている欄に合わせて、左の道具の「選んだ文」（textRange）と、選んだ所のすぐ上の帯、
+   * 書く欄の近くの「貼り付け」を出す・隠す（スマホは出さない）
+   */
+  private updateSelectionUi(): void {
+    const sheet = this.overlay.inSheet
+    const found = !sheet && !this.overlay.blockId && this.hasPaperSelection() ? this.paperRange() : null
+    if (found && this.selection) {
+      // 紙面で文を選んだら、選んでいた図・表などは選ぶのをやめる（左の道具は「選んだ文」になる）
+      this.selection = null
+      this.markSelection()
+    }
+    if (!!found !== this.textRange) {
+      this.textRange = !!found
+      this.version += 1
+      for (const listener of this.listeners) listener()
+    }
+    const bounds = this.visibleBounds()
+    // 帯：選んだ所のすぐ上（なぞっている途中・隠しておくときは出さない）
+    if (found && bounds && !this.mouseSelecting && !this.barSuppressed) {
+      const sel = getSelection()!
+      const lines = [...sel.getRangeAt(0).getClientRects()].filter((r) => r.width > 1 && r.height > 2 && r.bottom > bounds.top && r.top < bounds.bottom && r.right > bounds.left && r.left < bounds.right)
+      this.selectionBar.showBar(lines, bounds)
+    } else this.selectionBar.hideBar()
+    // 書く欄の近くの「貼り付け」：紙面でコピーしたあと、段落の書く欄を開いたとき（書き始めた・使ったら出さない）
+    const id = this.overlay.blockId
+    if (id !== this.chipBlock) {
+      this.chipBlock = id
+      this.chipDismissed = false
+    }
+    const kind = id ? ops.findEditable(this.report, id)?.kind : undefined
+    const caret = id && !sheet && this.clip && this.clip !== this.clipPasted && !this.chipDismissed && (kind === 'paragraph' || kind === 'abstractParagraph') ? this.overlay.caretClientRect() : null
+    if (caret && bounds) this.selectionBar.showChip(caret, bounds)
+    else this.selectionBar.hideChip()
+  }
+
+  /**
+   * 道具・帯の「コピー」：紙面で選んだ範囲をコピーする（Ctrl+C と同じまとまりを覚え、ふつうの文字をクリップボードに入れる。
+   * クリップボードに入れられなかったときも、まとまりは覚えておく（このツールの「貼り付け」で使える））
+   */
+  copySelection(): void {
+    const found = this.paperRange()
+    if (!found) return
+    const clip = copyRange(found.report, found.range)
+    this.clip = clip
+    this.clipPasted = null
+    navigator.clipboard?.writeText(clip.text).catch(() => {})
+    this.notify()
+  }
+
+  /** 道具・書く欄の近くの「貼り付け」：紙面でコピーしたまとまりを、書いている段落のカーソルの所に入れる（Ctrl+V と同じ） */
+  pasteFromTool(): void {
+    if (!this.clip || !this.overlay.blockId) return
+    this.overlay.pasteClip()
+  }
+
   /** 紙面で選んでいる文字を、選ばないようにする（ページを替えたとき） */
   private clearPaperSelection(): void {
     if (this.hasPaperSelection()) getSelection()?.removeAllRanges()
@@ -2660,6 +2826,8 @@ export class ReportEditor {
     e.clipboardData?.setData('text/plain', clip.text)
     e.preventDefault()
     this.clip = clip
+    this.clipPasted = null
+    this.notify()
   }
 
   /**
@@ -2725,6 +2893,8 @@ export class ReportEditor {
     const offset = Math.max(0, typedText.length - text.slice(end).length)
     const result = pasteClip(typed, id, offset, clip)
     this.report = result.report
+    // このまとまりでは、書く欄の近くの「貼り付け」を、もう出さない
+    this.clipPasted = clip
     this.autoPeriod = null
     if (result.skippedChapters) this.showNotice('大見出し（Ⅰ．など）は貼り付けていません（大見出しは「大見出し」で足します）')
     else if (result.droppedForAbstract) this.showNotice('抄録には、文だけを貼り付けました（見出し・図・表は貼り付けません）')
@@ -2774,73 +2944,115 @@ export class ReportEditor {
     getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, focus.offsetNode, focus.offset)
   }
 
-  // ---- 作品写真 ----
+  // ---- 作品写真（何ページかにできる。ページごとに並べ方を選ぶ。page は何ページ目の作品写真か（0 から）。mockups/v38 案A） ----
 
-  /** 並べ方を変える（写真は消さずに先頭へ詰める。枚数を減らすと、1枚目から順に載る） */
-  setPhotoLayout(layout: WorkPhotoLayout, columns: number): void {
+  /** 作品写真のページ数の上限（学科の設定 workPhotos.maxPages。null は上限なし） */
+  get maxPhotoPages(): number | null {
+    return this.config.workPhotos?.maxPages ?? null
+  }
+
+  /** 作品写真のページを、まだ足せるか（ページ数の上限に達していない） */
+  canAddPhotoPage(): boolean {
+    return canAddPhotoPage(this.report.workPhotos, this.maxPhotoPages)
+  }
+
+  /** page ページ目の並べ方を変える（写真は消さずに先頭へ詰める。枚数を減らすと、1枚目から順に載る） */
+  setPhotoLayout(page: number, layout: WorkPhotoLayout, columns: number): void {
     // 写真の順番が変わることがあるので、選んでいた写真は選び直してもらう
-    if (this.selection?.kind === 'photos') this.selection = { kind: 'photos' }
-    this.update((r) => ({ ...r, workPhotos: changeArrangement(r.workPhotos, layout, columns) }))
+    if (this.selection?.kind === 'photos') this.selection = { kind: 'photos', page }
+    this.update((r) => ({ ...r, workPhotos: updatePhotoPage(r.workPhotos, page, (p) => changeArrangement(p, layout, columns)) }))
     // 写真の数より枠の少ない並べ方にした：後ろの写真は消さずに残しているが、ページには出ないことを知らせる
-    const filled = this.report.workPhotos.imageIds.filter(Boolean).length
+    const filled = this.report.workPhotos[page]?.imageIds.filter(Boolean).length ?? 0
     if (filled > layout) this.noticeInfo(`${layout + 1}枚目からは隠れています（並べ方を戻すと出ます）`)
   }
 
-  async setPhoto(index: number): Promise<void> {
-    const imageId = await this.importImage('photo')
-    if (!imageId) return
-    this.update((r) => ({ ...r, workPhotos: putPhoto(r.workPhotos, index, imageId) }))
+  /**
+   * after ページ目の後ろに、そのページと同じ並べ方の空のページを足して、足したページを見せる（左の道具の「＋ 写真のページを足す」）。
+   * ページ数の上限（学科の設定）に達していれば、足さずに知らせる（道具のボタンも押せない）
+   */
+  async addPhotoPage(after: number): Promise<void> {
+    if (!this.canAddPhotoPage()) return this.noticeInfo(`作品写真は${this.maxPhotoPages}ページまでです`)
+    this.selection = null
+    this.update((r) => ({ ...r, workPhotos: addPhotoPage(r.workPhotos, after) }))
+    await this.goToPhotoPage(after + 1)
   }
 
   /**
-   * 空いている枠を押した：写真を選ぶ（何枚かまとめて選べる）。押した枠から後ろ、そのあと前の、空いている枠に順に入れる。
-   * 空いている枠より多く選んだときは、入れなかった枚数とわけを画面の下に知らせる（作品写真は1ページ・6枚まで。手順書）。
-   * 前は1枚ずつしか選べず、多く選ぼうとしても何も言わなかった
+   * page ページ目を、中の写真ごと消す（左の道具の「このページを消す」。元に戻せる。画面の下に「作品写真のページを消しました［戻す］」）。
+   * 1ページだけのときは消さない（作品写真のページは、いつも1ページはある）。消したら、前のページ（1ページ目を消したら、新しい1ページ目）を見せる
    */
-  async addPhotos(index: number): Promise<void> {
-    const files = this.callbacks.pickImages ? await this.callbacks.pickImages('photo') : await this.callbacks.pickImage('photo').then((f) => (f ? [f] : []))
-    if (files.length === 0) return
-    const { layout, imageIds } = this.report.workPhotos
-    const empty = Array.from({ length: layout }, (_, i) => i).filter((i) => !imageIds[i])
-    const order = [...empty.filter((i) => i >= index), ...empty.filter((i) => i < index)]
-    const stored: { index: number; id: string }[] = []
-    let tried = 0
-    for (const file of files) {
-      if (stored.length >= order.length) break
-      tried++
-      const id = await this.storeImage(file, 'photo')
-      if (id) stored.push({ index: order[stored.length], id })
-    }
-    if (stored.length > 0) this.update((r) => ({ ...r, workPhotos: stored.reduce((w, s) => putPhoto(w, s.index, s.id), r.workPhotos) }))
-    const left = files.length - tried
-    if (left <= 0) return
-    const max = this.config.workPhotos.maxImages
-    this.showNotice(
-      layout >= max
-        ? `作品写真は1ページ・${max}枚までです（手順書）。${left}枚は入れていません`
-        : `空いている枠が足りないため、${left}枚は入れていません。並べ方で枠を増やせます（作品写真は1ページ・${max}枚までです（手順書））`,
-    )
+  async removePhotoPage(page: number): Promise<void> {
+    const pages = this.report.workPhotos
+    if (pages.length <= 1 || !pages[page]) return
+    const photos = pagePhotoCount(pages[page])
+    this.selection = null
+    this.update((r) => ({ ...r, workPhotos: removePhotoPage(r.workPhotos, page) }))
+    this.noticeRemoved('作品写真のページ', photos ? `（写真${photos}枚も）` : undefined)
+    await this.goToPhotoPage(Math.max(0, page - 1))
   }
 
-  /** index 枚目の写真を外して、枠を空にする（元に戻せる。画面の下に「作品写真を外しました［戻す］」を出す） */
-  removePhoto(index: number): void {
-    if (this.selection?.kind === 'photos') this.selection = { kind: 'photos' }
-    const had = !!this.report.workPhotos.imageIds[index]
-    this.update((r) => ({ ...r, workPhotos: putPhoto(r.workPhotos, index, '') }))
+  /** k ページ目（0 から）の作品写真を見せる（ページを足した・消したときは、組み直し終えてから） */
+  private async goToPhotoPage(k: number): Promise<void> {
+    await this.whenLaidOut()
+    const index = pageOfPhotoPage(this.layout?.kinds ?? [], k)
+    if (index >= 0 && index !== this.page) await this.goToPage(index, 'fade')
+  }
+
+  async setPhoto(page: number, index: number): Promise<void> {
+    const imageId = await this.importImage('photo')
+    if (!imageId) return
+    this.update((r) => ({ ...r, workPhotos: updatePhotoPage(r.workPhotos, page, (p) => putPhoto(p, index, imageId)) }))
+  }
+
+  /**
+   * 空いている枠を押した：写真を選ぶ（何枚かまとめて選べる）。押した枠から後ろ、そのあと前の、そのページの空いている枠 →
+   * 後ろのページの空いている枠に順に入れ、それでも足りなければ、最後のページと同じ並べ方のページを後ろに足して、選んだ写真を全部入れる
+   * （mockups/v38：依頼者の判断。足したときは画面の下で知らせる）。
+   * 学科の設定でページ数の上限があって入りきらなかったときだけ、入れなかった枚数とわけを知らせる（上限がなければ、いつも全部入る）
+   */
+  async addPhotos(page: number, index: number): Promise<void> {
+    const files = this.callbacks.pickImages ? await this.callbacks.pickImages('photo') : await this.callbacks.pickImage('photo').then((f) => (f ? [f] : []))
+    if (files.length === 0) return
+    const max = this.maxPhotoPages
+    const before = this.report.workPhotos.length
+    const slots = photoSlots(this.report.workPhotos, page, index, files.length, max)
+    const stored: (PhotoSlot & { imageId: string })[] = []
+    let tried = 0
+    for (const file of files) {
+      if (stored.length >= slots.length) break
+      tried++
+      const imageId = await this.storeImage(file, 'photo')
+      if (imageId) stored.push({ ...slots[stored.length], imageId })
+    }
+    if (stored.length > 0) this.update((r) => ({ ...r, workPhotos: placePhotos(r.workPhotos, stored) }))
+    const added = this.report.workPhotos.length - before
+    const left = files.length - tried
+    const notes = [
+      added > 0 ? `作品写真のページを${added}つ足して、${stored.filter((s) => s.page >= before).length}枚入れました` : '',
+      left > 0 && max !== null ? `${left}枚は入れていません（作品写真は${max}ページまでです）` : '',
+    ].filter(Boolean)
+    if (notes.length) this.noticeInfo(notes.join('。'))
+  }
+
+  /** page ページ目の index 枚目の写真を外して、枠を空にする（元に戻せる。画面の下に「作品写真を外しました［戻す］」を出す） */
+  removePhoto(page: number, index: number): void {
+    if (this.selection?.kind === 'photos') this.selection = { kind: 'photos', page }
+    const had = !!this.report.workPhotos[page]?.imageIds[index]
+    this.update((r) => ({ ...r, workPhotos: updatePhotoPage(r.workPhotos, page, (p) => putPhoto(p, index, '')) }))
     if (had) this.noticeRemoved('作品写真')
   }
 
   /** 写真の切り抜く位置を変える（x・y は %。50 が中央） */
-  setPhotoPosition(index: number, position: PhotoPosition): void {
-    this.update((r) => ({ ...r, workPhotos: movePhoto(r.workPhotos, index, position) }))
+  setPhotoPosition(page: number, index: number, position: PhotoPosition): void {
+    this.update((r) => ({ ...r, workPhotos: updatePhotoPage(r.workPhotos, page, (p) => movePhoto(p, index, position)) }))
   }
 
   /**
-   * index 枚目の写真を「全体を入れる（切らない）」にする・枠いっぱいに切り抜くのに戻す（元に戻せる。mockups/v32 ③ 案A）。
+   * page ページ目の index 枚目の写真を「全体を入れる（切らない）」にする・枠いっぱいに切り抜くのに戻す（元に戻せる。mockups/v32 ③ 案A）。
    * 選んでいる写真は、選んだまま（道具のスイッチを続けて押せるように）
    */
-  setPhotoWhole(index: number, on: boolean): void {
-    this.update((r) => ({ ...r, workPhotos: wholePhoto(r.workPhotos, index, on) }))
+  setPhotoWhole(page: number, index: number, on: boolean): void {
+    this.update((r) => ({ ...r, workPhotos: updatePhotoPage(r.workPhotos, page, (p) => wholePhoto(p, index, on)) }))
   }
 
   // 作品写真をつかんで動かし、枠の中で見える位置を変える（つかまずに離したらクリック＝写真を選び直す）
@@ -2851,18 +3063,21 @@ export class ReportEditor {
     const img = (e.target as HTMLElement).closest?.<HTMLImageElement>('[data-photo-slot] img')
     if (!img || e.button !== 0 || !img.naturalWidth) return
     const slot = img.closest<HTMLElement>('[data-photo-slot]')!
+    const page = photoPageOf(slot)
     const index = Number(slot.dataset.photoSlot)
+    const photos = this.report.workPhotos[page]
     // 全体を入れている写真は切り抜いていないので、動かさない（押すと、ふつうのクリック＝写真を選ぶ）
-    if (this.report.workPhotos.whole?.[index] || slot.classList.contains('whole')) return
+    if (!photos || photos.whole?.[index] || slot.classList.contains('whole')) return
     const cell = slot.getBoundingClientRect()
     const k = Math.max(cell.width / img.naturalWidth, cell.height / img.naturalHeight)
     this.photoDrag = {
+      page,
       index,
       img,
       pointerId: e.pointerId,
       startX: e.clientX,
       startY: e.clientY,
-      from: this.report.workPhotos.positions?.[index] ?? { x: 50, y: 50 },
+      from: photos.positions?.[index] ?? { x: 50, y: 50 },
       spanX: img.naturalWidth * k - cell.width,
       spanY: img.naturalHeight * k - cell.height,
       moved: false,
@@ -2895,7 +3110,7 @@ export class ReportEditor {
     // 離した後に届くクリックを無視する（届かなかったときのため、すぐ後に戻す）
     this.suppressClick = true
     setTimeout(() => (this.suppressClick = false), 0)
-    this.setPhotoPosition(d.index, this.photoDragPosition(d, e.clientX - d.startX, e.clientY - d.startY))
+    this.setPhotoPosition(d.page, d.index, this.photoDragPosition(d, e.clientX - d.startX, e.clientY - d.startY))
   }
 
   private cancelPhotoDrag(): void {

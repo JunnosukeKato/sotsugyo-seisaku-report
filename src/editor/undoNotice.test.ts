@@ -65,9 +65,24 @@ describe('元に戻して変わった所（そこへ移って光らせる）', (
   })
 
   it('外した作品写真を戻すと、その枠。並べ方を戻すと、作品写真のページへ移るだけ', () => {
-    const photos: Report = { ...r, workPhotos: { layout: 2, imageIds: ['g1', 'g2'] } }
-    expect(changedPlace({ ...photos, workPhotos: { layout: 2, imageIds: ['g1', ''] } }, photos)).toEqual({ kind: 'photo', index: 1 })
-    expect(changedPlace({ ...photos, workPhotos: { layout: 4, imageIds: ['g1', 'g2'] } }, photos)).toEqual({ kind: 'area', area: 'photos' })
+    const photos: Report = { ...r, workPhotos: [{ layout: 2, imageIds: ['g1', 'g2'] }] }
+    expect(changedPlace({ ...photos, workPhotos: [{ layout: 2, imageIds: ['g1', ''] }] }, photos)).toEqual({ kind: 'photo', page: 0, index: 1 })
+    expect(changedPlace({ ...photos, workPhotos: [{ layout: 4, imageIds: ['g1', 'g2'] }] }, photos)).toEqual({ kind: 'area', area: 'photos', page: 0 })
+  })
+
+  it('作品写真が何ページかあるとき：変えたページの枠へ。消したページを戻すと、そのページへ移るだけ（mockups/v38 案A）', () => {
+    const two: Report = { ...r, workPhotos: [{ layout: 4, imageIds: ['a', 'b', 'c', 'd'] }, { layout: 1, imageIds: ['e'] }] }
+    expect(changedPlace({ ...two, workPhotos: [two.workPhotos[0], { layout: 1, imageIds: [''] }] }, two)).toEqual({ kind: 'photo', page: 1, index: 0 })
+    // 2ページ目を消した → 戻すと2ページ目
+    expect(changedPlace({ ...two, workPhotos: [two.workPhotos[0]] }, two)).toEqual({ kind: 'area', area: 'photos', page: 1 })
+    // 足したページを元に戻す → 残ったページの最後
+    expect(changedPlace(two, { ...two, workPhotos: [two.workPhotos[0]] })).toEqual({ kind: 'area', area: 'photos', page: 0 })
+  })
+
+  it('作品写真のページを消したときの知らせ（写真の枚数を添える）と、戻したときの知らせ', () => {
+    expect(noticeText({ kind: 'removed', what: '作品写真のページ', note: '（写真2枚も）' })).toBe('作品写真のページを消しました（写真2枚も）')
+    expect(noticeText({ kind: 'removed', what: '作品写真のページ' })).toBe('作品写真のページを消しました')
+    expect(noticeText({ kind: 'restored', what: '作品写真のページ' })).toBe('作品写真のページを戻しました')
   })
 
   it('紙面に見える所が変わらなければ（「このままにする」を戻しただけ）null', () => {

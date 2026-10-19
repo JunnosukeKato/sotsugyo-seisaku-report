@@ -447,51 +447,75 @@ export async function firstTimeV3Pc(browser, check) {
   await pause(600)
   await ready()
 
-  // ---- 作品写真：まとめて選べる。入らない枚数と、隠れた写真を知らせる ----
-  await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: { layout: 2, columns: 2, imageIds: [] } })))
+  // ---- 作品写真：まとめて選べる。枠より多く選ぶと、ページを足して全部入れる（mockups/v38 ③）。隠れた写真・ページ数の上限を知らせる ----
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: [{ layout: 2, columns: 2, imageIds: [] }] })))
   await pause(600)
   await ready()
   await page.evaluate(() => window.__editor.goToArea('photos'))
   await ready()
   await pause(300)
   const pngs = await makePngs(page, 5)
-  const clickSlot = async (i) => {
-    const at = await page.evaluate((i) => { const r = document.querySelector(`.page-viewport.front [data-photo-slot="${i}"]`).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } }, i)
+  /** k ページ目（0 から）の作品写真の i 枚目の枠を押して、写真を選ぶ画面を開く */
+  const clickSlot = async (k, i) => {
+    const at = await page.evaluate((k, i) => { const r = document.querySelector(`.page-viewport.front section.photos[data-photo-page="${k}"] [data-photo-slot="${i}"]`).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } }, k, i)
     const [chooser] = await Promise.all([page.waitForFileChooser(), page.mouse.click(at.x, at.y)])
     return chooser
   }
-  let chooser = await clickSlot(0)
+  const counts = () => page.evaluate(() => window.__editor.getSnapshot().report.workPhotos.map((p) => p.imageIds.filter(Boolean).length).join())
+  let chooser = await clickSlot(0, 0)
   const multiple = chooser.isMultiple()
   await chooser.accept(pngs.slice(0, 3))
-  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos.imageIds.filter(Boolean).length === 2, { timeout: 20000 })
+  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos.length === 2, { timeout: 20000 })
   await pause(300)
   const twoToast = await toastText(page)
+  const placed = await counts()
   await ready()
   await page.screenshot({ path: `${OUT}/11-photos-two-frames.png` })
   check(
-    '作品写真の空いている枠を押すと、写真をまとめて選べ、空いている枠に順に入る（枠より多いと、入れなかった枚数とわけを知らせる）',
-    multiple && twoToast === '空いている枠が足りないため、1枚は入れていません。並べ方で枠を増やせます（作品写真は1ページ・6枚までです（手順書））',
-    JSON.stringify({ multiple, twoToast }),
+    '作品写真の空いている枠を押すと、写真をまとめて選べ、空いている枠に順に入る（枠より多いと、同じ並べ方のページを足して全部入れ、そのことを知らせる）',
+    multiple && placed === '2,1' && twoToast === '作品写真のページを1つ足して、1枚入れました',
+    JSON.stringify({ multiple, placed, twoToast }),
   )
-  await page.evaluate(() => [...document.querySelectorAll('.palette .lay')].find((b) => b.title.startsWith('6枚（2列')).click())
-  await pause(300)
+  // 学科の設定でページ数の上限があるとき（2ページ）：上限のページまで入れ、入れなかった枚数とわけを知らせる。「＋ 写真のページを足す」は押せない
+  // 年度の設定を入れ替える（ツールの setConfig。ページ数の上限だけ変える）
+  await page.evaluate(() => {
+    const ed = window.__editor
+    ed.setConfig({ ...ed.config, workPhotos: { maxPages: 2 } })
+  })
   await ready()
-  chooser = await clickSlot(2)
-  await chooser.accept(pngs)
-  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos.imageIds.filter(Boolean).length === 6, { timeout: 20000 })
-  await pause(300)
-  const sixToast = await toastText(page)
+  await page.evaluate(() => {
+    const ed = window.__editor
+    const kinds = ed.getSnapshot().layout.kinds
+    void ed.goToPage(kinds.lastIndexOf('photos'), 'none')
+  })
   await ready()
-  check('6枚の並べ方で枠より多く選ぶと「作品写真は1ページ・6枚までです（手順書）」と出る', sixToast === '作品写真は1ページ・6枚までです（手順書）。1枚は入れていません', sixToast)
-  await page.evaluate(() => [...document.querySelectorAll('.palette .lay')].find((b) => b.title.startsWith('2枚（左右')).click())
+  await pause(300)
+  chooser = await clickSlot(1, 1)
+  await chooser.accept(pngs.slice(0, 3))
+  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos[1].imageIds.filter(Boolean).length === 2, { timeout: 20000 })
+  await pause(300)
+  const limitToast = await toastText(page)
+  const addButton = await page.evaluate(() => { const b = [...document.querySelectorAll('.palette .photo-pages .tb')].find((x) => x.textContent.includes('足す')); return { disabled: b?.disabled, title: b?.title } })
+  await ready()
+  check(
+    'ページ数の上限（学科の設定。この確かめでは2ページ）があるときは、上限のページまで入れて「2枚は入れていません（作品写真は2ページまでです）」と出す。「＋ 写真のページを足す」は押せない',
+    (await counts()) === '2,2' && limitToast === '2枚は入れていません（作品写真は2ページまでです）' && addButton.disabled === true && addButton.title === '作品写真は2ページまでです',
+    JSON.stringify({ counts: await counts(), limitToast, addButton }),
+  )
+  await page.evaluate(() => {
+    const ed = window.__editor
+    ed.setConfig({ ...ed.config, workPhotos: { maxPages: null } })
+  })
+  await ready()
+  await page.evaluate(() => [...document.querySelectorAll('.palette .lay')].find((b) => b.title.startsWith('1枚')).click())
   await pause(300)
   const hiddenToast = await toastText(page)
   await ready()
   await page.screenshot({ path: `${OUT}/11-photos-hidden.png` })
-  check('写真より枠の少ない並べ方にすると「3枚目からは隠れています（並べ方を戻すと出ます）」と出る', hiddenToast === '3枚目からは隠れています（並べ方を戻すと出ます）', hiddenToast)
+  check('写真より枠の少ない並べ方にすると「2枚目からは隠れています（並べ方を戻すと出ます）」と出る', hiddenToast === '2枚目からは隠れています（並べ方を戻すと出ます）', hiddenToast)
 
   // ---- 作品写真がまだないときの PDF には、空の作品写真のページを入れない（前は下書きの PDF だけの決まり） ----
-  await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: { layout: 1, imageIds: [] } })))
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: [{ layout: 1, imageIds: [] }] })))
   await pause(600)
   await ready()
   const pages = await page.evaluate(() => {

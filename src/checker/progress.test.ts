@@ -142,7 +142,7 @@ describe('まだのところの行', () => {
 
   it('済んだ行は緑の ✓（入れました・すべて書きました・枚数）', () => {
     const r0 = fresh(plainConfig)
-    let r: Report = { ...r0, basicInfo: { ...r0.basicInfo, name: '文化　花子', subtitleInput: '海の王女' }, workPhotos: { layout: 2, imageIds: ['p1', 'p2'] } }
+    let r: Report = { ...r0, basicInfo: { ...r0.basicInfo, name: '文化　花子', subtitleInput: '海の王女' }, workPhotos: [{ layout: 2, imageIds: ['p1', 'p2'] }] }
     for (const id of templateParagraphs(r)) r = ops.setText(r, id, '筆者は衣装を制作した。')
     const min = plainConfig.body.minPages
     const list = rows(r, layout({ bodyPages: min }), false, plainConfig)
@@ -179,5 +179,30 @@ describe('「PDFを書き出す」の下のひとこと', () => {
     expect(note(0, 0)).toBe('直すところ・まだのところはありません')
     expect(note(0, 0, true)).toBe('紙面を確かめています…')
     expect(note(0, 0, false, true)).toBe('あとは抄録です（先生の許可のあと）')
+  })
+})
+
+describe('作品写真が何ページかあるとき（mockups/v38 案A）', () => {
+  const done = (workPhotos: Report['workPhotos']) => {
+    const r0 = fresh(plainConfig)
+    let r: Report = { ...r0, basicInfo: { ...r0.basicInfo, name: '文化　花子', subtitleInput: '海の王女' }, workPhotos }
+    for (const id of templateParagraphs(r)) r = ops.setText(r, id, '筆者は衣装を制作した。')
+    return rows(r, layout({ bodyPages: plainConfig.body.minPages }), false, plainConfig).find((x) => x.id === 'photos')!
+  }
+
+  it('済んだ行は「6枚（2ページ）」（1ページだけなら今までどおり「6枚」ではなく枚数だけ）', () => {
+    expect(done([{ layout: 4, imageIds: ['a', 'b', 'c', 'd'] }, { layout: 2, imageIds: ['e', 'f'] }])).toMatchObject({ state: 'done', value: '6枚（2ページ）' })
+    expect(done([{ layout: 4, imageIds: ['a', 'b', 'c', 'd'] }])).toMatchObject({ state: 'done', value: '4枚' })
+  })
+
+  it('写真のないページがあれば、まだのところ「2ページ目が空です」（押すと、そのページへ）。赤くしない', () => {
+    const row = done([{ layout: 4, imageIds: ['a', 'b', 'c', 'd'] }, { layout: 4, imageIds: [] }])
+    expect(row).toMatchObject({ state: 'todo', value: '2ページ目が空です', target: { kind: 'finding', finding: { ruleId: 'photos-empty-page', photoPage: 1 } } })
+    expect(done([{ layout: 1, imageIds: [] }, { layout: 1, imageIds: ['a'] }, { layout: 1, imageIds: [] }])).toMatchObject({ value: '1・3ページ目が空です' })
+    expect(NOT_YET_RULES).toContain('photos-empty-page')
+  })
+
+  it('どのページにも写真がなければ、今までどおり「まだ」', () => {
+    expect(done([{ layout: 4, imageIds: [] }, { layout: 1, imageIds: [] }])).toMatchObject({ state: 'todo', value: 'まだ' })
   })
 })

@@ -2,7 +2,7 @@ import type { EditorSnapshot } from '../editor/reportEditor'
 import type { EditableKind } from '../editor/reportOps'
 import type { HelpTopic } from '../help/helpTopics'
 import { photoGrid, shownPhotos } from '../model/photos'
-import type { Report, WorkPhotos } from '../model/types'
+import type { Report, WorkPhotoPage } from '../model/types'
 
 /**
  * スマホの紙面の下の帯（mockups/v32 ④ 案A。帯そのものは PageBand.tsx）に出す言葉。
@@ -22,7 +22,7 @@ export function photoToolsAtSide(snap: Pick<EditorSnapshot, 'layout' | 'page' | 
 }
 
 /** 空いている作品写真の枠の呼び方（2枚の並べ方は「下の枠」など、ほかは「3枚目の枠」） */
-export function photoSlotName(photos: Pick<WorkPhotos, 'layout' | 'columns'>, index: number): string {
+export function photoSlotName(photos: Pick<WorkPhotoPage, 'layout' | 'columns'>, index: number): string {
   if (photos.layout === 2) {
     const sideBySide = photoGrid(photos).columns === 2
     if (index === 0) return sideBySide ? '左の枠' : '上の枠'
@@ -32,7 +32,7 @@ export function photoSlotName(photos: Pick<WorkPhotos, 'layout' | 'columns'>, in
 }
 
 /** 作品写真のページの帯：空いている枠の言葉と、「写真を選ぶ」で入れる枠（空いている枠がなければ null） */
-export function photoBand(photos: WorkPhotos): { text: string; index: number } | null {
+export function photoBand(photos: WorkPhotoPage): { text: string; index: number } | null {
   const empty = shownPhotos(photos).flatMap((p, i) => (p.imageId ? [] : [i]))
   if (!empty.length) return null
   if (photos.layout === 1) return { text: '作品写真が、まだ入っていません', index: 0 }

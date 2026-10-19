@@ -192,6 +192,7 @@ export function usedImageIds(report: Report): string[] {
     if (block.type === 'figureRow') ids.push(...block.figures.map((f) => f.imageId))
     if (block.type === 'table') ids.push(...block.rows.flatMap((r) => r.cells.map((c) => c.imageId ?? '')))
   }
-  ids.push(...report.workPhotos.imageIds)
+  // 作品写真は、どのページの写真も（並べ方で隠れている写真も、並べ方を戻すと出るので残す）
+  ids.push(...report.workPhotos.flatMap((p) => p.imageIds))
   return ids.filter(Boolean)
 }

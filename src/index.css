@@ -1383,3 +1383,37 @@ button.row { cursor: pointer; }
 /* 「PDFを書き出す」の下のひとこと 13px */
 .side .side-foot p { margin-top: 9px; font-size: 13px; }
 .side .source-notice { margin-top: 6px; font-size: 11px; }
+
+/* ---- v36 選んだ文のボタン（mockups/v36 案A：選んだ所のすぐ上の帯・書く欄の近くの「貼り付け」。部品は editor/selectionBar.ts。案B の左の道具「選んだ文」は app/Palette.tsx） ---- */
+.range-bar, .range-chip { position: absolute; z-index: 9; box-sizing: border-box; font-family: 'BIZ UDPGothic', sans-serif; pointer-events: auto; background: #fff; border: 1px solid var(--palette-line); box-shadow: 0 8px 24px rgba(30, 25, 20, 0.18); }
+.range-bar { display: flex; gap: 2px; padding: 4px; border-radius: 11px; }
+.range-bar[hidden], .range-chip[hidden] { display: none; }
+.range-bar button, .range-chip { display: flex; align-items: center; gap: 5px; border: 0; border-radius: 8px; padding: 6px 10px 6px 8px; font: inherit; font-size: 13px; color: var(--ink); white-space: nowrap; }
+.range-bar button { background: none; }
+.range-bar button svg, .range-chip svg { width: 17px; height: 17px; flex: none; }
+.range-bar button:hover, .range-chip:hover { background: var(--palette-hover); color: var(--accent); }
+.range-bar button.danger { color: var(--error); }
+.range-bar button:focus-visible, .range-chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.range-bar .sep { width: 1px; margin: 5px 2px; background: var(--line); }
+/* 帯の小さな三角：選んだ文の1行目の始めを指す（下に出したときは上向き） */
+.range-bar::after, .range-chip::after { content: ''; position: absolute; left: var(--ax, 24px); bottom: -6px; width: 10px; height: 10px; margin-left: -5px; background: #fff; border-right: 1px solid var(--palette-line); border-bottom: 1px solid var(--palette-line); transform: rotate(45deg); pointer-events: none; }
+.range-bar.below::after, .range-chip.below::after { bottom: auto; top: -6px; transform: rotate(225deg); }
+.range-chip { border-radius: 10px; padding: 5px 10px 5px 8px; }
+@media print { .range-bar, .range-chip { display: none !important; } }
+
+/* ---- v38 作品写真の複数ページ（mockups/v38 案A：左の道具の「ページ」の欄・スマホの下の道具の「ページを足す」「ページを消す」。部品は app/Palette.tsx） ---- */
+/* 左の道具の上の名前「作品写真 2」を1行に収める */
+.palette .p-head b.photo-name { letter-spacing: 0.02em; white-space: nowrap; }
+/* 「写真の／ページを足す」「この／ページを消す」：2行の名前（Palette.tsx の改行） */
+.palette .photo-pages .tb span, .photo-arrange .tb span { white-space: pre-line; line-height: 1.3; }
+.palette .photo-pages .tb { padding: 6px 0 5px; }
+.palette .photo-pages .tb svg { width: 20px; height: 20px; }
+/* 「＋ 写真のページを足す」は藍の太字（足す道具）。押せないとき（ページ数の上限・1ページだけのときの「消す」）は薄く（button:disabled） */
+.photo-pages .tb:not(.danger):not(:disabled), .photo-arrange .tb:not(.danger):not(:disabled) { color: var(--accent); font-weight: 700; }
+/* スマホ（縦）：下の道具の並べ方の横に、区切りの線と「ページを足す」「ページを消す」 */
+.photo-arrange .photo-pages-sep { display: none; }
+.app.phone .range-bar .photo-arrange .photo-pages-sep { display: block; flex: none; width: 1px; align-self: stretch; margin: 4px 2px 4px 4px; background: var(--line); }
+.app.phone .range-bar .photo-arrange .tb { min-width: 0; width: 52px; padding: 3px 0; gap: 2px; font-size: 10.5px; letter-spacing: -0.03em; white-space: nowrap; }
+.app.phone .range-bar .photo-arrange .tb svg { width: 20px; height: 20px; }
+/* スマホ（横）：右の列は今までどおり3列×2段。並べ方4つの後ろに「ページを足す」「ページを消す」を続けて並べる（並べ方の入れ物は、札の並びにそのまま入れる） */
+.app.phone .page-side .photo-arrange .layouts { display: contents; }

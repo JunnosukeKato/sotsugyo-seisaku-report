@@ -1033,7 +1033,7 @@ export class OverlayEditor {
    * カーソルの画面上の四角。包んだ句読点のすぐ前・後ろ（要素の境目）にカーソルがあると、ブラウザが四角を返さないことがあるので、
    * そのときは隣の文字の四角から求める（前の文字の右端、なければ後ろの文字の左端）
    */
-  private caretBox(): { top: number; bottom: number } | null {
+  private caretBox(): { left: number; top: number; bottom: number } | null {
     const sel = getSelection()
     if (!sel?.rangeCount || !sel.focusNode) return null
     // 文字を選んでいるときは、選んでいる端（Shift+矢印で動かしている方）
@@ -1042,7 +1042,29 @@ export class OverlayEditor {
     const r = focus.getClientRects()[0]
     if (r && (r.height > 0 || r.width > 0)) return r
     const at = this.offsetAt(sel.focusNode ?? this.element, sel.focusOffset)
-    return charRect(this.element, at - 1) ?? charRect(this.element, at) ?? null
+    const before = charRect(this.element, at - 1)
+    if (before) return { left: before.right, top: before.top, bottom: before.bottom }
+    return charRect(this.element, at) ?? null
+  }
+
+  /** PC：書いている欄のカーソルの画面上の位置（左・上・下。書いていない・スマホ・カーソルが書く欄の外なら null） */
+  caretClientRect(): { left: number; top: number; bottom: number } | null {
+    if (!this.target || this.sheetHost || this.clip.hidden) return null
+    const sel = getSelection()
+    if (!sel?.rangeCount || !this.element.contains(sel.focusNode)) return null
+    return this.caretBox()
+  }
+
+  /**
+   * 道具の「貼り付け」・書く欄の近くの「貼り付け」：紙面でコピーしたまとまりを、カーソルの所に入れる（Ctrl+V と同じ。選んでいる文字は置き換える）
+   */
+  pasteClip(): void {
+    const clip = this.callbacks.onPasteClip
+    if (!this.target || this.target.kind !== 'paragraph' || !clip) return
+    const { blockId } = this.target
+    const text = this.text
+    const { start, end } = this.selectionOffsets()
+    this.handOff(() => clip.paste(blockId, text, start, end))
   }
 
   private emitInput(): void {

@@ -18,7 +18,7 @@ export function createReport(config: YearConfig, courseId?: string): Report {
     abstract: { paragraphs: [emptyParagraph(abstractHint(config, course))], started: false },
     body: bodyFromTemplate(courseTemplate(config, course)),
     references: [],
-    workPhotos: { layout: 1, imageIds: [] },
+    workPhotos: [{ layout: 1, imageIds: [] }],
     updatedAt: new Date().toISOString(),
   }
 }

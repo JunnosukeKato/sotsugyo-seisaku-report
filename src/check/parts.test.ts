@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { findPage, locateFindings, pagePins } from './locate'
 import { chooseThumbWidth, packRows, pageSlots } from './pageGrid'
-import { A4, fitInPage, photoGrid, photoPixels, photoPlaces } from './pageFit'
+import { A4, fitInPage, maxPhotos, photoGrid, photoPages, photoPixels, photoPlaces } from './pageFit'
 import { confirmText, fileKind, groupByPart, idAndName, isStale, mergedFileName, partFromName, placeFor, staleFinding, timeText, wrongPartFinding, type CheckFinding } from './parts'
 import type { PdfFacts, PdfPageFacts } from './pdfFacts'
 
@@ -171,14 +171,22 @@ describe('作品写真を A4 の1ページに置く', () => {
     expect(big.height / big.width).toBeCloseTo(8000 / 6000, 2)
     expect(photoPixels(800, 600)).toEqual({ width: 800, height: 600 })
   })
-  it('並べ方は枚数で決まる（2枚は、縦長だけなら左右、横長があれば上下。3〜4枚は 2×2、5〜6枚は 2×3）', () => {
+  it('1ページの並べ方は枚数で決まる（2枚は、縦長だけなら左右、横長があれば上下。3〜4枚は 2×2）', () => {
     const tall = { width: 3, height: 4 }
     const wide = { width: 4, height: 3 }
     expect(photoGrid([tall])).toEqual({ cols: 1, rows: 1 })
     expect(photoGrid([tall, tall])).toEqual({ cols: 2, rows: 1 })
     expect(photoGrid([tall, wide])).toEqual({ cols: 1, rows: 2 })
     expect(photoGrid([tall, tall, wide])).toEqual({ cols: 2, rows: 2 })
-    expect(photoGrid(Array(6).fill(tall))).toEqual({ cols: 2, rows: 3 })
+    expect(photoGrid(Array(4).fill(tall))).toEqual({ cols: 2, rows: 2 })
+  })
+  it('写真は入れた順に4枚ずつのページに分ける（5枚なら4枚＋1枚。mockups/v38 案1）。上限は年度の設定のページ数×4（null は上限なし）', () => {
+    expect(photoPages([1, 2, 3, 4, 5])).toEqual([[1, 2, 3, 4], [5]])
+    expect(photoPages([1, 2, 3, 4, 5, 6, 7, 8, 9])).toEqual([[1, 2, 3, 4], [5, 6, 7, 8], [9]])
+    expect(photoPages([1, 2])).toEqual([[1, 2]])
+    expect(photoPages([])).toEqual([])
+    expect(maxPhotos(null)).toBe(Infinity)
+    expect(maxPhotos(3)).toBe(12)
   })
   it('並べた写真は、10mm の余白の内側に、切らずに、重ならずに入る（左上から右へ、上の段から下の段へ）', () => {
     const photos = [{ width: 3000, height: 4000 }, { width: 4000, height: 3000 }, { width: 3000, height: 3000 }, { width: 3000, height: 4000 }]

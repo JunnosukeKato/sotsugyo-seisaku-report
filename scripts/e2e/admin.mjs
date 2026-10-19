@@ -341,6 +341,33 @@ await withEdge(async (browser) => {
   await page.waitForFunction(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config.driveSave === 'required', { timeout: 10000 }).catch(() => {})
   check('「必須」に戻して保存すると、元に戻る', (await savedDriveSave()) === 'required', String(await savedDriveSave()))
 
+  // 作品写真のページ数の上限（詳細設定。空なら上限なし。前の版の「作品写真の上限（枚）」はなくした。mockups/v38）
+  const savedPhotos = () => page.evaluate(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config.workPhotos)
+  await page.evaluate(() => (document.querySelector('details.details').open = true))
+  const pagesField = await page.evaluate(() => {
+    const f = [...document.querySelectorAll('.f')].find((x) => x.querySelector('.l')?.textContent === '作品写真のページ数の上限')
+    return { value: f?.querySelector('input')?.value, placeholder: f?.querySelector('input')?.placeholder, hint: f?.querySelector('.hint')?.textContent, old: [...document.querySelectorAll('.f .l')].some((l) => l.textContent.includes('作品写真の上限')) }
+  })
+  check('詳細設定に「作品写真のページ数の上限」：はじめは空（「上限なし」）で、「空なら上限なし（1ページに写真4枚まで）」。前の「作品写真の上限（枚）」はない', pagesField.value === '' && pagesField.placeholder === '上限なし' && pagesField.hint === '空なら上限なし（1ページに写真4枚まで）' && !pagesField.old, JSON.stringify(pagesField))
+  const pagesInput = await fieldInput('作品写真のページ数の上限')
+  await pagesInput.type('3')
+  await clickButton('保存して学生に反映')
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config.workPhotos?.maxPages === 3, { timeout: 10000 }).catch(() => {})
+  check('「3」と入れて保存すると、ページ数の上限が3になる（枚数の上限 maxImages は残らない）', JSON.stringify(await savedPhotos()) === '{"maxPages":3}', JSON.stringify(await savedPhotos()))
+  await pagesInput.evaluate((el) => el.select())
+  await pagesInput.press('Backspace')
+  await pagesInput.type('0')
+  await sleep(200)
+  const zeroProblem = await page.evaluate(() => document.querySelector('.problems')?.textContent ?? '')
+  check('「0」はエラー（1以上の整数か、空）', zeroProblem.includes('作品写真のページ数の上限は、1以上の整数にしてください（空にすると上限なし）'), zeroProblem)
+  await pagesInput.evaluate((el) => el.select())
+  await pagesInput.press('Backspace')
+  await sleep(200)
+  await clickButton('保存して学生に反映')
+  await page.waitForFunction(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config.workPhotos?.maxPages === null, { timeout: 10000 }).catch(() => {})
+  check('空にして保存すると、上限なし（null）に戻る', JSON.stringify(await savedPhotos()) === '{"maxPages":null}', JSON.stringify(await savedPhotos()))
+  await page.evaluate(() => (document.querySelector('details.details').open = false))
+
   // 先生の画面：ひな形だけを編集・保存できる
   const teacher = await context.newPage()
   const teacherDialogs = dialogLog(teacher)

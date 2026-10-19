@@ -379,7 +379,7 @@ button.pg { cursor: pointer; }
 /* ---- mockups/v31：作品写真を6枚まで（案A）・エラーと要確認の意味（案1）・入れたときの知らせ ---- */
 .add-notes li.info { background: var(--accent-soft); color: #33406f; }
 .add-notes li.info .st.ok { background: var(--accent); }
-/* 「写真 4枚」は切らずに出し、入りきらなければ「（6枚まで）」を次の行へ */
+/* 「写真 5枚・2ページ」は切らずに出し、入りきらなければ「（1ページ4枚まで）」を次の行へ */
 .pf.photos { flex-wrap: wrap; }
 .pf.photos .fname { flex: none; }
 .pf-sub { font-size: 11.5px; color: var(--muted); white-space: nowrap; }
@@ -417,3 +417,8 @@ button.pg { cursor: pointer; }
   .photo-menu button.pm-b { width: 44px; height: 44px; }
   .photo-menu .pm-name { font-size: 14px; }
 }
+
+/* ---- v38 作品写真の複数ページ（mockups/v38 案1：入れた順に4枚ずつのページ）：「並べ替え・外す」の窓のページの区切り「1ページ目 4枚」 ---- */
+.photo-menu li.pm-page { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 6px 3px; border-radius: 0; font-size: 12px; font-weight: 700; color: var(--accent); letter-spacing: 0.04em; }
+.photo-menu li.pm-page:not(:first-child) { margin-top: 4px; border-top: 1px solid var(--line); }
+.photo-menu li.pm-page span { font-weight: 400; font-size: 11.5px; color: var(--muted); letter-spacing: 0; }

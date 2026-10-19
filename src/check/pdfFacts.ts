@@ -169,7 +169,9 @@ export function classifyPdf(facts: PdfFacts): PartId {
   if (!first) return 'body'
   const lines = first.lines.map((l) => compact(l.text)).filter(Boolean)
   const all = lines.join('')
-  if (facts.pages.length === 1 && all.length < 20 && first.images > 0) return 'photo'
+  // 作品写真は何ページかでもよい（mockups/v38）：どのページも文字がほとんどなく写真がある
+  const fewWords = (p: PdfFacts['pages'][number]) => p.lines.map((l) => compact(l.text)).join('').length < 20
+  if (facts.pages.every((p) => fewWords(p) && p.images > 0)) return 'photo'
   if (lines.slice(0, 3).some((l) => l.startsWith('目次'))) return 'toc'
   if (lines.slice(0, 8).some((l) => l.includes('抄録') || l.includes('要旨'))) return 'abstract'
   const largest = Math.max(0, ...first.lines.map((l) => l.size))
@@ -246,7 +248,9 @@ export function pdfFindings(pdfs: Partial<Record<PartId, PdfFacts>>, config: Yea
       add({ ruleId: 'pdf-a4', part, severity: 'error', title: '用紙は A4 にする', detail: `A4 でないページ：${pageList(notA4)}（${mm(p.widthPt)}×${mm(p.heightPt)}mm）`, page: notA4[0] })
     }
     if (part === 'photo') {
-      if (facts.pages.length > 1) add({ ruleId: 'photo-one-page', part, severity: 'error', title: '作品写真は A4 1枚にする', detail: `今 ${facts.pages.length}ページ` })
+      // 作品写真は何ページかでもよい（mockups/v38：依頼者の判断）。学科の設定でページ数の上限があるときだけ確かめる
+      const max = config.workPhotos?.maxPages ?? null
+      if (max !== null && facts.pages.length > max) add({ ruleId: 'photo-pages', part, severity: 'error', title: `作品写真は${max}ページまでにする`, detail: `今 ${facts.pages.length}ページ` })
       continue
     }
     // ページ番号：本文の各ページに付ける。表紙・抄録・目次には付けない（手順書「目次・抄録はページ数に入れない」）

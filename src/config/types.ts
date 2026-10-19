@@ -47,7 +47,11 @@ export interface YearConfig {
     imagesPerPageGuide: number
   }
   workPhotos: {
-    maxImages: number
+    /**
+     * 作品写真のページ数の上限（1ページは4枚まで。多いときは学生がページを足す）。null は上限なし（依頼者の判断：何枚でも。mockups/v38）。
+     * 前の版の設定の maxImages（枚数の上限）は使わない（読み込むときに外す：validate.ts の repairConfig）
+     */
+    maxPages: number | null
   }
   /** 学籍番号の形式（正規表現）。未確定の間は null とし、形式チェックを行わない */
   studentIdPattern: string | null

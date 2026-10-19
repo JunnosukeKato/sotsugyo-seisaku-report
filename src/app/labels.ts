@@ -1,5 +1,6 @@
 import type { Area } from '../checker/reportChecks'
 import type { PageKind } from '../layout/measure'
+import { photoPageName } from '../model/photos'
 
 export const AREA_LABELS: Record<Area, string> = {
   cover: '表紙',
@@ -12,11 +13,15 @@ export const AREA_LABELS: Record<Area, string> = {
 
 export const AREA_ORDER: Area[] = ['cover', 'abstract', 'toc', 'body', 'references', 'photos']
 
-/** ページ一覧に出す名前（本文は何ページ目かを付ける） */
+/** ページ一覧に出す名前（本文は何ページ目かを付ける。作品写真も、何ページかあれば付ける） */
 export function pageLabels(kinds: PageKind[]): string[] {
   let body = 0
+  let photo = 0
+  const photos = kinds.filter((k) => k === 'photos').length
   return kinds.map((kind) => {
     if (kind === 'body') return `本文 ${++body}`
+    // 作品写真が何ページかあるときは「作品写真 1」「作品写真 2」（mockups/v38 案A）
+    if (kind === 'photos') return photoPageName(photo++, photos)
     if (kind === 'toc') return '目次（自動）'
     return kind === 'unknown' ? '' : AREA_LABELS[kind]
   })

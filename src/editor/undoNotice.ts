@@ -1,4 +1,4 @@
-import type { BodyBlock, Report } from '../model/types'
+import type { BodyBlock, Report, WorkPhotoPage } from '../model/types'
 
 /**
  * 削除の「戻す」の知らせと、元に戻した所（mockups/v32 ② 案A）。
@@ -12,7 +12,7 @@ import type { BodyBlock, Report } from '../model/types'
  * 削除したもの（知らせの言葉に使う）。下書き：コースを変えて、本文の下書きをそのコースのひな形に入れ替えた。
  * 選んだ文：紙面をなぞって選んだ範囲を Delete・Backspace で消した／切り取り：選んだ範囲を Ctrl+X で切り取った（editor/rangeOps.ts）
  */
-export type RemovedWhat = '段落' | '小見出し' | '大見出し（章）' | '図' | '表' | '改ページ' | '作品写真' | '下書き' | '選んだ文' | '切り取り'
+export type RemovedWhat = '段落' | '小見出し' | '大見出し（章）' | '図' | '表' | '改ページ' | '作品写真' | '作品写真のページ' | '下書き' | '選んだ文' | '切り取り'
 
 /**
  * 画面の下に出す知らせの中身。
@@ -40,6 +40,8 @@ export function noticeText(notice: NoticeBody): string {
       const note = notice.note ?? ''
       if (notice.what === '下書き') return '下書きを入れ替えました'
       if (notice.what === '切り取り') return `切り取りました${note}`
+      // 作品写真のページ：「消す」（左の道具の「このページを消す」。note は「（写真2枚も）」。mockups/v38 案A）
+      if (notice.what === '作品写真のページ') return `作品写真のページを消しました${note}`
       return notice.what === '作品写真' ? '作品写真を外しました' : `${notice.what}を削除しました${note}`
     }
     case 'started':
@@ -60,10 +62,10 @@ export type ChangedPlace =
   /** 図のまとまり（並んだ図ごと戻した） */
   | { kind: 'group'; id: string }
   | { kind: 'table'; id: string }
-  /** 作品写真の枠（0 から） */
-  | { kind: 'photo'; index: number }
-  /** 光らせる所がない変更（作品写真の並べ方・引用・参考文献・抄録を書き始めたか）：そのページへ移るだけ */
-  | { kind: 'area'; area: 'abstract' | 'references' | 'photos' }
+  /** 作品写真の枠（page：何ページ目の作品写真か、index：その中の枠。0 から） */
+  | { kind: 'photo'; page: number; index: number }
+  /** 光らせる所がない変更（作品写真の並べ方・ページを足した・消した、引用・参考文献、抄録を書き始めたか）：そのページへ移るだけ（page：作品写真の何ページ目か） */
+  | { kind: 'area'; area: 'abstract' | 'references' | 'photos'; page?: number }
 
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
@@ -102,19 +104,28 @@ export function changedPlace(before: Report, after: Report): ChangedPlace | null
   const body = changedInBody(before, after)
   if (body) return body
   if (!same(before.references, after.references)) return { kind: 'area', area: 'references' }
-  // 作品写真：変わった枠（写真・見える位置など、写真ごとに並べて持つ値）。並べ方が変わったときは、ページへ移るだけ
+  // 作品写真：変わった枠（写真・見える位置など、写真ごとに並べて持つ値）。並べ方が変わったときは、そのページへ移るだけ。
+  // ページを足した・消した（ページの数が変わった）ときは、変わったページ（なければ最後のページ）へ移るだけ（mockups/v38 案A）
   if (!same(before.workPhotos, after.workPhotos)) {
-    if (before.workPhotos.layout === after.workPhotos.layout && before.workPhotos.columns === after.workPhotos.columns) {
-      for (let i = 0; i < after.workPhotos.layout; i++) if (!same(photoSlot(before, i), photoSlot(after, i))) return { kind: 'photo', index: i }
+    const was = before.workPhotos
+    const now = after.workPhotos
+    if (was.length !== now.length) {
+      const k = now.findIndex((p, i) => !same(p, was[i]))
+      return { kind: 'area', area: 'photos', page: k < 0 ? now.length - 1 : k }
     }
-    return { kind: 'area', area: 'photos' }
+    const k = now.findIndex((p, i) => !same(p, was[i]))
+    const [a, b] = [was[k], now[k]]
+    if (a.layout === b.layout && a.columns === b.columns) {
+      for (let i = 0; i < b.layout; i++) if (!same(photoSlot(a, i), photoSlot(b, i))) return { kind: 'photo', page: k, index: i }
+    }
+    return { kind: 'area', area: 'photos', page: k }
   }
   return null
 }
 
-/** index 枚目の写真の値（写真ごとに並べて持つ値を、すべて取り出す） */
-function photoSlot(report: Report, index: number): unknown[] {
-  return Object.entries(report.workPhotos)
+/** そのページの index 枚目の写真の値（写真ごとに並べて持つ値を、すべて取り出す） */
+function photoSlot(page: WorkPhotoPage, index: number): unknown[] {
+  return Object.entries(page)
     .filter(([, v]) => Array.isArray(v))
     .map(([k, v]) => [k, (v as unknown[])[index] ?? null])
 }

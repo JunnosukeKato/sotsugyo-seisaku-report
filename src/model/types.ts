@@ -4,7 +4,8 @@
  */
 
 /** 保存データの形式バージョン。公開後に形を変えるときは必ず上げ、古い形式の読み込みを残す */
-export const DATA_FORMAT_VERSION = 1
+// 2：作品写真を何ページかにした（workPhotos はページの並び。mockups/v38 案A）。前の版のツールは、新しい形の原稿を読まずに「新しい版のツールで作られています」と出す
+export const DATA_FORMAT_VERSION = 2
 
 export interface Report {
   formatVersion: number
@@ -14,7 +15,8 @@ export interface Report {
   body: Chapter[]
   /** 引用・参考文献（任意） */
   references: Reference[]
-  workPhotos: WorkPhotos
+  /** 作品写真のページ（1ページ以上。ページごとに並べ方を選ぶ。mockups/v38 案A） */
+  workPhotos: WorkPhotoPage[]
   /**
    * 学生が「このままにする（確認済み）」にした補助の指摘（ReportFinding.key）。エラーに数えない。
    * 手順書のルールではない補助のチェックは誤って指摘することがあるため、学生が確かめて外せる
@@ -151,8 +153,8 @@ export interface WebReference {
   accessedOn: string
 }
 
-/** 作品写真のページに載せる枚数 */
-export type WorkPhotoLayout = 1 | 2 | 4 | 6
+/** 作品写真の1ページに載せる枚数（6枚の並べ方はなくした。前の版の6枚の原稿は、4枚と次のページにする：migrate.ts。mockups/v38） */
+export type WorkPhotoLayout = 1 | 2 | 4
 
 /** 写真を枠に合わせて切り抜く位置（%）。50・50 が中央、0 が左（上）端、100 が右（下）端 */
 export interface PhotoPosition {
@@ -160,9 +162,10 @@ export interface PhotoPosition {
   y: number
 }
 
-export interface WorkPhotos {
+/** 作品写真の1ページ */
+export interface WorkPhotoPage {
   layout: WorkPhotoLayout
-  /** 横に並べる数（2枚：2＝左右・1＝上下、6枚：2＝2列×3段・3＝3列×2段）。省略したら既定の並べ方（photoGrid） */
+  /** 横に並べる数（2枚：2＝左右・1＝上下）。省略したら既定の並べ方（photoGrid） */
   columns?: number
   /**
    * 写真（1枚目から順）。枚数を減らしても消さずに残し、先頭から layout 枚を載せる（枚数を戻すと、また載る）
