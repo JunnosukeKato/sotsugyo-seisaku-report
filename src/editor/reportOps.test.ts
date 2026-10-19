@@ -490,3 +490,73 @@ describe('空の段落と置き換える（小見出し・図・表を、何も�
     expect(ops.inBody(r, 'basic:name')).toBe(false)
   })
 })
+
+describe('段落に打った見出し（paragraphToHeading・headingLabel）', () => {
+  /** c2：小見出し s4、段落 p4・p5。段落 px を p4 と p5 の間に足した原稿 */
+  const withTyped = (text: string, hint?: string): Report => {
+    const r = demoReport()
+    return {
+      ...r,
+      body: r.body.map((c) => (c.id === 'c2' ? { ...c, blocks: [c.blocks[0], c.blocks[1], { type: 'paragraph', id: 'px', content: [{ type: 'text', text }], ...(hint ? { hint } : {}) }, c.blocks[2]] } : c)),
+    }
+  }
+  const ids = (r: Report) => r.body.map((c) => `${c.id}:${c.blocks.map((b) => b.id).join(',')}`)
+
+  it('大見出し：そこから新しい章を始め、同じ章の後ろのブロックは新しい章に入る（番号は自動で付く）', () => {
+    const r = withTyped('Ⅴ．仕上げ')
+    const result = ops.paragraphToHeading(r, 'px', { level: 1, title: '仕上げ' })!
+    const body = result.report.body
+    expect(body.map((c) => c.title)).toEqual(['企画・立案', '制作過程', '仕上げ', 'まとめ'])
+    expect(body[1].blocks.map((b) => b.id)).toEqual(['s4', 'p4'])
+    expect(body[2]).toMatchObject({ id: result.headingId, title: '仕上げ' })
+    expect(body[2].blocks.map((b) => b.id)).toEqual(['p5'])
+    expect(result.nextId).toBeNull()
+    // 打った「Ⅴ」ではなく、3つ目の章の番号
+    expect(ops.headingLabel(result.report, result.headingId)).toBe('Ⅲ．仕上げ')
+    // 元の原稿は変えない
+    expect(ids(r)).toEqual(['c1:s1,p1,s2,p2,r1,s3,p3,t1', 'c2:s4,p4,px,p5', 'c3:p6'])
+  })
+
+  it('大見出しで Enter（rest）：見出しのすぐ後ろに段落を作り、その後ろに章の残りが続く。ひな形の説明は、その段落に移す', () => {
+    const r = withTyped('Ⅲ．仕上げあとの文', 'ここに仕上げを書く')
+    const result = ops.paragraphToHeading(r, 'px', { level: 1, title: '仕上げ' }, 'あとの文')!
+    const added = result.report.body[2]
+    expect(added.blocks.map((b) => b.id)).toEqual([result.nextId, 'p5'])
+    expect(added.blocks[0]).toMatchObject({ type: 'paragraph', content: [{ type: 'text', text: 'あとの文' }], hint: 'ここに仕上げを書く' })
+  })
+
+  it('章の最初の段落を大見出しにすると、前の章は空になり、章の中身はすべて新しい章に入る', () => {
+    const r = demoReport()
+    const result = ops.paragraphToHeading(r, 'p6', { level: 1, title: '振り返り' }, '')!
+    expect(result.report.body.map((c) => c.blocks.length)).toEqual([8, 3, 0, 1])
+    expect(ops.headingLabel(result.report, result.headingId)).toBe('Ⅳ．振り返り')
+  })
+
+  it('小見出し：その位置に入り（番号は章ごとに自動）、rest があればすぐ後ろに段落を作る', () => {
+    const r = withTyped('ⅴ．縫製')
+    const result = ops.paragraphToHeading(r, 'px', { level: 2, title: '縫製' }, '')!
+    expect(ids(result.report)[1]).toBe(`c2:s4,p4,${result.headingId},${result.nextId},p5`)
+    expect(result.report.body[1].blocks[2]).toEqual({ type: 'subheading', id: result.headingId, title: '縫製' })
+    expect(ops.headingLabel(result.report, result.headingId)).toBe('ⅱ．縫製')
+    expect(result.report.body).toHaveLength(3)
+  })
+
+  it('本文の段落でなければ（抄録・見出し・図・表）null', () => {
+    const r = demoReport()
+    for (const id of ['a1', 's1', 'c1', 'f1', 't1', 'nothing']) expect(ops.paragraphToHeading(r, id, { level: 1, title: 'x' }), id).toBeNull()
+  })
+
+  it('headingLabel：大見出しは章の番号、小見出しは章の中の番号。見出しでなければ null', () => {
+    const r = demoReport()
+    expect(ops.headingLabel(r, 'c3')).toBe('Ⅲ．まとめ')
+    expect(ops.headingLabel(r, 's3')).toBe('ⅲ．使用素材')
+    expect(ops.headingLabel(r, 's4')).toBe('ⅰ．ジャケット')
+    expect(ops.headingLabel(r, 'p1')).toBeNull()
+  })
+
+  it('何行かの貼り付け：行ごとの段落の ID を返す（1行目は今の段落）', () => {
+    const { ids: pasted } = ops.replaceWithParagraphs(demoReport(), 'p6', ['Ⅳ．振り返り', '本文。'])
+    expect(pasted).toHaveLength(2)
+    expect(pasted[0]).toBe('p6')
+  })
+})

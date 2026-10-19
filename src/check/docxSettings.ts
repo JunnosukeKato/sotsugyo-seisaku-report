@@ -1,4 +1,5 @@
-import { headingFromText, isPlaceholderOnly, parseCaptionLine } from '../import/wordImport'
+import { isPlaceholderOnly, parseCaptionLine } from '../import/wordImport'
+import { headingFromText } from '../model/headingText'
 import { attr, child, elements, is } from '../import/wordDocument'
 import type { CheckFinding, PartId } from './parts'
 

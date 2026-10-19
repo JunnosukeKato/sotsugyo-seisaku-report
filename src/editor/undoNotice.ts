@@ -19,15 +19,29 @@ export type RemovedWhat = '段落' | '小見出し' | '大見出し（章）' | 
  * - removed：削除した（［戻す］を出す）／restored：戻した
  * - started：抄録を書き始めた（「先生の許可が出た」を押した。［戻す］を出す）／unstarted：戻して、書き始める前に戻った
  * - info：戻すもののない、短い知らせ（表の行・列を消せないわけなど。text）
+ * - heading：段落に「Ⅲ．まとめ」のように打ったので、見出しにした（［戻す］を出す。label：自動で付いた番号と名前「Ⅲ．まとめ」）
+ * - headings：何行かの文を貼り付けて、見出しの形の count 行を見出しにした（［戻す］を出す。note：添える一言）
+ * - unheaded：戻して、見出しにする前（打ったままの段落）に戻った
  */
-export type NoticeBody = { kind: 'removed' | 'restored'; what: RemovedWhat; note?: string } | { kind: 'started' | 'unstarted' } | { kind: 'info'; text: string }
+export type NoticeBody =
+  | { kind: 'removed' | 'restored'; what: RemovedWhat; note?: string }
+  | { kind: 'started' | 'unstarted' }
+  | { kind: 'info'; text: string }
+  | { kind: 'heading'; level: 1 | 2; label: string }
+  | { kind: 'headings'; count: number; note?: string }
+  | { kind: 'unheaded' }
 
 /** 画面の下に出す知らせ。id：知らせごとに変わる番号（出しておく時間を、知らせごとに数え直すため） */
 export type UndoNotice = NoticeBody & { id: number }
 
-/** ［戻す］を出す知らせか（削除した・抄録を書き始めた） */
+/** ［戻す］を出す知らせか（削除した・抄録を書き始めた・段落を見出しにした） */
 export function undoable(notice: NoticeBody): boolean {
-  return notice.kind === 'removed' || notice.kind === 'started'
+  return notice.kind === 'removed' || notice.kind === 'started' || headingNotice(notice)
+}
+
+/** 段落を見出しにした知らせか（書いている間も出す。段落で Enter を押して、次の段落を書いているときなど） */
+export function headingNotice(notice: NoticeBody): boolean {
+  return notice.kind === 'heading' || notice.kind === 'headings'
 }
 
 /** 知らせの言葉。作品写真は「外す」なので「外しました」、下書きは「入れ替えました」 */
@@ -50,6 +64,12 @@ export function noticeText(notice: NoticeBody): string {
       return '抄録を書き始める前に戻しました'
     case 'info':
       return notice.text
+    case 'heading':
+      return `${notice.level === 1 ? '大見出し' : '小見出し'}「${notice.label}」にしました`
+    case 'headings':
+      return `見出しに${notice.count}つしました${notice.note ?? ''}`
+    case 'unheaded':
+      return '見出しにする前に戻しました'
   }
 }
 

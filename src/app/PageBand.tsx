@@ -2,7 +2,7 @@ import { useEffect, useLayoutEffect, useRef, type ReactNode } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { editables } from '../editor/reportOps'
 import { FIELD_IDS, ABSTRACT_LOCK_TEXT } from '../layout/document'
-import { BAND_SIDE_QUERY, paragraphHint, photoBand, photoToolsAtSide, todoBand, type BandTodo } from './bandText'
+import { BAND_SIDE_QUERY, paragraphHint, photoBand, photoToolsAtSide, TOC_BAND, todoBand, type BandTodo } from './bandText'
 import { SelectionTools } from './Palette'
 import { useBandSide } from './uiShared'
 
@@ -12,6 +12,7 @@ import { useBandSide } from './uiShared'
  * 6px ほどになり、指で広げることもできなかった。紙面には小さな印（↓・＋）だけを残す（印の見た目は index.css の「v32 ④」。
  * 抄録の ↓ は、帯が紙面の右に出る横向きでは → にする）。
  * - 抄録を書き始める前：抄録の説明と「先生の許可が出た（抄録を書き始める）」
+ * - 目次のページ：「目次は、本文の見出しから自動で作ります」と、行をタップすると見出しへ移れること（ボタンなし。mockups/v41 案C）
  * - 作品写真のページに空いている枠：「下の枠に、まだ写真がありません」と「写真を選ぶ」
  * - まだ書いていない欄（ひな形の段落・見出し・表紙の項目など）・写真を入れていない図の枠：いちばん上の所の言葉と「書く」「写真を選ぶ」
  * 帯は紙面の外の部品なので、PDF・印刷には出ない。横向きのスマホでは、紙面の右に出す（紙面の下に出すと、紙面がとても小さくなるため）。
@@ -27,11 +28,14 @@ const svg = (children: ReactNode) => (
 const Mark = {
   down: svg(<path d="M12 5v13M6.5 12.5L12 18l5.5-5.5" />),
   plus: svg(<path d="M12 5v14M5 12h14" />),
+  /** 自動（まわる矢印。目次のページ：mockups/v41） */
+  auto: svg(<path d="M19.2 12a7.2 7.2 0 1 1-2.1-5.1M19.4 4.6v3.6h-3.6" />),
 }
 
 /** 帯に出すもの */
 type Band =
   | { kind: 'abstract' }
+  | { kind: 'toc' }
   | { kind: 'photos'; text: string; page: number; index: number }
   | { kind: 'fields'; todo: BandTodo; text: string; sub: string | null; button: string }
 
@@ -42,6 +46,8 @@ const GAP = 10
 function bandOf(editor: ReportEditor, snap: EditorSnapshot): Band | null {
   const kind = snap.layout?.kinds[snap.page]
   if (kind === 'abstract' && snap.report.abstract.started === false) return { kind: 'abstract' }
+  // 目次のページ：本文の見出しから自動で作ること・行をタップすると見出しへ移れること（mockups/v41 案C）
+  if (kind === 'toc') return { kind: 'toc' }
   if (kind === 'photos') {
     // 何ページ目の作品写真か（mockups/v38 案A）
     const page = snap.photoPage ?? 0
@@ -132,6 +138,17 @@ function BandView({ editor, band, inColumn }: { editor: ReportEditor; band: Band
     }
   })
 
+  if (band.kind === 'toc') {
+    return (
+      <section className="page-band toc-band" aria-label="このページの案内" ref={ref}>
+        <div className="t">
+          <span className="mk">{Mark.auto}</span>
+          <span>{TOC_BAND.text}</span>
+        </div>
+        <p>{TOC_BAND.sub}</p>
+      </section>
+    )
+  }
   if (band.kind === 'abstract') {
     return (
       <section className="page-band" aria-label="このページの案内" ref={ref}>

@@ -24,6 +24,11 @@ export class EditHistory<T, N = unknown> {
     return this.future.length > 0
   }
 
+  /** 次に元に戻すと戻る状態（いちばん新しく積んだもの。なければ undefined） */
+  get last(): T | undefined {
+    return this.past.at(-1)
+  }
+
   /** 原稿を新しく変える前の状態を積む（やり直しの分は消える） */
   push(state: T): void {
     this.past.push(state)

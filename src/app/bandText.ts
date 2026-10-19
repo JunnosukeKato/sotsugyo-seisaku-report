@@ -40,6 +40,15 @@ export function photoBand(photos: WorkPhotoPage): { text: string; index: number 
   return { text: `まだ写真がない枠が${empty.length}つあります（＋の枠）`, index: empty[0] }
 }
 
+/**
+ * 目次のページの帯（目次は、本文の見出しから自動で作る。学生は書けないので、壊れている・さわれないと思わないように：mockups/v41 案C）。
+ * ボタンはない（目次の行をタップすると、その見出しへ移る）
+ */
+export const TOC_BAND = {
+  text: '目次は、本文の見出しから自動で作ります',
+  sub: '目次の行をタップすると、その見出しへ移ります',
+} as const
+
 /** 紙面の、まだ書いていない所（帯の「書く」「写真を選ぶ」で、その所を開く） */
 export type BandTodo =
   /** 書く欄（段落・見出し・図表のタイトル・表のセル・表紙の項目）。hint：ひな形の「ここに何を書くか」 */

@@ -198,20 +198,41 @@ ${paragraphs}
 </section>`
 }
 
+/**
+ * 目次の行の行き先（大見出し・小見出しのブロック ID。引用・参考文献の行は REFERENCES_ANCHOR）。
+ * 画面で目次の行を押すと、その見出しへ移って書き始める（mockups/v41 案C。reportEditor の onClick）。
+ * 同じ名前の見出しがあっても取り違えないよう、文字ではなく ID で結ぶ。属性だけなので、紙面の見た目・PDF は変わらない
+ */
+export const TOC_TARGET_ATTR = 'data-toc-target'
+
+/**
+ * 目次のページの言葉（mockups/v41。画面だけ。紙面・PDF には出ない）。
+ * jumped：目次の行から見出しへ移ったときの、画面の下の知らせ（案C）。
+ * note：目次のページの、行のない所を押したときの、押した所の近くの知らせ（案B。app/TocNotice.tsx）
+ */
+export const TOC_TEXT = {
+  jumped: 'この見出しを直すと、目次も変わります',
+  noteTitle: '目次は自動です',
+  noteBody: '見出しを直すと、ここも変わります',
+  noteButton: '本文の見出しへ',
+} as const
+
 function tocHtml(report: Report, pageNumbers: Record<string, number>): string {
   const pno = (key: string) => (pageNumbers[key] ? String(pageNumbers[key]) : '')
+  const target = (id: string) => `${TOC_TARGET_ATTR}="${escapeHtml(id)}"`
   const entries = report.body
     .map((chapter, i) => {
       let sub = 0
       const subs = chapter.blocks
         .filter((b) => b.type === 'subheading')
-        .map((b) => `<div class="toc-sub">${subheadingLabel(sub++)}${escapeHtml(b.title)}</div>`)
+        // 小見出しの行も、見出しの字を span に入れる（大見出しの行と同じ形。画面でマウスを乗せたときの下線と「→ 見出しへ」の置き場所。紙面の見た目は変わらない）
+        .map((b) => `<div class="toc-sub" ${target(b.id)}><span>${subheadingLabel(sub++)}${escapeHtml(b.title)}</span></div>`)
         .join('\n')
-      return `<div class="toc-ch${i > 0 ? ' next' : ''}"><span>${chapterLabel(i)}${escapeHtml(chapter.title)}</span><span class="leader"></span><span class="pno">${pno(chapter.id)}</span></div>\n${subs}`
+      return `<div class="toc-ch${i > 0 ? ' next' : ''}" ${target(chapter.id)}><span>${chapterLabel(i)}${escapeHtml(chapter.title)}</span><span class="leader"></span><span class="pno">${pno(chapter.id)}</span></div>\n${subs}`
     })
     .join('\n')
   const references = report.references.length
-    ? `<div class="toc-ch${report.body.length ? ' next' : ''}"><span>引用・参考文献</span><span class="leader"></span><span class="pno">${pno(REFERENCES_ANCHOR)}</span></div>`
+    ? `<div class="toc-ch${report.body.length ? ' next' : ''}" ${target(REFERENCES_ANCHOR)}><span>引用・参考文献</span><span class="leader"></span><span class="pno">${pno(REFERENCES_ANCHOR)}</span></div>`
     : ''
   return `<section class="toc">
 <div class="toc-title">目次</div>

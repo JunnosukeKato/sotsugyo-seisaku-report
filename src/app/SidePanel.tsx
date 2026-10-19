@@ -41,13 +41,19 @@ interface Props {
   wordTodo?: ReactNode
 }
 
-/** 保存のようす。role="status"：変わったら、読み上げでも（話の切れ目で）知らせる */
-export function SaveChip({ state }: { state: SaveState }) {
+/**
+ * 保存のようす。role="status"：変わったら、読み上げでも（話の切れ目で）知らせる。
+ * compact：スマホの上の帯（「戻す」「やり直す」を置いて狭いので、短い言葉にする。mockups/v39 案A）。
+ * 保存した時刻は時刻だけ（ドライブに保存するときの「☁ 13:05」と同じ形。読み上げでは「自動保存 13:05」）、保存中は「保存中」、保存できないときは「保存エラー」。
+ * くわしい言葉は、メニューの中の保存のようす（compact でないもの）に出る
+ */
+export function SaveChip({ state, compact }: { state: SaveState; compact?: boolean }) {
   const title = '原稿はこのブラウザに自動で保存されます'
-  if (state.status === 'saving') return <span className="chip saved" role="status" title={title}><i className="dot busy" />保存しています…</span>
-  if (state.status === 'error') return <span className="chip saved ng" role="status" title={state.message}><i className="dot ng" />保存できません。バックアップを保存してください</span>
-  const at = state.status === 'saved' ? ` ${state.at.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })}` : ''
-  return <span className="chip saved" role="status" title={title}><i className="dot" />自動保存{at}</span>
+  if (state.status === 'saving') return <span className="chip saved" role="status" title={title}><i className="dot busy" />{compact ? '保存中' : '保存しています…'}</span>
+  if (state.status === 'error') return <span className="chip saved ng" role="status" title={state.message}><i className="dot ng" />{compact ? '保存エラー' : '保存できません。バックアップを保存してください'}</span>
+  const at = state.status === 'saved' ? state.at.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : ''
+  if (compact && at) return <span className="chip saved" role="status" title={`${title}（最後に保存：${at}）`}><i className="dot" /><span className="sr-only">自動保存 </span>{at}</span>
+  return <span className="chip saved" role="status" title={title}><i className="dot" />自動保存{at ? ` ${at}` : ''}</span>
 }
 
 /** 管理ページでドライブ保存を止めているとき（mockups/v22 ②） */
@@ -78,7 +84,8 @@ export function DeadlineChip({ deadline }: { deadline: string }) {
   return <span className="chip deadline" title={title}>締切まで <b>{days}</b> 日</span>
 }
 
-const SHORT_NAMES: Record<PageKind, string> = { cover: '表紙', abstract: '抄録', toc: '目次', body: '本文', references: '参考文献', photos: '作品写真', unknown: '' }
+/** ページの一覧の名前。目次は、本文の見出しから自動で作ることが分かるように「目次（自動）」（mockups/v41） */
+const SHORT_NAMES: Record<PageKind, string> = { cover: '表紙', abstract: '抄録', toc: '目次（自動）', body: '本文', references: '参考文献', photos: '作品写真', unknown: '' }
 
 /** 画面の左端の、ページの一覧の欄（PC。PowerPoint と同じ形） */
 export function PageColumn({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {

@@ -19,7 +19,7 @@ import { WordImportLink } from './WordImport'
 
 /**
  * スマホ版の画面（mockups/v7 案2「下から書く欄が出る」）。
- * 上：細い帯（名前・保存・メニュー）／中：紙面（左右・上下にはらってめくる。上下は拡大していないとき）／下：タブ（ページ一覧・追加・チェック・PDF）
+ * 上：細い帯（名前・保存・戻す・やり直す・メニュー）／中：紙面（左右・上下にはらってめくる。上下は拡大していないとき）／下：タブ（ページ一覧・追加・チェック・PDF）
  * 紙面の段落をタップすると、画面の下から大きな文字の書く欄が出る。
  */
 
@@ -324,7 +324,21 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
           <div className="title">{config.reportName}</div>
           <div className="sub">{pageName(snap)}</div>
         </div>
-        {drive ? <DriveChip drive={drive} compact /> : <SaveChip state={saveState} />}
+        {drive ? <DriveChip drive={drive} compact /> : <SaveChip state={saveState} compact />}
+        {/* ≡ の左に「戻す」「やり直す」（mockups/v39 案A）。段落などをタップしていなくても戻せる（パソコンの左の道具と同じ動き）。
+            書く欄を開いている間は出さない（書く欄の中に同じものがあり、2か所に出さない） */}
+        {!snap.editingId && (
+          <span className="p-undo">
+            <button aria-label="元に戻す" disabled={!snap.canUndo} onClick={() => editor.undo()}>
+              {Icon.undo}
+              <span>戻す</span>
+            </button>
+            <button aria-label="やり直す" disabled={!snap.canRedo} onClick={() => editor.redo()}>
+              {Icon.redo}
+              <span>やり直す</span>
+            </button>
+          </span>
+        )}
         <button className="icon-btn" aria-label="メニュー（手順書・バックアップ・作り直す・使い方など）" onClick={() => setSheet('menu')}>
           {PhoneIcon.menu}
         </button>

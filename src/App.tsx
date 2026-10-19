@@ -17,6 +17,7 @@ import { Icon } from './app/icons'
 import { loadPlace, openLastPlace, useRememberPlace, useRememberZoom } from './app/lastPlace'
 import { Palette } from './app/Palette'
 import { PageBand } from './app/PageBand'
+import { TocNotice } from './app/TocNotice'
 import { PhoneChrome } from './app/Phone'
 import { UndoBar } from './app/UndoBar'
 import { useUndoNotice } from './app/useUndoNotice'
@@ -178,6 +179,9 @@ export default function App() {
   const [config, setConfig] = useState<YearConfig>(currentConfig)
   const [editor, setEditor] = useState<ReportEditor | null>(null)
   const [dialog, setDialog] = useState<Dialog>(null)
+  // 目次のページの、行のない所を押した点（目次は自動であることを、その近くに知らせる：mockups/v41 案B。app/TocNotice.tsx）
+  const [tocPoint, setTocPoint] = useState<{ x: number; y: number } | null>(null)
+  const closeTocNotice = useCallback(() => setTocPoint(null), [])
   const [loadError, setLoadError] = useState<string | null>(null)
   // はじめて使う学生への案内（コース →（今年度だけ）Word で書き始めているか → 学籍番号 → 氏名 → サブタイトル）
   const [guide, setGuide] = useState<GuideStep | null>(null)
@@ -479,6 +483,7 @@ export default function App() {
           },
           onCourseClick: (rect) => setDialog({ kind: 'course', rect }),
           onReferencesClick: () => setDialog({ kind: 'references' }),
+          onTocClick: (point) => setTocPoint(point),
           pickImage: pickImageFile,
           pickImages: pickImageFiles,
         })
@@ -863,6 +868,8 @@ export default function App() {
         <div id="overlay-layer" ref={layerRef} />
         {/* スマホ：紙面の中の小さな案内とボタンを、紙面の下（横向きは右）の帯に出す（mockups/v32 ④ 案A） */}
         {ready && snap.layout && narrow && <PageBand editor={editor} snap={snap} hidden={!!guide} />}
+        {/* 目次のページの、行のない所を押したときの小さな知らせ（PC・スマホ。mockups/v41 案B） */}
+        {ready && snap.layout && <TocNotice editor={editor} snap={snap} point={tocPoint} onClose={closeTocNotice} />}
         {ready && snap.layout && !narrow && (
           <>
             <Palette editor={editor} snap={snap} onReferences={() => setDialog({ kind: 'references' })} />

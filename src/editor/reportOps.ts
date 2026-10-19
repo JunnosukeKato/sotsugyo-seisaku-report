@@ -1,5 +1,6 @@
+import { chapterLabel, subheadingLabel } from '../layout/bodyHtml'
 import { setCellText } from '../model/table'
-import type { BasicInfo, BodyBlock, Chapter, Figure, InlineNode, ParagraphBlock, Report, TableBlock } from '../model/types'
+import type { BasicInfo, BodyBlock, Chapter, Figure, InlineNode, ParagraphBlock, Report, SubheadingBlock, TableBlock } from '../model/types'
 
 /**
  * 報告書データの操作。いずれも元のデータを変えず、新しいデータを返す（元に戻す機能のため）。
@@ -347,19 +348,64 @@ export function mergeBackward(report: Report, id: string, text: string): { repor
   return null
 }
 
-/** 複数行の貼り付け：1行目で今の段落を置き換え、残りを新しい段落として後ろに入れる */
-export function replaceWithParagraphs(report: Report, id: string, texts: string[]): { report: Report; lastId: string } {
+/** 複数行の貼り付け：1行目で今の段落を置き換え、残りを新しい段落として後ろに入れる。ids：行ごとの段落の ID（1行目は今の段落の ID） */
+export function replaceWithParagraphs(report: Report, id: string, texts: string[]): { report: Report; lastId: string; ids: string[] } {
   const ids = texts.map((_, i) => (i === 0 ? id : newId('p')))
   const lastId = ids[ids.length - 1]
   if (report.abstract.paragraphs.some((p) => p.id === id)) {
     const paragraphs = report.abstract.paragraphs.flatMap((p) => (p.id === id ? texts.map((t, i) => paragraph(ids[i], t, undefined, i === 0 ? p.hint : undefined)) : [p]))
-    return { report: { ...report, abstract: { ...report.abstract, paragraphs } }, lastId }
+    return { report: { ...report, abstract: { ...report.abstract, paragraphs } }, lastId, ids }
   }
   const num = numbering(report)
   return {
     report: mapBody(report, (b) => (b.id === id && b.type === 'paragraph' ? texts.map((t, i) => paragraph(ids[i], t, num, i === 0 ? b.hint : undefined)) : b)),
     lastId,
+    ids,
   }
+}
+
+// ---- 段落に打った見出し（「Ⅲ．まとめ」などの形で打った段落を、見出しにする） ----
+
+/**
+ * 本文の段落 id を、見出しにする（段落に「Ⅲ．まとめ」のように、手順書の番号の形で打った。番号は除いた名前 title だけを持つ。番号は自動で付く）。
+ * - 小見出し（level 2）：その位置に入る
+ * - 大見出し（level 1）：そこから新しい章を始める。同じ章の、その段落より後ろのブロックは、新しい章に入る（章を2つに分ける）
+ * rest：見出しのすぐ後ろに続ける段落の文字（Enter で分けたとき。カーソルより後ろの文字。空でも段落を作る）。なければ段落は作らない。
+ * ひな形の説明（hint）は、続ける段落に移す（見出しには残せないため。続ける段落がなければ、なくなる）。
+ * 返す値：headingId（大見出しは章の ID）、nextId（続ける段落の ID。なければ null）。本文の段落でなければ null
+ */
+export function paragraphToHeading(report: Report, id: string, heading: { level: 1 | 2; title: string }, rest?: string): { report: Report; headingId: string; nextId: string | null } | null {
+  const ci = report.body.findIndex((c) => c.blocks.some((b) => b.id === id && b.type === 'paragraph'))
+  if (ci < 0) return null
+  const chapter = report.body[ci]
+  const i = chapter.blocks.findIndex((b) => b.id === id)
+  const old = chapter.blocks[i] as ParagraphBlock
+  const title = heading.title.replace(/[\r\n]/g, '')
+  const nextId = rest === undefined ? null : newId('p')
+  const next: BodyBlock[] = nextId === null ? [] : [paragraph(nextId, rest ?? '', numbering(report), old.hint)]
+  const before = chapter.blocks.slice(0, i)
+  const after = chapter.blocks.slice(i + 1)
+  if (heading.level === 2) {
+    const headingId = newId('s')
+    const blocks: BodyBlock[] = [...before, { type: 'subheading', id: headingId, title }, ...next, ...after]
+    return { report: { ...report, body: report.body.map((c) => (c === chapter ? { ...c, blocks } : c)) }, headingId, nextId }
+  }
+  const added: Chapter = { id: newId('c'), title, blocks: [...next, ...after] }
+  const body = [...report.body]
+  body.splice(ci, 1, { ...chapter, blocks: before }, added)
+  return { report: { ...report, body }, headingId: added.id, nextId }
+}
+
+/** 見出し（大見出しは章の ID、小見出しはその ID）の、番号を付けた名前（「Ⅲ．まとめ」「ⅱ．袖の刺繍」。紙面と同じ番号）。見出しでなければ null */
+export function headingLabel(report: Report, id: string): string | null {
+  const ci = report.body.findIndex((c) => c.id === id)
+  if (ci >= 0) return chapterLabel(ci) + report.body[ci].title
+  for (const c of report.body) {
+    const subs = c.blocks.filter((b): b is SubheadingBlock => b.type === 'subheading')
+    const k = subs.findIndex((b) => b.id === id)
+    if (k >= 0) return subheadingLabel(k) + subs[k].title
+  }
+  return null
 }
 
 // ---- ブロックの追加・削除 ----

@@ -57,6 +57,12 @@ describe('言葉で探す：項目を探す', () => {
     for (const q of ['最初から', '作り直す', '作り直', '新しく']) expect(ids(searchTopics(STUDENT_TOPICS, q).hits)[0], q).toBe('restart')
   })
 
+  it('「ローマ数字」「見出し 番号」「勝手に」では、書き方の項目が先に出て、段落に「Ⅲ．まとめ」と打って見出しにする行を示す', () => {
+    for (const q of ['ローマ数字', '見出し 番号', '勝手に']) expect(ids(searchTopics(STUDENT_TOPICS, q).hits)[0], q).toBe('write')
+    const write = STUDENT_TOPICS.find((t) => t.id === 'write')!
+    expect(write.items?.some((i) => i.t.includes('段落に「Ⅲ．まとめ」のように打って Enter でも、大見出しになります（「ⅰ．」なら小見出し）'))).toBe(true)
+  })
+
   it('「やり直す」「やり直」では、元に戻す・やり直すの項目が先に出る（最初から作り直す項目は、その下に出る）', () => {
     for (const q of ['やり直す', 'やり直']) {
       const found = ids(searchTopics(STUDENT_TOPICS, q).hits)
@@ -149,5 +155,15 @@ describe('使い方の項目', () => {
 
   it('「指差し確認をもう一度見る」の項目がある（学生用）', () => {
     expect(STUDENT_TOPICS.find((t) => t.action?.kind === 'tour')?.title).toBe('指差し確認をもう一度見る')
+  })
+})
+
+describe('目次（mockups/v41：目次は本文の見出しから自動で作る）', () => {
+  it('「目次」「目次 直せない」で、書き方の項目の見出しの手順（目次は自動・行を押すと見出しへ）が出る', () => {
+    for (const q of ['目次', '目次 直せない', 'もくじ']) {
+      const { hits } = searchTopics(STUDENT_TOPICS, q)
+      expect(hits[0]?.topic.id, q).toBe('write')
+    }
+    expect(searchTopics(STUDENT_TOPICS, '目次').hits[0].line.text).toContain('目次は見出しから自動で作ります（行をクリックで、その見出しへ）')
   })
 })

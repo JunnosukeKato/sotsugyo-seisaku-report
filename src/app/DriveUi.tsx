@@ -238,7 +238,8 @@ export function DriveChip({ drive, compact, onClick }: { drive: DriveControls; c
       return (
         <span className={`chip ng${click}`} {...props} title={status.kind === 'error' ? status.message : undefined}>
           <i className="dot ng" />
-          {compact ? 'ドライブ未保存' : status.kind === 'expired' ? (
+          {/* スマホの上の帯は「戻す」「やり直す」を置いて狭いので「未保存」（くわしい言葉は、メニューの中の保存のようすに出る。mockups/v39 案A） */}
+          {compact ? '未保存' : status.kind === 'expired' ? (
             <>
               ドライブに保存できません　<u>ログインし直す</u>
             </>

@@ -238,7 +238,9 @@ await withEdge(async (browser) => {
     )
     await pc.page.click('.modal .close')
     await setInfo(pc.page, { name: '文化　花子' })
-    await until(() => drive.report()?.report.basicInfo.name === '文化　花子')
+    // 名前だけでなく、パソコンの原稿の最後の変更がドライブに届くまで待つ（「文化　花子子」がまだ送られていないと、名前は前と同じで、
+    // 待たずに次へ進み、5秒後にパソコンが送った原稿を、スマホが「別の端末で書いた原稿」として見つけてしまう）
+    await until(async () => drive.report()?.report.updatedAt === (await pc.page.evaluate(() => window.__editor.getSnapshot().report.updatedAt)))
     await savedChip(pc.page)
     await pc.page.setViewport({ width: 1440, height: 900 })
   }

@@ -1,7 +1,8 @@
 import { findCourse, subtitleInputOnly, type YearConfig } from '../config'
 import { checkReportDetailed, type ReportFinding } from '../checker/reportChecks'
-import { FIELD_IDS } from '../layout/document'
+import { FIELD_IDS, REFERENCES_ANCHOR, TOC_TEXT } from '../layout/document'
 import type { LayoutInfo, PageKind } from '../layout/measure'
+import { typedHeading, type HeadingText } from '../model/headingText'
 import { FIGURE_MAX_PX, fitFigureSize, importImage, PHOTO_MAX_PX } from '../model/images'
 import { putImage, type StoredImage } from '../model/storage'
 import { skippedPages } from '../pdf/exportPages'
@@ -20,7 +21,7 @@ import { PLACEHOLDER_ATTR } from './pageView'
 import { copyRange, deleteRange, pasteClip, rangePieces, resolveRange, sameClipText, type Clip, type ModelPoint, type ModelRange } from './rangeOps'
 import { domPoint, paperPoint } from './rangeSelection'
 import { SelectionBar, type Bounds } from './selectionBar'
-import { changedPlace, type ChangedPlace, type NoticeBody, type RemovedWhat, type UndoNotice } from './undoNotice'
+import { changedPlace, headingNotice, type ChangedPlace, type NoticeBody, type RemovedWhat, type UndoNotice } from './undoNotice'
 import { submissionTitle } from '../model/fileName'
 
 /**
@@ -126,6 +127,8 @@ export interface EditorCallbacks {
   onCourseClick(rect: DOMRect): void
   /** 紙面の引用・参考文献をクリックした */
   onReferencesClick(): void
+  /** 目次のページの、行のない所を押した（押した点。目次は自動であることを、その近くに知らせる：mockups/v41 案B。app/TocNotice.tsx） */
+  onTocClick?(point: { x: number; y: number }): void
   /** 写真を選ぶ画面を開いてほしい */
   pickImage(purpose: 'figure' | 'swatch' | 'photo'): Promise<File | null>
   /** 写真を何枚かまとめて選ぶ画面を開いてほしい（作品写真の空いている枠を押したとき。やめたら空） */
@@ -151,6 +154,8 @@ const RENDER_DELAY_MS = 600
 const FIGURE_MAX_MM = 80
 /** 元に戻した所を光らせておく時間（mockups/v32 ② 案A） */
 const UNDO_FLASH_MS = 1500
+/** 目次の行から移った見出しを光らせておく時間（mockups/v41 案C。光り方は index.css の「v41」） */
+const TOC_ARRIVE_MS = 1600
 /** 原稿が変わっても出しておく知らせ（showNotice）を、出しておく時間（画面の知らせの部品 UndoBar は 8秒で閉じる。少し長めに） */
 const STICKY_NOTICE_MS = 10000
 
@@ -159,6 +164,15 @@ interface FrozenPlace {
   page: number
   pageBox: { left: number; top: number; width: number }
   box: { left: number; top: number }
+}
+
+/**
+ * 段落を見出しにしたこと（段落に「Ⅲ．まとめ」のように打った・見出しの形の行を貼り付けた）。元に戻すときに使う。
+ * declined：戻したら、同じ文のままなら、もう見出しにしない段落の ID と、その文。notice：画面の下の知らせ（やり直したときも出す）
+ */
+interface HeadingStep {
+  declined: [string, string][]
+  notice: NoticeBody
 }
 
 /** 後ろの文章をずらしていた要素を元に戻す（shiftFollowing） */
@@ -205,6 +219,20 @@ export class ReportEditor {
   private readonly listeners = new Set<() => void>()
   /** 「元に戻す」「やり直す」の履歴（やり直しの分には、やり直したときに出す知らせも持つ。history.ts） */
   private readonly history = new EditHistory<Report, NoticeBody>()
+  /** 元に戻す履歴を変えた回数（積んだ・元に戻した・やり直した・入れ替えた。段落を見出しにした知らせを、ほかを変えたら出さないため） */
+  private historySeq = 0
+  /** 書く欄で文字を打った回数（段落を見出しにした知らせを、そのあと書き始めたら出さないため） */
+  private inputSeq = 0
+  /** 段落を見出しにする手前の原稿（履歴に積んだ原稿そのもの）→ そのときのこと。元に戻すと、その原稿に戻る */
+  private readonly headingSteps = new WeakMap<Report, HeadingStep>()
+  /** 見出しにした知らせ（やり直したときに出す知らせ）→ そのときのこと（やり直したあと、また元に戻せるように） */
+  private readonly headingStepOfNotice = new WeakMap<NoticeBody, HeadingStep>()
+  /** 見出しにしたのを戻した段落と、その文。同じ文のままなら、Enter・書き終えたときに、もう見出しにしない */
+  private readonly declined = new Map<string, string>()
+  /** 見出しにした知らせを出したときの、履歴と打った回数（どちらかが変わったら、もう出さない） */
+  private headingNoticeAt: { history: number; input: number } | null = null
+  /** 書いている欄を、段落のまま確定している途中（図を入れる・紙面で選ぶ範囲を広げるなど、その段落に続けて何かをするとき） */
+  private keepParagraph = false
   private reportBeforeEdit: Report | null = null
   private findings: ReportFinding[] = []
   private acknowledged: ReportFinding[] = []
@@ -277,6 +305,7 @@ export class ReportEditor {
       onInput: (id, text) => {
         // 書き始めたら、書く欄の近くの「貼り付け」は出さない
         this.chipDismissed = true
+        this.inputSeq += 1
         this.report = ops.setText(this.report, id, text)
         this.afterChange({ render: 'debounce', save: true })
         // カーソルがページの下からはみ出した（書き足して、段落が次のページへ続いた）：打つ手が止まるのを待たずに組み直し、次のページへ移る（followCaret）
@@ -287,6 +316,9 @@ export class ReportEditor {
         // 図・表のタイトル：Enter で、図・表の後ろに新しい段落を作る（mockups/v32 ① 案A）
         const editing = ops.findEditable(this.report, id)?.kind
         if (editing === 'figureCaption' || editing === 'tableCaption') return this.enterAfterCaption(id, before + after)
+        // 本文の段落に「Ⅲ．まとめ」のように打って Enter：カーソルより前を見出しにして、後ろを次の段落にする（「。」は付けない）
+        const heading = editing === 'paragraph' ? this.headingOf(id, before) : null
+        if (heading) return this.enterAsHeading(id, before, after, heading)
         // 見出し：すぐ後ろに何も書いていない段落（「大見出し」を足すと付いてくる段落など）があれば、新しく作らずにそこへ移る
         const blank = editing === 'chapter' || editing === 'subheading' ? ops.blankParagraphAfterHeading(this.report, id) : null
         if (blank) return this.enterBelowHeading(id, before + after, blank)
@@ -323,7 +355,8 @@ export class ReportEditor {
         const next = ops.neighbor(ops.setText(this.report, id, text), id, direction)
         // 段落を分けたばかりで、移る先の段落がまだ紙面にない（仮に表示している）：いまの欄を書き終えて（仮の表示はそのまま残る）、組み直したら移る
         if (next && this.overlay.ghostCount > 0 && this.renderer.pageView.fragments(next.id).length === 0) {
-          this.overlay.commit()
+          // ↑↓で移るときは、見出しの形でも段落のまま（↑↓で移ったときは、ほかの所でも見出しにしない）
+          this.commitAsParagraph()
           this.pendingOpen = { id: next.id, caret: direction === 'prev' ? next.text.length : 0 }
           return
         }
@@ -343,10 +376,33 @@ export class ReportEditor {
         this.pushHistory(this.reportBeforeEdit ?? this.report)
         const result = ops.replaceWithParagraphs(this.report, id, paragraphs)
         this.report = result.report
-        this.reopenAfterRender(result.lastId, caretInLast, { id, place: 'after' })
+        // 本文の段落に貼り付けた行のうち、見出しの形の行（「Ⅰ．企画・立案」など）は見出しにする（Word から読み込むときと同じ）
+        const headed = this.pasteHeadings(result.ids)
+        const last = headed?.headingIds.get(result.lastId)
+        // 最後の行を見出しにしたときは、その見出しの終わりで書き続ける（Enter で、見出しの後ろに段落ができる）
+        const caret = last ? (ops.findEditable(this.report, last)?.text.length ?? 0) : caretInLast
+        this.reopenAfterRender(last ?? result.lastId, caret, { id, place: 'after' })
+        if (headed) this.noticeHeading(headed.step)
       },
       // 貼り付けたものを、そのままの形では入れなかった（1行の欄の2行目から・表）：画面の下に知らせる
-      onPasteNote: (what) => this.showNotice(what === 'table' ? '表は「表を入れる」で作ります（貼り付けた表は文になりました）' : 'この欄は1行なので、1行目だけを貼り付けました'),
+      onPasteNote: (what) => {
+        // 貼り付けた行を見出しにした知らせが出ていれば、その知らせに添える（「戻す」を残す）
+        const shown = this.currentNotice
+        const step = this.shownHeadingStep
+        if (what === 'table' && shown?.kind === 'headings' && step) {
+          step.notice = { kind: 'headings', count: shown.count, note: '。表は文になりました（表は「表を入れる」で作ります）' }
+          this.headingStepOfNotice.set(step.notice, step)
+          return this.noticeHeading(step)
+        }
+        this.showNotice(what === 'table' ? '表は「表を入れる」で作ります（貼り付けた表は文になりました）' : 'この欄は1行なので、1行目だけを貼り付けました')
+      },
+      // 書く欄でまだ何も書いていないときの Ctrl+Z：直前に段落を見出しにしていれば、それを戻す（知らせの「戻す」と同じ）
+      onUndoEmpty: () => {
+        const shown = this.currentNotice
+        if (!shown || !headingNotice(shown)) return false
+        this.undo()
+        return true
+      },
       // 紙面で選んでコピーした・切り取ったまとまり（段落・図表など）を、書いている段落に貼り付ける（rangeOps.ts の pasteClip）
       onPasteClip: {
         matches: (pasted) => !!this.clip && sameClipText(pasted, this.clip.text),
@@ -888,6 +944,53 @@ export class ReportEditor {
     return kinds.indexOf(area as never)
   }
 
+  /**
+   * 目次の行から、その見出しへ移って書き始める（mockups/v41 案C。行き先は目次の行の data-toc-target：見出しの ID）。
+   * 見出しの終わりにカーソルを置き、画面の下に「この見出しを直すと、目次も変わります」と知らせる。
+   * 引用・参考文献の行は、そのページへ移るだけ（引用・参考文献は、そのページを押して開く窓で書く）
+   */
+  async goToHeading(id: string): Promise<void> {
+    if (id === REFERENCES_ANCHOR) {
+      const page = this.pageOfArea('references')
+      if (page >= 0) await this.goToPage(page, 'fade')
+      return
+    }
+    const editable = ops.findEditable(this.report, id)
+    const page = this.pageOfBlock(id)
+    if (!editable || page < 0) return
+    await this.goToPage(page, 'fade')
+    const view = this.renderer.pageView
+    const fragment = view.fragments(id).find((f) => view.pageIndexOf(f) === this.page)
+    if (this.stage.zoomed) fragment?.scrollIntoView({ block: 'center' })
+    requestAnimationFrame(() => {
+      this.openEditor(id, editable.text.length)
+      // 移った見出しを少しの間うすく光らせる（どこへ移ったか分かるように。スマホは下の書く欄が開くので光らせない）
+      if (this.overlay.blockId === id && !this.overlay.inSheet) {
+        const el = this.overlay.element
+        el.classList.remove('toc-arrived')
+        void el.offsetWidth
+        el.classList.add('toc-arrived')
+        window.setTimeout(() => el.classList.remove('toc-arrived'), TOC_ARRIVE_MS)
+      }
+      this.showNotice(TOC_TEXT.jumped)
+    })
+  }
+
+  /**
+   * スマホ：指で押した点に近い目次の行（行の上下 10px まで。紙面の目次の行は細く、少しずれて押すと行のない所になるため）。なければ null
+   */
+  private tocLineNear(x: number, y: number): HTMLElement | null {
+    const page = this.renderer.pageView.pages()[this.page]
+    let best: { el: HTMLElement; d: number } | null = null
+    for (const el of page?.querySelectorAll<HTMLElement>('[data-toc-target]') ?? []) {
+      const r = el.getBoundingClientRect()
+      if (x < r.left - 10 || x > r.right + 10) continue
+      const d = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0
+      if (d <= 10 && (!best || d < best.d)) best = { el, d }
+    }
+    return best?.el ?? null
+  }
+
   /** 指摘の箇所へ移動する（文字の指摘なら入力欄を開く） */
   async goToFinding(finding: ReportFinding): Promise<void> {
     const page = this.pageOfFinding(finding)
@@ -1053,7 +1156,13 @@ export class ReportEditor {
    */
   setSheetHost(host: HTMLElement | null): void {
     this.hideStyle.textContent = ''
-    this.overlay.setSheetHost(host)
+    // 書いていた欄は、段落のまま確定する（画面の並べ方が変わっただけで、見出しにしない）
+    this.keepParagraph = true
+    try {
+      this.overlay.setSheetHost(host)
+    } finally {
+      this.keepParagraph = false
+    }
     // 画面の並べ方が変わると紙面のまわりの余白も変わるため、倍率を求め直す
     this.setZoom(false)
     this.notify()
@@ -1162,18 +1271,22 @@ export class ReportEditor {
     // サブタイトル：自動で付く前後の決まり文句（「―」「の衣装制作―」など）まで入力していたら取る（表紙で二重にならないように）
     const course = id === FIELD_IDS.subtitleInput ? findCourse(this.config, this.report.basicInfo.courseId) : undefined
     const committed = ops.setText(this.report, id, course ? subtitleInputOnly(course, text) : text)
+    // 本文の段落に「Ⅲ．まとめ」のように打って閉じた（ほかを押した・Esc・スマホの「完了」）：段落ごと見出しにする（headingOnClose）
+    const heading = this.headingOnClose(id, text, committed)
+    // 仮に表示する欄（見出しにしたときは、見出し。組み直して見出しが出るまで、打ったままの文を見せる）
+    const shownId = heading?.headingId ?? id
     // 書いていた欄の文字が、表に出ている紙面と違えば、組み直した紙面が出るまで、閉じる前の見た目のまま仮に表示する（freezeEdited）。
     // 後ろの文章をずらしていれば、それもそのままにする
     // （段落を分けたばかりで、まだ紙面にない段落も。分けた前の段落の仮の表示も一緒に写してある）
-    const shownText = this.shownReport ? ops.findEditable(this.shownReport, id)?.text : undefined
-    const nextText = ops.findEditable(committed, id)?.text
-    const unrendered = this.renderer.pageView.fragments(id).length === 0
+    const shownText = this.shownReport ? ops.findEditable(this.shownReport, shownId)?.text : undefined
+    const nextText = ops.findEditable(heading?.report ?? committed, shownId)?.text
+    const unrendered = this.renderer.pageView.fragments(shownId).length === 0
     // 隠したままにする欄：PC は書いていたときのまま。スマホは、書いていた欄（枠で示していた）と、分けた前の段落（仮に表示していた）を隠す
     const pending = this.continuing?.id === id ? (this.continuing.ghosts ?? []) : []
     const hidden = this.overlay.inSheet ? [id, ...pending].map((x) => this.hiddenStyle(x)).join('\n') : (this.hideStyle.textContent ?? '')
     // 後ろの文章をずらす基準の段落（分けた前の段落を仮に表示していれば、紙面にある元の段落）
     const anchor = (this.continuing?.id === id && this.continuing.anchor) || id
-    if (frozen && nextText !== undefined && (unrendered || nextText !== shownText || pending.length > 0)) this.freezeEdited(id, frozen, hidden, nextText, anchor)
+    if (frozen && nextText !== undefined && (unrendered || nextText !== shownText || pending.length > 0)) this.freezeEdited(shownId, frozen, hidden, nextText, anchor)
     else {
       frozen?.remove()
       this.clearShift()
@@ -1181,6 +1294,11 @@ export class ReportEditor {
     if (this.continuing?.id === id) this.continuing = null
     this.report = committed
     if (this.reportBeforeEdit && JSON.stringify(this.reportBeforeEdit) !== JSON.stringify(this.report)) this.pushHistory(this.reportBeforeEdit)
+    // 見出しにした：元に戻すと、まず打ったままの段落に戻る（もう一度戻すと、書く前に戻る）
+    if (heading) {
+      this.pushHistory(committed)
+      this.report = heading.report
+    }
     this.reportBeforeEdit = null
     this.hideStyle.textContent = ''
     // 閉じた段落が空のままなら、すぐ「空の段落がある」と言う（組み直すのを待たない）
@@ -1188,10 +1306,11 @@ export class ReportEditor {
     if (byKey && !this.overlay.inSheet) {
       // Esc・Enter で書き終えた（PC）：書いていた紙面の欄にフォーカスを戻す（ページ全体に戻ると、どこにいたか分からなくなる）。
       // 欄がまだ紙面にない（分けたばかりの段落など）ときは、組み直してから戻す
-      if (!this.focusPaper(blockPaperKey(id), true)) this.refocusKey = blockPaperKey(id)
-      else this.ringFrozen(id)
+      if (!this.focusPaper(blockPaperKey(shownId), true)) this.refocusKey = blockPaperKey(shownId)
+      else this.ringFrozen(shownId)
     }
     this.afterChange({ render: 'now', save: true })
+    if (heading) this.noticeHeading(heading.step)
   }
 
   /** 後ろの文章をずらしている要素（組み直す・書き終えると元に戻す） */
@@ -1454,9 +1573,10 @@ export class ReportEditor {
    * 段落を分けた・つなげた・↑↓で移ったとき：紙面を組み直すのを待たずに、入力欄を開いたまま書く先を移す。
    * 組み直しは長い原稿だと数秒かかり、待つ間に打った文字が消えていたため。組み直したら正しい位置へ動かす（render の終わり）。
    * ghostOf：分けた前の段落（組み直すまで、入力欄の上に仮に表示する）。alsoHide：つなげて無くなった段落（組み直すまで隠す）。
-   * inPlace：移る先の段落は、もう紙面にある（見出しの後ろの空の段落。後ろの文章は、その段落を基準にずらす）
+   * inPlace：移る先の段落は、もう紙面にある（見出しの後ろの空の段落。後ろの文章は、その段落を基準にずらす）。
+   * ghostText：仮に表示する前の段落の文字（なければ、原稿の ghostOf の文字。段落を見出しにしたときは、打ったままの文を見せる）
    */
-  private continueWriting(id: string, caret: number, how: { ghostOf?: string; alsoHide?: string; inPlace?: boolean } = {}): void {
+  private continueWriting(id: string, caret: number, how: { ghostOf?: string; ghostText?: string; alsoHide?: string; inPlace?: boolean } = {}): void {
     const editable = ops.findEditable(this.report, id)
     if (!editable || !this.overlay.blockId) return this.reopenAfterRender(id, caret)
     const kind = this.overlayKind(editable.kind)
@@ -1465,7 +1585,7 @@ export class ReportEditor {
     // まだ紙面にない段落（分けた後ろ）は、同じ種類の段落の書体を写す
     const kinds = fragment ? null : new Map(ops.editables(this.report).map((e) => [e.id, e.kind]))
     const styleSource = fragment ?? [...document.querySelectorAll<HTMLElement>('.page-viewport.front [data-block-id]')].find((el) => kinds?.get(el.dataset.blockId!) === editable.kind)
-    const ghost = how.ghostOf ? (ops.findEditable(this.report, how.ghostOf)?.text ?? '') : undefined
+    const ghost = how.ghostOf ? (how.ghostText ?? ops.findEditable(this.report, how.ghostOf)?.text ?? '') : undefined
     // まだ組み直していない前の段落の仮の表示（続けて Enter を押したときは、それまでの仮の表示も残す。組み直した紙面が出たら外す：settleContinued）
     const before = this.continuing && this.overlay.ghostCount > 0 ? this.continuing : null
     let ghosts = before?.ghosts ?? []
@@ -1629,6 +1749,121 @@ export class ReportEditor {
     this.continueWriting(blankId, 0, { ghostOf: id, inPlace: true })
   }
 
+  // ---- 段落に打った見出し（「Ⅲ．まとめ」のように、手順書の番号の形で打った段落を、見出しにする。形を見分けるのは model/headingText.ts） ----
+
+  /**
+   * 段落 id に打った1行 line が、見出しにする形か（見出しにするなら、大見出しか小見出しかと、番号を除いた名前）。
+   * 本文の段落だけ（抄録・図表のタイトル・表のセル・表紙・見出しはしない）。図表の参照（「（図1）」）のある行はしない。
+   * 見出しにしたのを「戻す」で戻した段落は、同じ文のままなら、もうしない
+   */
+  private headingOf(id: string, line: string): HeadingText | null {
+    const heading = typedHeading(line)
+    if (!heading || this.declined.get(id) === line.trim()) return null
+    if (ops.findEditable(this.report, id)?.kind !== 'paragraph' || ops.refRanges(line, ops.numbering(this.report)).length > 0) return null
+    return heading
+  }
+
+  /**
+   * 段落を見出しにしたことを覚える。typed：見出しにする手前の、打ったままの原稿（履歴に積んだもの。元に戻すと、これに戻る）。
+   * declined：戻したら、もう見出しにしない段落と、その文
+   */
+  private headingStep(typed: Report, declined: [string, string][], notice: NoticeBody): HeadingStep {
+    const step = { declined, notice }
+    this.headingSteps.set(typed, step)
+    this.headingStepOfNotice.set(notice, step)
+    return step
+  }
+
+  /** いま出している、見出しにした知らせのこと（貼り付けた表の知らせを添えるとき） */
+  private shownHeadingStep: HeadingStep | null = null
+
+  /** 見出しにしたことを、画面の下に「大見出し「Ⅲ．まとめ」にしました［戻す］」と出す（書いている間も出す。書き始めたら・ほかを変えたら消える） */
+  private noticeHeading(step: HeadingStep): void {
+    this.notice = { notice: { ...step.notice, id: ++this.noticeCount }, report: this.report }
+    this.headingNoticeAt = { history: this.historySeq, input: this.inputSeq }
+    this.shownHeadingStep = step
+    this.notify()
+  }
+
+  /** 見出しにした知らせの中身（自動で付いた番号と名前） */
+  private headingNoticeBody(report: Report, headingId: string, heading: HeadingText): NoticeBody {
+    return { kind: 'heading', level: heading.level, label: ops.headingLabel(report, headingId) ?? heading.title }
+  }
+
+  /**
+   * 段落に「Ⅲ．まとめ」のように打って Enter：カーソルより前（before）を見出しにし、後ろ（after）を見出しのすぐ後ろの段落にして、続けて書く。
+   * 大見出しなら、同じ章のその後ろのブロックも新しい章に入る。「。」は付けない（autoPeriod にしない）。
+   * 元に戻す（知らせの「戻す」・Ctrl+Z・道具の「元に戻す」）と、まず打ったままの段落（Enter を押す前）に戻る（もう一度戻すと、書く前に戻る）
+   */
+  private enterAsHeading(id: string, before: string, after: string, heading: HeadingText): void {
+    const typed = ops.setText(this.report, id, before + after)
+    const result = ops.paragraphToHeading(typed, id, heading, after)
+    if (!result?.nextId) return
+    const start = this.reportBeforeEdit ?? this.report
+    if (ops.findEditable(start, id)?.text !== ops.findEditable(typed, id)?.text) this.pushHistory(start)
+    this.pushHistory(typed)
+    this.report = result.report
+    this.autoPeriod = null
+    const step = this.headingStep(typed, [[id, before.trim()]], this.headingNoticeBody(result.report, result.headingId, heading))
+    // 組み直すまでは、打ったままの文を仮に表示しておく（組み直すと、見出しになる）
+    this.continueWriting(result.nextId, 0, { ghostOf: id, ghostText: before })
+    this.noticeHeading(step)
+  }
+
+  /**
+   * 書き終えた段落を、見出しにするか（段落に「Ⅲ．まとめ」のように打って閉じた：ほかを押した・Esc・スマホの「完了」）。
+   * この欄で書き換えたときだけ（開いて閉じただけならしない）。元に戻す・図を入れるなど、続けて原稿を変えるために閉じたときもしない。
+   * typed：書く欄の文字（まず形だけを見る）。見出しにするなら、見出しにした原稿・見出しの ID・そのこと（step。知らせを出す前）
+   */
+  private headingOnClose(id: string, typed: string, committed: Report): { report: Report; headingId: string; step: HeadingStep } | null {
+    if (this.holdingRender || this.keepParagraph || !this.reportBeforeEdit || !typedHeading(typed)) return null
+    const text = ops.findEditable(committed, id)?.text
+    if (text === undefined || text === ops.findEditable(this.reportBeforeEdit, id)?.text) return null
+    const heading = this.headingOf(id, text)
+    const result = heading ? ops.paragraphToHeading(committed, id, heading) : null
+    if (!heading || !result) return null
+    const step = this.headingStep(committed, [[id, text.trim()]], this.headingNoticeBody(result.report, result.headingId, heading))
+    return { report: result.report, headingId: result.headingId, step }
+  }
+
+  /**
+   * 何行かの文を貼り付けて、段落に分けたあと（this.report。履歴には、貼り付ける前を積み済み）：見出しの形の行を見出しにする。
+   * 本文の段落だけ（抄録に貼り付けたときはしない）。見出しにした行がなければ null（原稿はそのまま）。
+   * 元に戻すと、まず見出しにする前（行ごとの段落）に戻る。headingIds：見出しにした段落の ID → 見出しの ID
+   */
+  private pasteHeadings(ids: string[]): { headingIds: Map<string, string>; step: HeadingStep } | null {
+    const plain = this.report
+    const texts = new Map(ops.editables(plain).map((e) => [e.id, e]))
+    const num = ops.numbering(plain)
+    let report = plain
+    const headingIds = new Map<string, string>()
+    const declined: [string, string][] = []
+    for (const id of ids) {
+      const line = texts.get(id)
+      if (line?.kind !== 'paragraph' || this.declined.get(id) === line.text.trim() || ops.refRanges(line.text, num).length > 0) continue
+      const heading = typedHeading(line.text)
+      const result = heading ? ops.paragraphToHeading(report, id, heading) : null
+      if (!result) continue
+      report = result.report
+      headingIds.set(id, result.headingId)
+      declined.push([id, line.text.trim()])
+    }
+    if (headingIds.size === 0) return null
+    this.pushHistory(plain)
+    this.report = report
+    return { headingIds, step: this.headingStep(plain, declined, { kind: 'headings', count: headingIds.size }) }
+  }
+
+  /** 書いている欄を、見出しにせず段落のまま確定する（図を入れる・紙面で選ぶ範囲を広げるなど、その段落に続けて何かをするとき） */
+  private commitAsParagraph(): void {
+    this.keepParagraph = true
+    try {
+      this.overlay.commit()
+    } finally {
+      this.keepParagraph = false
+    }
+  }
+
   /** 「＋ ここに続きを書く」：図・表・見出し（objectId は図・表・小見出しの ID か、大見出しの章の ID）のすぐ後ろに新しい段落を作り、書き始める */
   continueAfter(objectId: string): void {
     if (this.settlingRemoval || !ops.paragraphBelow(this.report, objectId)) return
@@ -1767,6 +2002,14 @@ export class ReportEditor {
     if (keyHit === undefined && this.outsidePaper(x, y)) return this.select(null)
     // 抄録の「先生の許可が出た」
     if (target.closest('[data-abstract-start]')) return this.startAbstract()
+    // 目次のページ（本文の見出しから自動で作る。書けない）：行を押すと、その見出しへ移って書き始める（mockups/v41 案C）。
+    // 行のない所を押すと、目次は自動であることを、押した所の近くに知らせる（案B）。前は、押しても何も起きなかった
+    if (this.layout?.kinds[this.page] === 'toc') {
+      const line = target.closest<HTMLElement>('[data-toc-target]') ?? (touch ? this.tocLineNear(x, y) : null)
+      if (line) return void this.goToHeading(line.dataset.tocTarget!)
+      this.select(null)
+      return this.callbacks.onTocClick?.({ x, y })
+    }
     // 改ページの印：選ぶ（道具の「削除」で消せる）
     const pageBreak = target.closest<HTMLElement>('.page-break[data-block-id]')
     if (pageBreak) return this.select({ kind: 'pageBreak', id: pageBreak.dataset.blockId! })
@@ -2032,6 +2275,7 @@ export class ReportEditor {
   /** 原稿を変える前の状態を、元に戻せるように覚える（新しく変えたので、やり直しの分は消える） */
   private pushHistory(report: Report): void {
     this.history.push(report)
+    this.historySeq += 1
   }
 
   private afterChange({ render, save }: { render: 'now' | 'debounce'; save: boolean }): void {
@@ -2093,15 +2337,20 @@ export class ReportEditor {
     // 「抄録を書き始めました」が出ている間に戻した：「抄録を書き始める前に戻しました」
     const shown = this.currentNotice
     this.commitForChange()
-    // やり直したときは、いま出ている知らせ（「段落を削除しました［戻す］」など）を、もう一度出す
-    const again: NoticeBody | null = shown?.kind === 'removed' ? { kind: 'removed', what: shown.what, note: shown.note } : shown?.kind === 'started' ? { kind: 'started' } : null
+    // 段落を見出しにしたのを戻す（知らせの「戻す」でも、Ctrl+Z・道具の「元に戻す」でも）：打ったままの段落に戻る
+    const heading = this.history.last ? this.headingSteps.get(this.history.last) : undefined
+    // やり直したときは、いま出ている知らせ（「段落を削除しました［戻す］」など）を、もう一度出す（見出しにしたのは、いつも）
+    const again: NoticeBody | null = heading ? heading.notice : shown?.kind === 'removed' ? { kind: 'removed', what: shown.what, note: shown.note } : shown?.kind === 'started' ? { kind: 'started' } : null
     const previous = this.history.undo(this.report, again)
     if (!previous) return
+    this.historySeq += 1
+    // 戻した段落は、同じ文のままなら、もう見出しにしない（Enter をもう一度押しても、ふつうに段落を分ける）
+    if (heading) for (const [id, line] of heading.declined) this.declined.set(id, line)
     // 戻した所は、組み直した紙面で見せる（ほかのページでも、そこへ移って少しの間光らせる）
     this.undone = changedPlace(this.report, previous)
     this.report = previous
     this.afterChange({ render: 'now', save: true })
-    const restored: NoticeBody | null = shown?.kind === 'removed' ? { kind: 'restored', what: shown.what } : shown?.kind === 'started' ? { kind: 'unstarted' } : null
+    const restored: NoticeBody | null = heading ? { kind: 'unheaded' } : shown?.kind === 'removed' ? { kind: 'restored', what: shown.what } : shown?.kind === 'started' ? { kind: 'unstarted' } : null
     this.notice = restored ? { notice: { ...restored, id: ++this.noticeCount }, report: this.report } : null
     // 削除して、まだ組み直していない間に戻したもの：すぐまた見せる
     this.hideRemoved()
@@ -2118,6 +2367,13 @@ export class ReportEditor {
     const before = bodyIds(this.report)
     const next = this.history.redo(this.report)
     if (!next) return
+    this.historySeq += 1
+    // 見出しにしたのをやり直した：また元に戻せるように、積んだ原稿（打ったままの段落）に、そのことを付け直す
+    const heading = next.note ? this.headingStepOfNotice.get(next.note) : undefined
+    if (heading && this.history.last) {
+      this.headingSteps.set(this.history.last, heading)
+      for (const [id] of heading.declined) this.declined.delete(id)
+    }
     this.undone = changedPlace(this.report, next.state)
     this.report = next.state
     this.afterChange({ render: 'now', save: true })
@@ -2125,6 +2381,10 @@ export class ReportEditor {
     for (const id of before) if (!after.has(id)) this.removed.add(id)
     this.hideRemoved()
     this.notice = next.note ? { notice: { ...next.note, id: ++this.noticeCount }, report: this.report } : null
+    if (heading) {
+      this.headingNoticeAt = { history: this.historySeq, input: this.inputSeq }
+      this.shownHeadingStep = heading
+    }
     this.notify()
   }
 
@@ -2133,6 +2393,8 @@ export class ReportEditor {
     this.commitForChange()
     // 履歴は原稿ごと（入れ替えた原稿では、元に戻す・やり直すの両方とも、はじめから）
     this.history.clear()
+    this.historySeq += 1
+    this.declined.clear()
     this.report = report
     this.selection = null
     this.currentId = null
@@ -2182,6 +2444,12 @@ export class ReportEditor {
   /** いま出す知らせ：削除した・戻した直後の原稿のまま（ほかを変えていない）で、書き始めていないとき */
   private get currentNotice(): UndoNotice | null {
     if (!this.notice) return null
+    // 段落を見出しにした知らせ：そのあと、ほかを変えず（元に戻す・やり直すもせず）、書き始めてもいない間だけ出す。
+    // 書いている間も出す（Enter で見出しにすると、すぐ後ろの段落を書いているため）
+    if (headingNotice(this.notice.notice)) {
+      const at = this.headingNoticeAt
+      return at && at.history === this.historySeq && at.input === this.inputSeq ? this.notice.notice : null
+    }
     const fresh = this.notice.until !== undefined ? Date.now() < this.notice.until : this.notice.report === this.report
     // 戻すもののない知らせ（表の行・列を消せないわけ）は、書いている間も出す（セルを書いている間に押すため）
     return fresh && (!this.overlay.blockId || this.notice.notice.kind === 'info') ? this.notice.notice : null
@@ -2458,8 +2726,8 @@ export class ReportEditor {
   private async insertFigureAtCaret(paragraphId: string): Promise<void> {
     const caret = this.overlay.caret
     this.marker.hidden = true
-    // 書いた文字を確定してから写真を選ぶ（写真を選ぶ画面を開くと入力欄は閉じる）
-    this.overlay.commit()
+    // 書いた文字を確定してから写真を選ぶ（写真を選ぶ画面を開くと入力欄は閉じる。段落のまま確定する：見出しの形でも見出しにしない）
+    this.commitAsParagraph()
     const imageId = await this.importImage('figure')
     if (!imageId) {
       this.reopenAfterRender(paragraphId, caret)
@@ -2918,7 +3186,7 @@ export class ReportEditor {
     const a = domPoint(this.viewport, id, anchor)
     const b = domPoint(this.viewport, id, direction === 'next' ? text.length : 0)
     if (shown !== text || this.overlay.inSheet || !a || !b) return false
-    this.overlay.commit()
+    this.commitAsParagraph()
     const sel = getSelection()
     if (!sel) return true
     sel.setBaseAndExtent(a.node, a.offset, b.node, b.offset)
@@ -2940,7 +3208,7 @@ export class ReportEditor {
     const focus = document.caretPositionFromPoint?.(e.clientX, e.clientY)
     if (!anchor || !focus || !this.viewport.contains(focus.offsetNode)) return
     e.preventDefault()
-    this.overlay.commit()
+    this.commitAsParagraph()
     getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, focus.offsetNode, focus.offset)
   }
 

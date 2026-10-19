@@ -4,7 +4,14 @@ import { PHOTO_ARRANGEMENTS, photoGrid, photoPageName } from '../model/photos'
 import { SELECTION_TEXTS } from '../editor/selectionBar'
 import { Icon } from './icons'
 import { TableSizeMenu } from './TableSize'
-import { keepFocus, PAGE_CONTEXT } from './uiShared'
+import { keepFocus, PAGE_CONTEXT, TOC_PALETTE_NOTE } from './uiShared'
+
+/** マウスの指の絵（目次の行を押せること。mockups/v41 案C） */
+const TOC_HAND = (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.4} strokeLinejoin="round" aria-hidden="true">
+    <path d="M9.2 3.2a1.5 1.5 0 0 1 3 0v6.9h.4V8.6a1.5 1.5 0 0 1 3 0v1.9h.3V9.6a1.5 1.5 0 0 1 3 0v6.2a5.6 5.6 0 0 1-5.6 5.6h-1.6a5.6 5.6 0 0 1-4.6-2.4l-3.3-4.7a1.5 1.5 0 0 1 2.3-1.9l1.7 1.9h.4z" />
+  </svg>
+)
 
 /**
  * 紙面の左わきに置く道具。表示しているページの種類と、書いている物・選んでいる物に合わせて入れ替わる。
@@ -434,6 +441,13 @@ export function Palette({ editor, snap, onReferences }: Props) {
         <b className={kind === 'photos' ? 'photo-name' : undefined}>{kind === 'photos' && snap.photoPage !== null ? photoPageName(snap.photoPage, snap.report.workPhotos.length) : context.name}</b>
         <span>{context.hint}</span>
       </div>
+      {/* 目次のページ：行を押すと、その見出しへ移れること（mockups/v41 案C） */}
+      {kind === 'toc' && (
+        <div className="group toc-note">
+          {TOC_HAND}
+          <span>{TOC_PALETTE_NOTE}</span>
+        </div>
+      )}
       {kind === 'body' && !onObject && (
         <>
           <div className="group">

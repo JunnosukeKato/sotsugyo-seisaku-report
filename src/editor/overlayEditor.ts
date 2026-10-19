@@ -58,6 +58,11 @@ export interface OverlayCallbacks {
   onTab?(blockId: string, text: string, backward: boolean): void
   /** 紙面に重ねた入力欄の大きさが変わった（行が増えた・減った。日本語の変換中も呼ぶ） */
   onResize?(): void
+  /**
+   * 書く欄の中で、戻すもののない（開いてからまだ何も書いていない）ときに Ctrl+Z を押した。
+   * 呼び出し側が、直前の原稿の変更を戻したら true（段落に「Ⅲ．まとめ」と打って Enter で見出しにした直後など）
+   */
+  onUndoEmpty?(): boolean
 }
 
 /** 紙面上の位置と大きさ（画面座標）。紙面は縮小・拡大して表示しているため、倍率も渡す */
@@ -919,10 +924,13 @@ export class OverlayEditor {
     if (this.undoStack.length > 200) this.undoStack.shift()
   }
 
-  /** 書く欄の中の「元に戻す」（戻すものがなければ何もしない） */
+  /** 書く欄の中の「元に戻す」（戻すものがなければ、呼び出し側に任せる：onUndoEmpty） */
   private undoStep(): void {
     const previous = this.undoStack.pop()
-    if (!previous) return
+    if (!previous) {
+      this.callbacks.onUndoEmpty?.()
+      return
+    }
     this.redoStack.push({ text: this.model, ...this.selectionOffsets() })
     this.restore(previous)
   }
@@ -1082,6 +1090,11 @@ export class OverlayEditor {
     const text = this.text
     const collapsed = getSelection()?.isCollapsed ?? true
     // 紙面と同じ組み方で書いているとき：書く欄の中の Ctrl+Z（⌘+Z）・Ctrl+Y・Ctrl+Shift+Z（⌘+Shift+Z）は、ここで書いた文字を戻す・やり直す
+    // 紙面と同じ組み方で書いていないとき（見出しなど1行の欄・スマホ）：開いてから何も書いていなければ、Ctrl+Z は呼び出し側に任せる（onUndoEmpty）
+    if (!this.typeset && (e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'z' && text === this.target.text && this.callbacks.onUndoEmpty?.()) {
+      e.preventDefault()
+      return
+    }
     if (this.typeset && (e.ctrlKey || e.metaKey) && !e.altKey) {
       const key = e.key.toLowerCase()
       if (key === 'z' && !e.shiftKey) {

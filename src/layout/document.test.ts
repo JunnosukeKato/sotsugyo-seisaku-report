@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { currentConfig } from '../config'
 import { createReport } from '../model/newReport'
-import { ABSTRACT_SUBTITLE, abstractHtml, abstractRowFontPt, buildReportDocument, buildReportParts, COVER_SUBTITLE, coverHtml, fitLineFontPt, formatReference, partList, refitLineFontPt, subtitleLine, textUnits, yearDigits } from './document'
+import { ABSTRACT_SUBTITLE, abstractHtml, abstractRowFontPt, buildReportDocument, buildReportParts, COVER_SUBTITLE, coverHtml, fitLineFontPt, formatReference, partList, refitLineFontPt, subtitleLine, textUnits, TOC_TARGET_ATTR, TOC_TEXT, yearDigits } from './document'
 import { documentCss } from './documentCss'
 
 describe('抄録の見出し（学籍番号・氏名と指導教員を1行に）', () => {
@@ -205,5 +205,34 @@ describe('作品写真の何ページか（mockups/v38 案A）', () => {
   it('組版の CSS に、6枚の並べ方（2×3・3×2）はない', () => {
     expect(documentCss).not.toContain('grid-2x3')
     expect(documentCss).not.toContain('grid-3x2')
+  })
+})
+
+describe('目次の行の行き先（mockups/v41 案C：目次の行を押すと、その見出しへ移る）', () => {
+  const options = { imageSrc: (id: string) => `img/${id}`, figureSize: () => ({ widthMm: 60, heightMm: 45 }) }
+  const report = {
+    ...createReport(currentConfig),
+    body: [
+      { id: 'c1', title: '制作過程', blocks: [{ type: 'subheading' as const, id: 's1', title: '仮縫い' }] },
+      { id: 'c2', title: '制作過程', blocks: [{ type: 'subheading' as const, id: 's2', title: '仮縫い' }] },
+    ],
+    references: [{ type: 'book' as const, id: 'r1', author: '文化花子', title: '衣装', publisher: '文化出版局', year: '2020', pages: '1-2' }],
+  }
+  const toc = buildReportParts(report, currentConfig, options).toc
+
+  it('大見出し・小見出しの行は、見出しの ID で結ぶ（同じ名前の見出しでも、別の行き先）', () => {
+    expect(toc).toContain(`<div class="toc-ch" ${TOC_TARGET_ATTR}="c1"><span>Ⅰ．制作過程</span>`)
+    expect(toc).toContain(`<div class="toc-ch next" ${TOC_TARGET_ATTR}="c2"><span>Ⅱ．制作過程</span>`)
+    expect(toc).toContain(`<div class="toc-sub" ${TOC_TARGET_ATTR}="s1"><span>ⅰ．仮縫い</span></div>`)
+    expect(toc).toContain(`<div class="toc-sub" ${TOC_TARGET_ATTR}="s2"><span>ⅰ．仮縫い</span></div>`)
+  })
+
+  it('引用・参考文献の行は references（そのページへ移る）', () => {
+    expect(toc).toContain(`<div class="toc-ch next" ${TOC_TARGET_ATTR}="references"><span>引用・参考文献</span>`)
+  })
+
+  it('画面だけの言葉は、紙面（目次の文書）には入らない', () => {
+    for (const text of Object.values(TOC_TEXT)) expect(toc).not.toContain(text)
+    expect(toc).not.toContain('見出しへ')
   })
 })

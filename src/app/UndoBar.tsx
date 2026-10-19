@@ -1,7 +1,23 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReportEditor } from '../editor/reportEditor'
-import { noticeText, undoable, type UndoNotice } from '../editor/undoNotice'
+import { headingNotice, noticeText, undoable, type UndoNotice } from '../editor/undoNotice'
 import { Icon } from './icons'
+import { keepFocus } from './uiShared'
+
+/** 見出しにした知らせの、終わりの何文字かを1行にまとめる（「た」だけが次の行に出ないように。index.css の「段落に打った見出し」） */
+const KEEP_TAIL = 5
+
+/** 知らせの言葉。見出しにした知らせは、終わりの何文字かを折り返さないまとまりにする */
+function NoticeWords({ notice }: { notice: UndoNotice }) {
+  const text = noticeText(notice)
+  if (!headingNotice(notice) || text.length <= KEEP_TAIL * 2) return <span>{text}</span>
+  return (
+    <span>
+      {text.slice(0, -KEEP_TAIL)}
+      <span className="undo-keep">{text.slice(-KEEP_TAIL)}</span>
+    </span>
+  )
+}
 
 /** 削除の知らせを出しておく時間（15秒か、次の操作をするまで）。「抄録を書き始めました［戻す］」も同じ */
 const REMOVED_MS = 15000
@@ -17,6 +33,8 @@ const INFO_MS = 8000
  * - マウスを重ねている間・キーボードで知らせの中に移っている間は、時間を止める
  * - 「戻す」で元に戻すと「✓ 段落を戻しました」を少しの間出す（戻した所へ移って光らせるのは、編集の中核）
  * - 抄録を書き始めたとき（「抄録を書き始めました［戻す］」）と、表の行・列を消せないとき（わけだけ。8秒）も、ここに出す
+ * - 段落に「Ⅲ．まとめ」のように打って見出しにしたとき（「大見出し「Ⅲ．まとめ」にしました［戻す］」）も。書いている間も出すので、
+ *   「戻す」を押しても書く欄からフォーカスを移さない（スマホで書く欄が閉じて、知らせが動くと、押したつもりの所から外れるため）
  * 読み上げにも伝わるよう、いつも置いておく枠（role="status"）の中に、知らせを出し入れする。
  * onClose：出しておく時間が過ぎた（useUndoNotice の close）。
  * place：知らせを出すたびに（画面が描き直されるたびに）、知らせの枠の位置を決める（スマホ：ページ送りや帯に重ねない。Phone.tsx）
@@ -70,8 +88,8 @@ export function UndoBar({
         >
           {undoable(notice) ? (
             <>
-              <span>{noticeText(notice)}</span>
-              <button onClick={() => editor.undo()}>
+              <NoticeWords notice={notice} />
+              <button onMouseDown={headingNotice(notice) ? keepFocus : undefined} onClick={() => editor.undo()}>
                 {Icon.undo}戻す
               </button>
               {/* 残りの時間（細い線が右から縮む） */}

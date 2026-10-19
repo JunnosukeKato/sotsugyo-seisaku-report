@@ -1,7 +1,7 @@
 /**
  * 紙面の欄に、キーボード（Tab）で移れるようにする（mockups/v23 ④）。
  * 組版した紙面は表示専用で、もとは Tab で止まる所がなかった。紙面を組み直して表に出すたびに（reportEditor の render）、
- * 書ける欄・図・改ページの印・作品写真の枠・抄録の「先生の許可が出た」・引用・参考文献に、Tab で止まる印（tabindex）と読み上げ用の名前を付ける。
+ * 書ける欄・図・改ページの印・作品写真の枠・抄録の「先生の許可が出た」・引用・参考文献・目次の行に、Tab で止まる印（tabindex）と読み上げ用の名前を付ける。
  * 移った欄で Enter（スペース）を押すと、クリックしたときと同じことをする（reportEditor の onPaperKey）。
  *
  * 見えているページのほかは表示していない（display: none）ので、Tab で移るのは見えているページの欄だけ。
@@ -106,6 +106,12 @@ export function markFocusable(viewport: HTMLElement): void {
   // 「先生の許可が出た（抄録を書き始める）」は、書いてある文がそのまま名前になる
   for (const el of viewport.querySelectorAll<HTMLElement>('[data-abstract-start]')) mark(el, 'abstract-start')
   for (const el of viewport.querySelectorAll<HTMLElement>('section.references')) mark(el, 'references', { label: `引用・参考文献：${contentOf(el).replace(/^引用・参考文献\s*/, '')}` })
+  // 目次の行：押す（Enter）と、その見出しへ移って書き始める（mockups/v41 案C。行き先は data-toc-target の ID）
+  for (const el of viewport.querySelectorAll<HTMLElement>('[data-toc-target]')) {
+    const name = (el.querySelector('span') ?? el).textContent?.trim() ?? ''
+    const where = el.dataset.tocTarget === 'references' ? 'そのページ' : 'その見出し'
+    mark(el, `toc:${el.dataset.tocTarget}`, { label: `目次の行：${name}（押すと、${where}へ移ります）` })
+  }
   // 表紙の題目（研究題目）は学科で決まっていて、押しても書けない。理由が分かるよう、PC ではマウスを重ねると理由を出す
   // （押したときは、PC・スマホとも画面の下に同じ言葉を知らせる。reportEditor の onClick）
   for (const el of viewport.querySelectorAll<HTMLElement>('section.cover .el.title')) el.title = fixedTitleNote(el.closest('section.cover')?.querySelector('.el.label')?.textContent ?? '')

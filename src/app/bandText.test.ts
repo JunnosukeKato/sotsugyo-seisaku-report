@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { STUDENT_TOPICS } from '../help/helpTopics'
 import type { LayoutInfo } from '../layout/measure'
-import { forTouch, paragraphHint, photoBand, photoSlotName, photoToolsAtSide, todoBand, topicsForTouch } from './bandText'
-import { PAGE_CONTEXT } from './uiShared'
+import { forTouch, paragraphHint, photoBand, photoSlotName, photoToolsAtSide, TOC_BAND, todoBand, topicsForTouch } from './bandText'
+import { PAGE_CONTEXT, TOC_PALETTE_NOTE } from './uiShared'
 
 describe('スマホの紙面の下の帯の言葉（mockups/v32 ④ 案A）', () => {
   it('作品写真の空いている枠：2枚の並べ方は「下の枠」「右の枠」、ほかは「3枚目の枠」と呼ぶ', () => {
@@ -89,5 +89,26 @@ describe('横向きのスマホ：作品写真のページの道具を、紙面�
   it('書いている間・拡大している間は、右の列に出さない', () => {
     expect(photoToolsAtSide(at(2, { editingId: 'p1' }), true)).toBe(false)
     expect(photoToolsAtSide(at(2, { zoomed: true }), true)).toBe(false)
+  })
+})
+
+describe('目次のページの言葉（mockups/v41：目次は自動で作ることが分かるように）', () => {
+  /** 行に分けた言葉の行（道具の幅は1行6字ほど。1字だけの行・7字以上の行がないか） */
+  const lines = (text: string) => text.split('\n')
+
+  it('左の道具の上：「本文の／見出しから／自動で／作ります」。1字だけの行はない（前は「る」だけの行ができていた）', () => {
+    expect(PAGE_CONTEXT.toc).toEqual({ name: '目次', hint: '本文の\n見出しから\n自動で\n作ります' })
+    for (const l of lines(PAGE_CONTEXT.toc.hint)) expect([...l].length).toBeGreaterThan(1)
+    for (const l of lines(PAGE_CONTEXT.toc.hint)) expect([...l].length).toBeLessThanOrEqual(6)
+  })
+
+  it('左の道具のもう一言：「直すときは、／目次の行を／クリック」', () => {
+    expect(lines(TOC_PALETTE_NOTE)).toEqual(['直すときは、', '目次の行を', 'クリック'])
+    for (const l of lines(TOC_PALETTE_NOTE)) expect([...l].length).toBeLessThanOrEqual(6)
+  })
+
+  it('スマホの帯：「目次は、本文の見出しから自動で作ります」「目次の行をタップすると、その見出しへ移ります」（「クリック」はない）', () => {
+    expect(TOC_BAND).toEqual({ text: '目次は、本文の見出しから自動で作ります', sub: '目次の行をタップすると、その見出しへ移ります' })
+    expect(Object.values(TOC_BAND).join('')).not.toContain('クリック')
   })
 })

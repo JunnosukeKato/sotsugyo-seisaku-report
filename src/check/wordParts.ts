@@ -1,5 +1,6 @@
 import { courseIdInText, type YearConfig } from '../config'
-import { headingFromText, isPlaceholderOnly } from '../import/wordImport'
+import { isPlaceholderOnly } from '../import/wordImport'
+import { headingFromText } from '../model/headingText'
 import type { WordBlock } from '../import/wordDocument'
 import type { PartId } from './parts'
 

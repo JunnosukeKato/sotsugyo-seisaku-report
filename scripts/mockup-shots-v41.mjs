@@ -24,9 +24,8 @@ mkdirSync(OUT, { recursive: true })
 const ONLY = process.argv.slice(2)
 const want = (k) => ONLY.length === 0 || ONLY.includes(k)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
-/** パソコン（ノートパソコン）とスマホ。どちらも細かく写す */
+/** パソコン（ノートパソコン）。細かく写す（スマホは openTool の 390×844） */
 const PC = { width: 1366, height: 768, deviceScaleFactor: 1.5 }
-const PHONE = { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
 
 // ---- 案の言葉（review.html の「言葉の表」と同じ） ----
 const T = {
@@ -257,6 +256,7 @@ async function open(browser, device) {
         await ready(page)
       }
       await installKit(page)
+      await installTocLine(page)
       return opened
     } catch (e) {
       await opened?.context.close().catch(() => {})
@@ -275,12 +275,14 @@ async function goToc(page) {
   await sleep(700)
 }
 
-/** 見ている紙面のページの中の、目次の行（text を含む行。title：行の見出しの部分） */
-const TOC_LINE = `(text) => {
-  const cur = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current') ?? window.__editor.pageElements()[window.__editor.getSnapshot().page]
-  const line = [...cur.querySelectorAll('.toc > div')].find((d) => d.textContent.includes(text))
-  return line
-}`
+/** 見ている紙面のページの中の、目次の行（text を含む行）を返す関数を、ページの中に置く（window.__v41tocLine） */
+const installTocLine = (page) =>
+  page.evaluate(() => {
+    window.__v41tocLine = (text) => {
+      const cur = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current') ?? window.__editor.pageElements()[window.__editor.getSnapshot().page]
+      return [...cur.querySelectorAll('.toc > div')].find((d) => d.textContent.includes(text))
+    }
+  })
 
 /** どの案でも同じ：左の道具の上の言葉と、ページの一覧の名前 */
 const common = (page) =>
@@ -295,11 +297,11 @@ const common = (page) =>
 /** 案A：紙面の上の余白に、画面だけの知らせ（紙面の題「目次」より上） */
 const drawA = (page) =>
   page.evaluate(
-    ({ T, IC, TOC_LINE }) => {
+    ({ T, IC }) => {
       const k = window.__v41
       const ed = window.__editor
       const r = ed.pageElements()[ed.getSnapshot().page].getBoundingClientRect()
-      const title = eval(TOC_LINE)('目次').getBoundingClientRect()
+      const title = window.__v41tocLine('目次').getBoundingClientRect()
       // 本文の幅（左の余白 35mm・右の余白 25mm の内側）
       const left = r.left + r.width * (132.3 / 793.7) - 8
       const width = r.width * (566.9 / 793.7) + 8
@@ -311,7 +313,7 @@ const drawA = (page) =>
       // 紙面の上の端・題「目次」とのすき間（画面の px）
       return { above: Math.round(b.top - r.top), below: Math.round(title.top - b.bottom) }
     },
-    { T, IC, TOC_LINE },
+    { T, IC },
   )
 
 /** 案B：押した所（x, y）の近くに知らせ。cursor：'arrow'（パソコン）・'tap'（スマホ） */
@@ -337,8 +339,8 @@ const drawB = (page, x, y, cursor) =>
 /** 目次の行の上の、押す所（パソコン：見出しの字の中ほど） */
 const linePoint = (page, text) =>
   page.evaluate(
-    ({ text, TOC_LINE }) => {
-      const line = eval(TOC_LINE)(text)
+    ({ text }) => {
+      const line = window.__v41tocLine(text)
       const span = line.querySelector('span') ?? line
       const r = span.getBoundingClientRect()
       const range = document.createRange()
@@ -347,15 +349,15 @@ const linePoint = (page, text) =>
       // 行の字の終わりのすぐ右（字を隠さないように）
       return { x: Math.round(t.right + 6), y: Math.round(r.top + r.height / 2) }
     },
-    { text, TOC_LINE },
+    { text },
   )
 
 /** 案C：行にマウスを乗せた（スマホは押した）ときの見た目。tag：「→ 見出しへ」を出すか。cursor：'hand'・'tap' */
 const drawCHover = (page, text, { tag = true, cursor = 'hand' } = {}) =>
   page.evaluate(
-    ({ T, IC, text, tag, cursor, TOC_LINE }) => {
+    ({ T, IC, text, tag, cursor }) => {
       const k = window.__v41
-      const line = eval(TOC_LINE)(text)
+      const line = window.__v41tocLine(text)
       const span = line.querySelector('span') ?? line
       const lr = line.getBoundingClientRect()
       // 行の地を薄い色に（紙面の文字の上に重ねて、掛け合わせる）
@@ -377,7 +379,7 @@ const drawCHover = (page, text, { tag = true, cursor = 'hand' } = {}) =>
       if (cursor === 'hand') k.add(`<div class="v41-x v41-fixed v41-cursor" style="left:${x - 7}px;top:${y - 2}px">${IC.hand}</div>`)
       else k.add(`<div class="v41-x v41-fixed v41-tap" style="left:${x}px;top:${y}px"></div>`)
     },
-    { T, IC, text, tag, cursor, TOC_LINE },
+    { T, IC, text, tag, cursor },
   )
 
 /** 案C：左の道具の上の、もう一言（パソコン） */

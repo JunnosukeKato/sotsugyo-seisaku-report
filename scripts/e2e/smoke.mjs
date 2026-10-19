@@ -13,6 +13,8 @@ import { teacherTrialPc } from './teacherTrialFixes.mjs'
 import { rangeSelectPc } from './rangeSelect.mjs'
 import { writingWrapPc } from './writingWrap.mjs'
 import { photoPagesPc } from './photoPages.mjs'
+import { tocLinksPc } from './tocLinks.mjs'
+import { autoHeadingPc } from './autoHeading.mjs'
 import { setupWriting } from './sampleReport.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
@@ -2347,6 +2349,9 @@ await withEdge(async (browser) => {
   // ---- 作品写真の何ページか（mockups/v38 案A：ページを足す・消す・ページごとの並べ方・選んだ写真を全部入れる・空のページは PDF に入らない。scripts/e2e/photoPages.mjs） ----
   await photoPagesPc(browser, check)
 
+  // ---- 目次のページ（mockups/v41 案C＋案B：行を押すと見出しへ・行のない所は知らせ・言葉・PDF は変わらない。scripts/e2e/tocLinks.mjs） ----
+  await tocLinksPc(browser, check)
+
   // ---- はじめて使う学生の試し（3回目：Word から移す学生・パソコン）で見つかったこと（scripts/e2e/firstTimeV3.mjs） ----
   await firstTimeV3Pc(browser, check)
   await firstTimeV3Word(browser, check)
@@ -2362,6 +2367,9 @@ await withEdge(async (browser) => {
 
   // ---- 書く欄の折り返しが紙面と同じ（scripts/e2e/writingWrap.mjs） ----
   await writingWrapPc(browser, check)
+
+  // ---- 段落に「Ⅲ．まとめ」のように打つと見出しになる（Enter・書く欄を閉じたとき・何行かの貼り付け。「戻す」。scripts/e2e/autoHeading.mjs） ----
+  await autoHeadingPc(browser, check)
 })
 
 /**

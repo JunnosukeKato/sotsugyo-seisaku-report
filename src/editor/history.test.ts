@@ -25,6 +25,17 @@ describe('「元に戻す」「やり直す」の履歴', () => {
     expect(now).toBe('b')
   })
 
+  it('last：次に元に戻すと戻る状態（積んだものそのもの。段落を見出しにしたのを戻すかを、これで見分ける）', () => {
+    const typed = { text: 'Ⅲ．まとめ' }
+    const h = new EditHistory<{ text: string }>()
+    expect(h.last).toBeUndefined()
+    h.push({ text: '' })
+    h.push(typed)
+    expect(h.last).toBe(typed)
+    expect(h.undo({ text: '見出し' })).toBe(typed)
+    expect(h.last?.text).toBe('')
+  })
+
   it('戻したあとに新しく変えると、やり直しの分は消える', () => {
     const h = new EditHistory<string>()
     h.push('a')

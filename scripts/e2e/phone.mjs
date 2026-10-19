@@ -8,6 +8,9 @@ import { firstTimeV3Phone } from './firstTimeV3.mjs'
 import { editorFixesV3Phone } from './editorFixesV3.mjs'
 import { rangeSelectPhone } from './rangeSelect.mjs'
 import { photoPagesPhone } from './photoPages.mjs'
+import { tocLinksPhone } from './tocLinks.mjs'
+import { autoHeadingPhone } from './autoHeading.mjs'
+import { undoHeaderPhone } from './undoHeader.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -669,6 +672,15 @@ await withEdge(async (browser) => {
 
   // 作品写真の何ページか（mockups/v38 案A）：下の道具の「ページを足す」「ページを消す」（scripts/e2e/photoPages.mjs）
   await photoPagesPhone(browser, check)
+
+  // 目次のページ（mockups/v41 案C＋案B）：帯の言葉・行をタップすると見出しへ・行のない所は知らせ・はらうとページを送る（scripts/e2e/tocLinks.mjs）
+  await tocLinksPhone(browser, check)
+
+  // 段落に「ⅲ．試着」のように打って Enter・「完了」で見出しになる。知らせは書く欄の上に出て、「戻す」で打ったままの段落に戻る（scripts/e2e/autoHeading.mjs）
+  await autoHeadingPhone(browser, check)
+
+  // 上の帯の「戻す」「やり直す」（mockups/v39 案A。何もタップしていなくても戻せる。scripts/e2e/undoHeader.mjs）
+  await undoHeaderPhone(browser, check)
 })
 
 /**

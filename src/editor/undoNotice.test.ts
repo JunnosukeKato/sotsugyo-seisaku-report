@@ -27,6 +27,28 @@ describe('削除の知らせの言葉（mockups/v32 ② 案A）', () => {
   })
 })
 
+describe('段落を見出しにした知らせの言葉（段落に「Ⅲ．まとめ」のように打った）', () => {
+  it('自動で付いた番号の見出しを言う。貼り付けたときは「見出しにnつしました」。どちらも［戻す］を出し、戻したら「見出しにする前に戻しました」', () => {
+    expect(noticeText({ kind: 'heading', level: 1, label: 'Ⅲ．まとめ' })).toBe('大見出し「Ⅲ．まとめ」にしました')
+    expect(noticeText({ kind: 'heading', level: 2, label: 'ⅱ．袖の刺繍' })).toBe('小見出し「ⅱ．袖の刺繍」にしました')
+    expect(noticeText({ kind: 'headings', count: 3 })).toBe('見出しに3つしました')
+    expect(noticeText({ kind: 'headings', count: 2, note: '。表は文になりました（表は「表を入れる」で作ります）' })).toBe('見出しに2つしました。表は文になりました（表は「表を入れる」で作ります）')
+    expect(noticeText({ kind: 'unheaded' })).toBe('見出しにする前に戻しました')
+    expect(undoable({ kind: 'heading', level: 1, label: 'Ⅲ．まとめ' })).toBe(true)
+    expect(undoable({ kind: 'headings', count: 1 })).toBe(true)
+    expect(undoable({ kind: 'unheaded' })).toBe(false)
+  })
+
+  it('見出しにしたのを戻すと、戻した段落を光らせる（大見出しで分けた章が、元の1つの章に戻る）', () => {
+    const r = demoReport()
+    const typed = ops.setText(r, 'p5', 'Ⅲ．仕上げ')
+    const big = ops.paragraphToHeading(typed, 'p5', { level: 1, title: '仕上げ' }, '')!.report
+    expect(changedPlace(big, typed)).toEqual({ kind: 'block', id: 'p5' })
+    const small = ops.paragraphToHeading(typed, 'p5', { level: 2, title: '仕上げ' })!.report
+    expect(changedPlace(small, typed)).toEqual({ kind: 'block', id: 'p5' })
+  })
+})
+
 describe('元に戻して変わった所（そこへ移って光らせる）', () => {
   const r = demoReport()
   // 元に戻す前（before）と戻したあと（after）を比べる
