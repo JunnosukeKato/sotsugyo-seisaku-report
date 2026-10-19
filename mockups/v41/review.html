@@ -1,0 +1,218 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v41 目次のページが自動だと分かるように</title>
+<!-- 画面の絵は node scripts/mockup-shots-v41.mjs で作る（本物の学生用ツールを開き、案の部分だけ書き足して写したもの）。このページの写し（shots/review-toc.png）は同じスクリプトの review で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; --ng: #b5443b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 40px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); }
+  main { max-width: 1136px; }
+  .top { margin: 0 0 18px; font-size: 13.5px; color: var(--muted); line-height: 1.8; }
+  .top b { color: var(--ink); font-size: 15px; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  h2 { font-size: 17px; margin: 26px 0 8px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 14px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+  .lead b { color: var(--ink); }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 3px; }
+  figcaption span { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff !important; font-size: 11.5px !important; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .why { display: block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #e8ebf5; color: var(--accent) !important; font-size: 13px !important; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > div { background: #fff; align-self: stretch; }
+  .row > .lbl { grid-column: 1 / -1; padding: 7px 16px 5px !important; background: #f4f2ee !important; font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 8px; border: 1px solid #ddd; }
+  .ph img + img, .ph small + a, .ph img + a, .ph a + a { margin-top: 10px; }
+  .ph a { display: block; }
+  .ph small { display: block; padding: 6px 4px 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .ph small b { color: var(--ink); }
+  .note { display: flex; flex-direction: column; justify-content: center; padding: 14px 18px !important; font-size: 13.5px; color: var(--muted); line-height: 1.8; background: #faf9f7 !important; }
+  .note b { color: var(--ink); }
+  .note p { margin: 0 0 8px; }
+  .note p:last-child { margin-bottom: 0; }
+  .say { color: var(--accent); font-weight: 700; }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 9px 16px 11px; font-size: 13.5px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: var(--ok); }
+  .pw .weak b { color: var(--ng); }
+  .common { margin: 0 0 18px; padding: 12px 16px; border-radius: 14px; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: grid; grid-template-columns: 1fr 120px 120px; gap: 16px; align-items: center; }
+  .common > div:first-child { font-size: 13.5px; line-height: 1.8; }
+  .common > div:first-child > b { font-size: 13px; letter-spacing: 0.06em; color: var(--accent); }
+  .common ul { margin: 2px 0 0; padding-left: 20px; }
+  .common img { border-radius: 8px; border: 1px solid #ddd; }
+  .common small { display: block; padding-top: 4px; font-size: 12px; color: var(--muted); text-align: center; }
+  .ask { margin: 0 0 18px; padding: 12px 18px; border-radius: 12px; background: #fff8e6; border: 1.5px solid #e6c46a; font-size: 13.5px; line-height: 1.8; }
+  .ask > b { font-size: 14px; color: #7a5a00; letter-spacing: 0.04em; }
+  .ask ol { margin: 4px 0 0; padding-left: 22px; }
+  .ask li b { color: var(--ink); }
+  .ask small { color: var(--muted); font-size: 12.5px; }
+  /* 言葉の表 */
+  table.words { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; line-height: 1.6; background: #fff; }
+  table.words th, table.words td { padding: 7px 12px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+  table.words thead th { background: #f4f2ee; color: var(--muted); font-size: 12.5px; letter-spacing: 0.06em; border-top: 0; }
+  table.words tbody th { font-weight: 700; color: var(--muted); background: #faf9f7; }
+  table.words td.old { color: var(--muted); }
+  table.words td.new { color: var(--accent); font-weight: 700; }
+  table.words td.c { background: #f5f6fb; }
+  table.words .br { white-space: pre-line; }
+
+  /* 行の形 */
+  .r-now { grid-template-columns: 540px 130px 190px 1fr; }
+  .r-2 { grid-template-columns: 1fr 1fr; }
+  .r-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .r-zc { grid-template-columns: 140px 1fr 1fr; }
+  .r-ph1 { grid-template-columns: 190px 1fr; }
+  .r-ph2 { grid-template-columns: 190px 190px 1fr; }
+  .r-ph3 { grid-template-columns: 190px 190px 190px 1fr; }
+  .stack > * + * { margin-top: 10px; }
+  /* スマホの近くの絵は、画面と同じ大きさで（大きくしすぎない） */
+  .ph a.nat { max-width: 390px; }
+  .top b { font-size: 13.5px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>v41　目次のページが自動だと分かるように</h1>
+<p class="top">心配：目次のページは、本文の見出しから自動で作ります。学生はここに書けません。「目次が壊れている」「さわれない」と思うのでは。<br>
+<b>3つの案から1つ選んでください</b>（組み合わせもできます）。<br>
+画面は本物のツールに、案の部分だけ書き足して写したものです（絵を押すと大きく見られます）。見本の原稿は、衣装コースの見本（文化花子）。</p>
+
+<!-- ===================================================================== -->
+<figure>
+  <figcaption><b>いま</b><span>左の道具の上に小さく「目次　見出しから自動で作られる」とあるだけ。</span></figcaption>
+  <div class="row r-now">
+    <div class="ph"><a href="shots/now-pc.png"><img src="shots/now-pc.png" alt=""></a><small><b>パソコン</b>：紙面を押しても、何も起きない</small></div>
+    <div class="ph stack"><a href="shots/now-pc-head.png"><img src="shots/now-pc-head.png" alt=""></a><a href="shots/now-pc-list.png"><img src="shots/now-pc-list.png" alt=""></a><small>左の道具の上と、ページの一覧</small></div>
+    <div class="ph"><a href="shots/now-ph.png"><img src="shots/now-ph.png" alt=""></a><small><b>スマホ</b>：帯は出ない</small></div>
+    <div class="note">
+      <p>左の道具の言葉は「見出しから／自動で作られ／<b>る</b>」と、<b>「る」が1字だけの行</b>になっています。</p>
+      <p>ページの一覧の名前は「目次」だけ。</p>
+      <p>スマホの紙面の下の帯は、目次のページでは<b>何も出ません</b>（まだ書いていない欄がないため）。</p>
+    </div>
+  </div>
+</figure>
+
+<div class="common">
+  <div><b>どの案でも同じ</b>
+    <ul>
+      <li>左の道具の上：「目次」の下を <span class="say">本文の／見出しから／自動で／作ります</span> に。言葉の切れ目で分け、1字だけの行を作りません。</li>
+      <li>ページの一覧の名前：<span class="say">目次（自動）</span></li>
+      <li>紙面の目次そのもの（PDF・印刷）は、いまのまま。</li>
+    </ul>
+  </div>
+  <div><a href="shots/common-pc-head.png"><img src="shots/common-pc-head.png" alt=""></a><small>左の道具の上</small></div>
+  <div><a href="shots/common-pc-list.png"><img src="shots/common-pc-list.png" alt=""></a><small>ページの一覧</small></div>
+</div>
+
+<!-- ===================================================================== -->
+<figure>
+  <figcaption><b>案A　紙面の上に、画面だけの知らせ</b><span>目次のページを開くと、いつも出ています。紙面の部品ではないので、PDF・印刷には出ません。</span></figcaption>
+  <div class="row r-2">
+    <div class="lbl">パソコン（1366×768）</div>
+    <div class="ph"><a href="shots/a-pc.png"><img src="shots/a-pc.png" alt=""></a></div>
+    <div class="ph"><a href="shots/a-pc-zoom.png"><img src="shots/a-pc-zoom.png" alt=""></a><small>近くで：紙面の上の余白（題「目次」の上）に置きます</small>
+      <div class="note" style="padding:12px 4px 0 !important">
+        <p><span class="say">目次は、本文の見出しから自動で作ります</span><br><span class="say" style="font-weight:400">直すときは、本文の見出しを直します</span></p>
+      </div>
+    </div>
+  </div>
+  <div class="row r-ph1">
+    <div class="lbl">スマホ（390×844）</div>
+    <div class="ph"><a href="shots/a-ph.png"><img src="shots/a-ph.png" alt=""></a></div>
+    <div class="ph"><a class="nat" href="shots/a-ph-band.png"><img src="shots/a-ph-band.png" alt=""></a><small>近くで：紙面の下の帯</small>
+      <div class="note" style="padding:12px 4px 0 !important">
+        <p>スマホは紙面の中の字が小さすぎて読めないので、<b>紙面の下の帯</b>に同じ言葉を出します（v32 の帯と同じ考え）。ボタンはありません。</p>
+      </div>
+    </div>
+  </div>
+  <div class="pw"><div class="good"><b>よいところ</b><br>開いたらすぐ目に入る。作るのがかんたん。</div><div class="weak"><b>弱いところ</b><br>いつも出ているので、紙面がにぎやか。押しても何も起きないのは、いまのまま。</div></div>
+</figure>
+
+<!-- ===================================================================== -->
+<figure>
+  <figcaption><b>案B　紙面を押すと、押した所の近くに知らせ</b><span>ふだんの紙面は、いまのまま。目次のページのどこを押しても、小さな知らせが出ます。「本文の見出しへ」は、本文の1ページ目へ移ります。</span></figcaption>
+  <div class="row r-2">
+    <div class="lbl">パソコン（1366×768）</div>
+    <div class="ph"><a href="shots/b-pc.png"><img src="shots/b-pc.png" alt=""></a><small><b>押す前</b>：いまと同じ（左の道具の言葉だけ直す）</small></div>
+    <div class="ph"><a href="shots/b-pc-click.png"><img src="shots/b-pc-click.png" alt=""></a><small><b>行を押したあと</b>（「ⅱ．デザイン説明」を押した）</small></div>
+  </div>
+  <div class="row r-ph2">
+    <div class="lbl">スマホ（390×844）</div>
+    <div class="ph"><a href="shots/now-ph.png"><img src="shots/now-ph.png" alt=""></a><small><b>押す前</b>：いまと同じ（帯は出ない）</small></div>
+    <div class="ph"><a href="shots/b-ph-tap.png"><img src="shots/b-ph-tap.png" alt=""></a><small><b>タップしたあと</b></small></div>
+    <div class="ph"><a class="nat" href="shots/b-ph-zoom.png"><img src="shots/b-ph-zoom.png" alt=""></a><small>近くで：言葉はパソコンと同じ。ボタンは指で押しやすい高さ</small></div>
+  </div>
+  <div class="row r-2">
+    <div class="lbl">近くで（パソコン）</div>
+    <div class="ph"><a href="shots/b-pc-zoom.png"><img src="shots/b-pc-zoom.png" alt=""></a><small>押した所のすぐ下に出ます。× か、ほかの所を押すと消えます</small></div>
+    <div class="note">
+      <p><span class="say">目次は自動です</span><br><span class="say" style="font-weight:400">見出しを直すと、ここも変わります</span><br>［<span class="say">本文の見出しへ ＞</span>］</p>
+      <p>目次の行を押しても、行のない所を押しても、同じ知らせです。</p>
+    </div>
+  </div>
+  <div class="pw"><div class="good"><b>よいところ</b><br>ふだんの紙面は、いまのまま。押したときだけ、わけが出る。</div><div class="weak"><b>弱いところ</b><br>押すまで分からない。「本文の見出しへ」では、押した行の見出しまでは行けない。</div></div>
+</figure>
+
+<!-- ===================================================================== -->
+<figure class="is-rec">
+  <figcaption><b>案C　目次の行を押せる（＋ 左の道具・スマホの帯に一言）<span class="rec">おすすめ</span></b><span>行にマウスを乗せると、下線と「→ 見出しへ」。押すと、その見出しのページへ移り、見出しを書く欄が開きます（小見出しの行も同じ）。</span><span class="why">おすすめの理由：直したい行を押すと、直す場所（本文の見出し）へそのまま行けるので、「動かない・壊れている」と感じにくい。</span></figcaption>
+  <div class="row r-3">
+    <div class="lbl">パソコン（1366×768）</div>
+    <div class="ph"><a href="shots/c-pc.png"><img src="shots/c-pc.png" alt=""></a><small><b>ふだん</b>：左の道具に「直すときは、目次の行をクリック」</small></div>
+    <div class="ph"><a href="shots/c-pc-hover.png"><img src="shots/c-pc-hover.png" alt=""></a><small><b>行にマウスを乗せたとき</b></small></div>
+    <div class="ph"><a href="shots/c-pc-jump.png"><img src="shots/c-pc-jump.png" alt=""></a><small><b>押したあと</b>：本文 3 の「Ⅱ．制作過程」を書いているところ（本物のツールで移ったもの）</small></div>
+  </div>
+  <div class="row r-zc">
+    <div class="lbl">近くで</div>
+    <div class="ph"><a href="shots/c-pc-head.png"><img src="shots/c-pc-head.png" alt=""></a><small>左の道具の上</small></div>
+    <div class="ph"><a href="shots/c-pc-zoom.png"><img src="shots/c-pc-zoom.png" alt=""></a><small>行の地がうすい色になり、見出しに下線と「<b>→ 見出しへ</b>」。行のどこを押しても移れます</small></div>
+    <div class="ph"><a href="shots/c-pc-jump-zoom.png"><img src="shots/c-pc-jump-zoom.png" alt=""></a><small>移った見出しが少しの間うすく光り、終わりにカーソル。すぐ直せます</small><a href="shots/c-pc-jump-toast.png"><img src="shots/c-pc-jump-toast.png" alt=""></a><small>画面の下の知らせ（いまの知らせと同じ形）</small></div>
+  </div>
+  <div class="row r-ph3">
+    <div class="lbl">スマホ（390×844）</div>
+    <div class="ph"><a href="shots/c-ph.png"><img src="shots/c-ph.png" alt=""></a><small><b>ふだん</b>：帯に一言</small></div>
+    <div class="ph"><a href="shots/c-ph-tap.png"><img src="shots/c-ph-tap.png" alt=""></a><small><b>行をタップしたとき</b></small></div>
+    <div class="ph"><a href="shots/c-ph-jump.png"><img src="shots/c-ph-jump.png" alt=""></a><small><b>タップしたあと</b>：見出しの書く欄が開く（本物）</small></div>
+    <div class="ph"><a class="nat" href="shots/c-ph-band.png"><img src="shots/c-ph-band.png" alt=""></a><small>近くで：紙面の下の帯</small></div>
+  </div>
+  <div class="pw"><div class="good"><b>よいところ</b><br>押した行の見出しへ、そのまま行ける。押すと何か起きるので「さわれない」と感じにくい。</div><div class="weak"><b>弱いところ</b><br>作る手間がいちばん多い。見るだけのつもりで押しても、ページが変わる。</div></div>
+</figure>
+
+<!-- ===================================================================== -->
+<h2>言葉の表</h2>
+<figure>
+  <table class="words">
+    <colgroup><col style="width:112px"><col style="width:150px"><col><col><col></colgroup>
+    <thead><tr><th>場所</th><th>いま</th><th>案A</th><th>案B</th><th>案C（おすすめ）</th></tr></thead>
+    <tbody>
+      <tr><th>左の道具の上<br><small style="font-weight:400">（／は行の分け目）</small></th><td class="old">目次<br>見出しから／<br>自動で作られ／る</td><td class="new">目次<br>本文の／見出しから／<br>自動で／作ります</td><td class="new">（案A と同じ）</td><td class="new c">目次<br>本文の／見出しから／<br>自動で／作ります<br>＋ 直すときは、／<br>目次の行を／クリック</td></tr>
+      <tr><th>ページの一覧</th><td class="old">目次</td><td class="new">目次（自動）</td><td class="new">目次（自動）</td><td class="new c">目次（自動）</td></tr>
+      <tr><th>紙面（パソコン）</th><td class="old">（なし）<br>押しても何も起きない</td><td class="new">目次は、本文の見出しから<br>自動で作ります<br><span style="font-weight:400">直すときは、本文の見出しを<br>直します</span></td><td class="new">押すと：<br>目次は自動です<br><span style="font-weight:400">見出しを直すと、ここも変わります</span><br>［本文の見出しへ］</td><td class="new c">行にマウス：→ 見出しへ<br>押したあと：<br><span style="font-weight:400">この見出しを直すと、<br>目次も変わります</span></td></tr>
+      <tr><th>スマホの帯</th><td class="old">（出ない）</td><td class="new">目次は、本文の見出しから<br>自動で作ります<br><span style="font-weight:400">直すときは、本文の見出しを<br>直します</span></td><td class="new">（出ない）<br><span style="font-weight:400">タップすると、パソコンと<br>同じ知らせ</span></td><td class="new c">目次は、本文の見出しから<br>自動で作ります<br><span style="font-weight:400">目次の行をタップすると、<br>その見出しへ移ります</span></td></tr>
+    </tbody>
+  </table>
+</figure>
+
+<div class="ask"><b>決めていただきたいこと</b>
+  <ol>
+    <li><b>案A・案B・案C</b>のどれにしますか。<small>（おすすめは案C）</small></li>
+    <li>案C のとき、行のない所（紙面の下の白い所）を押したら、<b>案B の小さな知らせも出しますか？</b><small>（出さなければ、いままでどおり何も起きません）</small></li>
+  </ol>
+</div>
+
+</main>
+</body>
+</html>
