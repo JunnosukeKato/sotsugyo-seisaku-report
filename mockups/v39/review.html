@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v39 スマホの「戻す」「やり直す」</title>
+<!-- 画面の絵は node scripts/mockup-shots-v39.mjs phone で作る（本物の学生用ツールを開き、案の部分だけ書き足して写したもの）。このページの写しは同じスクリプトの review で作る（shots/review-undo-phone.png） -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; --ng: #b5443b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 40px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); word-break: auto-phrase; text-wrap: pretty; }
+  section { max-width: 1136px; margin: 0; }
+  .top { margin: 0 0 18px; font-size: 13.5px; color: var(--muted); line-height: 1.8; }
+  .top b { color: var(--ink); font-size: 15px; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  .lead { margin: 0 0 14px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+  .lead b { color: var(--ink); }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 3px; }
+  figcaption span { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff !important; font-size: 11.5px !important; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .why { display: block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #e8ebf5; color: var(--accent) !important; font-size: 13.5px !important; font-weight: 700; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > div { background: #fff; align-self: stretch; }
+  .row > .lbl { grid-column: 1 / -1; padding: 7px 16px 5px !important; background: #f4f2ee !important; font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 8px; border: 1px solid #ddd; }
+  .ph img + img, .ph small + a, .ph a + a { margin-top: 8px; }
+  .ph small { display: block; padding: 6px 2px 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .ph small b { color: var(--ink); }
+  .ph p.n { margin: 10px 2px 0; font-size: 13.5px; color: var(--muted); line-height: 1.8; }
+  .ph p.n b { color: var(--ink); }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 9px 16px 11px; font-size: 13.5px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: var(--ok); }
+  .pw .weak b { color: var(--ng); }
+  .common { margin: 0 0 14px; padding: 10px 16px; border-radius: 12px; background: #fff; font-size: 13.5px; line-height: 1.8; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+  .common > b { font-size: 13px; letter-spacing: 0.06em; color: var(--accent); }
+  .common ul { margin: 2px 0 0; padding-left: 20px; }
+  .ask { margin: 0 0 18px; padding: 12px 18px; border-radius: 12px; background: #fff8e6; border: 1.5px solid #e6c46a; font-size: 13.5px; line-height: 1.8; }
+  .ask > b { font-size: 14px; color: #7a5a00; letter-spacing: 0.04em; }
+  .ask ol { margin: 4px 0 0; padding-left: 22px; }
+  .ask li b { color: var(--ink); }
+  /* 3つの絵（何も選んでいない・書く欄・iPhone）と、近くで見た絵 */
+  .r4 { grid-template-columns: 220px 220px 220px 1fr; }
+  .r-now { grid-template-columns: 180px 180px 1fr; }
+  .r2 { grid-template-columns: 1fr 1fr; }
+  .r-words { grid-template-columns: 560px 1fr; }
+  /* 言葉の表 */
+  table.words { width: 100%; border-collapse: collapse; font-size: 13px; line-height: 1.6; }
+  table.words th, table.words td { padding: 6px 10px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+  table.words tr:first-child :is(th, td) { border-top: 0; }
+  table.words thead th { font-size: 12px; color: var(--muted); background: #faf9f7; letter-spacing: 0.04em; }
+  table.words tbody th { width: 178px; font-weight: 400; color: var(--muted); }
+  table.words td.old { color: var(--muted); }
+  table.words td.new { color: var(--accent); font-weight: 700; }
+  table.words td.same { color: var(--muted); }
+  .words-note { margin: 0; padding: 8px 10px 4px; font-size: 12.5px; color: var(--muted); line-height: 1.7; }
+  .hdr small { padding-top: 3px; }
+  .hdr a + small { margin-bottom: 6px; }
+  /* 保存のようすの雲のマーク（ツールの上の帯と同じ絵） */
+  .ic { display: inline-block; width: 15px; height: 15px; margin-right: 3px; vertical-align: -2px; color: var(--ok); }
+  .pair { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+</style>
+</head>
+<body>
+
+<section id="undo">
+  <p class="top"><b>v39　スマホの「戻す」「やり直す」をどこに置くか</b><br>ご希望：段落をタップしていないときも、「戻す」「やり直す」を押せるようにする。<br>画面は本物のツールに、案の部分だけを書き足して写したものです（絵を押すと大きく見られます）。</p>
+
+  <h1>スマホの「戻す」「やり直す」の置き場所</h1>
+  <p class="lead">3つの案から1つ選んでください。どの絵も、<b>「戻す」は押せる・「やり直す」は押せない（灰色）</b>ときです。</p>
+  <div class="common"><b>どの案でも同じ</b>
+    <ul>
+      <li>押したときの動きは、パソコンの「元に戻す」「やり直す」と同じです。</li>
+      <li>段落をタップして書く欄を開いている間は、いまと同じく<b>書く欄の中のボタン</b>を使います（同じボタンを2か所に出しません）。</li>
+      <li>ボタンは、どれも指で押しやすい大きさ（44px 四方以上）です。</li>
+    </ul>
+  </div>
+  <div class="ask"><b>決めていただきたいこと</b>
+    <ol>
+      <li><b>置き場所</b>は、案A・案B・案C のどれにしますか。</li>
+      <li>案A のとき：上の帯の<b>「保存のようす」の言葉</b>を、少し短くしてよいですか（案A の表のとおり）。</li>
+    </ol>
+  </div>
+
+  <figure>
+    <figcaption><b>いま</b><span>「戻す」「やり直す」は、段落をタップしたときの書く欄の中だけです。</span></figcaption>
+    <div class="row r-now">
+      <div class="ph"><a href="shots/now-ph.png"><img src="shots/now-ph.png" alt=""></a><small><b>何も選んでいないとき</b>：ボタンなし</small></div>
+      <div class="ph"><a href="shots/now-ph-sheet.png"><img src="shots/now-ph-sheet.png" alt=""></a><small><b>書く欄を開いたとき</b></small></div>
+      <div class="ph"><p class="n">何も選んでいないときに戻せるのは、削除した直後に下に出る知らせの「戻す」だけです（少しの間だけ出ます）。</p><p class="n">並べ方を変えた・見出しを足した、などのあとは、段落をタップしないと戻せません。</p></div>
+    </div>
+  </figure>
+
+  <!-- ================= 案A ================= -->
+  <figure class="is-rec">
+    <figcaption><b>案A　上の帯（≡ の左）<span class="rec">おすすめ</span></b><span>≡ の左に「戻す」「やり直す」。絵の下に、小さく名前を出します。</span><span class="why">おすすめの理由：紙面をかくさず、どのページでも、いつも同じ所にある。</span></figcaption>
+    <div class="row r4">
+      <div class="ph"><a href="shots/a-ph.png"><img src="shots/a-ph.png" alt=""></a><small><b>何も選んでいないとき</b></small></div>
+      <div class="ph"><a href="shots/a-ph-sheet.png"><img src="shots/a-ph-sheet.png" alt=""></a><small><b>書く欄を開いたとき</b>：上の帯はいまと同じ</small></div>
+      <div class="ph"><a href="shots/a-ph-iphone.png"><img src="shots/a-ph-iphone.png" alt=""></a><small><b>iPhone</b>（下にホームバー）：上なので変わりません</small></div>
+      <div class="ph"><a href="shots/a-ph-zoom.png"><img src="shots/a-ph-zoom.png" alt=""></a><small><b>近くで</b>：上の帯</small><p class="n">帯の部品の間を少しつめました。ふだんの「<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18.5h10.5a4 4 0 0 0 .7-7.94A6 6 0 0 0 6.6 9.6 4.5 4.5 0 0 0 7 18.5z"/><path d="M9.4 13.7l2 2 3.6-3.7"/></svg>保存した時刻」は、そのまま入ります。</p><p class="n">短くするのは、めったに出ない言葉だけです（下の表）。</p></div>
+    </div>
+    <div class="row r-words">
+      <div class="lbl">上の帯の「保存のようす」の言葉（幅 390px のスマホ）</div>
+      <div style="padding:4px 6px 8px">
+        <table class="words">
+          <thead><tr><th>どんなとき</th><th>いま</th><th>案A</th></tr></thead>
+          <tbody>
+            <tr><th>ふだん（保存したとき）</th><td class="old"><svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 18.5h10.5a4 4 0 0 0 .7-7.94A6 6 0 0 0 6.6 9.6 4.5 4.5 0 0 0 7 18.5z"/><path d="M9.4 13.7l2 2 3.6-3.7"/></svg>時刻</td><td class="same">そのまま</td></tr>
+            <tr><th>開いた直後・保存中・電波なし・保存エラー</th><td class="old">ドライブ・保存中・電波なし・保存エラー</td><td class="same">そのまま</td></tr>
+            <tr><th>ドライブに保存できないとき</th><td class="old">ドライブ未保存</td><td class="new">未保存</td></tr>
+            <tr><th>ドライブへの保存を止めているとき（学科の判断）</th><td class="old">自動保存 時刻</td><td class="new">時刻だけ（緑の点）</td></tr>
+            <tr><th>〃　保存している間</th><td class="old">保存しています…</td><td class="new">保存中</td></tr>
+            <tr><th>〃　保存できないとき</th><td class="old">保存できません。バックアップを保存してください（いまも途中で切れる）</td><td class="new">保存エラー</td></tr>
+          </tbody>
+        </table>
+        <p class="words-note">くわしい言葉は、いまと同じく ≡ のメニューに出ます。「ドライブ未保存」は、ボタンを足すと少し切れるため短くします。</p>
+      </div>
+      <div class="ph hdr">
+        <a href="shots/a-hdr-390-saved.png"><img src="shots/a-hdr-390-saved.png" alt=""></a><small>ふだん：そのまま</small>
+        <a href="shots/a-hdr-390-unsaved.png"><img src="shots/a-hdr-390-unsaved.png" alt=""></a><small>ドライブに保存できないとき：「未保存」</small>
+        <a href="shots/a-hdr-390-local.png"><img src="shots/a-hdr-390-local.png" alt=""></a><small>ドライブへの保存を止めているとき：時刻だけ</small>
+      </div>
+    </div>
+    <div class="row r2">
+      <div class="lbl">幅の狭いスマホ・横向き</div>
+      <div class="ph hdr">
+        <a href="shots/a-hdr-375-saved.png"><img src="shots/a-hdr-375-saved.png" alt=""></a><small><b>iPhone SE（375px）</b>：ふだん</small>
+        <a href="shots/a-hdr-375-error.png"><img src="shots/a-hdr-375-error.png" alt=""></a><small>いちばん長い言葉（保存エラー）も入ります</small>
+        <a href="shots/a-hdr-360-saved.png"><img src="shots/a-hdr-360-saved.png" alt=""></a><small><b>小さい Android（360px）</b>：左の「卒」のマークを出しません</small>
+        <a href="shots/a-hdr-360-error.png"><img src="shots/a-hdr-360-error.png" alt=""></a><small>マークをなくすと、保存エラーも入ります</small>
+      </div>
+      <div class="ph">
+        <a href="shots/a-land.png"><img src="shots/a-land.png" alt=""></a><small><b>横向き</b>：帯にゆとりがあります</small>
+        <a href="shots/a-land-sheet.png"><img src="shots/a-land-sheet.png" alt=""></a><small><b>横向きで書く欄を開いたとき</b>：上の帯はいまと同じ</small>
+      </div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>紙面をかくさない。どのページでも同じ所にある。ほかのアプリでもよく見る場所。</div><div class="weak"><b>弱いところ</b><br>上の帯がきゅうくつになり、めったに出ない言葉を短くする。片手だと指が届きにくい。</div></div>
+  </figure>
+
+  <!-- ================= 案B ================= -->
+  <figure>
+    <figcaption><b>案B　ページ送りの両わき</b><span>ページ送りの左に「戻す」、右に「やり直す」。ページ送りと同じ、白い丸のボタンです。</span></figcaption>
+    <div class="row r4">
+      <div class="ph"><a href="shots/b-ph.png"><img src="shots/b-ph.png" alt=""></a><small><b>何も選んでいないとき</b></small></div>
+      <div class="ph"><a href="shots/b-ph-sheet.png"><img src="shots/b-ph-sheet.png" alt=""></a><small><b>書く欄を開いたとき</b>：ページ送りといっしょに消えます</small></div>
+      <div class="ph"><a href="shots/b-ph-iphone.png"><img src="shots/b-ph-iphone.png" alt=""></a><small><b>iPhone</b>：ホームバーの分だけ上がります</small></div>
+      <div class="ph"><a href="shots/b-ph-zoom.png"><img src="shots/b-ph-zoom.png" alt=""></a><small><b>近くで</b></small><a href="shots/b-ph-iphone-zoom.png"><img src="shots/b-ph-iphone-zoom.png" alt=""></a><small><b>近くで</b>：iPhone</small><p class="n">ページ送りの幅をそろえて、ページを送ってもボタンが動かないようにします。</p></div>
+    </div>
+    <div class="row r2">
+      <div class="lbl">気になるところ</div>
+      <div class="ph"><a href="shots/b-ph-zoomed-zoom.png"><img src="shots/b-ph-zoomed-zoom.png" alt=""></a><small><b>拡大しているとき</b>：ページ送りが消えるので、左下に2つ並べます（右下は「ページ全体に戻す」）。場所が変わります。</small></div>
+      <div class="ph"><a href="shots/b-ph-photos-zoom.png"><img src="shots/b-ph-photos-zoom.png" alt=""></a><small><b>作品写真のページ</b>：並べ方の道具の下に並び、画面の下がこみあいます。</small></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>指が届きやすい。いま見ている紙面のすぐ下にある。</div><div class="weak"><b>弱いところ</b><br>「戻す」が「前のページ（‹）」とまぎれやすい。拡大すると場所が変わる。画面の下がこみあう。</div></div>
+  </figure>
+
+  <!-- ================= 案C ================= -->
+  <figure>
+    <figcaption><b>案C　下のタブ</b><span>下のタブの右はしに「戻す」「やり直す」を並べます（5つ目の場所を2つに分ける）。ほかの4つのタブは少し細くなります。</span></figcaption>
+    <div class="row r4">
+      <div class="ph"><a href="shots/c-ph.png"><img src="shots/c-ph.png" alt=""></a><small><b>何も選んでいないとき</b></small></div>
+      <div class="ph"><a href="shots/c-ph-sheet.png"><img src="shots/c-ph-sheet.png" alt=""></a><small><b>書く欄を開いたとき</b>：隠します（右はしが空く）</small></div>
+      <div class="ph"><a href="shots/c-ph-iphone.png"><img src="shots/c-ph-iphone.png" alt=""></a><small><b>iPhone</b>：ホームバーのすぐ上</small></div>
+      <div class="ph"><a href="shots/c-ph-zoom.png"><img src="shots/c-ph-zoom.png" alt=""></a><small><b>近くで</b></small><a href="shots/c-ph-iphone-zoom.png"><img src="shots/c-ph-iphone-zoom.png" alt=""></a><small><b>近くで</b>：iPhone</small><p class="n">「戻す」だけをタブにして、戻したあとに「やり直す」を出す形も考えました。ボタンが出たり消えたりして分かりにくいので、2つとも置いています。</p></div>
+    </div>
+    <div class="pw"><div class="good"><b>よいところ</b><br>いつも同じ所で、指が届きやすい。紙面をかくさない。</div><div class="weak"><b>弱いところ</b><br>タブがきゅうくつ。ほかのタブは欄が開くのに、「戻す」はすぐ戻るので、働きがちがう。書いている間は右はしが空く。</div></div>
+  </figure>
+</section>
+
+</body>
+</html>

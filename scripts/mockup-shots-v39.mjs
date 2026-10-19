@@ -29,6 +29,8 @@ const SE = { width: 375, height: 667, deviceScaleFactor: 2, isMobile: true, hasT
 const SMALL = { width: 360, height: 780, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
 /** iPhone の画面の下の、ホームバーの所の高さ（縦向き。CSS px） */
 const SAFE = 34
+/** 上の帯の保存のようすに出す時刻（写すたびに保存の時刻が変わり、絵ごとに食い違わないよう、写す間だけこの時刻にする） */
+const TIME = '13:05'
 /** 段落をタップして書く欄を開くときの段落（本文 3ページ。図の下の段落） */
 const PARA = 'p9'
 
@@ -269,7 +271,23 @@ async function shot(page, name, clip) {
   await sleep(300)
   await audit(page, name)
   const box = typeof clip === 'function' ? await page.evaluate(clip) : clip
+  // 保存のようすの時刻を、写す間だけ TIME にする（写したらすぐ戻す。React が覚えている文字と食い違わないように）
+  await page.evaluate((t) => {
+    window.__v39time = []
+    for (const c of document.querySelectorAll('.p-top .chip')) {
+      const w = document.createTreeWalker(c, NodeFilter.SHOW_TEXT)
+      for (let n = w.nextNode(); n; n = w.nextNode()) {
+        if (!/\d{1,2}:\d{2}/.test(n.nodeValue)) continue
+        window.__v39time.push([n, n.nodeValue])
+        n.nodeValue = n.nodeValue.replace(/\d{1,2}:\d{2}/, t)
+      }
+    }
+  }, TIME)
   await page.screenshot({ path: `${OUT}/${name}.png`, captureBeyondViewport: false, ...(box ? { clip: box } : {}) })
+  await page.evaluate(() => {
+    for (const [n, v] of window.__v39time ?? []) n.nodeValue = v
+    window.__v39time = []
+  })
   console.log('✓', name)
 }
 
@@ -451,7 +469,8 @@ async function phoneShots(browser) {
 // =====================================================================
 async function reviewShots(browser) {
   const page = await browser.newPage()
-  await page.setViewport({ width: 1200, height: 900, deviceScaleFactor: 1 })
+  // 幅 1215px（縦のスクロールバーの分 15px を足して、写しの幅を 1200px にする）
+  await page.setViewport({ width: 1215, height: 900, deviceScaleFactor: 1 })
   await page.goto(`${APP}/${DIR}/review.html`, { waitUntil: 'networkidle0' })
   await page.evaluate(() => document.fonts.ready)
   const lonely = await page.evaluate(() => {
