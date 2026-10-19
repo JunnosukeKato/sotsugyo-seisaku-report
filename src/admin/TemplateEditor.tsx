@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { Icon } from '../app/icons'
 import { useDialogFocus } from '../app/useDialogFocus'
 import type { Course, TemplateBlock, YearConfig } from '../config'
 import { LIMITS, templateRowName, tooLong } from '../config/validate'
@@ -36,20 +37,31 @@ function numbers(blocks: TemplateBlock[]): string[] {
 }
 
 /**
+ * 直してもらうことの1つ。text：左の欄のいちばん下の一覧に出す文（長すぎる行は、行の書き出しも示す）。
+ * short：「反映する」のとなりに出す短い文（行の書き出しを外したもの）
+ */
+interface Problem {
+  text: string
+  short: string
+}
+
+/**
  * 「反映する」の前に直してもらうこと（空の名前・長すぎる文字など）。保存のときにサーバーで断られる前に、窓の中で知らせる
  * （上限は src/config/validate.ts の LIMITS。サーバーの gas/admin-project/Code.js と同じ値）
  */
-function problemsOf(blocks: TemplateBlock[], abstractExample: string): string[] {
-  const problems: string[] = []
-  if (abstractExample.trim().length > LIMITS.abstractExample) problems.push(`抄録の書き出し例${tooLong(LIMITS.abstractExample, abstractExample.trim().length)}`)
-  if (blocks.length === 0) problems.push('大見出しを1つ以上入れてください')
-  else if (blocks[0].type !== 'chapter') problems.push('いちばん上は大見出しにしてください')
-  if (blocks.length > LIMITS.blocks) problems.push(`行が多すぎます（${LIMITS.blocks}行まで。今は${blocks.length}行）`)
+function problemsOf(blocks: TemplateBlock[], abstractExample: string): Problem[] {
+  const problems: Problem[] = []
+  const push = (text: string, short = text) => problems.push({ text, short })
+  if (abstractExample.trim().length > LIMITS.abstractExample) push(`抄録の書き出し例${tooLong(LIMITS.abstractExample, abstractExample.trim().length)}`)
+  if (blocks.length === 0) push('大見出しを1つ以上入れてください')
+  else if (blocks[0].type !== 'chapter') push('いちばん上は大見出しにしてください')
+  if (blocks.length > LIMITS.blocks) push(`行が多すぎます（${LIMITS.blocks}行まで。今は${blocks.length}行）`)
   blocks.forEach((b, i) => {
     const empty = b.type === 'chapter' || b.type === 'subheading' ? !b.title.trim() : b.type === 'figure' || b.type === 'materialTable' ? !b.caption.trim() : false
-    if (empty) problems.push(`${i + 1}行目の${KIND_LABELS[b.type]}の名前が空です`)
+    if (empty) push(`${i + 1}行目の${KIND_LABELS[b.type]}の名前が空です`)
     const max = b.type === 'paragraph' ? LIMITS.hint : LIMITS.name
-    if (textOf(b).length > max) problems.push(`${templateRowName(i, b.type, textOf(b))}${tooLong(max, textOf(b).length)}`)
+    // 短い文は「3行目の説明が長すぎます（…）」（行の書き出し「…」を外す）
+    if (textOf(b).length > max) push(`${templateRowName(i, b.type, textOf(b))}${tooLong(max, textOf(b).length)}`, `${templateRowName(i, b.type, '')}${tooLong(max, textOf(b).length)}`)
   })
   return problems
 }
@@ -150,6 +162,8 @@ export function TemplateEditor({ course, config, footNote, onApply, onClose }: P
     onClose()
   }
   const inputs = useRef(new Map<number, HTMLInputElement>())
+  /** 左の欄（「ほか○件」を押すと、いちばん下の一覧まで動かす） */
+  const editRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (focusKey !== null) inputs.current.get(focusKey)?.focus()
@@ -198,7 +212,7 @@ export function TemplateEditor({ course, config, footNote, onApply, onClose }: P
           </button>
         </header>
         <div className="tpl-body">
-          <div className="tpl-edit">
+          <div className="tpl-edit" ref={editRef}>
             <label className="f">
               <span className="l">抄録の書き出し例（学生の抄録の欄に薄く出す。空なら「{config.abstract.openingExample}」）</span>
               <textarea className="in" rows={2} value={abstractExample} placeholder={`例：${config.abstract.openingExample}卒業イベント「…」において、筆者が制作した〇〇についてである。`} onChange={(e) => setAbstractExample(e.target.value)} />
@@ -257,10 +271,10 @@ export function TemplateEditor({ course, config, footNote, onApply, onClose }: P
               ))}
             </div>
             {problems.length > 0 && (
-              <div className="problems">
+              <div className="problems" id="tpl-problems">
                 {problems.map((p) => (
-                  <div key={p} className="error">
-                    {p}
+                  <div key={p.text} className="error">
+                    {p.text}
                   </div>
                 ))}
               </div>
@@ -274,11 +288,29 @@ export function TemplateEditor({ course, config, footNote, onApply, onClose }: P
           </div>
         </div>
         <footer className="tpl-foot">
-          <span className="hint">{footNote}</span>
+          {problems.length === 0 && <span className="hint">{footNote}</span>}
           <span className="spacer" />
+          {/* 押せないときは、1つ目の理由を「反映する」のとなりに出す（mockups/v35-admin ④ 案A）。2つ以上なら「ほか○件」を押すと、左の欄のいちばん下の一覧へ動く */}
+          {problems.length > 0 && (
+            <span className="why" id="tpl-why">
+              {Icon.warn}
+              <span>{problems[0].short}</span>
+              {problems.length > 1 && (
+                <button className="more" aria-controls="tpl-problems" onClick={() => editRef.current?.scrollTo({ top: editRef.current.scrollHeight, behavior: 'smooth' })}>
+                  ほか{problems.length - 1}件
+                </button>
+              )}
+            </span>
+          )}
           <button onClick={close}>やめる</button>
           {/* 押せないときは、理由（左の欄のいちばん下の赤い字と同じ）を、ボタンに重ねたときにも出す */}
-          <button className="primary" disabled={problems.length > 0} title={problems.join('\n') || undefined} onClick={() => onApply(blocks, abstractExample.trim())}>
+          <button
+            className="primary"
+            disabled={problems.length > 0}
+            title={problems.map((p) => p.text).join('\n') || undefined}
+            aria-describedby={problems.length ? 'tpl-why' : undefined}
+            onClick={() => onApply(blocks, abstractExample.trim())}
+          >
             反映する
           </button>
         </footer>

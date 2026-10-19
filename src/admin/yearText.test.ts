@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { currentConfig } from '../config'
 import { skippedWords } from './wordsText'
-import { deliveryNote, formatDate, newYearNotice, publishConfirmText, saveConfirmText, savedMessage, templateFootNote } from './yearText'
+import { deleteConfirmText, deletedMessage, deliveryNote, formatDate, newYearNotice, publishConfirmText, saveConfirmText, savedMessage, templateFootNote } from './yearText'
 
 describe('年度の状態で変わる言葉', () => {
   it('「反映する」の後どうすれば届くかは、公開中・準備中・終了で違う（ボタンの名前どおり）', () => {
@@ -42,17 +42,42 @@ describe('年度の状態で変わる言葉', () => {
     expect(text).toContain('保存していない変更は、保存してから公開します')
   })
 
-  it('新年度を作ったときの知らせ：前の年度のままの項目（締切・お知らせ・書き出し例の題目の言葉）', () => {
+  it('新年度を作ったときの知らせ：前の年度のままの項目（締切・お知らせ・書き出し例の題目の言葉）を、直す場所を添えて箇条書きに', () => {
     const from = { ...currentConfig, courses: currentConfig.courses.map((c, i) => (i === 0 ? { ...c, notice: '中間発表の準備' } : c)) }
-    const text = newYearNotice(from, 2027)
-    expect(text).toContain('2027年度を作成しました（2026年度の設定のコピーです）')
-    expect(text).toContain('最終締切（2027年1月20日（水）。2026年度と同じ日付）')
-    expect(text).toContain('お知らせ（映画・舞台衣装デザイナー コース）')
-    expect(text).toContain('抄録の書き出し例（映画・舞台衣装デザイナー コース')
-    expect(text).toContain('「シンドバッド」が入っています')
+    const notice = newYearNotice(from, 2027)
+    expect(notice.text).toBe('2027年度を作成しました（2026年度の設定のコピーです）。')
+    expect(notice.detail).toBe('次の項目は2026年度のままです。確かめて直してください。')
+    expect(notice.items.map((i) => i.text)).toEqual([
+      '共通の題目',
+      '最終締切（2027年1月20日（水）。2026年度と同じ日付）',
+      'お知らせ（映画・舞台衣装デザイナー コース）',
+      '抄録の書き出し例（映画・舞台衣装デザイナー コース。前の年度の題目の言葉「シンドバッド」が入っています）',
+    ])
+    expect(notice.items.map((i) => i.where)).toEqual([
+      'この下の「毎年設定する項目」のいちばん上',
+      '共通の題目のすぐ下',
+      'コースのカードの「このコースの学生へのお知らせ」',
+      'コースのカードの「下書きのひな形」の「編集する」',
+    ])
+    // 詳細設定の書き出し例に題目の言葉があれば、詳細設定の欄も場所に添える
+    const opening = { ...from, abstract: { ...from.abstract, openingExample: '本制作報告書は、卒業イベント「シンドバッド」において、' } }
+    expect(newYearNotice(opening, 2027).items.at(-1)).toEqual({
+      text: '抄録の書き出し例（映画・舞台衣装デザイナー コース、詳細設定。前の年度の題目の言葉「シンドバッド」が入っています）',
+      where: 'コースのカードの「下書きのひな形」の「編集する」と、「詳細設定」の中の「抄録の書き出し例」',
+    })
     // 題目の言葉が入っていなければ、書き出し例は出さない
     const plain = { ...currentConfig, courses: currentConfig.courses.map((c) => ({ ...c, abstractExample: '本制作報告書は、' })) }
-    expect(newYearNotice(plain, 2027)).not.toContain('抄録の書き出し例')
+    expect(newYearNotice(plain, 2027).items.some((i) => i.text.startsWith('抄録の書き出し例'))).toBe(false)
+  })
+
+  it('準備中の年度を削除するときの確認と、削除したあとの知らせ', () => {
+    expect(deleteConfirmText(2027, { year: 2026, status: '公開中' })).toBe(
+      '2027年度（準備中）を削除しますか？\n\n' +
+        '・この年度の設定（共通の題目・締切・コース・ひな形・お知らせなど）が、すべて消えます。元には戻せません。\n' +
+        '・まだ学生に公開していないので、学生のツールは変わりません。\n' +
+        '・削除したあとは、2026年度（公開中）を開きます。',
+    )
+    expect(deletedMessage(2027, { year: 2026, status: '公開中' })).toBe('2027年度を削除しました。いまは2026年度（公開中）を開いています。')
   })
 
   it('日付は「2027年1月20日（水）」の形（日付でなければ、そのまま）', () => {

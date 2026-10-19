@@ -63,8 +63,11 @@ export interface OverlayTarget extends OverlayPlacement {
 
 const COPIED_STYLES = ['fontFamily', 'fontSize', 'lineHeight', 'letterSpacing', 'textIndent', 'textAlign', 'fontWeight'] as const
 
-/** キーボードで書く欄からここへ移っても、書き終わりにしない（道具の「図を入れる」などを、書いていた位置で使えるように） */
-const KEEP_OPEN = '.palette, .es-tools'
+/**
+ * キーボードで書く欄からここへ移っても、書き終わりにしない（道具の「図を入れる」などを、書いていた位置で使えるように）。
+ * .table-size：スマホの書く欄の「表を入れる」で出る、表の大きさを選ぶ欄（app/TableSize.tsx。選んでいる間も、書いていた位置を覚えておく）
+ */
+const KEEP_OPEN = '.palette, .es-tools, .table-size'
 
 /** 段落を分けた直後に、前の段落を仮に表示する要素（ghost）の見た目（入力欄と同じ書体・位置で、押せない） */
 const GHOST_STYLE: Partial<CSSStyleDeclaration> = {

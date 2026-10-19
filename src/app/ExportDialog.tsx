@@ -11,7 +11,7 @@ import { AREA_LABELS } from './labels'
  * 「PDFを書き出す」の窓（mockups/v28 案C「窓の中で、できたページを見せる」）。
  * 3つを確かめる → PDF をツールの中で作る（進み具合と、できたページの小さな絵が1枚ずつ並ぶ）→ できた。
  * パソコン・Android は、できたらそのまま「ダウンロード」に保存する。iPhone・iPad は「保存する」を押して、共有の画面から保存する。
- * エラーが残っているときは、「下書き」の透かし入りの PDF を同じ流れで作る（ファイル名に _下書き）。
+ * 「下書き」の透かし入りの PDF も同じ流れで作る（ファイル名に _下書き）。エラーが残っているときの窓と、エラーが0件の窓（mockups/v35 ⑤ 案A）の両方から出せる。
  * 作れなかったとき・うまくいかないときのために、今までの印刷の画面から保存する道も残す（窓の左下と、下書きの欄の小さなリンク）
  */
 
@@ -448,6 +448,16 @@ export function ExportDialog({ editor, findings, onClose, onBuilt }: Props) {
         ))}
       </div>
       <FileBox fileName={fileName(false)} note={mode === 'share' ? 'できたら「保存する」を押し、「"ファイル"に保存」を選びます' : '「ダウンロード」のフォルダに保存します'} />
+      {/* エラーが0件でも、先生に途中経過を見せる下書きの PDF を出せる（エラーがあるときと同じ欄。mockups/v35 ⑤ 案A）。
+          前は、エラーが0件になると下書きを選べず、先生に見てもらう前に「了承を得た」にチェックを入れることになっていた。
+          下の「PDF を保存する」と並ぶので、ボタンは目立たない形（primary にしない） */}
+      <div className="draft-box draft-zero">
+        <b>先生に途中経過を見せるとき</b>
+        どのページにも「下書き」の透かしが入った PDF を保存できます（提出には使えません。上の3つのチェックは要りません）。
+        <button className="pdf-draft" onClick={() => void build(true)}>
+          {mode === 'share' ? '下書きの PDF を作る' : '下書きの PDF を保存する'}
+        </button>
+      </div>
       {printOpen && (
         <div className="pdf-print-box">
           <PrintGuide fileName={fileName(false)} />

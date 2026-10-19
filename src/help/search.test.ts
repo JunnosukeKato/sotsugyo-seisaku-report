@@ -47,9 +47,23 @@ describe('言葉で探す：項目を探す', () => {
     expect(hit.line.label).toBe('iPhone')
   })
 
-  it('学生が探した言葉（引用・参考文献・最初から・やり直・新しく）で、引用・参考文献と、最初から作り直す項目が先に出る', () => {
+  it('学生が探した言葉（引用・参考文献・最初から・作り直す・新しく）で、引用・参考文献と、最初から作り直す項目が先に出る', () => {
     for (const q of ['引用', '参考文献']) expect(ids(searchTopics(STUDENT_TOPICS, q).hits)[0], q).toBe('references')
-    for (const q of ['最初から', 'やり直', '新しく']) expect(ids(searchTopics(STUDENT_TOPICS, q).hits)[0], q).toBe('restart')
+    for (const q of ['最初から', '作り直す', '作り直', '新しく']) expect(ids(searchTopics(STUDENT_TOPICS, q).hits)[0], q).toBe('restart')
+  })
+
+  it('「やり直す」「やり直」では、元に戻す・やり直すの項目が先に出る（最初から作り直す項目は、その下に出る）', () => {
+    for (const q of ['やり直す', 'やり直']) {
+      const found = ids(searchTopics(STUDENT_TOPICS, q).hits)
+      expect(found[0], q).toBe('undo')
+      expect(found, q).toContain('restart')
+    }
+  })
+
+  it('「見開き」で、書き方の項目（右下の「見開き」）が見つかる', () => {
+    const hit = searchTopics(STUDENT_TOPICS, '見開き').hits[0]
+    expect(hit?.topic.id).toBe('write')
+    expect(hit?.line.label).toBe('見開き（パソコン）')
   })
 
   it('作品写真の「全体を入れる（切らない）」は、「全体」「切らない」「写真 切れる」で探すと、作品写真の項目が先に出る（「切れる」だけでも出る）', () => {

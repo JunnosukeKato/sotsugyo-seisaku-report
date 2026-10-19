@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { demoReport } from './demoReport'
 import { migrateReport } from './migrate'
-import { addColumn, addRow, blankTable, cellPosition, fromMaterialTable, materialTable, removeColumn, removeRow, setCellImage, swatchColumn } from './table'
+import { addColumn, addRow, blankTable, cellPosition, clampTableSize, fromMaterialTable, materialTable, removeColumn, removeRow, setCellImage, swatchColumn, TABLE_SIZE } from './table'
 
 let n = 0
 const newId = (p: string) => `${p}${++n}`
@@ -13,6 +13,24 @@ describe('表', () => {
     const m = materialTable('t', newId)
     expect(m.rows[0].cells.map((c) => c.text)).toEqual(['名称', '使用箇所', '生地見本'])
     expect(swatchColumn(m)).toBe(2)
+  })
+
+  it('入れる前に大きさを選べる（3列×4行なら、見出しの行と3行。セルの ID はみな違う）', () => {
+    const t = blankTable('t', newId, '', 3, 4)
+    expect(shape(t)).toEqual([3, 3, 3, 3])
+    const ids = t.rows.flatMap((r) => [r.id, ...r.cells.map((c) => c.id)])
+    expect(new Set(ids).size).toBe(ids.length)
+    expect(t.rows.flatMap((r) => r.cells).every((c) => c.text === '' && c.imageId === null)).toBe(true)
+    expect(t.widths).toBe('equal')
+  })
+
+  it('大きさは 1〜6列・2〜10行に収める（見出しの行ともう1行は要る）。いつもは 2列×2行', () => {
+    expect(shape(blankTable('t', newId, '', 6, 10))).toEqual(Array(10).fill(6))
+    expect(shape(blankTable('t', newId, '', 9, 30))).toEqual(Array(10).fill(6))
+    expect(shape(blankTable('t', newId, '', 0, 1))).toEqual([1, 1])
+    expect(shape(blankTable('t', newId, '', Number.NaN, Number.NaN))).toEqual([2, 2])
+    expect(clampTableSize(2.6, 3.2)).toEqual({ columns: 3, rows: 3 })
+    expect(TABLE_SIZE).toMatchObject({ minColumns: 1, maxColumns: 6, minRows: 2, maxRows: 10, columns: 2, rows: 2 })
   })
 
   it('行は書いているセルの行の下に、列は右に足す。見出しの行と最後の1行・1列は消さない', () => {

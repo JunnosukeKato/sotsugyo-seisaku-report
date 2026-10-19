@@ -7,7 +7,7 @@ import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
  * 覚えるのは、ページの番号と、そのページにある欄の目印（ID）だけ（原稿の文字は入れない）。
  * 欄の目印で探すので、ページが前後にずれても（ほかの端末で書き足した、など）同じ所を開く。
  * その欄がもうなければ覚えたページの番号で開き、そのページもなければ表紙を開く。
- * PC では、表示の大きさ（「全体」か「拡大」か）も覚えておき、開いたときに戻す（useRememberZoom）
+ * PC では、表示の仕方（「全体」「見開き」「拡大」）も覚えておき、開いたときに戻す（useRememberZoom）
  */
 
 const PLACE_KEY = 'sotsugyo-seisaku-report-place'
@@ -61,47 +61,57 @@ export async function openLastPlace(editor: ReportEditor): Promise<void> {
   if (page > 0) await editor.goToPage(page, 'none')
 }
 
-// ---- PC の表示の大きさ（「全体」・「拡大」）も覚える ----
-// 読み込み直すと、ページは戻っても、表示が「拡大」から「全体」に戻っていたため。覚えるのは「全体」か「拡大」かだけ。
-// スマホは覚えない（スマホの拡大は、書いている間だけ。ページを替えると全体に戻る）
+// ---- PC の表示の仕方（「全体」・「見開き」・「拡大」）も覚える ----
+// 読み込み直すと、ページは戻っても、表示が「拡大」から「全体」に戻っていたため。覚えるのは「全体」「見開き」「拡大」のどれかだけ（mockups/v35 ③ 案A）。
+// スマホは覚えない（スマホの拡大は、書いている間だけ。ページを替えると全体に戻る。見開きはない）
 
 const ZOOM_KEY = 'sotsugyo-seisaku-report-zoom'
 
-/** 覚えている表示の大きさ（拡大なら true。覚えていない・読めなければ false＝全体） */
-export function loadZoom(): boolean {
+/** 表示の仕方：全体（1ページ全体）・見開き（2ページを並べる）・拡大（横幅いっぱい） */
+export type PageView = 'fit' | 'spread' | 'zoom'
+
+/** 覚えている表示の仕方（覚えていない・読めなければ「全体」） */
+export function loadView(): PageView {
   try {
-    return localStorage.getItem(ZOOM_KEY) === 'zoom'
+    const v = localStorage.getItem(ZOOM_KEY)
+    return v === 'zoom' || v === 'spread' ? v : 'fit'
   } catch {
-    return false
+    return 'fit'
   }
 }
 
-export function saveZoom(zoomed: boolean): void {
+export function saveView(view: PageView): void {
   try {
-    localStorage.setItem(ZOOM_KEY, zoomed ? 'zoom' : 'fit')
+    localStorage.setItem(ZOOM_KEY, view)
   } catch {
     // 覚えておけなくても、続けられる（次に開いたときは「全体」から）
   }
 }
 
+/** いまの表示の仕方 */
+export function viewOf(snap: Pick<EditorSnapshot, 'zoomed' | 'spread'>): PageView {
+  return snap.zoomed ? 'zoom' : snap.spread ? 'spread' : 'fit'
+}
+
 /**
- * PC：開いたときに、覚えている表示の大きさ（拡大）にし、そのあとは「全体」・「拡大」を替えるたびに覚える。
+ * PC：開いたときに、覚えている表示の仕方（見開き・拡大）にし、そのあとは「全体」「見開き」「拡大」を替えるたびに覚える。
  * active：覚えた場所を開き終えた・このタブで書ける（useRememberPlace と同じ）。narrow：スマホの並べ方（覚えない・戻さない）
  */
 export function useRememberZoom(editor: ReportEditor | null, snap: EditorSnapshot | null, active: boolean, narrow: boolean): void {
   const restored = useRef(false)
-  const zoomed = snap?.zoomed
+  const view = snap ? viewOf(snap) : undefined
   const ready = !!snap?.layout
   useEffect(() => {
-    if (!editor || !active || !ready || narrow || zoomed === undefined) return
-    // はじめの1回は、覚えている大きさに戻す（開いた直後の「全体」で、覚えている「拡大」を上書きしない）
+    if (!editor || !active || !ready || narrow || view === undefined) return
+    // はじめの1回は、覚えている表示の仕方に戻す（開いた直後の「全体」で、覚えている「拡大」「見開き」を上書きしない）
     if (!restored.current) {
       restored.current = true
-      if (loadZoom() && !zoomed) editor.setZoom(true)
+      const wanted = loadView()
+      if (wanted !== view) editor.setView(wanted)
       return
     }
-    saveZoom(zoomed)
-  }, [editor, active, ready, narrow, zoomed])
+    saveView(view)
+  }, [editor, active, ready, narrow, view])
 }
 
 /**

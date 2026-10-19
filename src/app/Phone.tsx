@@ -5,8 +5,10 @@ import { findEditable, type EditableKind } from '../editor/reportOps'
 import { BAND_SIDE_QUERY, forTouch, paragraphHint, photoToolsAtSide } from './bandText'
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
+import { TableSizeSheet } from './TableSize'
 import { BackupLabel } from './dialogs'
-import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, HelpButton, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
+import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, ExportNote, HelpButton, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
+import { checkSummary } from './checkSummary'
 import { keepFocus, PAGE_CONTEXT, pageName, useBandSide } from './uiShared'
 import { DriveChip, DriveMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
@@ -91,7 +93,17 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
   const tableId = id && (snap.editingKind === 'tableCell' || snap.editingKind === 'tableCaption') ? editor.tableIdOf(id) : null
   const tableBlock = tableId ? snap.report.body.flatMap((c) => c.blocks).find((b) => b.id === tableId) : undefined
   const tableWidths = tableBlock?.type === 'table' ? tableBlock.widths : 'equal'
+  // 「表を入れる」で出す、表の大きさを選ぶ欄（mockups/v35 ②）
+  const [tableSheet, setTableSheet] = useState(false)
+  // 書く欄の「戻す」「やり直す」：戻した（やり直した）あとも、書いていた欄が残っていれば、書く欄を開いたままにする
+  // （閉じると、続けて「やり直す」を押せないため。mockups/v35 ④）
+  const undoRedo = (run: () => void) => {
+    run()
+    const still = id ? findEditable(editor.getSnapshot().report, id) : undefined
+    if (id && still) editor.openWhenReady(id, still.text.length)
+  }
   return (
+    <>
     <section className={`edit-sheet${snap.editingId ? ' open' : ''}`} aria-label="書く欄">
       <header className="es-head">
         <span className="where">
@@ -119,14 +131,10 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
             {Icon.figure}図を入れる
           </button>
         )}
+        {/* 表を入れる：大きさ（列・行）を選ぶ小さな欄を出す。素材表もその欄の中（mockups/v35 ②） */}
         {snap.editingKind === 'paragraph' && (
-          <button onMouseDown={keepFocus} onClick={() => editor.addTable('blank')}>
+          <button className={tableSheet ? 'on' : undefined} onMouseDown={keepFocus} onClick={() => setTableSheet(true)}>
             {Icon.table}表を入れる
-          </button>
-        )}
-        {snap.editingKind === 'paragraph' && (
-          <button onMouseDown={keepFocus} onClick={() => editor.addTable('material')}>
-            {Icon.table}素材表
           </button>
         )}
         {tableId && (
@@ -170,16 +178,37 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
             {Icon.remove}削除
           </button>
         )}
-        <button onMouseDown={keepFocus} disabled={!snap.canUndo} onClick={() => editor.undo()}>
-          {Icon.undo}戻す
-        </button>
+        {/* 「戻す」の横に「やり直す」（戻しすぎたときに進める。mockups/v35 ④）。折り返すときも2つ並べたまま */}
+        <span className="es-undo">
+          <button onMouseDown={keepFocus} disabled={!snap.canUndo} onClick={() => undoRedo(() => editor.undo())}>
+            {Icon.undo}戻す
+          </button>
+          <button onMouseDown={keepFocus} disabled={!snap.canRedo} onClick={() => undoRedo(() => editor.redo())}>
+            {Icon.redo}やり直す
+          </button>
+        </span>
       </div>
     </section>
+    {/* 表の大きさを選ぶ欄（書く欄の外に置く。書く欄より上に重ねるため） */}
+    {tableSheet && snap.editingKind === 'paragraph' && (
+      <TableSizeSheet
+        onInsert={(size) => {
+          editor.addTable('blank', size)
+          setTableSheet(false)
+        }}
+        onMaterial={() => {
+          editor.addTable('material')
+          setTableSheet(false)
+        }}
+        onClose={() => setTableSheet(false)}
+      />
+    )}
+    </>
   )
 }
 
 /** 「追加」の欄：本文のページなら段落・見出し・図・表を足す */
-function AddTools({ editor, snap, onDone, onReferences }: { editor: ReportEditor; snap: EditorSnapshot; onDone: () => void; onReferences: () => void }) {
+function AddTools({ editor, snap, onDone }: { editor: ReportEditor; snap: EditorSnapshot; onDone: () => void }) {
   // 開いた直後で、まだ紙面が出ていない：どのページかが分からないので「本文のページで足せます」とは言わない（本文のページを開いていた学生が迷っていた）
   if (!snap.layout) return <p className="sheet-hint">紙面を準備しています。準備ができたら、ここから段落や見出しを足せます。</p>
   const kind = snap.layout.kinds[snap.page] ?? 'unknown'
@@ -211,12 +240,8 @@ function AddTools({ editor, snap, onDone, onReferences }: { editor: ReportEditor
         {tool('大見出し', Icon.heading1, () => editor.addChapter())}
         {tool('改ページ', Icon.pageBreak, () => editor.addPageBreak())}
       </div>
-      <p className="sheet-hint">図・表は、文中の入れたい位置をタップして、書く欄の「図を入れる」「表を入れる」「素材表」で入れます。</p>
-      {snap.report.references.length === 0 && (
-        <button className="add-refs" onClick={() => { onDone(); onReferences() }}>
-          ＋ 引用・参考文献を入れる（使うときだけ）
-        </button>
-      )}
+      <p className="sheet-hint">図・表は、文中の入れたい位置をタップして、書く欄の「図を入れる」「表を入れる」で入れます（素材表も「表を入れる」から）。</p>
+      {/* 引用・参考文献は、使い方の「引用・参考文献」から入れる（mockups/v35 ①。入れた後は、そのページをタップして直す） */}
     </>
   )
 }
@@ -261,7 +286,6 @@ interface Props {
   onExport: () => void
   /** 「PDFを書き出す」を押して、紙面を確かめている途中 */
   exporting?: boolean
-  onReferences: () => void
   /** 「？ 使い方」：画面いっぱいの使い方の欄を開く（メニューから。mockups/v27 案A） */
   onHelp: () => void
   sheetHostRef: React.RefObject<HTMLDivElement | null>
@@ -274,7 +298,7 @@ interface Props {
 }
 
 /** スマホ版の、紙面のまわりの部品（紙面そのものは App の .stage） */
-export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onReferences, onHelp, sheetHostRef, onWordImport, wordTodo, checkRequest }: Props) {
+export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onHelp, sheetHostRef, onWordImport, wordTodo, checkRequest }: Props) {
   const [sheet, setSheet] = useState<SheetKind>(null)
   const close = () => setSheet(null)
   // checkRequest が増えたら、チェックの欄を開く（描く途中で合わせる。React の「前の値と比べて state を変える」書き方）
@@ -283,7 +307,8 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
     setHandledRequest(checkRequest)
     setSheet('check')
   }
-  const errors = snap.findings.filter((f) => f.severity === 'error').length
+  // 下の「チェック」の赤い数は、直すところのエラーの数だけ（まだのところは数えない。mockups/v35 ① 案A）
+  const errors = checkSummary(snap, config).errors
   const kind = snap.layout?.kinds[snap.page]
   // 横向きの作品写真のページでは、作品写真の道具は紙面の右の列に出す（mockups/v33 案A。PageBand.tsx）
   const bandSide = useBandSide()
@@ -358,11 +383,11 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
       )}
       {sheet === 'add' && (
         <Sheet title="追加" onClose={close}>
-          <AddTools editor={editor} snap={snap} onDone={close} onReferences={onReferences} />
+          <AddTools editor={editor} snap={snap} onDone={close} />
         </Sheet>
       )}
       {sheet === 'check' && (
-        <Sheet title="セルフチェック" extra={<Tally snap={snap} />} onClose={close}>
+        <Sheet title="セルフチェック" extra={<Tally snap={snap} config={config} />} onClose={close}>
           {wordTodo?.(close)}
           <CheckBody editor={editor} snap={snap} config={config} onPick={close} />
           <button
@@ -374,6 +399,8 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
           >
             {Icon.pdf}PDFを書き出す
           </button>
+          {/* PDF のボタンの下のひとこと（右の欄と同じ。mockups/v35 ① 案A） */}
+          <ExportNote snap={snap} config={config} />
         </Sheet>
       )}
       {sheet === 'menu' && (

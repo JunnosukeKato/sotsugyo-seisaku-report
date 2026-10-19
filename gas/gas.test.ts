@@ -515,7 +515,11 @@ describe('管理ページ（admin-project）', () => {
     const gas = load('admin-project')
     gas.setup()
     const years = () => gas.getState().years.map((y: { year: number; status: string }) => `${y.year}:${y.status}`)
+    /** 年度ごとの、削除できるか（管理ページは、削除できる年度にだけ「この年度を削除」を出す） */
+    const deletable = () => gas.getState().years.map((y: { year: number; deletable: boolean }) => `${y.year}:${y.deletable}`)
+    expect(deletable()).toEqual(['2026:false'])
     gas.createYear(2026, 2028)
+    expect(deletable()).toEqual(['2028:true', '2026:false'])
     expect(() => gas.deleteYear(2026)).toThrow('2026年度は、学生に公開したことがあるため削除できません（削除できるのは、一度も公開していない「準備中」の年度だけです）')
     gas.addMember('sensei@example.ac.jp', '先生')
     user = 'sensei@example.ac.jp'
@@ -534,6 +538,10 @@ describe('管理ページ（admin-project）', () => {
     sheetRows('年度設定').find((r) => r[0] === 2026)![1] = '準備中'
     expect(() => gas.deleteYear(2026)).toThrow(/公開したことがある/)
     expect(() => gas.deleteYear(2027)).toThrow(/公開したことがある/)
+    expect(deletable()).toEqual(['2027:false', '2026:false'])
+    // 削除した年度をもう一度作ると、また削除できる（変更履歴の「削除」「作成」は、公開ではない）
+    gas.createYear(2027, 2028)
+    expect(deletable()).toEqual(['2028:true', '2027:false', '2026:false'])
   })
 
   it('画面を開いたあとに保存したのが自分（別のタブ）なら、そう伝える', () => {

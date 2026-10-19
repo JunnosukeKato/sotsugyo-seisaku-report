@@ -26,6 +26,27 @@ const check = (name, ok, detail = '') => {
   console.log(`${ok ? '✓' : '✗'} ${name}${detail ? `  (${detail})` : ''}`)
 }
 const wait = (ms) => new Promise((r) => setTimeout(r, ms))
+/**
+ * 引用・参考文献の窓を開く（mockups/v35 ①：「追加」の欄からは外し、メニューの「？ 使い方」→「引用・参考文献」の「引用・参考文献を入れる」から入れる）。
+ * 下から出る欄が開いていれば閉じてから。返す値：使い方の「引用・参考文献を入れる」の高さ（px）と、押したあと使い方の欄が閉じたか
+ */
+const openRefs = async (page) => {
+  if (await page.$('.sheet .sheet-close')) {
+    await page.click('.sheet .sheet-close')
+    await wait(300)
+  }
+  await page.click('.p-top .icon-btn')
+  await page.waitForSelector('.sheet .help-btn')
+  await page.click('.sheet .help-btn')
+  await page.waitForSelector('.help-list button[data-topic="references"]')
+  await page.click('.help-list button[data-topic="references"]')
+  await page.waitForSelector('.help-topic .help-refs')
+  await wait(200)
+  const h = await page.evaluate(() => Math.round(document.querySelector('.help-topic .help-refs').getBoundingClientRect().height))
+  await page.click('.help-topic .help-refs')
+  await page.waitForSelector('.modal .row-buttons')
+  return { h, helpClosed: !(await page.$('.help-sheet')) }
+}
 /** 見えているボタンなどの、見た目の高さ（px。いちばん低いもの。見えているものがなければ 0） */
 const minVisibleHeight = (page, sel) =>
   page.evaluate((sel) => {
@@ -130,6 +151,40 @@ await withEdge(async (browser) => {
   await ready()
   check('コースの一覧から選べる', !!(await snap()).report.basicInfo.courseId)
 
+  // 書き始めたばかり（氏名・サブタイトルはあとで）：チェックの欄は「直すところ 0」で赤い字・印が出ず、まだのところが灰色の ○ で並ぶ。
+  // 下の「チェック」の赤い数も出ない（直すところのエラーだけを数える。mockups/v35 ① 案A）
+  await page.click('.p-nav .nav-check')
+  await page.waitForSelector('.sheet .check-prog')
+  await wait(300)
+  const freshSheet = await page.evaluate(() => {
+    const body = document.querySelector('.sheet .sheet-body')
+    const red = [...document.querySelectorAll('.sheet *')].filter((e) => { const cs = getComputedStyle(e); return cs.color === 'rgb(181, 68, 59)' || cs.backgroundColor === 'rgb(181, 68, 59)' }).map((e) => e.className || e.tagName)
+    return {
+      tally: document.querySelector('.sheet .tally')?.textContent.replace(/\s/g, '') ?? '',
+      rows: [...body.querySelectorAll('.check-prog li')].map((li) => `${li.className}:${li.querySelector('.l')?.textContent}`),
+      none: body.querySelector('.check-none')?.textContent ?? '',
+      note: body.querySelector('.export-note')?.textContent ?? '',
+      issues: body.querySelectorAll('.issue').length,
+      red,
+      badge: document.querySelector('.p-nav .badge')?.textContent ?? '',
+    }
+  })
+  await shot('4a-check-fresh')
+  check(
+    'スマホ：書き始めたばかりのチェックの欄は「直すところ 0　まだ 4」で、赤い字・印がない。まだのところ（表紙・本文のページ・本文の段落・作品写真は ○、抄録は「先生の許可のあと」）と、PDF のボタンの下に「まだのところが4つあります」。下の「チェック」に赤い数は出ない',
+    freshSheet.tally === '直すところ0まだ4' && freshSheet.red.length === 0 && freshSheet.issues === 0 && freshSheet.none.includes('いま直すところはありません') && freshSheet.rows.join(',') === 'todo:表紙,todo:本文のページ,todo:本文の段落,todo:作品写真,wait:抄録,info:図の枚数' && freshSheet.note === 'まだのところが4つあります' && !freshSheet.badge,
+    JSON.stringify(freshSheet),
+  )
+  // まだの行を押すと、欄が閉じて、その場所へ移る（本文の段落：まだ書いていない最初の段落が開く）
+  await page.evaluate(() => [...document.querySelectorAll('.sheet .check-prog li')].find((li) => li.textContent.includes('本文の段落')).querySelector('button').click())
+  await page.waitForFunction(() => !!window.__editor.getSnapshot().editingId, { timeout: 20000 }).catch(() => {})
+  const rowJump = await page.evaluate(() => ({ sheet: !!document.querySelector('.sheet'), editing: window.__editor.getSnapshot().editingId, first: window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.type === 'paragraph' && b.hint)?.id }))
+  check('スマホ：まだのところの「本文の段落」を押すと、欄が閉じて、まだ書いていない最初の段落が書く欄で開く', !rowJump.sheet && !!rowJump.editing && rowJump.editing === rowJump.first, JSON.stringify(rowJump))
+  if (rowJump.editing) {
+    await page.click('.edit-sheet .done')
+    await ready()
+  }
+
 
   // 本文の段落をタップすると、下から書く欄が出る
   const pid = await page.evaluate(() => window.__editor.getSnapshot().report.body[0].blocks.find((b) => b.type === 'paragraph').id)
@@ -180,9 +235,15 @@ await withEdge(async (browser) => {
 
   // チェック
   await page.click('.p-nav button:nth-child(3)')
-  await page.waitForSelector('.sheet .meters')
+  await page.waitForSelector('.sheet .check-prog')
   await shot('5-check')
   check('「チェック」で、セルフチェックが下から出る', (await page.$$('.sheet .issue')).length > 0)
+  // 書いた文の間違い（「私」「製作」）は直すところ（赤・黄）に出て、下の「チェック」の赤い数は、直すところのエラーの数だけ（まだのところは数えない）
+  const fixSheet = await page.evaluate(() => {
+    const errors = [...document.querySelectorAll('.sheet .issue.error')].length
+    return { errors, afterFix: !!document.querySelector('.sheet .check-sub.fix ~ .sev-legend'), badge: document.querySelector('.p-nav .badge')?.textContent ?? '', tally: document.querySelector('.sheet .tally')?.textContent.replace(/\s/g, '') ?? '', todo: document.querySelectorAll('.sheet .check-prog li.todo').length }
+  })
+  check('スマホ：書いた文の間違いは「直すところ」に出て（凡例は直すところの中）、下の「チェック」の赤い数は直すところのエラーの数（まだのところは数えない）', fixSheet.errors >= 2 && fixSheet.afterFix && fixSheet.badge === String(fixSheet.errors) && fixSheet.todo > 0 && fixSheet.tally.startsWith('直すところ'), JSON.stringify(fixSheet))
   // エラーと要確認の意味は、一覧の上に1行（指摘ごとの札「手順書」「補助」はない。mockups/v31 案1）。スマホの幅で横にはみ出さない
   const phoneLegend = await page.evaluate(() => {
     const el = document.querySelector('.sheet .sev-legend')
@@ -218,11 +279,91 @@ await withEdge(async (browser) => {
   await page.waitForFunction(() => document.querySelector('.edit-sheet.open'), { timeout: 20000 })
   let fit = await toolsFit()
   check('段落を書いているとき、書く欄の道具が全部画面の中に見える', fit.out.length === 0 && !fit.scroll && fit.rows <= 2, JSON.stringify(fit))
-  // 表を入れて、セルを書く（道具が7つになり、2段に折り返す）
-  await page.evaluate(() => [...document.querySelectorAll('.edit-sheet .es-tools button')].find((b) => b.textContent.includes('表を入れる')).click())
+  // 書く欄の道具は「図を入れる」「表を入れる」（素材表は「表を入れる」の欄の中へ。mockups/v35 ②）と、「戻す」の横に「やり直す」（mockups/v35 ④）
+  const paraTools = await page.evaluate(() => [...document.querySelectorAll('.edit-sheet .es-tools button')].map((b) => b.textContent.trim()).join(','))
+  check('段落を書いているときの書く欄の道具は「図を入れる・表を入れる・削除・戻す・やり直す」（素材表のボタンはない）', paraTools === '図を入れる,表を入れる,削除,戻す,やり直す', paraTools)
+  // 表を入れる：下から小さな欄が出て、列・行を［−］［＋］で選ぶ（最初は2列×2行。ボタンは 44px 以上）。書く欄は開いたまま
+  const centerOf = (sel, text) =>
+    page.evaluate((sel, text) => {
+      const el = [...document.querySelectorAll(sel)].find((b) => !text || b.textContent.includes(text))
+      const r = el.getBoundingClientRect()
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    }, sel, text)
+  const tapEl = async (sel, text) => {
+    const p = await centerOf(sel, text)
+    await page.touchscreen.tap(p.x, p.y)
+    await wait(150)
+  }
+  const sizeSheet = () =>
+    page.evaluate(() => {
+      const el = document.querySelector('.sheet.table-size')
+      if (!el) return null
+      const steps = [...el.querySelectorAll('.ts-step')]
+      const buttons = [...el.querySelectorAll('.ts-step button')].map((b) => b.getBoundingClientRect())
+      return {
+        title: el.querySelector('h2')?.textContent,
+        values: steps.map((s) => s.querySelector('b').textContent).join('×'),
+        labels: steps.map((s) => s.querySelector('.l').textContent).join('／'),
+        minus: steps.map((s) => s.querySelectorAll('button')[0].disabled),
+        small: Math.min(...buttons.map((r) => Math.min(r.width, r.height))),
+        preview: el.querySelectorAll('.ts-preview i').length,
+        head: el.querySelectorAll('.ts-preview i.h').length,
+        note: el.querySelector('.ts-note')?.textContent,
+        insert: el.querySelector('.ts-insert')?.textContent,
+        material: el.querySelector('.ts-material')?.textContent,
+        editing: window.__editor.getSnapshot().editingKind,
+      }
+    })
+  await tapEl('.edit-sheet .es-tools button', '表を入れる')
+  await page.waitForSelector('.sheet.table-size')
+  let ss = await sizeSheet()
+  check(
+    '書く欄の「表を入れる」で、下から「表を入れる」の欄が出る（列［−］2［＋］・行［−］2［＋］（1行目は見出し）・小さな表の絵・「入れる」・「素材表を入れる」。［−］［＋］は 44px 以上。行は2より減らせない）',
+    ss?.title === '表を入れる' && ss.values === '2×2' && ss.labels === '列横に並ぶ数／行縦に並ぶ数（1行目は見出し）' && ss.minus.join() === 'false,true' && ss.small >= 44 && ss.preview === 4 && ss.head === 2 && ss.note === '2列×2行（色の付いた行が見出し）' && ss.insert === '入れる' && ss.material === '素材表を入れる名称・使用箇所・生地見本の3列' && ss.editing === 'paragraph',
+    JSON.stringify(ss),
+  )
+  // ×で閉じると、入れずに書く欄に戻る（書いていた段落のまま）
+  await tapEl('.sheet.table-size .sheet-close')
+  await wait(200)
+  const closedSheet = await page.evaluate(() => ({ sheet: !!document.querySelector('.sheet.table-size'), editing: window.__editor.getSnapshot().editingId, focus: !!document.activeElement?.closest('.overlay-editor') }))
+  check('「表を入れる」の欄を×で閉じると、表は入らず、書いていた段落に戻る', !closedSheet.sheet && closedSheet.editing === pid && closedSheet.focus, JSON.stringify(closedSheet))
+  // 列を3、行を4にして「入れる」
+  await tapEl('.edit-sheet .es-tools button', '表を入れる')
+  await page.waitForSelector('.sheet.table-size')
+  const plusOf = (n) => tapEl(`.sheet.table-size .ts-step:nth-of-type(${n + 1}) button[aria-label$="を増やす"]`)
+  await plusOf(0)
+  await plusOf(1)
+  await plusOf(1)
+  ss = await sizeSheet()
+  check('［＋］で列3・行4にすると、小さな表の絵も 3列×4行になる', ss?.values === '3×4' && ss.preview === 12 && ss.head === 3 && ss.note === '3列×4行（色の付いた行が見出し）', JSON.stringify(ss))
+  await shot('6b-table-size')
+  await tapEl('.sheet.table-size .ts-insert')
   await page.waitForFunction(() => window.__editor.getSnapshot().editingKind === 'tableCaption', { timeout: 30000 })
   await ready()
+  const phoneTable = await page.evaluate(() => {
+    const s = window.__editor.getSnapshot()
+    const id = window.__editor.tableIdOf(s.editingId)
+    return { shape: s.report.body.flatMap((c) => c.blocks).find((b) => b.id === id)?.rows.map((r) => r.cells.length), sheet: !!document.querySelector('.sheet.table-size') }
+  })
+  check('「入れる」で、選んだ 3列×4行（1行目は見出し）の表が入り、表のタイトルを書き始める', JSON.stringify(phoneTable.shape) === '[3,3,3,3]' && !phoneTable.sheet, JSON.stringify(phoneTable))
   await page.keyboard.type('素材')
+  // 書く欄の「戻す」で書いた分を戻し、「やり直す」で戻す前に進める（書く欄は開いたまま。mockups/v35 ④）
+  const captionNow = () =>
+    page.evaluate(() => {
+      const s = window.__editor.getSnapshot()
+      const t = s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'table' && b.id === window.__editor.tableIdOf(s.editingId ?? ''))
+      const redo = [...document.querySelectorAll('.edit-sheet .es-tools button')].find((b) => b.textContent.includes('やり直す'))
+      return { editing: s.editingKind, caption: t?.caption ?? null, open: !!document.querySelector('.edit-sheet.open'), redoOff: redo?.disabled ?? null, canRedo: s.canRedo }
+    })
+  await tapEl('.edit-sheet .es-tools button', '戻す')
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingKind === 'tableCaption', { timeout: 30000 })
+  await ready()
+  const phUndo = await captionNow()
+  await tapEl('.edit-sheet .es-tools button', 'やり直す')
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingKind === 'tableCaption' && !window.__editor.getSnapshot().canRedo, { timeout: 30000 })
+  await ready()
+  const phRedo = await captionNow()
+  check('スマホ：書く欄の「戻す」で書いた分が戻り、横の「やり直す」で戻す前に進む（書く欄は開いたまま）', phUndo.caption === '' && phUndo.open && phUndo.redoOff === false && phRedo.caption === '素材' && phRedo.open && phRedo.redoOff === true, JSON.stringify({ phUndo, phRedo }))
   const tableId = await page.evaluate(() => window.__editor.tableIdOf(window.__editor.getSnapshot().editingId))
   const cellId = await page.evaluate((tid) => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === tid).rows[1].cells[0].id, tableId)
   await page.click('.edit-sheet .done')
@@ -511,7 +652,7 @@ await withEdge(async (browser) => {
  * スマホの見やすさ（mockups/v32 ④ 案A）：
  * - 紙面の中の小さな案内とボタン（抄録の「先生の許可が出た」・作品写真の空いている枠・まだ書いていない欄）を、紙面の下の帯に、ふつうの文字の大きさで出す。紙面には小さな印だけ
  * - 横向きでは、帯は紙面の右（紙面が小さくなりすぎない）
- * - 小さいボタン（「完了」「あとで入力する」「＋引用・参考文献を入れる」・ページ送り・「ページ全体に戻す」）は高さ 44px 以上（指摘の「直す」はなくした。学生が自分で直す）
+ * - 小さいボタン（「完了」「あとで入力する」・使い方の「引用・参考文献を入れる」・ページ送り・「ページ全体に戻す」）は高さ 44px 以上（指摘の「直す」はなくした。学生が自分で直す）
  * - 残りの小さいボタン（書く欄の道具・案内の「本文へ進む」・引用・参考文献の窓のボタン）も、見た目の高さ 44px 以上（v32 の直し。
  *   削除の知らせの［戻す］・「＋ ここに続きを書く」・「とばす」は上の流れの中で、PDF の窓は iphoneShareCheck で確かめる）
  * - 縦向きでも横向きでも、画面が横にはみ出さない。横向きでは抄録の印を「→」に
@@ -749,7 +890,7 @@ async function bandCheck(browser) {
   await page.click('.edit-sheet .done')
   await ready()
 
-  // ページ送り・「ページ全体に戻す」・「＋引用・参考文献を入れる」は高さ 44px 以上
+  // ページ送り・「ページ全体に戻す」・使い方の「引用・参考文献を入れる」は高さ 44px 以上
   const pagerH = await height('.pager button')
   await page.evaluate(() => window.__editor.setZoom(true))
   await wait(300)
@@ -770,12 +911,12 @@ async function bandCheck(browser) {
   check('スマホ：拡大したままほかのページへ移ると、ページ全体の表示に戻り、ページ送りと帯が出る', movedZoomed.kind === 'photos' && !movedZoomed.zoomed && movedZoomed.pager && movedZoomed.band && movedZoomed.wholePage, JSON.stringify(movedZoomed))
   await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfBlock('p1'), 'none'))
   await ready()
+  // 「追加」の欄に「＋ 引用・参考文献を入れる」はない（使い方の「引用・参考文献」から入れる。mockups/v35 ①）
   await page.click('.p-nav .add')
-  await page.waitForSelector('.sheet .add-refs')
-  const refsH = await height('.sheet .add-refs')
-  // 「＋引用・参考文献を入れる」の窓：ボタン（「削除」「＋ 書籍を追加」「やめる」「反映する」など）と種類の選択は、見た目も高さ 44px 以上
-  await page.click('.sheet .add-refs')
-  await page.waitForSelector('.modal .row-buttons')
+  await page.waitForSelector('.sheet .add-grid')
+  const addHasRefs = !!(await page.$('.sheet .add-refs'))
+  // 引用・参考文献の窓：ボタン（「削除」「＋ 書籍を追加」「やめる」「反映する」など）と種類の選択は、見た目も高さ 44px 以上
+  const { h: refsH, helpClosed: refsHelpClosed } = await openRefs(page)
   await page.evaluate(() => [...document.querySelectorAll('.modal button')].find((b) => b.textContent.includes('書籍を追加')).click())
   await wait(300)
   const refsDialog = await page.evaluate(() => [...document.querySelectorAll('.modal button, .modal select')].map((b) => `${b.textContent.trim().slice(0, 8)}:${Math.round(b.getBoundingClientRect().height)}`))
@@ -800,7 +941,8 @@ async function bandCheck(browser) {
   await page.screenshot({ path: `${OUT}/16-buttons-44.png` })
   await page.click('.sheet-close')
   await wait(300)
-  check('ページ送り・「ページ全体に戻す」・「＋引用・参考文献を入れる」は、高さ 44px 以上', pagerH >= 44 && unzoomH >= 44 && refsH >= 44, JSON.stringify({ pagerH, unzoomH, refsH }))
+  check('ページ送り・「ページ全体に戻す」・使い方の「引用・参考文献を入れる」は、高さ 44px 以上', pagerH >= 44 && unzoomH >= 44 && refsH >= 44, JSON.stringify({ pagerH, unzoomH, refsH }))
+  check('スマホ：「追加」の欄に「＋ 引用・参考文献を入れる」はなく、使い方の「引用・参考文献」のボタンで窓が開く（使い方の欄は閉じる）', !addHasRefs && refsHelpClosed, JSON.stringify({ addHasRefs, refsHelpClosed }))
   check(
     'スマホのチェックの欄にも「直す」のボタンはなく、直し方を書く。「見頃」（書き間違えやすい語のエラー）は「このままにする」が出ない',
     phoneIssues.fix === 0 && phoneIssues.fixText === 0 && phoneIssues.mikoro?.error && phoneIssues.mikoro.detail.startsWith('「見頃」→「身頃」') && !phoneIssues.mikoro.keep,
@@ -1223,8 +1365,7 @@ async function firstTimeFixesPhone(browser) {
   const closeBox = () => page.evaluate(() => { const r = document.querySelector('.sheet .sheet-close').getBoundingClientRect(); return { w: Math.round(r.width), h: Math.round(r.height) } })
   const addClose = await closeBox()
   // 引用・参考文献の窓：書いた内容があるまま「×」を押すと、窓の中で聞く（「反映せずに閉じる」で閉じ、反映しない。ボタンは高さ 44px 以上）
-  await page.tap('.sheet .add-refs')
-  await page.waitForSelector('.modal .row-buttons')
+  await openRefs(page)
   await page.evaluate(() => [...document.querySelectorAll('.modal button')].find((b) => b.textContent.includes('書籍を追加')).click())
   await wait(200)
   await page.tap('.modal .ref-card .field:first-child input')

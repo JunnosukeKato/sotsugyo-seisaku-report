@@ -17,19 +17,23 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /**
  * 確認の窓（confirm・ページを離れるときの確認）を記録し、答える。ふだんは「OK」。
- * answer(false) のあいだは「キャンセル」
+ * answer(false) のあいだは「キャンセル」。answerNext(true, false) は、次の窓から順に「OK」「キャンセル」（使い切ったら、ふだんの答え）
  */
 function dialogLog(page) {
-  const log = { messages: [], ok: true }
+  const log = { messages: [], ok: true, next: [] }
   page.on('dialog', (d) => {
     log.messages.push(d.message())
-    if (log.ok) d.accept()
+    const ok = log.next.length ? log.next.shift() : log.ok
+    if (ok) d.accept()
     else d.dismiss()
   })
   return {
     last: () => log.messages.at(-1) ?? '',
+    /** 後ろから n 番目の窓の文（1 で最後） */
+    nth: (n) => log.messages.at(-n) ?? '',
     count: () => log.messages.length,
     answer: (ok) => void (log.ok = ok),
+    answerNext: (...answers) => void log.next.push(...answers),
   }
 }
 
@@ -60,8 +64,39 @@ await withEdge(async (browser) => {
       return e.defaultPrevented
     })
   const savedYear = (year) => page.evaluate((year) => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === year), year)
+  /**
+   * 見出し（2段。mockups/v35-admin ① 案A）が画面の幅に入っているか：ページが横にはみ出さない・どちらの段も入りきる・
+   * 「この年度を学生に公開」（なければ保存のボタン）が上の段にあり、画面の中に見える
+   */
+  const headerFits = (p = page) =>
+    p.evaluate(() => {
+      const rows = [...document.querySelectorAll('.admin-header > div')]
+      const buttons = [...document.querySelectorAll('.admin-header .head-row button')]
+      const main = buttons.find((b) => b.textContent.includes('この年度を学生に公開')) ?? buttons.find((b) => b.textContent.startsWith('保存'))
+      const r = main?.getBoundingClientRect()
+      return {
+        scrollWidth: document.documentElement.scrollWidth,
+        width: innerWidth,
+        rows: rows.map((x) => `${x.className}:${x.scrollWidth}/${x.clientWidth}`),
+        fits: document.documentElement.scrollWidth <= innerWidth && rows.length === 2 && rows.every((x) => x.scrollWidth <= x.clientWidth + 1),
+        main: main?.textContent ?? '',
+        mainVisible: !!r && r.width > 0 && r.left >= 0 && r.right <= innerWidth && r.bottom <= innerHeight,
+      }
+    })
+  /** 見出しの下の段のリンクの並び（「この年度を削除」があれば、その位置も分かる） */
+  const subLinks = (p = page) => p.evaluate(() => [...document.querySelectorAll('.admin-header .head-sub .link')].map((b) => b.textContent.trim()).join('|'))
 
   check('公開中の2026年度が開く', await page.evaluate(() => document.querySelector('.badge.pub')?.textContent === '公開中'))
+  const firstHeader = await page.evaluate(() => ({
+    top: [...document.querySelectorAll('.admin-header .head-row > *')].map((e) => e.textContent.trim() || e.className).join('|'),
+    sub: [...document.querySelectorAll('.admin-header .head-sub > *')].map((e) => e.textContent.trim() || e.className).join('|'),
+  }))
+  check(
+    '見出しは2段：上の段に年度・状態の印・保存、下の段にログイン中の人・試験用サーバーと、変更履歴・先生の登録・新年度を作成（公開中の年度には「この年度を削除」は出ない）',
+    firstHeader.top === '卒業制作報告書 管理ページ|使い方|2026年度（公開中）|公開中|spacer|保存して学生に反映' &&
+      firstHeader.sub === 'ログイン中：|admin@example.ac.jp|試験用サーバー|spacer|変更履歴|sep|先生の登録|sep|新年度を作成',
+    JSON.stringify(firstHeader),
+  )
   // 「？ 使い方」（見出しの横。右の端に先生用の使い方の欄が出る。mockups/v27 案A）
   await page.click('.admin-header .help-open')
   await page.waitForSelector('.help-dock')
@@ -79,6 +114,8 @@ await withEdge(async (browser) => {
       adminHelp.pdf.join('|') === '先生用 https://junnosukekato.github.io/sotsugyo-seisaku-report/guides/teacher-guide.pdf _blank|管理者用 https://junnosukekato.github.io/sotsugyo-seisaku-report/guides/admin-guide.pdf _blank',
     JSON.stringify(adminHelp),
   )
+  const dockTop = await page.evaluate(() => ({ dock: document.querySelector('.help-dock').getBoundingClientRect().top, header: document.querySelector('.admin-header').getBoundingClientRect().bottom }))
+  check('使い方の欄は、2段の見出しのすぐ下から出る（見出しの下の段に重ならない）', dockTop.dock === dockTop.header && dockTop.header > 80, JSON.stringify(dockTop))
   await page.type('.help-dock .help-search input', '反映 されない')
   await new Promise((r) => setTimeout(r, 300))
   const adminFound = await page.evaluate(() => ({ first: document.querySelector('.help-dock .help-results .t')?.textContent, marks: [...new Set([...document.querySelectorAll('.help-dock .help-results mark')].map((m) => m.textContent))] }))
@@ -187,12 +224,56 @@ await withEdge(async (browser) => {
   const applyDisabled = await page.evaluate(() => [...document.querySelectorAll('.tpl-foot button')].find((b) => b.textContent.includes('反映する')).disabled)
   await page.screenshot({ path: `${SHOTS}/1-template-long-row.png` })
   check('ひな形の行が長すぎると、窓の中で行と字数を示し、「反映する」を押せない', /^\d+行目の小見出し「あ+…」が長すぎます（100字まで。今は101字）$/.test(longProblem) && applyDisabled, longProblem)
+  // 押せない理由は、「反映する」のとなりにも出す（mockups/v35-admin ④ 案A。行の書き出しは外した短い文。そのあいだ、下の案内は出さない）
+  const footReason = () =>
+    page.evaluate(() => ({
+      why: document.querySelector('.tpl-foot .why > span')?.textContent ?? null,
+      icon: !!document.querySelector('.tpl-foot .why svg'),
+      more: document.querySelector('.tpl-foot .why .more')?.textContent ?? null,
+      hint: !!document.querySelector('.tpl-foot .hint'),
+      order: [...document.querySelectorAll('.tpl-foot > *')].map((e) => e.className || e.textContent.trim()).join('|'),
+    }))
+  const oneReason = await footReason()
+  check(
+    '「反映する」を押せないときは、ボタンのとなりに理由を出す（「⚠ 3行目の小見出しが長すぎます（…）」。1つだけなら「ほか○件」はなく、下の案内の代わりに出す）',
+    /^\d+行目の小見出しが長すぎます（100字まで。今は101字）$/.test(oneReason.why) && oneReason.icon && oneReason.more === null && !oneReason.hint && oneReason.order === 'spacer|why|やめる|primary',
+    JSON.stringify(oneReason),
+  )
+  // 2つ目の問題（いちばん上の大見出しを空に）：1つ目の理由と「ほか1件」。「ほか1件」を押すと、左の欄のいちばん下の一覧へ動く
+  const firstRow = await page.$('.tpl-modal .row input')
+  const firstRowTitle = await firstRow.evaluate((el) => el.value)
+  const setRowText = (handle, text) =>
+    handle.evaluate((el, text) => {
+      Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, text)
+      el.dispatchEvent(new Event('input', { bubbles: true }))
+    }, text)
+  await setRowText(firstRow, '')
+  await page.evaluate(() => (document.querySelector('.tpl-edit').scrollTop = 0))
+  await sleep(300)
+  const twoReasons = await footReason()
+  await page.screenshot({ path: `${SHOTS}/9-template-foot-reason.png` })
+  await page.evaluate(() => document.querySelector('.tpl-foot .why .more').click())
+  await sleep(900)
+  const scrolled = await page.evaluate(() => {
+    const edit = document.querySelector('.tpl-edit')
+    const list = document.querySelector('.tpl-modal .problems').getBoundingClientRect()
+    const box = edit.getBoundingClientRect()
+    return { atBottom: edit.scrollTop >= edit.scrollHeight - edit.clientHeight - 2, listVisible: list.top >= box.top && list.bottom <= box.bottom }
+  })
+  check(
+    '2つ以上あるときは、1つ目の理由と「ほか1件」。押すと、左の欄のいちばん下の理由の一覧へ動く',
+    twoReasons.why === '1行目の大見出しの名前が空です' && twoReasons.more === 'ほか1件' && scrolled.atBottom && scrolled.listVisible,
+    JSON.stringify({ twoReasons, scrolled }),
+  )
+  await setRowText(firstRow, firstRowTitle)
   await subheading.evaluate((el) => {
     const set = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set
     set.call(el, '試験の小見出し')
     el.dispatchEvent(new Event('input', { bubbles: true }))
   })
   await sleep(200)
+  const fixedFoot = await footReason()
+  check('直すと、となりの理由は消え、下の案内に戻る', fixedFoot.why === null && fixedFoot.hint, JSON.stringify(fixedFoot))
   await clickButton('反映する')
   await new Promise((r) => setTimeout(r, 300))
   const summary = await page.evaluate(() => document.querySelector('.tpl-row b').textContent)
@@ -268,6 +349,19 @@ await withEdge(async (browser) => {
   await teacher.waitForSelector('.teacher-main')
   check('先生には、ひな形の一覧だけの画面が出る（年度の設定の欄は出ない）', !(await teacher.$('.form')) && (await teacher.$$('.teacher-main .tpl-row')).length > 0)
   check('先生の画面にも、ソースコードの場所のリンクが出る（AGPL）', await teacher.evaluate(() => !!document.querySelector('.teacher-main .source a')?.href))
+  const teacherHeader = await teacher.evaluate(() => ({
+    top: [...document.querySelectorAll('.admin-header .head-row > *')].map((e) => e.textContent.trim() || e.className).join('|'),
+    sub: [...document.querySelectorAll('.admin-header .head-sub > *')].map((e) => e.textContent.trim() || e.className).join('|'),
+  }))
+  await teacher.setViewport({ width: 1280, height: 720 })
+  await sleep(300)
+  const teacherFit = await headerFits(teacher)
+  await teacher.setViewport({ width: 1440, height: 900 })
+  check(
+    '先生の画面の見出しも2段（ログイン中の人は下の段。変更履歴・先生の登録・新年度を作成・削除はない）で、1280×720 に入る',
+    teacherHeader.top === '卒業制作報告書 管理ページ|使い方|2026年度（公開中）|公開中|spacer|保存して学生に反映' && teacherHeader.sub === 'ログイン中：|sensei@example.ac.jp（先生）|試験用サーバー' && teacherFit.fits && teacherFit.mainVisible,
+    JSON.stringify({ teacherHeader, teacherFit }),
+  )
   await teacher.click('.admin-header .help-open')
   await teacher.waitForSelector('.help-dock')
   const teacherHelp = await teacher.evaluate(() => ({ topics: document.querySelectorAll('.help-dock .help-list button').length, main: !!document.querySelector('.admin.help-on .teacher-main'), label: document.querySelector('.help-dock .help-title small')?.textContent ?? '', foot: document.querySelector('.help-dock .help-foot p')?.textContent ?? '' }))
@@ -433,7 +527,25 @@ await withEdge(async (browser) => {
     createdNotice.startsWith('2027年度を作成しました（2026年度の設定のコピーです）。次の項目は2026年度のままです。') && createdNotice.includes('最終締切（2027年1月20日（水）。2026年度と同じ日付）') && createdNotice.includes('お知らせ（映画・舞台衣装デザイナー コース）'),
     createdNotice,
   )
+  // 知らせは、同じ緑の枠のまま箇条書き。項目ごとに、直す場所を小さな字で添える（mockups/v35-admin ③ 案A）
+  const noticeList = await page.evaluate(() => {
+    const box = document.querySelector('.form .message.ok.list')
+    return {
+      head: box?.querySelector('.h')?.textContent,
+      detail: box?.querySelector('p')?.textContent,
+      items: [...(box?.querySelectorAll('li') ?? [])].map((li) => `${li.firstChild?.textContent}／${li.querySelector('small')?.textContent}`),
+    }
+  })
+  check(
+    '新年度の知らせは箇条書きで、項目ごとに「場所：…」を添える',
+    noticeList.head === '2027年度を作成しました（2026年度の設定のコピーです）。' &&
+      noticeList.detail === '次の項目は2026年度のままです。確かめて直してください。' &&
+      noticeList.items.join('|') ===
+        '共通の題目／場所：この下の「毎年設定する項目」のいちばん上|最終締切（2027年1月20日（水）。2026年度と同じ日付）／場所：共通の題目のすぐ下|お知らせ（映画・舞台衣装デザイナー コース）／場所：コースのカードの「このコースの学生へのお知らせ」',
+    JSON.stringify(noticeList),
+  )
   check('前の年度の締切のままなら、年度の期間の外だと確認が出る', problemsText.includes('確認：最終締切（2027年1月20日）が、2027年度（2027年4月1日〜2028年3月31日）の外です'), problemsText)
+  check('作ったばかりの準備中の年度には、見出しの下の段の「変更履歴」のとなりに「この年度を削除」が出る', (await subLinks()) === '変更履歴|この年度を削除|先生の登録|新年度を作成', await subLinks())
   await page.screenshot({ path: `${OUT}/admin-2027.png` })
   // 準備中の年度では、ひな形の窓の案内も「公開してから届く」と言う
   await page.evaluate(() => document.querySelector('.tpl-row button').click())
@@ -450,6 +562,19 @@ await withEdge(async (browser) => {
   const typedDate = await dateInput.evaluate((el) => el.value)
   const afterDate = await page.evaluate(() => document.querySelector('.problems')?.textContent ?? '')
   check('締切の欄に「20280119」と打つと 2028-01-19 になり、期間の外の確認も消える', typedDate === '2028-01-19' && !afterDate.includes('最終締切'), `${typedDate} / ${afterDate}`)
+  // ノートパソコンの画面（1280×720）でも、「保存していない変更があります」が出たまま、見出しが横にはみ出さず、「この年度を学生に公開」が見える
+  await page.setViewport({ width: 1280, height: 720 })
+  await sleep(400)
+  const fit1280 = await headerFits()
+  await page.screenshot({ path: `${SHOTS}/10-header-1280.png` })
+  await page.setViewport({ width: 1440, height: 900 })
+  await sleep(400)
+  const fit1440 = await headerFits()
+  check(
+    '1280×720 と 1440×900 で、保存していない変更があっても見出しが横にはみ出さず、「この年度を学生に公開」が見える',
+    (await hasDirty()) && fit1280.fits && fit1280.mainVisible && fit1280.main === 'この年度を学生に公開' && fit1440.fits && fit1440.mainVisible,
+    JSON.stringify({ fit1280, fit1440 }),
+  )
   await clickButton('保存')
   await page.waitForFunction(() => document.querySelector('.message.ok')?.textContent.startsWith('保存しました'))
   check('準備中の年度は確かめずに保存し、学生に届くのは公開してからだと知らせる', (await messageText()) === '保存しました（学生に届くのは、「この年度を学生に公開」を押してからです）', await messageText())
@@ -536,22 +661,68 @@ await withEdge(async (browser) => {
   await page.keyboard.press('Escape')
   await sleep(200)
 
-  // 間違えて作った準備中の年度は削除できる（一度も公開していない年度だけ）。画面のボタンはまだないので、試験用サーバーを直接呼ぶ
-  const deleted = await page.evaluate(async () => {
-    const s = window.__adminServer
-    const created = await s.createYear(2027, 2029)
-    const after = await s.deleteYear(2029, created.years.find((y) => y.year === 2029).updatedAt)
-    const refused = await s.deleteYear(2027).then(
+  // 間違えて作った準備中の年度は削除できる（mockups/v35-admin ② 案A：見出しの下の段の「変更履歴」のとなりの「この年度を削除」。一度も公開していない年度だけ）
+  check('公開した年度（2027年度・公開中）には「この年度を削除」が出ない', (await subLinks()) === '変更履歴|先生の登録|新年度を作成', await subLinks())
+  // 間違えて 2028年度を作った（保存していない「（書きかけ）」は、確かめて破棄する）
+  await clickButton('新年度を作成')
+  await page.waitForSelector('.modal')
+  await clickButton('作成する')
+  await page.waitForFunction(() => document.querySelector('.admin-header .sel').value === '2028' && document.querySelector('.badge.draft'))
+  check('作った準備中の年度（2028年度）には「この年度を削除」が出る', (await subLinks()) === '変更履歴|この年度を削除|先生の登録|新年度を作成', await subLinks())
+  const delTitle = await fieldInput('共通の題目')
+  await delTitle.type('（消す年度）')
+  const clickDelete = () => page.evaluate(() => document.querySelector('.admin-header .head-sub .link.del').click())
+  // 保存していない変更があるときは、年度を切り替えるときと同じく先に確かめる（キャンセルなら何もしない）
+  dialogs.answer(false)
+  await clickDelete()
+  await sleep(300)
+  dialogs.answer(true)
+  check(
+    '保存していない変更があるときに「この年度を削除」を押すと、先に確かめる（キャンセルなら何もしない）',
+    dialogs.last() === '保存していない変更があります。破棄して、この年度の削除に進みますか？' && !!(await savedYear(2028)) && (await hasDirty()),
+    dialogs.last(),
+  )
+  // 削除の確かめ（消える内容・学生のツールは変わらない・削除したあとに開く年度）。キャンセルなら何も変わらない
+  dialogs.answerNext(true, false)
+  await clickDelete()
+  await sleep(300)
+  const deleteConfirm = dialogs.last()
+  check(
+    '削除の前に、消える内容と、削除したあとに開く年度（公開中の2027年度）を示して確かめる（キャンセルなら消さない）',
+    deleteConfirm ===
+      '2028年度（準備中）を削除しますか？\n\n・この年度の設定（共通の題目・締切・コース・ひな形・お知らせなど）が、すべて消えます。元には戻せません。\n・まだ学生に公開していないので、学生のツールは変わりません。\n・削除したあとは、2027年度（公開中）を開きます。' &&
+      !!(await savedYear(2028)) &&
+      (await page.evaluate(() => document.querySelector('.admin-header .sel').value)) === '2028',
+    deleteConfirm.replace(/\n/g, '⏎'),
+  )
+  // 「OK」：消して、公開中の年度を開き、緑の知らせを出す
+  await clickDelete()
+  await page.waitForFunction(() => document.querySelector('.message.ok')?.textContent.includes('削除しました'))
+  const afterDelete = await page.evaluate(() => ({
+    year: document.querySelector('.admin-header .sel').value,
+    options: [...document.querySelectorAll('.admin-header .sel option')].map((o) => o.textContent).join(','),
+  }))
+  await page.screenshot({ path: `${SHOTS}/11-year-deleted.png` })
+  const deletedHistory = await page.evaluate(async () => (await window.__adminServer.getHistory(2028)).map((h) => h.action))
+  check(
+    '「OK」で削除し、公開中の年度（2027年度）を開いて知らせる（変更履歴に「削除」が残る。保存していない変更は破棄）',
+    (await messageText()) === '2028年度を削除しました。いまは2027年度（公開中）を開いています。' &&
+      afterDelete.year === '2027' &&
+      afterDelete.options === '2027年度（公開中）,2026年度（終了）' &&
+      !(await savedYear(2028)) &&
+      deletedHistory[0] === '削除' &&
+      !(await hasDirty()) &&
+      (await subLinks()) === '変更履歴|先生の登録|新年度を作成',
+    `${await messageText()} / ${JSON.stringify(afterDelete)} / ${deletedHistory.join(',')}`,
+  )
+  // 画面では押せないが、サーバーも、公開した年度の削除は断る
+  const refused = await page.evaluate(() =>
+    window.__adminServer.deleteYear(2027).then(
       () => 'deleted',
       (e) => e.message,
-    )
-    return { before: created.years.map((y) => y.year), after: after.years.map((y) => y.year), refused, history: (await s.getHistory(2029)).map((h) => h.action) }
-  })
-  check(
-    '一度も公開していない準備中の年度は削除でき（変更履歴に「削除」が残る）、公開した年度は削除できない',
-    deleted.before.includes(2029) && !deleted.after.includes(2029) && deleted.refused.includes('学生に公開したことがあるため削除できません') && deleted.history[0] === '削除',
-    JSON.stringify(deleted),
+    ),
   )
+  check('公開した年度は、サーバーでも削除できない', refused.includes('学生に公開したことがあるため削除できません'), refused)
 
   // 終了した年度（その年度に書き始めた学生が今も読む）を保存するときも確かめる
   await page.evaluate(() => {

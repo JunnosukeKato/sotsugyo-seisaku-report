@@ -108,7 +108,8 @@ function watermark(): HTMLElement {
     'font-size:96pt',
     'line-height:normal',
     'letter-spacing:0.3em',
-    'color:rgba(181,68,59,0.14)',
+    // 灰色（先生は赤ペンで書き込むので、赤い透かしだと見分けにくい。文字の上でも、暗い写真の上でも見える濃さ。mockups/v35 ⑤ 案B）
+    'color:rgba(140,140,140,0.26)',
     'white-space:nowrap',
     'pointer-events:none',
     'z-index:10',

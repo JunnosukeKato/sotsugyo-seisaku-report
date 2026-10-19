@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { loadPlace, loadZoom, pageToOpen, placeOf, savePlace, saveZoom } from './lastPlace'
+import { loadPlace, loadView, pageToOpen, placeOf, savePlace, saveView, viewOf } from './lastPlace'
 
 // 画面のない環境なので、ブラウザの保存場所（localStorage）は簡単な偽物を置く
 const memory = new Map<string, string>()
@@ -33,18 +33,26 @@ describe('最後に見ていたページを覚える', () => {
   })
 })
 
-describe('PC の表示の大きさ（全体・拡大）を覚える', () => {
+describe('PC の表示の仕方（全体・見開き・拡大）を覚える', () => {
   beforeEach(() => memory.clear())
 
-  it('覚えるのは「全体」か「拡大」かだけ。覚えていなければ・読めなければ「全体」', () => {
-    expect(loadZoom()).toBe(false)
-    saveZoom(true)
+  it('覚えるのは「全体」「見開き」「拡大」のどれかだけ。覚えていなければ・読めなければ「全体」', () => {
+    expect(loadView()).toBe('fit')
+    saveView('zoom')
     expect([...memory.values()]).toEqual(['zoom'])
-    expect(loadZoom()).toBe(true)
-    saveZoom(false)
-    expect(loadZoom()).toBe(false)
+    expect(loadView()).toBe('zoom')
+    saveView('spread')
+    expect(loadView()).toBe('spread')
+    saveView('fit')
+    expect(loadView()).toBe('fit')
     memory.set('sotsugyo-seisaku-report-zoom', '壊れた')
-    expect(loadZoom()).toBe(false)
+    expect(loadView()).toBe('fit')
+  })
+
+  it('いまの表示の仕方は、拡大・見開き・全体の順に見る', () => {
+    expect(viewOf({ zoomed: true, spread: false })).toBe('zoom')
+    expect(viewOf({ zoomed: false, spread: true })).toBe('spread')
+    expect(viewOf({ zoomed: false, spread: false })).toBe('fit')
   })
 })
 

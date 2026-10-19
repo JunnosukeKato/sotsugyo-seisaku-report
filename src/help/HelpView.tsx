@@ -30,6 +30,8 @@ interface Props {
   onClose: () => void
   /** 「指差し確認をもう一度見る」の「いま見る」（学生用ツールだけ） */
   onTour?: () => void
+  /** 「引用・参考文献」の「引用・参考文献を入れる」：引用・参考文献の窓を開く（学生用ツールだけ。mockups/v35 ①） */
+  onReferences?: () => void
 }
 
 /** 使っている端末の、PDF の保存のしかた（印刷の画面が端末によって違う） */
@@ -55,7 +57,7 @@ function Hl({ text, terms }: { text: string; terms: string[] }) {
   )
 }
 
-export function HelpView({ topics, who, imageBase, guides, variant, onClose, onTour }: Props) {
+export function HelpView({ topics, who, imageBase, guides, variant, onClose, onTour, onReferences }: Props) {
   const [query, setQuery] = useState('')
   const [view, setView] = useState<View>({ kind: 'list' })
   const [device, setDevice] = useState<HelpDevice['id']>(currentDevice)
@@ -157,6 +159,7 @@ export function HelpView({ topics, who, imageBase, guides, variant, onClose, onT
           onOpen={(id) => open(id, 'list')}
           onZoom={setZoom}
           onTour={onTour}
+          onReferences={onReferences}
         />
       ) : searching ? (
         <Results topics={topics} query={query} who={who} onOpen={(id) => open(id, 'search')} />
@@ -227,7 +230,7 @@ function TopicList({ topics, who, guides, onOpen }: { topics: HelpTopic[]; who: 
           <ul className="help-list">
             {g.items.map((t) => (
               <li key={t.id}>
-                <button data-topic={t.id} className={t.action ? 'action' : undefined} onClick={() => onOpen(t.id)}>
+                <button data-topic={t.id} className={t.action?.kind === 'tour' ? 'action' : undefined} onClick={() => onOpen(t.id)}>
                   {t.title}
                   {t.video && <span className="help-mark" aria-label="動画あり">{Icon.play}</span>}
                 </button>
@@ -320,10 +323,11 @@ interface TopicProps {
   onOpen: (id: string) => void
   onZoom: (z: { src: string; caption: string }) => void
   onTour?: () => void
+  onReferences?: () => void
 }
 
 /** 開いた項目：ひとこと・手順・端末ごとの手順・補足・画面の写真（・動画） */
-function TopicView({ topic: t, topics, terms, backLabel, imageBase, device, detected, onDevice, onBack, onOpen, onZoom, onTour }: TopicProps) {
+function TopicView({ topic: t, topics, terms, backLabel, imageBase, device, detected, onDevice, onBack, onOpen, onZoom, onTour, onReferences }: TopicProps) {
   const dev = t.devices?.find((d) => d.id === device) ?? t.devices?.[0]
   const shotSrc = t.shot ? `${imageBase}${t.shot.file}` : ''
   return (
@@ -388,6 +392,13 @@ function TopicView({ topic: t, topics, terms, backLabel, imageBase, device, dete
       ))}
       {t.action?.kind === 'tour' && onTour && (
         <button className="help-action" onClick={onTour}>
+          {t.action.label}
+        </button>
+      )}
+      {/* 引用・参考文献を入れる（右の欄からは外し、ここから入れる。入れた文献があれば、窓の中で直せる） */}
+      {t.action?.kind === 'references' && onReferences && (
+        <button className="help-action help-refs" onClick={onReferences}>
+          {Icon.refs}
           {t.action.label}
         </button>
       )}

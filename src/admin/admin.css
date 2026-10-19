@@ -23,10 +23,20 @@ button:disabled { opacity: 0.45; cursor: default; }
 .spacer { flex: 1; }
 
 .admin-loading { height: 100%; display: grid; place-items: center; text-align: center; line-height: 2; color: var(--muted); }
-.admin { height: 100%; display: grid; grid-template-rows: 56px 1fr; }
+/* --head-h：見出しの高さ（上の段 52px ＋ 下の段 32px ＋ 下の線 1px。右の端に出る使い方の欄は、この下から） */
+.admin { --head-h: 85px; height: 100%; display: grid; grid-template-rows: var(--head-h) 1fr; }
 
-.admin-header { display: flex; align-items: center; gap: 10px; padding: 0 18px; background: var(--panel); border-bottom: 1px solid var(--line); white-space: nowrap; }
+/* 見出しは2段（mockups/v35-admin ① 案A）。上の段は年度・状態の印と保存・公開、下の細い段（薄い灰色）はログイン中の人と、ときどき使うリンク */
+.admin-header { background: var(--panel); border-bottom: 1px solid var(--line); white-space: nowrap; }
+.admin-header .head-row { display: flex; align-items: center; gap: 10px; height: 52px; padding: 0 18px; }
+.admin-header .head-sub { display: flex; align-items: center; gap: 12px; height: 32px; padding: 0 18px; background: #f6f7f9; border-top: 1px solid var(--line); }
 .admin-header b { font-size: 15px; }
+.head-sub .who { font-size: 12px; color: var(--muted); margin-right: -6px; }
+.head-sub .link { padding: 0; font-size: 12.5px; }
+.head-sub .sep { width: 1px; height: 14px; background: #cfd4dc; }
+/* 準備中の年度を削除する（mockups/v35-admin ② 案A：「変更履歴」のとなりに、赤い字で。削除できる年度のときだけ出す） */
+.head-sub .link.del { display: inline-flex; align-items: center; gap: 3px; color: var(--error); }
+.head-sub .link.del svg { width: 15px; height: 15px; }
 .sel { font: inherit; font-size: 13px; border: 1px solid var(--line); border-radius: 8px; padding: 6px 8px; background: #fff; }
 .badge { font-size: 11px; border-radius: 999px; padding: 3px 9px; font-weight: 700; }
 .badge.pub { background: var(--ok-soft); color: var(--ok); }
@@ -40,9 +50,18 @@ button:disabled { opacity: 0.45; cursor: default; }
 .admin-main { display: grid; grid-template-columns: 480px 1fr; min-height: 0; }
 .form { background: var(--panel); border-right: 1px solid var(--line); overflow: auto; padding: 16px 20px 40px; }
 .form h2 { font-size: 13px; color: var(--muted); font-weight: 400; margin: 20px 0 10px; letter-spacing: 0.04em; }
-.message { border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 10px; }
+/* 知らせは、言葉の切れ目で折り返す（mockups/v35-admin の知らせと同じ） */
+.message { border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 10px; word-break: auto-phrase; }
 .message.ok { background: var(--ok-soft); color: var(--ok); }
 .message.ng { background: var(--error-soft); color: var(--error); }
+/* 箇条書きの知らせ（新年度を作ったあとの、前の年度のままの項目。mockups/v35-admin ③ 案A）。直す場所を小さな字で添える */
+.message.list { padding: 10px 14px 12px; line-height: 1.65; }
+.message.list .h { font-weight: 700; }
+.message.list p { margin: 2px 0 0; }
+.message.list ul { margin: 6px 0 0; padding: 0 0 0 1.3em; color: var(--ink); }
+.message.list li { margin: 6px 0 0; }
+.message.list li::marker { color: var(--ok); }
+.message.list small { display: block; color: #5f7d6a; font-size: 11.5px; line-height: 1.55; }
 .problems { display: grid; gap: 4px; font-size: 12px; margin-bottom: 6px; }
 .problems .error { color: var(--error); }
 .problems .warning { color: var(--warn); }
@@ -137,6 +156,12 @@ textarea.in { resize: vertical; }
 .tpl-preview { min-height: 0; }
 .tpl-preview iframe { width: 100%; height: 100%; border: 0; display: block; }
 .tpl-foot { display: flex; align-items: center; gap: 10px; padding: 12px 20px; border-top: 1px solid var(--line); }
+/* 「反映する」を押せない理由（mockups/v35-admin ④ 案A）：ボタンのとなりに1つ目の理由と「ほか○件」。直すところがあるあいだは、下の案内の代わりに出す */
+.tpl-foot .why { display: inline-flex; align-items: center; gap: 6px; min-width: 0; font-size: 13px; color: var(--error); white-space: nowrap; }
+.tpl-foot .why svg { width: 17px; height: 17px; flex: none; }
+.tpl-foot .why > span { overflow: hidden; text-overflow: ellipsis; }
+.tpl-foot .why .more { flex: none; margin-left: 2px; padding: 1px 8px; border: 1px solid #f0c9c9; border-radius: 999px; background: #fff; color: var(--error); font-size: 12px; line-height: inherit; }
+.tpl-foot .why .more:hover { background: var(--error-soft); }
 
 /* ---- 管理者と先生の登録 ---- */
 .member-list { list-style: none; margin: 0 0 12px; padding: 0; }
@@ -210,5 +235,7 @@ textarea.in { resize: vertical; }
 .admin-header .help-open.on { border-color: var(--accent); background: var(--accent-soft); font-weight: 700; }
 .admin-header .help-open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .help-dock { --panel-bg: #fff; --chip-bg: #eef0f3; --palette-hover: #f2f4f7; }
+/* 使い方の欄は、2段の見出しの下から */
+.admin .help-dock { top: var(--head-h); }
 /* 使い方の欄を開いている間は、入力欄と見本をその分だけ左に寄せる（欄の下に隠さない） */
 .admin.help-on .admin-main, .admin.help-on .teacher-main { margin-right: min(380px, 100vw); }

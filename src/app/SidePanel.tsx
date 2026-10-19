@@ -1,18 +1,22 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import { findCourse, type YearConfig } from '../config'
-import { abstractCharCount, type ReportFinding } from '../checker/reportChecks'
+import { exportNote, type ProgressRow, type ProgressTarget } from '../checker/progress'
+import type { ReportFinding } from '../checker/reportChecks'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import type { PageKind } from '../layout/measure'
 import { Icon } from './icons'
 import { AREA_LABELS, AREA_ORDER, daysUntil, formatDeadline } from './labels'
 import { BackupLabel } from './dialogs'
+import { checkSummary } from './checkSummary'
 import { DriveChipMenu, type DriveControls } from './DriveUi'
 import type { SaveState } from './useAutosave'
 import { WordImportLink } from './WordImport'
 
 /**
  * 右の欄。上から：名前・保存のようす・締切・手順書と「バックアップ・作り直す」と「？ 使い方」（今年度だけ「Word で書いた分を読み込む」）／
- * Word から写したあとの「つぎにすること」（今年度だけ）／学科からのお知らせ／ページ一覧／セルフチェック／PDFの書き出し
+ * Word から写したあとの「つぎにすること」（今年度だけ）／学科からのお知らせ／セルフチェック（まだのところ・直すところ）／PDFの書き出し。
+ * 上の半分は詰めて（保存と締切を1行に・ボタンを小さく）、セルフチェックを広く見せる（mockups/v35 ①）。
+ * 引用・参考文献を入れるボタンは、ここには置かない（使い方の「引用・参考文献」から入れる。入れた後は、そのページをクリックして直す）
  */
 
 interface Props {
@@ -28,7 +32,6 @@ interface Props {
   onExport: () => void
   /** 「PDFを書き出す」を押して、紙面を確かめている途中 */
   exporting?: boolean
-  onReferences: () => void
   /** 「？ 使い方」：右の欄を使い方に切り替える（mockups/v27 案A） */
   onHelp: () => void
   /** 今年度だけ：「Word で書いた分を読み込む」の小さなリンク（mockups/v24 ① 案C）。渡したときだけ出す */
@@ -51,13 +54,16 @@ export function DriveStoppedNote() {
   return <div className="drive-stopped">いまはドライブへの保存を止めています（学科の判断）。原稿はこの端末にだけ保存されます。再開されたら、ログインするとドライブにも保存されます。</div>
 }
 
-/** 自分のコースへのお知らせ（管理ページで、コースごとに書く。mockups/v21） */
-export function CourseNotice({ config, courseId }: { config: YearConfig; courseId: string }) {
+/**
+ * 自分のコースへのお知らせ（管理ページで、コースごとに書く。mockups/v21）。
+ * short：見出しを「コースからのお知らせ」だけにする（PC の右の欄。上の半分を詰める。mockups/v35 ①）
+ */
+export function CourseNotice({ config, courseId, short }: { config: YearConfig; courseId: string; short?: boolean }) {
   const course = findCourse(config, courseId)
   if (!course?.notice?.trim()) return null
   return (
     <div className="notice">
-      <b>{course.name} コースからのお知らせ</b>
+      <b>{short ? 'コースからのお知らせ' : `${course.name} コースからのお知らせ`}</b>
       <p>{course.notice.trim()}</p>
     </div>
   )
@@ -81,13 +87,27 @@ export function PageColumn({ editor, snap }: { editor: ReportEditor; snap: Edito
         <span>ページ</span>
         {snap.pageCount > 0 && (
           <span className="pcount">
-            <b>{snap.page + 1}</b> / {snap.pageCount}
+            <b>{shownPagesLabel(snap)}</b> / {snap.pageCount}
           </span>
         )}
       </div>
       <PageThumbs editor={editor} snap={snap} />
     </aside>
   )
+}
+
+/** 見開き（mockups/v35 ③ 案A）で並べているページ（0 から。見開きでなければ、見ているページだけ） */
+function shownPages(snap: EditorSnapshot): number[] {
+  if (!snap.spread) return [snap.page]
+  const first = snap.page - (snap.page % 2)
+  return first + 1 < snap.pageCount ? [first, first + 1] : [first]
+}
+
+/** 見ているページの番号（見開きなら「5–6」） */
+function shownPagesLabel(snap: EditorSnapshot): string {
+  return shownPages(snap)
+    .map((p) => p + 1)
+    .join('–')
 }
 
 /** 親から受け継ぐ文字の設定（紙面の複製に写すもの） */
@@ -120,6 +140,8 @@ export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; sna
   let body = 0
   const names = kinds.map((k) => (k === 'body' ? `${SHORT_NAMES.body} ${++body}` : SHORT_NAMES[k]))
   const errorPages = new Set(snap.findings.filter((f) => f.severity === 'error').map((f) => editor.pageOfFinding(f)))
+  // 見ているページ（見開きなら、並べている2ページとも選んだ印）
+  const shown = new Set(shownPages(snap))
 
   // 組み直すたびに、紙面のページを複製して縮小表示する。
   // 組み直した紙面を先に描いてから作る（長い原稿では、ページを複製して縮めるのにも時間がかかり、紙面が出るのを待たせていたため）
@@ -159,14 +181,14 @@ export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; sna
   // 見ているページの見本が、一覧の中で見えるようにする
   useEffect(() => {
     ref.current?.querySelector('.t.on')?.scrollIntoView({ block: 'nearest' })
-  }, [snap.page])
+  }, [snap.page, snap.spread])
 
   return (
     <div className="thumb-list" ref={ref}>
       {names.map((name, i) => (
         <button
           key={i}
-          className={`t${i === snap.page ? ' on' : ''}${errorPages.has(i) ? ' has-error' : ''}`}
+          className={`t${shown.has(i) ? ' on' : ''}${errorPages.has(i) ? ' has-error' : ''}`}
           title={`${name}（${i + 1}ページ目）${errorPages.has(i) ? '：エラーがあります' : ''}`}
           // 読み上げの名前（縮小した紙面の中の文字まで読まないように、短い名前を付ける）
           aria-label={`${name}（${i + 1}ページ目）${errorPages.has(i) ? 'エラーあり' : ''}`}
@@ -186,17 +208,61 @@ export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; sna
   )
 }
 
-function Meter({ label, value, ok, ratio }: { label: string; value: string; ok: boolean; ratio: number }) {
+/** 「PDFを書き出す」の下のひとこと（まだのところ・直すところの数） */
+export function ExportNote({ snap, config }: { snap: EditorSnapshot; config: YearConfig }) {
+  const { fixes, notYet } = checkSummary(snap, config)
+  return <p className="export-note">{exportNote({ fix: fixes.length, notYet, pending: snap.pageChecksPending, abstractWaiting: snap.report.abstract.started === false })}</p>
+}
+
+/** まだのところの行を押したとき：その指摘の箇所へ（文字の欄なら書き始める）、またはそのページへ */
+function goToTarget(editor: ReportEditor, target: ProgressTarget): void {
+  if (target.kind === 'finding') {
+    void editor.goToFinding(target.finding)
+    return
+  }
+  const kinds = editor.getSnapshot().layout?.kinds ?? []
+  const index = target.last ? kinds.lastIndexOf(target.area) : kinds.indexOf(target.area)
+  if (index >= 0) void editor.goToPage(index, 'fade')
+}
+
+/**
+ * まだのところの1行（灰色の ○、済むと緑の ✓、先生の許可のあとは点線の ○、目安は小さな点）。赤くしない。
+ * 押すと、その場所へ移る（図の枚数は目安だけなので押せない）
+ */
+function ProgressItem({ row, editor, onPick }: { row: ProgressRow; editor: ReportEditor; onPick?: () => void }) {
+  const inner = (
+    <>
+      <i aria-hidden="true">{row.state === 'done' && Icon.check}</i>
+      <span className="l">{row.label}</span>
+      <span className="v">
+        {row.value}
+        {row.strong && <b>{row.strong}</b>}
+      </span>
+      {row.bar !== undefined && (
+        <span className="bar" aria-hidden="true">
+          <i style={{ width: `${Math.max(3, Math.min(100, row.bar * 100))}%` }} />
+        </span>
+      )}
+    </>
+  )
+  const target = row.target
   return (
-    <div className="meter">
-      <div className="row">
-        <span>{label}</span>
-        <b className={ok ? 'ok' : 'ng'}>{value}</b>
-      </div>
-      <div className="bar">
-        <i className={ok ? 'ok' : 'ng'} style={{ width: `${Math.max(2, Math.min(100, ratio * 100))}%` }} />
-      </div>
-    </div>
+    <li className={row.state}>
+      {target ? (
+        <button
+          type="button"
+          className="row"
+          onClick={() => {
+            onPick?.()
+            goToTarget(editor, target)
+          }}
+        >
+          {inner}
+        </button>
+      ) : (
+        <div className="row">{inner}</div>
+      )}
+    </li>
   )
 }
 
@@ -295,9 +361,13 @@ export function HelpButton({ onClick }: { onClick: () => void }) {
   )
 }
 
-/** セルフチェックの中身（進み具合のメーターと、場所ごとにまとめた指摘）。PC は右の欄、スマホは下から出る欄に置く */
+/**
+ * セルフチェックの中身（mockups/v35 ① 案A）。PC は右の欄、スマホは下から出る欄に置く。
+ * - まだのところ：まだ書いていない・入れていないだけのもの。決まった行の進み具合（赤くしない。押すとその場所へ）
+ * - 直すところ：書いた文の間違い。エラーと要確認の意味（凡例）と、場所ごとにまとめた指摘（押すとその箇所へ）
+ */
 export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEditor; snap: EditorSnapshot; config: YearConfig; onPick?: () => void }) {
-  const { findings, layout, report } = snap
+  const { findings } = snap
   const listRef = useRef<HTMLDivElement>(null)
   // 書いている（選んでいる）箇所の指摘が変わったら、その指摘が一覧の見えるところに来るようにする
   const here = findings.filter((f) => activeKind(f, snap) === 'here').map((f) => `${f.ruleId}:${f.blockId}:${f.start}`).join('|')
@@ -306,41 +376,33 @@ export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEdit
     const behavior = matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth'
     if (here) listRef.current?.querySelector('.issue.here')?.scrollIntoView({ block: 'nearest', behavior })
   }, [here])
-  const chars = abstractCharCount(report)
-  const { minChars, maxChars, minLines, maxLines } = config.abstract
-  const bodyPages = layout?.bodyPages ?? 0
-  const figures = report.body.flatMap((c) => c.blocks).reduce((n, b) => n + (b.type === 'figureRow' ? b.figures.length : 0), 0)
-  const figureMax = Math.max(1, bodyPages * config.body.imagesPerPageGuide)
+  const { rows, fixes } = checkSummary(snap, config)
   return (
     <>
-      <div className="meters">
-        <Meter label="本文のページ数" value={`${bodyPages} / ${config.body.minPages}ページ以上`} ok={bodyPages >= config.body.minPages} ratio={bodyPages / config.body.minPages} />
-        {report.abstract.started === false ? (
-          <Meter label="抄録" value="先生の許可が出てから書きます" ok ratio={0} />
-        ) : (
-          <>
-            <Meter label="抄録の文字数" value={`${chars}字（${minChars}〜${maxChars}）`} ok={chars >= minChars && chars <= maxChars} ratio={chars / maxChars} />
-            <Meter
-              label="抄録の行数"
-              value={`${layout?.abstractLines ?? 0}行（${minLines}〜${maxLines}）`}
-              ok={!!layout && layout.abstractLines >= minLines && layout.abstractLines <= maxLines}
-              ratio={(layout?.abstractLines ?? 0) / maxLines}
-            />
-          </>
-        )}
-        <Meter label="図の枚数" value={`${figures}枚（目安 ${figureMax}枚まで）`} ok={figures <= figureMax} ratio={figures / figureMax} />
+      <div className="check-sub">
+        <b>まだのところ</b>
+        <span>押すと、その場所へ</span>
       </div>
+      <ul className="check-prog">
+        {rows.map((row) => (
+          <ProgressItem key={row.id} row={row} editor={editor} onPick={onPick} />
+        ))}
+      </ul>
       <div ref={listRef}>
-      {/* 開いた直後で、紙面を組み終えていない間は、ページ数などのチェックをまだしていない（「指摘はありません」とは言わない） */}
-      {snap.pageChecksPending && findings.length > 0 && <p className="check-pending">ページ数などのチェックは、紙面の準備ができてからします。</p>}
-      {findings.length > 0 && <SeverityLegend />}
-      {findings.length === 0 && snap.pageChecksPending ? (
+      <div className="check-sub fix">
+        <b>直すところ</b>
+        <span>書いた文の間違い</span>
+      </div>
+      {/* 開いた直後で、紙面を組み終えていない間は、ページ数などのチェックをまだしていない（「直すところはありません」とは言わない） */}
+      {snap.pageChecksPending && fixes.length > 0 && <p className="check-pending">ページ数などのチェックは、紙面の準備ができてからします。</p>}
+      {fixes.length > 0 && <SeverityLegend />}
+      {fixes.length === 0 && snap.pageChecksPending ? (
         <div className="empty check-pending">確かめています…</div>
-      ) : findings.length === 0 ? (
-        <div className="empty">✓ 指摘はありません。PDFを書き出せます。</div>
+      ) : fixes.length === 0 ? (
+        <p className="check-none">✓ いま直すところはありません</p>
       ) : (
         AREA_ORDER.map((area) => {
-          const items = findings.filter((f) => f.area === area)
+          const items = fixes.filter((f) => f.area === area)
           if (items.length === 0) return null
           return (
             <div key={area} className="igroup">
@@ -378,20 +440,19 @@ export function CheckBody({ editor, snap, config, onPick }: { editor: ReportEdit
   )
 }
 
-/** エラーと要確認の件数 */
-export function Tally({ snap }: { snap: EditorSnapshot }) {
-  const errors = snap.findings.filter((f) => f.severity === 'error').length
+/** 直すところと、まだのところの数（例：直すところ 3、まだ 2。直すところがあれば赤い数。mockups/v35 ① 案A） */
+export function Tally({ snap, config }: { snap: EditorSnapshot; config: YearConfig }) {
   // 紙面を組み終えるまでは、件数を出さない（ページ数などのチェックが加わって、数が変わるため）
   if (snap.pageChecksPending) return <span className="tally">確かめています…</span>
+  const { fixes, notYet } = checkSummary(snap, config)
   return (
-    <span className="tally">
-      <b className="e">{errors}</b> エラー　<b className="w">{snap.findings.length - errors}</b> 要確認
+    <span className="tally split">
+      直すところ <b className={fixes.length ? 'e' : 'm'}>{fixes.length}</b>　まだ <b className="m">{notYet}</b>
     </span>
   )
 }
 
-export function SidePanel({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onReferences, onHelp, onWordImport, wordTodo }: Props) {
-  const errors = snap.findings.filter((f) => f.severity === 'error').length
+export function SidePanel({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onHelp, onWordImport, wordTodo }: Props) {
   return (
     <aside className="side">
       <header className="side-head">
@@ -426,21 +487,12 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
 
       {wordTodo}
 
-      <CourseNotice config={config} courseId={snap.report.basicInfo.courseId} />
-
-      {/* 引用・参考文献はない報告書が多いため、使うときだけここから入れる（入れた後は、そのページをクリックして編集する） */}
-      {snap.report.references.length === 0 && (
-        <div className="refs-link">
-          <button className="add-refs" onClick={onReferences}>
-            ＋ 引用・参考文献を入れる（使うときだけ）
-          </button>
-        </div>
-      )}
+      <CourseNotice config={config} courseId={snap.report.basicInfo.courseId} short />
 
       <section className="sec check">
         <div className="sec-h">
           <span>セルフチェック</span>
-          <Tally snap={snap} />
+          <Tally snap={snap} config={config} />
         </div>
         <CheckBody editor={editor} snap={snap} config={config} />
       </section>
@@ -450,7 +502,7 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
           {Icon.pdf}
           {exporting ? '確かめています…' : 'PDFを書き出す'}
         </button>
-        <p>{errors > 0 ? `エラーが${errors}件あります。0にしてから書き出しましょう` : snap.pageChecksPending ? '紙面を確かめています…' : '提出用のPDFを書き出せます'}</p>
+        <ExportNote snap={snap} config={config} />
         <SourceNotice />
       </footer>
     </aside>

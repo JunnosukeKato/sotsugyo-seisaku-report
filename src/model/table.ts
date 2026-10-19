@@ -10,9 +10,20 @@ type NewId = (prefix: string) => string
 const cell = (newId: NewId, text = ''): TableCell => ({ id: newId('tc'), text, imageId: null })
 const row = (newId: NewId, texts: string[]): TableRow => ({ id: newId('tr'), cells: texts.map((t) => cell(newId, t)) })
 
-/** 空の表（見出しの行と、1行。2列） */
-export function blankTable(id: string, newId: NewId, caption = ''): TableBlock {
-  return { type: 'table', id, caption, widths: 'equal', rows: [row(newId, ['', '']), row(newId, ['', ''])] }
+/** 入れる前に選べる表の大きさ（mockups/v35 ②。パソコンはます目、スマホは［−］［＋］）。行は見出しの行も数える（見出しともう1行が要る） */
+export const TABLE_SIZE = { minColumns: 1, maxColumns: 6, minRows: 2, maxRows: 10, columns: 2, rows: 2 } as const
+
+/** 表の大きさを、選べる範囲に収める（整数でなければ、いつもの 2列×2行の値にする） */
+export function clampTableSize(columns: number, rows: number): { columns: number; rows: number } {
+  const fit = (n: number, min: number, max: number, usual: number) => (Number.isFinite(n) ? Math.max(min, Math.min(max, Math.round(n))) : usual)
+  return { columns: fit(columns, TABLE_SIZE.minColumns, TABLE_SIZE.maxColumns, TABLE_SIZE.columns), rows: fit(rows, TABLE_SIZE.minRows, TABLE_SIZE.maxRows, TABLE_SIZE.rows) }
+}
+
+/** 空の表（1行目は見出しの行。columns 列×rows 行。いつもは 2列×2行＝見出しの行と、1行） */
+export function blankTable(id: string, newId: NewId, caption = '', columns: number = TABLE_SIZE.columns, rows: number = TABLE_SIZE.rows): TableBlock {
+  const size = clampTableSize(columns, rows)
+  const blank = () => Array.from({ length: size.columns }, () => '')
+  return { type: 'table', id, caption, widths: 'equal', rows: Array.from({ length: size.rows }, () => row(newId, blank())) }
 }
 
 /** 素材表のひな形の見出し（生地見本の列には写真を入れる） */

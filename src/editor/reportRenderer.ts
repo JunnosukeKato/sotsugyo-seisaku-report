@@ -126,6 +126,11 @@ export class ReportRenderer {
   private borrow: { back: Buffer; lender: Buffer; parts: Map<number, PartView> } | null = null
   /** めくっている途中の動きを、すぐ終える（hurryTurn。めくっていなければ null） */
   private finishTurn: (() => void) | null = null
+  /**
+   * 見開き（mockups/v35 ③ 案A。PC だけ）：表示しているページ（is-current）と同じ組（1–2、3–4…）の隣のページも出す（is-pair）。
+   * 組の右のページには is-right を付け、index.css で右へずらす。組を替えるときは、めくらずに、ふわっと替える
+   */
+  spread = false
 
   constructor(container: HTMLElement) {
     const make = (): Buffer => {
@@ -439,17 +444,26 @@ export class ReportRenderer {
   /** 表の紙面で page ページ目を見せる（動きなし。fade なら、ふわっと出す） */
   show(page: number, effect: 'none' | 'fade' = 'none'): void {
     this.setCurrent(this.pageView, page)
-    if (effect === 'fade' && !reducedMotion()) {
-      const el = this.pageView.pages()[page]
-      el?.classList.add('fade-in')
-      el?.addEventListener('animationend', () => el.classList.remove('fade-in'), { once: true })
-    }
+    if (effect === 'fade' && !reducedMotion()) fadeIn(this.shownPages(this.pageView, page))
+  }
+
+  /** 見えているページ（見開きなら、並べている2ページ） */
+  private shownPages(view: PageView, page: number): HTMLElement[] {
+    const pages = view.pages()
+    if (!this.spread) return pages[page] ? [pages[page]] : []
+    const first = page - (page % 2)
+    return [pages[first], pages[first + 1]].filter((p): p is HTMLElement => !!p)
   }
 
   private setCurrent(view: PageView, page: number): void {
+    // 見開き：同じ組（0–1、2–3…）の隣のページも出し、右のページに印を付ける
+    const first = this.spread ? page - (page % 2) : -1
     view.pages().forEach((p, i) => {
       p.classList.remove(...MOTION_CLASSES)
       p.classList.toggle('is-current', i === page)
+      const paired = this.spread && (i === first || i === first + 1)
+      p.classList.toggle('is-pair', paired && i !== page)
+      p.classList.toggle('is-right', paired && i === first + 1)
     })
     stackParts(view)
   }
@@ -460,6 +474,7 @@ export class ReportRenderer {
    */
   turn(from: number, to: number, effect: PageEffect): Promise<void> {
     const view = this.pageView
+    if (this.spread) return this.turnSpread(view, from, to, effect)
     const pages = view.pages()
     const a = pages[from]
     const b = pages[to]
@@ -502,6 +517,37 @@ export class ReportRenderer {
       moving.addEventListener('animationend', onEnd)
       setTimeout(finish, 1500)
     })
+  }
+
+  /**
+   * 見開きのページ送り：同じ組の隣のページへ移るだけなら、紙面はそのまま（印だけ付け替える）。
+   * ほかの組へは、めくらずに、並べた2ページをふわっと出す（1ページの「めくる」動きは、2ページ並べたときには合わないため）
+   */
+  private turnSpread(view: PageView, from: number, to: number, effect: PageEffect): Promise<void> {
+    const samePair = from - (from % 2) === to - (to % 2)
+    this.setCurrent(view, to)
+    if (samePair || effect === 'none' || reducedMotion()) return Promise.resolve()
+    fadeIn(this.shownPages(view, to))
+    return new Promise((resolve) => {
+      let finished = false
+      const finish = () => {
+        if (finished) return
+        finished = true
+        if (this.finishTurn === finish) this.finishTurn = null
+        resolve()
+      }
+      this.finishTurn = finish
+      // ふわっと出す動き（index.css の fade-in。0.2秒）が終わるころ
+      setTimeout(finish, 220)
+    })
+  }
+}
+
+/** ページをふわっと出す（動きが終わったら印を外す） */
+function fadeIn(pages: HTMLElement[]): void {
+  for (const el of pages) {
+    el.classList.add('fade-in')
+    el.addEventListener('animationend', () => el.classList.remove('fade-in'), { once: true })
   }
 }
 
@@ -587,7 +633,7 @@ function stackParts(view: PageView): void {
     const pages = [...part.element.querySelectorAll<HTMLElement>('[data-vivliostyle-page-container]')]
     const level = Math.max(
       0,
-      ...pages.map((p) => (p.matches('.turn-out, .turn-in, .fade-out') ? 3 : p.classList.contains('is-current') ? 2 : p.matches('.is-under, .is-under-current') ? 1 : 0)),
+      ...pages.map((p) => (p.matches('.turn-out, .turn-in, .fade-out') ? 3 : p.matches('.is-current, .is-pair') ? 2 : p.matches('.is-under, .is-under-current') ? 1 : 0)),
     )
     part.element.style.zIndex = String(level)
   }

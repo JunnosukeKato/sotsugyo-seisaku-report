@@ -700,7 +700,7 @@ body.resizing .page-viewport { pointer-events: none; }
 .acked li small { display: block; color: var(--muted); }
 .acked li button { border: 1px solid var(--line); background: #fff; border-radius: 999px; padding: 2px 10px; font-size: 12px; color: var(--accent); }
 
-/* ---- 下書きの PDF（どのページにも「下書き」の透かし。mockups/v22 ① 案A） ---- */
+/* ---- 下書きの PDF（どのページにも「下書き」の透かし。mockups/v22 ① 案A。透かしは灰色：mockups/v35 ⑤ 案B。src/pdf/pagesToPdf.ts と同じ色） ---- */
 .draft-box { margin: 14px 0 0; padding: 12px 14px; border-radius: 10px; background: #f6f4ef; border: 1px solid var(--line); font-size: 13px; line-height: 1.7; }
 /* 見出しの太字だけを1行にする（印刷の手順の中の太字は、文の中にそのまま置く） */
 .draft-box > b { display: block; margin-bottom: 2px; }
@@ -709,7 +709,7 @@ body.resizing .page-viewport { pointer-events: none; }
 @media print {
   .print-draft .page-viewport [data-vivliostyle-page-container] { position: relative; }
   /* 印刷のときはページの影（::after）を消しているので、下書きのときだけ、その場所に透かしを出す */
-  .print-draft .page-viewport [data-vivliostyle-page-container]::after { content: '下書き' !important; position: absolute !important; inset: auto !important; left: 50% !important; top: 50% !important; transform: translate(-50%, -50%) rotate(-32deg) !important; background: none !important; animation: none !important; font-family: 'BIZ UDPGothic', sans-serif; font-weight: 700; font-size: 96pt; letter-spacing: 0.3em; color: rgba(181, 68, 59, 0.14) !important; white-space: nowrap; pointer-events: none; z-index: 10; }
+  .print-draft .page-viewport [data-vivliostyle-page-container]::after { content: '下書き' !important; position: absolute !important; inset: auto !important; left: 50% !important; top: 50% !important; transform: translate(-50%, -50%) rotate(-32deg) !important; background: none !important; animation: none !important; font-family: 'BIZ UDPGothic', sans-serif; font-weight: 700; font-size: 96pt; letter-spacing: 0.3em; color: rgba(140, 140, 140, 0.26) !important; white-space: nowrap; pointer-events: none; z-index: 10; }
 }
 
 /* ---- PDF をそのまま保存する（印刷の画面を通さない。mockups/v28 案C「窓の中で、できたページを見せる」） ---- */
@@ -1184,3 +1184,135 @@ p.check-pending { margin: 10px 0 0; font-size: 12px; line-height: 1.6; color: va
 /* 提出用の PDF の窓の、要確認の一覧（エラーの一覧と同じ形） */
 .warning-list { margin: -6px 0 14px; }
 .warning-list .more button { font-size: 13px; }
+
+/* ---- v35 案A 右の欄：「まだのところ」と「直すところ」を分ける・上の半分を詰める（mockups/v35 ① 案A。app/SidePanel.tsx の CheckBody） ---- */
+/* 上の半分を詰める（PC の右の欄だけ）：名前と年度を1行に、保存のようすと締切を1行に（締切はチップにせず、右に寄せた字だけ）、
+   ボタン・Word の読み込み・お知らせを小さく。保存のようすが長い文（保存できません…）のときは、締切が次の行に回る */
+.side .side-head { padding: 12px 16px 10px; }
+.side .brand-row { gap: 9px; }
+.side .brand-row .mark { width: 28px; height: 28px; font-size: 14px; border-radius: 8px; }
+.side .brand-row > div { display: flex; align-items: baseline; gap: 8px; }
+.side .brand-name { font-size: 14.5px; }
+.side .brand-sub { margin: 0; font-size: 11px; }
+.side .meta { align-items: center; gap: 6px; margin-top: 9px; }
+.side .meta .chip { padding: 3px 9px; font-size: 11.5px; }
+.side .meta .chip.deadline { margin-left: auto; padding: 0; background: none; }
+.side .meta .chip.deadline b { font-size: 12.5px; }
+.side .links { gap: 6px; margin-top: 8px; }
+.side .link-btn { padding: 5px 0; font-size: 12px; }
+.side .link-btn svg { width: 15px; height: 15px; }
+.side .word-link { margin-top: 8px; font-size: 11px; color: var(--muted); }
+.side .word-link svg { width: 14px; height: 14px; }
+.side .notice { margin: 0 16px 10px; padding: 6px 10px; font-size: 11px; line-height: 1.5; }
+.side .notice b { font-size: 10.5px; }
+.side .sec { padding: 12px 16px 14px; }
+.side .side-foot { padding: 12px 16px 12px; }
+/* 「直すところ 3　まだ 2」（直すところがあれば赤い数、0 とまだの数は黒） */
+.tally.split { font-size: 11.5px; }
+.tally.split b { font-size: 15px; }
+.tally.split b.m { color: var(--ink); }
+.sheet-head .tally.split { font-size: 12px; }
+/* 「まだのところ」「直すところ」の小見出し（右に、ひとこと） */
+.check-sub { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin: 6px 0 4px; font-size: 11px; color: var(--muted); }
+.check-sub b { font-weight: 700; color: var(--ink); letter-spacing: 0.08em; }
+.check-sub.fix { margin-top: 14px; }
+/* まだのところ：決まった行の進み具合。灰色の ○（済むと緑の ✓）、先生の許可のあとは点線の ○、目安は小さな点。赤くしない */
+.check-prog { list-style: none; margin: 0; padding: 0 0 8px; border-bottom: 1px solid var(--line); }
+.check-prog .row { box-sizing: border-box; display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; column-gap: 9px; align-items: center; width: calc(100% + 8px); margin: 0 -4px; padding: 5px 4px; border: 0; border-radius: 6px; background: none; font: inherit; font-size: 12.5px; color: var(--ink); text-align: left; }
+button.row { cursor: pointer; }
+.check-prog button.row:hover { background: var(--chip-bg); }
+.check-prog button.row:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.check-prog .row > i { box-sizing: border-box; width: 16px; height: 16px; border-radius: 50%; border: 1.5px solid #aeaaa3; display: grid; place-items: center; color: #fff; font-style: normal; }
+.check-prog .row > i svg { width: 11px; height: 11px; stroke-width: 2.6; }
+.check-prog li.done .row > i { border-color: var(--ok); background: var(--ok); }
+.check-prog li.wait .row > i { border-style: dashed; border-color: #c4c0b9; }
+.check-prog li.info .row > i { border: 0; }
+.check-prog li.info .row > i::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #c4c0b9; }
+.check-prog .l { min-width: 0; }
+.check-prog .v { font-size: 12px; color: var(--muted); text-align: right; white-space: nowrap; }
+.check-prog li.done .v { color: var(--ok); }
+.check-prog li.todo .v b { color: var(--ink); font-size: 12.5px; }
+.check-prog .bar { grid-column: 2 / 4; height: 4px; margin-top: 4px; border-radius: 2px; background: var(--chip-bg); overflow: hidden; }
+.check-prog .bar i { display: block; height: 100%; border-radius: 2px; background: #9aa1b9; }
+/* 直すところがないとき */
+.check-none { margin: 6px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--ok); }
+/* 「PDFを書き出す」の下のひとこと（まだのところ・直すところの数） */
+.side-foot p.export-note { color: var(--ink); }
+.sheet-body p.export-note { margin: 8px 0 0; font-size: 13px; text-align: center; color: var(--ink); }
+/* スマホ（下から出るチェックの欄）では、字を少し大きく */
+.sheet-body .check-sub { font-size: 12px; }
+.sheet-body .check-prog .row { font-size: 14px; padding-top: 7px; padding-bottom: 7px; }
+.sheet-body .check-prog .v { font-size: 13px; }
+.sheet-body .check-prog li.todo .v b { font-size: 14px; }
+.sheet-body .check-none { font-size: 14px; }
+/* エラーが0件の窓の下書きの欄（mockups/v35 ⑤ 案A）：ボタンは、エラーがあるときの欄と同じ位置に（目立たない形） */
+.draft-box.draft-zero button.pdf-draft { margin-top: 8px; }
+/* 使い方の「引用・参考文献」の「引用・参考文献を入れる」（右の欄から外し、ここから入れる。mockups/v35 ①） */
+.help-topic .help-action.help-refs { gap: 6px; }
+.help-topic .help-action.help-refs svg { width: 17px; height: 17px; flex: none; }
+
+/* ---- v35 表の大きさ（mockups/v35 ②。パソコンは「表を入れる」のメニューのます目、スマホは書く欄の「表を入れる」で出る欄。部品は app/TableSize.tsx） ---- */
+/* パソコン：ます目（6列×10行）。マウスを乗せた所まで藍色、1行目は濃い藍色（見出し）。素材表は、ます目の下のボタン */
+.side-menu.table-menu { min-width: 0; width: 186px; padding: 9px 10px 6px; }
+.table-menu .side-menu-title { padding: 0 0 7px; font-size: 11px; }
+.table-menu .tgrid { display: grid; grid-template-columns: repeat(6, 19px); gap: 4px; width: max-content; margin: 0 auto; }
+.side-menu.table-menu .tgrid button { width: 19px; height: 19px; padding: 0; border: 1px solid #d3cfc8; border-radius: 3px; background: #fff; }
+.side-menu.table-menu .tgrid button:hover { background: #fff; }
+.side-menu.table-menu .tgrid button.on { border-color: var(--accent); background: var(--accent-soft); }
+.side-menu.table-menu .tgrid button.on.h { background: #c3cbe6; }
+.table-menu .tgrid-label { margin: 9px 0 2px; text-align: center; font-size: 13.5px; font-weight: 700; color: var(--accent); }
+.table-menu .tgrid-label small { display: block; margin-top: 2px; font-size: 11px; font-weight: 400; color: var(--muted); }
+.table-menu .tmenu-sep { height: 1px; margin: 8px -4px 4px; background: var(--line); }
+.side-menu.table-menu > button { width: 100%; padding: 7px 6px; font-size: 12.5px; line-height: 1.45; }
+.side-menu.table-menu > button small { display: block; font-size: 11px; color: var(--muted); }
+/* スマホ：列・行の［−］n［＋］（ボタンは指で押しやすい 46px 四方）と、できる形の小さな絵 */
+.sheet.table-size .sheet-body { padding-bottom: 20px; }
+.ts-step { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ts-step .l { flex: 1; font-size: 16px; font-weight: 700; }
+.ts-step .l small { display: block; margin-top: 1px; font-size: 12.5px; font-weight: 400; color: var(--muted); }
+.ts-step button { width: 46px; height: 46px; flex: none; border: 1px solid var(--line); border-radius: 12px; background: #fff; color: var(--accent); display: grid; place-items: center; }
+.ts-step button svg { width: 22px; height: 22px; stroke-width: 2; }
+.ts-step b { min-width: 34px; text-align: center; font-size: 24px; }
+.ts-preview { display: grid; gap: 3px; width: 168px; margin: 14px auto 2px; }
+.ts-preview i { height: 16px; border-radius: 2px; background: #fff; border: 1px solid #c9c6c0; }
+.ts-preview i.h { background: #d7ddef; border-color: #aab3d3; }
+.ts-note { margin: 4px 0 0; text-align: center; font-size: 12.5px; color: var(--muted); }
+.sheet.table-size .ts-insert { margin-top: 14px; }
+.ts-material { display: block; width: 100%; margin-top: 10px; padding: 12px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; font-size: 14px; color: var(--ink); text-align: center; }
+.ts-material small { display: block; margin-top: 2px; font-size: 12px; color: var(--muted); }
+/* 欄を出している間は、書く欄の「表を入れる」に印 */
+.es-tools button.on { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+
+/* ---- v35 見開き（mockups/v35 ③ 案A。PC だけ。いまのページと次のページを並べる。倍率と位置は editor/pageStage.ts、並べるページの印は editor/reportRenderer.ts） ---- */
+/* 紙面のまわり：左は道具の分（台の左端）、右は少し、2ページの間 14px、下は←→と「全体／見開き／拡大」の分（pageStage.ts が読む） */
+.stage.spread { --spread-left: 110px; --spread-right: 24px; --spread-gap: 14px; --spread-bottom: 72px; }
+/* 道具は台の左端、←→は下（拡大のときと同じ） */
+.stage.spread .palette { left: 12px; top: var(--inset-top); }
+.stage.spread .palette.compact { max-height: calc(100% - var(--inset-top) - 12px); }
+.stage.spread .arrow.prev { left: 31px; top: auto; bottom: 20px; translate: none; }
+.stage.spread .arrow.next { left: auto; right: 31px; top: auto; bottom: 68px; translate: none; }
+/* 並べる隣のページも出し、組の右のページを右へずらす（--pair-dx は縮小前の px） */
+.page-viewport [data-vivliostyle-page-container].is-pair { display: block !important; z-index: 2; }
+.stage.spread .page-viewport [data-vivliostyle-page-container].is-right { translate: var(--pair-dx, 807.7px) 0; }
+/* 組版エンジンは、ページを入れる枠（1ページ分の幅）の外を隠すので、見開きのときは右のページが見えるよう、隠さない */
+.stage.spread .page-viewport [data-vivliostyle-outer-zoom-box] { overflow: visible !important; }
+/* 部分（組版エンジンごとの枠）は同じ位置に重ねてあるので、上の部分の枠が下の部分のページを隠して押せなくしないよう、押せるのはページだけにする */
+.stage.spread .page-viewport > .paper-part { pointer-events: none; }
+.stage.spread .page-viewport [data-vivliostyle-page-container]:is(.is-current, .is-pair) { pointer-events: auto; }
+/* 開いた直後、ほかの部分を組んでいる間も、並べている隣のページは見せる */
+.page-viewport.front.measuring [data-vivliostyle-page-container].is-pair { visibility: visible !important; }
+@media print { .page-viewport [data-vivliostyle-page-container] { translate: none !important; } }
+
+/* ---- v35 元に戻す・やり直す（mockups/v35 ④ 案A。道具のいちばん下に2つ並べる。部品は app/Palette.tsx の UndoRedo。スマホは書く欄の「戻す」の横） ---- */
+/* 道具の幅（86px）に2つ並べるので、左右の余白まで広げ、字は少し小さく（読める大きさの 10px） */
+.palette .group.undo-redo { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-left: -4px; margin-right: -4px; }
+.palette .undo-redo .tb { padding: 8px 0 7px; font-size: 10px; letter-spacing: -0.04em; white-space: nowrap; }
+.palette .undo-redo .tb svg { width: 20px; height: 20px; }
+/* マウスを乗せたときの、キーボードでの押し方（ボタンの右に黒い吹き出し） */
+.ur-tip { position: fixed; z-index: 70; display: flex; flex-direction: column; padding: 6px 10px; border-radius: 7px; background: #2b2e36; color: #fff; font-size: 12px; line-height: 1.5; letter-spacing: 0; white-space: nowrap; box-shadow: 0 6px 16px rgba(20, 20, 30, 0.25); pointer-events: none; transform: translateY(-50%); }
+.ur-tip::before { content: ''; position: absolute; top: -4px; left: 0; width: 9px; height: 9px; margin-left: -4.5px; background: #2b2e36; transform: rotate(45deg); }
+@media print { .ur-tip { display: none !important; } }
+/* スマホ：書く欄の「戻す」「やり直す」は、道具が折り返すときも2つ並べたまま */
+.es-tools .es-undo { display: flex; flex: none; align-items: center; gap: 2px; }
+/* スマホの使い方（画面いっぱいの欄）では、指で押しやすい高さ（44px 以上。前の「追加」の欄の「＋ 引用・参考文献を入れる」と同じ） */
+.help-sheet .help-topic .help-action.help-refs { min-height: 44px; }

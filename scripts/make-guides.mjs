@@ -966,7 +966,7 @@ async function adminShots(browser) {
     const head = union(await page.evaluate(rectOf, '.admin-header .sel'), await page.evaluate(rectOf, '.admin-header .btn.primary'))
     const header = await page.evaluate(rectOf, '.admin-header')
     await capture(page, 'g-admin-draft', { x: head.x - 12, y: header.y, w: head.w + 24, h: header.h }, [
-      { n: 1, box: await page.evaluate(rectOf, '.admin-header .btn', '新年度を作成'), at: 'b' },
+      { n: 1, box: await page.evaluate(rectOf, '.admin-header button', '新年度を作成'), at: 'b' },
       { n: 2, box: await page.evaluate(rectOf, '.admin-header .btn.primary'), at: 'b' },
       { n: 3, box: await page.evaluate(rectOf, '.admin-header .link', '変更履歴'), at: 'b' },
       { n: 4, box: await page.evaluate(rectOf, '.admin-header .link', '先生の登録'), at: 'b' },

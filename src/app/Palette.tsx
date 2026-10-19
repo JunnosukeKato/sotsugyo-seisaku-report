@@ -1,12 +1,13 @@
-import { useState, type ReactNode } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { PHOTO_ARRANGEMENTS, photoGrid } from '../model/photos'
 import { Icon } from './icons'
+import { TableSizeMenu } from './TableSize'
 import { keepFocus, PAGE_CONTEXT } from './uiShared'
 
 /**
  * 紙面の左わきに置く道具。表示しているページの種類と、書いている物・選んでいる物に合わせて入れ替わる。
- * 上から：ページの名前とひとこと／足す道具／選んでいる物の道具／元に戻す
+ * 上から：ページの名前とひとこと／足す道具／選んでいる物の道具／元に戻す・やり直す
  */
 
 interface Props {
@@ -52,21 +53,82 @@ function Tool({
   )
 }
 
-/** 表を入れる：空の表か、素材表のひな形かを選ぶ */
+/** 表を入れる：ます目で大きさを選んで空の表を入れるか、素材表のひな形を入れる（mockups/v35 ②。メニューの中身は TableSize.tsx） */
 function TableMenu({ editor, disabled }: { editor: ReportEditor; disabled: boolean }) {
   const [open, setOpen] = useState(false)
   return (
     <div className="menu-wrap">
       <Tool label="表を入れる" icon={Icon.table} title="書いている文の終わりに「（表n）」が入り、この段落のすぐ下に表が入ります" disabled={disabled} onClick={() => setOpen(!open)} />
       {open && !disabled && (
-        <div className="side-menu" onMouseLeave={() => setOpen(false)}>
-          <div className="side-menu-title">どの表を入れますか</div>
-          <button onMouseDown={keepFocus} onClick={() => { setOpen(false); editor.addTable('blank') }}>
-            空の表（2列）
-          </button>
-          <button onMouseDown={keepFocus} onClick={() => { setOpen(false); editor.addTable('material') }}>
-            素材表（名称・使用箇所・生地見本）
-          </button>
+        <TableSizeMenu
+          onPick={(size) => {
+            setOpen(false)
+            editor.addTable('blank', size)
+          }}
+          onMaterial={() => {
+            setOpen(false)
+            editor.addTable('material')
+          }}
+          onClose={() => setOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+/** 「元に戻す」「やり直す」のキーボードでの押し方（マウスを乗せると出す。mockups/v35 ④ 案A） */
+const UNDO_TIP = ['元に戻す（Ctrl+Z）']
+const REDO_TIP = ['やり直す（Ctrl+Y）', 'Mac は ⌘+Shift+Z']
+
+/**
+ * 道具のいちばん下の「元に戻す」「やり直す」（mockups/v35 ④ 案A：いまの場所に2つ並べる）。
+ * マウスを乗せる（キーボードで移る）と、少しして、ボタンの右に黒い吹き出しでキーボードでの押し方を出す
+ * （道具が画面に入りきらず、道具の中を上下に動かすときも切れないよう、画面に重ねて出す）
+ */
+function UndoRedo({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
+  const [tip, setTip] = useState<{ lines: string[]; left: number; top: number } | null>(null)
+  const timer = useRef(0)
+  useEffect(() => () => clearTimeout(timer.current), [])
+  const show = (el: HTMLElement, lines: string[]) => {
+    clearTimeout(timer.current)
+    timer.current = window.setTimeout(() => {
+      const r = el.getBoundingClientRect()
+      setTip({ lines, left: r.right + 10, top: r.top + r.height / 2 })
+    }, 350)
+  }
+  const hide = () => {
+    clearTimeout(timer.current)
+    setTip(null)
+  }
+  const button = (label: string, icon: ReactNode, lines: string[], keys: string, enabled: boolean, run: () => void) => (
+    <button
+      className="tb"
+      aria-label={lines.join(' ')}
+      aria-keyshortcuts={keys}
+      disabled={!enabled}
+      onMouseDown={keepFocus}
+      onPointerEnter={(e) => e.pointerType === 'mouse' && show(e.currentTarget, lines)}
+      onPointerLeave={hide}
+      onFocus={(e) => e.currentTarget.matches(':focus-visible') && show(e.currentTarget, lines)}
+      onBlur={hide}
+      onClick={() => {
+        hide()
+        run()
+      }}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  )
+  return (
+    <div className="group undo-redo">
+      {button('元に戻す', Icon.undo, UNDO_TIP, 'Control+Z Meta+Z', snap.canUndo, () => editor.undo())}
+      {button('やり直す', Icon.redo, REDO_TIP, 'Control+Y Control+Shift+Z Meta+Shift+Z', snap.canRedo, () => editor.redo())}
+      {tip && (
+        <div className="ur-tip" role="tooltip" style={{ left: tip.left, top: tip.top }}>
+          {tip.lines.map((line) => (
+            <span key={line}>{line}</span>
+          ))}
         </div>
       )}
     </div>
@@ -333,9 +395,7 @@ export function Palette({ editor, snap, onReferences }: Props) {
         </div>
       )}
       <SelectionTools editor={editor} snap={snap} />
-      <div className="group">
-        <Tool label="元に戻す" icon={Icon.undo} title="元に戻す（Ctrl+Z）" disabled={!snap.canUndo} onClick={() => editor.undo()} />
-      </div>
+      <UndoRedo editor={editor} snap={snap} />
     </nav>
   )
 }

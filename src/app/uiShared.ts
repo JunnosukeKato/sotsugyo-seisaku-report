@@ -93,10 +93,11 @@ export function useWheelPaging(target: React.RefObject<HTMLElement | null>, scro
     let mode: 'turn' | 'scroll' | 'done' = 'turn'
     // めくっている間の回転は、そのめくりの続き（惰性など）とみなして使わない
     let busy = false
-    const turn = async (dir: number) => {
+    const turn = async (dir: 1 | -1) => {
       busy = true
       try {
-        await editor.goToPage(editor.getSnapshot().page + dir)
+        // 見開きのときは2ページずつ（editor の turnBy）
+        await editor.turnBy(dir)
       } finally {
         busy = false
       }

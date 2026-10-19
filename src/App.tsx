@@ -626,14 +626,21 @@ export default function App() {
         }
       : undefined
 
-  // キーボード：Ctrl+Z（入力欄の外）で元に戻す、Ctrl+S は保存されていることを示す（ブラウザの保存画面を出さない）
+  // キーボード：Ctrl+Z（入力欄の外）で元に戻す、Ctrl+Y・Ctrl+Shift+Z（Mac は ⌘+Shift+Z。入力欄の外）でやり直す、
+  // Ctrl+S は保存されていることを示す（ブラウザの保存画面を出さない）。書く欄の中では、元に戻す・やり直すとも、ブラウザの文字の元に戻す・やり直す
   // ←→・PageUp／PageDown（入力欄の外）でページを送る
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       // ログインするまでは、何もできないようにする（指差し確認の間も）
       if (!editor || gate || tabLock.locked || tourOn) return
       if (e.ctrlKey || e.metaKey) {
-        if (e.key === 'z' && !isTyping(e.target)) {
+        const key = e.key.toLowerCase()
+        // ⌘+Y は Mac のブラウザの履歴なので使わない（Mac は ⌘+Shift+Z）
+        const redo = (key === 'z' && e.shiftKey) || (key === 'y' && e.ctrlKey && !e.shiftKey)
+        if (redo && !isTyping(e.target)) {
+          e.preventDefault()
+          editor.redo()
+        } else if (key === 'z' && !e.shiftKey && !isTyping(e.target)) {
           e.preventDefault()
           editor.undo()
         } else if (e.key === 's') {
@@ -801,6 +808,12 @@ export default function App() {
       variant={variant}
       onClose={() => setHelp(false)}
       onTour={replayTour}
+      // 使い方の「引用・参考文献」のボタン（mockups/v35 ①）：引用・参考文献の窓を開く（入れた文献があれば、それを直せる）。
+      // スマホは、使い方の欄（窓と同じ扱い）を閉じてから開く。PC は、右の欄の使い方を開いたまま（窓を閉じると、ボタンに戻る）
+      onReferences={() => {
+        if (narrow) setHelp(false)
+        setDialog({ kind: 'references' })
+      }}
     />
   )
 
@@ -837,17 +850,24 @@ export default function App() {
         {ready && snap.layout && !narrow && (
           <>
             <Palette editor={editor} snap={snap} onReferences={() => setDialog({ kind: 'references' })} />
-            <button className="arrow prev" aria-label="前のページ" title="前のページ（←）" disabled={snap.page <= 0} onClick={() => editor.prevPage()}>
+            {/* 見開きのときは2ページずつ送る（最初の組・最後の組では押せない） */}
+            <button className="arrow prev" aria-label="前のページ" title="前のページ（←）" disabled={(snap.spread ? snap.page - (snap.page % 2) : snap.page) <= 0} onClick={() => editor.prevPage()}>
               {Icon.prev}
             </button>
-            <button className="arrow next" aria-label="次のページ" title="次のページ（→）" disabled={snap.page >= snap.pageCount - 1} onClick={() => editor.nextPage()}>
+            <button className="arrow next" aria-label="次のページ" title="次のページ（→）" disabled={(snap.spread ? snap.page - (snap.page % 2) + 1 : snap.page) >= snap.pageCount - 1} onClick={() => editor.nextPage()}>
               {Icon.next}
             </button>
+            {/* 全体／見開き／拡大（mockups/v35 ③ 案A。見開きは、台が狭いときは出さない） */}
             <div className="zoom" role="group" aria-label="表示の大きさ">
-              <button className={snap.zoomed ? '' : 'on'} aria-pressed={!snap.zoomed} title="1ページ全体を表示" onClick={() => editor.setZoom(false)}>
+              <button className={!snap.zoomed && !snap.spread ? 'on' : ''} aria-pressed={!snap.zoomed && !snap.spread} title="1ページ全体を表示" onClick={() => editor.setView('fit')}>
                 {Icon.fit}全体
               </button>
-              <button className={snap.zoomed ? 'on' : ''} aria-pressed={snap.zoomed} title="文字を大きく表示（マウスのホイールで上下に動かす）" onClick={() => editor.setZoom(true)}>
+              {(snap.spreadFits || snap.spread) && (
+                <button className={snap.spread ? 'on' : ''} aria-pressed={snap.spread} title="いまのページと次のページを並べて表示（2ページずつめくる）" onClick={() => editor.setView('spread')}>
+                  {Icon.spread}見開き
+                </button>
+              )}
+              <button className={snap.zoomed ? 'on' : ''} aria-pressed={snap.zoomed} title="文字を大きく表示（マウスのホイールで上下に動かす）" onClick={() => editor.setView('zoom')}>
                 {Icon.zoom}拡大
               </button>
             </div>
@@ -873,7 +893,6 @@ export default function App() {
           drive={driveStopped ? undefined : driveControls}
           driveStopped={driveStopped}
           sheetHostRef={sheetHostRef}
-          onReferences={() => setDialog({ kind: 'references' })}
           onHelp={() => setHelp(true)}
           onBackup={async () => setDialog({ kind: 'backup', snapshots: await listSnapshots() })}
           exporting={exporting}
@@ -890,7 +909,6 @@ export default function App() {
           editor={editor}
           snap={snap}
           config={config}
-          onReferences={() => setDialog({ kind: 'references' })}
           onHelp={() => setHelp(true)}
           saveState={autosave.state}
           drive={driveStopped ? undefined : driveControls}

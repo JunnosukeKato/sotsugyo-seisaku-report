@@ -48,9 +48,13 @@ const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v))
 export function createMockServer(): AdminServer {
   const members = (store: Store) => store.members ?? DEFAULT_MEMBERS
   const roleOf = (store: Store) => members(store).find((m) => m.email === USER)?.role ?? null
+  /** その年度を、これまでに学生に公開したことがあるか（本番の wasPublished_ と同じ：変更履歴に「公開」か「初期設定」がある） */
+  const wasPublished = (store: Store, year: number) => store.history.some((h) => h.year === year && (h.action === '公開' || h.action === '初期設定'))
   const state = (store: Store): AdminState => {
     const role = roleOf(store)
-    return { user: USER, isAdmin: role === '管理者', role: role === '管理者' ? 'admin' : role === '先生' ? 'teacher' : null, years: role ? clone(store.years).sort((a, b) => b.year - a.year) : [] }
+    // 削除できる年度（一度も公開していない「準備中」。本番の readYears_ と同じく、deleteYear と同じ決まりで付ける）
+    const years = clone(store.years).map((y) => ({ ...y, deletable: y.status === '準備中' && !wasPublished(store, y.year) }))
+    return { user: USER, isAdmin: role === '管理者', role: role === '管理者' ? 'admin' : role === '先生' ? 'teacher' : null, years: role ? years.sort((a, b) => b.year - a.year) : [] }
   }
   const requireAdmin = (store: Store) => {
     if (roleOf(store) !== '管理者') throw new Error(`管理者だけが変更できます（ログイン中：${USER}）`)
@@ -143,7 +147,7 @@ export function createMockServer(): AdminServer {
       requireAdmin(store)
       const row = findYear(store, year)
       // 本番の deleteYear と同じく、一度も公開したことのない「準備中」の年度だけ消せる
-      if (row.status !== '準備中' || store.history.some((h) => h.year === year && (h.action === '公開' || h.action === '初期設定'))) {
+      if (row.status !== '準備中' || wasPublished(store, year)) {
         throw new Error(`${year}年度は、学生に公開したことがあるため削除できません（削除できるのは、一度も公開していない「準備中」の年度だけです）`)
       }
       checkNotChanged(row, expectedUpdatedAt)

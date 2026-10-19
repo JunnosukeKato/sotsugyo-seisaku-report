@@ -99,19 +99,72 @@ function titleWords(title: string): string[] {
   return title.trim().length >= 2 ? [title.trim()] : []
 }
 
+/** 知らせの箇条書きの1行（where：画面のどこで直すか。「場所：…」として小さな字で添える） */
+export interface NoticeItem {
+  text: string
+  where: string
+}
+
+/** 箇条書きの知らせ（text：太字の1行目、detail：その下の文、items：箇条書き） */
+export interface ListNotice {
+  text: string
+  detail: string
+  items: NoticeItem[]
+}
+
+/** 管理ページの画面で、項目を直す場所 */
+const PLACE = {
+  commonTitle: 'この下の「毎年設定する項目」のいちばん上',
+  deadline: '共通の題目のすぐ下',
+  notice: 'コースのカードの「このコースの学生へのお知らせ」',
+  courseExample: 'コースのカードの「下書きのひな形」の「編集する」',
+  openingExample: '「詳細設定」の中の「抄録の書き出し例」',
+}
+
 /**
- * 新年度を作ったときの知らせ：前の年度のままの項目（確かめて直してもらう）。
+ * 新年度を作ったときの知らせ：前の年度のままの項目（確かめて直してもらう。mockups/v35-admin ③ 案A：箇条書きで、直す場所を添える）。
  * 共通の題目・最終締切（同じ日付）・お知らせのあるコース・抄録の書き出し例に前の年度の題目の言葉があるコース
  */
-export function newYearNotice(from: YearConfig, newYear: number): string {
-  const items = ['共通の題目', `最終締切（${formatDate(from.deadline)}。${from.fiscalYear}年度と同じ日付）`]
+export function newYearNotice(from: YearConfig, newYear: number): ListNotice {
+  const items: NoticeItem[] = [
+    { text: '共通の題目', where: PLACE.commonTitle },
+    { text: `最終締切（${formatDate(from.deadline)}。${from.fiscalYear}年度と同じ日付）`, where: PLACE.deadline },
+  ]
   const shown = from.courses.filter((c) => !c.hidden)
   const withNotice = shown.filter((c) => typeof c.notice === 'string' && c.notice.trim())
-  if (withNotice.length) items.push(`お知らせ（${withNotice.map((c) => `${courseName(c)} コース`).join('、')}）`)
+  if (withNotice.length) items.push({ text: `お知らせ（${withNotice.map((c) => `${courseName(c)} コース`).join('、')}）`, where: PLACE.notice })
   const words = titleWords(from.commonTitle)
   const found = (text: unknown) => typeof text === 'string' && words.some((w) => text.includes(w))
-  const examples = shown.filter((c) => found(c.abstractExample)).map((c) => `${courseName(c)} コース`)
-  if (found(from.abstract.openingExample)) examples.push('詳細設定')
-  if (examples.length) items.push(`抄録の書き出し例（${examples.join('、')}。前の年度の題目の言葉「${words.join('」「')}」が入っています）`)
-  return `${newYear}年度を作成しました（${from.fiscalYear}年度の設定のコピーです）。次の項目は${from.fiscalYear}年度のままです。確かめて直してください：${items.join('、')}`
+  const courseExamples = shown.filter((c) => found(c.abstractExample)).map((c) => `${courseName(c)} コース`)
+  const inOpening = found(from.abstract.openingExample)
+  const examples = inOpening ? [...courseExamples, '詳細設定'] : courseExamples
+  if (examples.length) {
+    // コースの書き出し例はひな形の窓で、詳細設定の書き出し例は詳細設定の欄で直す
+    const where = [courseExamples.length ? PLACE.courseExample : '', inOpening ? PLACE.openingExample : ''].filter(Boolean).join('と、')
+    items.push({ text: `抄録の書き出し例（${examples.join('、')}。前の年度の題目の言葉「${words.join('」「')}」が入っています）`, where })
+  }
+  return {
+    text: `${newYear}年度を作成しました（${from.fiscalYear}年度の設定のコピーです）。`,
+    detail: `次の項目は${from.fiscalYear}年度のままです。確かめて直してください。`,
+    items,
+  }
+}
+
+/**
+ * 準備中の年度を削除する前の確認の言葉（mockups/v35-admin ② の文）。
+ * next：削除したあとに開く年度（公開中の年度。なければいちばん新しい年度）
+ */
+export function deleteConfirmText(year: number, next: { year: number; status: YearStatus }): string {
+  return [
+    `${year}年度（準備中）を削除しますか？`,
+    '',
+    '・この年度の設定（共通の題目・締切・コース・ひな形・お知らせなど）が、すべて消えます。元には戻せません。',
+    '・まだ学生に公開していないので、学生のツールは変わりません。',
+    `・削除したあとは、${next.year}年度（${next.status}）を開きます。`,
+  ].join('\n')
+}
+
+/** 準備中の年度を削除したあとの知らせ（opened：いま開いている年度） */
+export function deletedMessage(year: number, opened: { year: number; status: YearStatus } | undefined): string {
+  return `${year}年度を削除しました。${opened ? `いまは${opened.year}年度（${opened.status}）を開いています。` : ''}`
 }

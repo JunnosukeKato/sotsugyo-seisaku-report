@@ -51,7 +51,7 @@ const PC_STEPS = (drive: boolean): Step[] => [
     targets: first('.side .meta > :first-child'),
     sides: ['left', 'below'],
   },
-  { title: 'セルフチェック', text: '直すところの一覧です。× を0件にします。', targets: first('.side .sec.check'), sides: ['left'] },
+  { title: 'セルフチェック', text: 'まだのところと、直すところの一覧です。押すと、その場所へ移ります。', targets: first('.side .sec.check'), sides: ['left'] },
   { title: 'PDFを書き出す', text: 'エラーが0件になったら、ここから提出用の PDF にします。', targets: first('.side .export'), sides: ['left', 'above'] },
   { title: '？ 使い方', text: '困ったら、ここを押します。言葉で探せます。', targets: first('.side .help-btn'), sides: ['left', 'below'] },
 ]
@@ -59,7 +59,7 @@ const PHONE_STEPS = (drive: boolean): Step[] => [
   { title: '紙面', text: '文をタップすると、書く欄が出ます。', targets: paper, sides: ['below', 'above'] },
   {
     title: 'チェックと PDF',
-    text: '直すところの一覧と、PDF の書き出しは、ここです。',
+    text: 'まだのところ・直すところと、PDF の書き出しは、ここです。',
     targets: () => [...first('.p-nav .nav-check')(), ...first('.p-nav .nav-pdf')()],
     sides: ['above'],
   },

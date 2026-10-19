@@ -50,7 +50,7 @@ export async function run({ page, rec, h }) {
   // 3. エラーを直す（「直す」ボタンはない。項目を押してその場所へ移り、自分で「。」を打つ）
   rec.mark('fixFirst', { focus: await exportArea(h, page) })
   await h.sleep(2200)
-  await h.clickEl(page, '.side .sec.check li .go', null, { pause: 800 })
+  await h.clickEl(page, '.side .sec.check .issues li .go', null, { pause: 800 })
   await h.sleep(600)
   await h.ready(page)
   const p14 = await h.blockRect(page, 'p14')

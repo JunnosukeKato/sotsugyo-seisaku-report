@@ -9,6 +9,7 @@ import { changeArrangement, clampPercent, movePhoto, putPhoto, wholePhoto } from
 import { addColumn, addRow, blankTable, cellPosition, materialTable, removeColumn, removeRow, setCellImage } from '../model/table'
 import type { BodyBlock, Chapter, PhotoPosition, Report, TableBlock, WorkPhotoLayout } from '../model/types'
 import { ContinueRow, endsPageWithRoom, type ContinueTarget } from './continueRow'
+import { EditHistory } from './history'
 import { OverlayEditor, type OverlayKind, type OverlayPlacement, type OverlayTarget } from './overlayEditor'
 import { PageStage, TEXT_LEFT, TEXT_W } from './pageStage'
 import { blockPaperKey, fixedTitleNote, markFocusable, PAPER_FOCUSABLE, paperElement, paperKeyOf, paperOrder, rememberTabStop, setTabStop } from './paperFocus'
@@ -63,11 +64,17 @@ export interface EditorSnapshot {
   currentId: string | null
   selection: Selection
   canUndo: boolean
-  /** 表示しているページ（0 から）とページ数 */
+  /** 「やり直す」ができるか（元に戻したあと、ほかを変えていない。書く欄で書き始めたら、もうできない。mockups/v35 ④） */
+  canRedo: boolean
+  /** 表示しているページ（0 から）とページ数。見開きのときは、並べた2ページのうち、書いている（最後に押した）方 */
   page: number
   pageCount: number
   /** 拡大して表示しているか */
   zoomed: boolean
+  /** 見開き（いまのページと次のページを並べる。1–2、3–4…の組。PC だけ。mockups/v35 ③ 案A）で表示しているか */
+  spread: boolean
+  /** 紙面の台が、見開きを出せる広さか（狭いときは「見開き」を出さない） */
+  spreadFits: boolean
   /** ページを送っている途中か */
   turning: boolean
   /** スマホ：下の欄で書いているか */
@@ -172,7 +179,8 @@ export class ReportEditor {
   private autoPeriod: { prevId: string; newId: string; original: string } | null = null
   private readonly images = new Map<string, ImageEntry>()
   private readonly listeners = new Set<() => void>()
-  private history: Report[] = []
+  /** 「元に戻す」「やり直す」の履歴（やり直しの分には、やり直したときに出す知らせも持つ。history.ts） */
+  private readonly history = new EditHistory<Report, NoticeBody>()
   private reportBeforeEdit: Report | null = null
   private findings: ReportFinding[] = []
   private acknowledged: ReportFinding[] = []
@@ -309,6 +317,8 @@ export class ReportEditor {
 
     // 画面の大きさが変わって紙面の倍率・位置が変わったら、入力欄も合わせる
     this.stage = new PageStage(stage, () => {
+      // 見開きにした・やめた（台が狭くなって全体に戻したときも）：紙面に、並べるページの印を付け直す
+      this.syncSpread()
       this.marker.hidden = true
       // 書き終えた欄の仮の表示は、紙面に合わせて動かし・大きさを変える（ページが替わっていれば外す）
       this.realignFrozen()
@@ -384,10 +394,14 @@ export class ReportEditor {
       editingKind: editable?.kind ?? null,
       currentId: this.currentId,
       selection: this.selection,
-      canUndo: this.history.length > 0,
+      canUndo: this.history.canUndo,
+      // 書く欄で書き始めたら、閉じるときにその分が新しい変更になり、やり直しの分は消える（その前から押せないようにする）
+      canRedo: this.history.canRedo && !(this.overlay.blockId && this.reportBeforeEdit && this.reportBeforeEdit !== this.report),
       page: this.page,
       pageCount: this.layout?.kinds.length ?? 0,
       zoomed: this.stage.zoomed,
+      spread: this.stage.spread,
+      spreadFits: this.stage.spreadFits,
       turning: this.turning !== null,
       sheet: this.overlay.inSheet,
       caret: this.overlay.blockId ? this.caretPos : null,
@@ -536,6 +550,8 @@ export class ReportEditor {
     if (kinds && this.layout && this.provisional) {
       this.layout = { ...this.layout, kinds, bodyPages: kinds.filter((k) => k === 'body').length }
       this.markPrintSkip()
+      // 見開き：並べている隣のページを組み終えたら、そのページも出す（組み終えるまでは、仮のページなので出ていない）
+      if (this.stage.spread && !this.turning) this.renderer.show(this.page)
     }
     this.notify()
     this.flushQueuedNav()
@@ -831,7 +847,9 @@ export class ReportEditor {
     }
     if (to === this.page || to < 0) return Promise.resolve()
     if (this.overlay.blockId) this.overlay.commit()
-    this.clearFrozen(Infinity)
+    // 見開きで、並べている隣のページへ移るだけなら、紙面はそのまま（書き終えた欄の仮の表示も残す）
+    const samePair = this.samePair(to, this.page)
+    this.clearFrozen(Infinity, (f) => samePair && this.samePair(f.place.page, to))
     this.marker.hidden = true
     this.selection = null
     this.markSelection()
@@ -866,11 +884,56 @@ export class ReportEditor {
   }
 
   nextPage(): void {
-    void this.goToPage(this.pageAhead + 1)
+    void this.turnBy(1)
   }
 
   prevPage(): void {
-    void this.goToPage(this.pageAhead - 1)
+    void this.turnBy(-1)
+  }
+
+  /**
+   * 次（dir が 1）・前（-1）のページへ送る。見開きのときは2ページずつ（次・前の組の左のページへ。1–2 → 3–4）。
+   * 最初・最後のページ（組）から先へは送らない
+   */
+  turnBy(dir: 1 | -1): Promise<void> {
+    const at = this.pageAhead
+    const to = this.stage.spread ? at - (at % 2) + 2 * dir : at + dir
+    if (to < 0 || to > this.renderer.pageCount() - 1) return Promise.resolve()
+    return this.goToPage(to)
+  }
+
+  // ---- 見開き（mockups/v35 ③ 案A。PC だけ） ----
+
+  /** 見開きで、a ページ目と b ページ目が同じ組（1–2、3–4…。0 からの番号では 0–1、2–3…）として並んでいるか（見開きでなければ false） */
+  private samePair(a: number, b: number): boolean {
+    return this.stage.spread && a >= 0 && b >= 0 && a - (a % 2) === b - (b % 2)
+  }
+
+  /** page ページ目（0 から）が、いま紙面に見えているか（見開きなら、並べている2ページのどちらか） */
+  private isVisiblePage(page: number): boolean {
+    return page >= 0 && (page === this.page || this.samePair(page, this.page))
+  }
+
+  /**
+   * page ページ目を、めくらずに見せる（書く位置・カーソルが別のページへ移ったとき）。
+   * 見開きで、並べている隣のページなら、紙面はそのままで、書くページだけを替える（書き終えた欄の仮の表示も残す）
+   */
+  private showPage(page: number, effect: 'none' | 'fade' = 'none'): void {
+    const shown = this.isVisiblePage(page)
+    this.page = page
+    if (shown) return this.renderer.show(page)
+    this.clearFrozen(Infinity)
+    this.setRevealRoom(0, 0)
+    this.scroller.scrollTop = 0
+    this.renderer.show(page, effect)
+  }
+
+  /** 見開きにした・やめたら、紙面の組版の表示に伝え、並べるページの印を付け直す（めくっている途中なら、めくり終えたときに付く） */
+  private syncSpread(): void {
+    const on = this.stage.spread
+    if (this.renderer.spread === on) return
+    this.renderer.spread = on
+    if (!this.turning) this.renderer.show(this.page)
   }
 
   /** 種類（表紙・抄録など）の最初のページへ */
@@ -879,11 +942,20 @@ export class ReportEditor {
     if (index >= 0) void this.goToPage(index, 'fade')
   }
 
-  /** 全体（1ページ全体を表示）と拡大（横幅いっぱい）を切り替える */
+  /** 全体（1ページ全体を表示）と拡大（横幅いっぱい）を切り替える（見開きはやめる） */
   setZoom(zoomed: boolean): void {
+    this.setView(zoomed ? 'zoom' : 'fit')
+  }
+
+  /**
+   * 表示の仕方を変える：全体（1ページ全体）・見開き（いまのページと次のページを並べる。PC だけ。mockups/v35 ③ 案A）・拡大（横幅いっぱい）。
+   * 見開きは、台が狭いとき（spreadFits でない）は全体にする
+   */
+  setView(view: 'fit' | 'spread' | 'zoom'): void {
     this.setRevealRoom(0, 0)
     this.scroller.scrollTop = 0
-    this.stage.setZoom(zoomed)
+    if (view === 'spread') this.stage.setSpread(true)
+    else this.stage.setZoom(view === 'zoom')
   }
 
   /** 紙面のまわりに空ける幅（台の CSS の変数）を変えたとき、紙面の倍率と位置を求め直す（スマホの紙面の下の帯。app/PageBand.tsx） */
@@ -990,11 +1062,8 @@ export class ReportEditor {
     if (!this.overlay.composing) {
       const page = this.renderer.pageView.pageOfOffset(id, this.overlay.caret)
       if (page >= 0 && page !== this.page && !this.turning) {
-        this.page = page
-        this.clearFrozen(Infinity)
-        this.setRevealRoom(0, 0)
-        this.scroller.scrollTop = 0
-        this.renderer.show(page, 'fade')
+        // 見開きで、並べている隣のページへ続いたときは、紙面はそのまま（書くページだけを替える）
+        this.showPage(page, 'fade')
         if (this.overlay.inSheet) this.revealEditing()
       }
     }
@@ -1143,10 +1212,16 @@ export class ReportEditor {
    */
   private realignFrozen(): void {
     if (this.frozen.length === 0) return
-    const page = this.renderer.pageView.pages()[this.page]?.getBoundingClientRect()
-    this.clearFrozen(Infinity, (f) => f.place.page === this.page && !!page && page.width > 0 && f.place.pageBox.width > 0)
-    if (!page) return
+    // 写したときのページ（見開きなら、並べている2ページのどちらでもよい）の、いまの位置と大きさ
+    const pages = this.renderer.pageView.pages()
+    const rectOf = (p: number) => pages[p]?.getBoundingClientRect()
+    this.clearFrozen(Infinity, (f) => {
+      const page = rectOf(f.place.page)
+      return this.isVisiblePage(f.place.page) && !!page && page.width > 0 && f.place.pageBox.width > 0
+    })
     for (const { element, place } of this.frozen) {
+      const page = rectOf(place.page)
+      if (!page) continue
       const { pageBox, box } = place
       element.style.transformOrigin = `${pageBox.left - box.left}px ${pageBox.top - box.top}px`
       element.style.transform = `translate(${page.left - pageBox.left}px, ${page.top - pageBox.top}px) scale(${page.width / pageBox.width})`
@@ -1235,14 +1310,12 @@ export class ReportEditor {
   openEditor(id: string, caret: number): void {
     // 開いた直後に頼まれていたページへの移動は、書き始めたらやめる（書いている欄が、急にほかのページへ移って閉じないように）
     this.cancelQueuedNav()
-    // 書く位置が別のページにあれば、そのページを表示する
+    // 書く位置が別のページにあれば、そのページを表示する（見開きで、並べている隣のページなら、紙面はそのまま）
     const page = this.renderer.pageView.pageOfOffset(id, caret)
     if (page >= 0 && page !== this.page && !this.turning) {
-      this.page = page
-      this.clearFrozen(Infinity)
-      this.setRevealRoom(0, 0)
-      this.scroller.scrollTop = 0
-      this.renderer.show(page)
+      // 見開きで隣のページの欄を書き始める：書いていた欄は先に書き終える（書き終えた欄の仮の表示を、書いていたページに置くため）
+      if (this.overlay.blockId && this.overlay.blockId !== id && this.samePair(page, this.page)) this.overlay.commit()
+      this.showPage(page)
     }
     // 書き終えたばかりの同じ欄をまた書くときは、仮の表示を外す（書く欄が、組み直す前の紙面の上で開く）
     this.clearFrozen(Infinity, (f) => f.id !== id)
@@ -1577,6 +1650,11 @@ export class ReportEditor {
     const touch = keyHit === undefined ? this.rawTouch(e) : null
     const { clientX: x, clientY: y } = touch ?? e
     const target = (touch?.target ?? e.target) as HTMLElement
+    // 見開き：並べている隣のページを押した：紙面はそのままで、そのページで書く（このあとは、そのページを押したときと同じ）
+    if (this.stage.spread) {
+      const at = this.renderer.pageView.pageIndexOf(target)
+      if (at !== this.page && this.samePair(at, this.page)) this.focusPartner(at)
+    }
     // スマホ：まだ書いていない欄の「＋」の印（とそのまわり 44px 四方）を押した：その欄を開く（markerAt）
     const marked = touch ? this.markerAt(x, y, target) : null
     if (marked === FIELD_IDS.course) return this.callbacks.onCourseClick(this.renderer.pageView.fragments(marked)[0].getBoundingClientRect())
@@ -1642,6 +1720,17 @@ export class ReportEditor {
     if (near === FIELD_IDS.course) return this.callbacks.onCourseClick(this.renderer.pageView.fragments(near)[0].getBoundingClientRect())
     if (near) return this.openOrSelect(near, ops.findEditable(this.report, near)?.text.length ?? 0, false)
     this.select(null)
+  }
+
+  /**
+   * 見開き：並べている隣のページ（page）で書く・選ぶようにする（紙面はそのまま。ページは送らない）。
+   * 書いていた欄は先に書き終える（書き終えた欄の仮の表示を、書いていたページに置くため）。選んでいた物は、押した物で選び直す
+   */
+  private focusPartner(page: number): void {
+    if (this.overlay.blockId) this.overlay.commit()
+    this.marker.hidden = true
+    this.showPage(page)
+    this.notify()
   }
 
   /**
@@ -1835,9 +1924,9 @@ export class ReportEditor {
 
   // ---- 変更 ----
 
+  /** 原稿を変える前の状態を、元に戻せるように覚える（新しく変えたので、やり直しの分は消える） */
   private pushHistory(report: Report): void {
     this.history.push(report)
-    if (this.history.length > 200) this.history.shift()
   }
 
   private afterChange({ render, save }: { render: 'now' | 'debounce'; save: boolean }): void {
@@ -1899,7 +1988,9 @@ export class ReportEditor {
     // 「抄録を書き始めました」が出ている間に戻した：「抄録を書き始める前に戻しました」
     const shown = this.currentNotice
     this.commitForChange()
-    const previous = this.history.pop()
+    // やり直したときは、いま出ている知らせ（「段落を削除しました［戻す］」など）を、もう一度出す
+    const again: NoticeBody | null = shown?.kind === 'removed' ? { kind: 'removed', what: shown.what } : shown?.kind === 'started' ? { kind: 'started' } : null
+    const previous = this.history.undo(this.report, again)
     if (!previous) return
     // 戻した所は、組み直した紙面で見せる（ほかのページでも、そこへ移って少しの間光らせる）
     this.undone = changedPlace(this.report, previous)
@@ -1912,10 +2003,31 @@ export class ReportEditor {
     this.notify()
   }
 
+  /**
+   * やり直す（mockups/v35 ④ 案A）：元に戻した操作を、もう一度する（戻しすぎたとき）。元に戻したあと、ほかを変えていなければできる。
+   * 変わった所は、元に戻したときと同じく、組み直した紙面で見せる（ほかのページなら、そこへ移って光らせる）。
+   * 削除をやり直したときは、削除したときと同じく、組み直すのを待たずに紙面から隠し、「〜を削除しました［戻す］」をもう一度出す
+   */
+  redo(): void {
+    this.commitForChange()
+    const before = bodyIds(this.report)
+    const next = this.history.redo(this.report)
+    if (!next) return
+    this.undone = changedPlace(this.report, next.state)
+    this.report = next.state
+    this.afterChange({ render: 'now', save: true })
+    const after = bodyIds(this.report)
+    for (const id of before) if (!after.has(id)) this.removed.add(id)
+    this.hideRemoved()
+    this.notice = next.note ? { notice: { ...next.note, id: ++this.noticeCount }, report: this.report } : null
+    this.notify()
+  }
+
   /** 報告書を丸ごと入れ替える（復元・新規作成）。履歴は消す */
   replace(report: Report): void {
     this.commitForChange()
-    this.history = []
+    // 履歴は原稿ごと（入れ替えた原稿では、元に戻す・やり直すの両方とも、はじめから）
+    this.history.clear()
     this.report = report
     this.selection = null
     this.currentId = null
@@ -2006,12 +2118,13 @@ export class ReportEditor {
     }
     // 光らせるのは、そこが見えてから（ページをめくり終え、拡大していればそこまで動かし終えてから）。
     // 前は動かし始めると同時に光らせたため、画面の下の方の段落では、見えたときには光が消えていた
+    // 見開きのときは、並べている2ページのどちらにあっても、めくらずに光らせる
     const flash = () => {
-      const here = targets.filter((el) => view.pageIndexOf(el) === this.page)
+      const here = targets.filter((el) => this.isVisiblePage(view.pageIndexOf(el)))
       if (here.length && this.stage.zoomed && !this.inView(here[0])) this.scrollThen(here[0], still, () => light(here))
       else light(here)
     }
-    if (page === this.page) flash()
+    if (this.isVisiblePage(page)) flash()
     else void this.goToPage(page).then(flash)
   }
 
@@ -2277,15 +2390,16 @@ export class ReportEditor {
 
   /**
    * 表を入れる（空の表か、素材表のひな形）。図と同じく、カーソルのある文の終わりに「（表n）」が入り、段落のすぐ下に表が入る。
-   * タイトルを書いて Enter を押すと、表の後ろに新しい段落ができる
+   * タイトルを書いて Enter を押すと、表の後ろに新しい段落ができる。
+   * size：空の表の大きさ（列・行。行は見出しの行も数える。入れる前に選ぶ：mockups/v35 ②。なければ 2列×2行）
    */
-  addTable(kind: 'blank' | 'material'): void {
+  addTable(kind: 'blank' | 'material', size?: { columns: number; rows: number }): void {
     const paragraphId = this.editingParagraph()
     if (!paragraphId || this.settlingRemoval) return
     const caret = this.overlay.caret
     this.commitForChange()
     const tableId = ops.newId('t')
-    const table = kind === 'material' ? materialTable(tableId, ops.newId) : blankTable(tableId, ops.newId)
+    const table = kind === 'material' ? materialTable(tableId, ops.newId) : blankTable(tableId, ops.newId, '', size?.columns, size?.rows)
     this.pushHistory(this.report)
     const near = this.placeObject(paragraphId, caret, tableId, table, (r) => ops.addTableBelow(r, paragraphId, table))
     // 仮のタイトル（素材表の「使用素材表」）があれば、その後ろから書く（前に付け足してしまわないように）

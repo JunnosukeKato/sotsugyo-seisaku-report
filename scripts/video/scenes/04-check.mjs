@@ -29,7 +29,7 @@ export async function prepare({ page, h }) {
 
 const items = (page) =>
   page.evaluate(() =>
-    [...document.querySelectorAll('.side .sec.check li')].map((li) => {
+    [...document.querySelectorAll('.side .sec.check .issues li')].map((li) => {
       const r = li.getBoundingClientRect()
       return { text: li.textContent, x: r.left, y: r.top, w: r.width, h: r.height }
     }),

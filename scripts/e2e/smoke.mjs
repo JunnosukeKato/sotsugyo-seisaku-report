@@ -147,7 +147,8 @@ await withEdge(async (browser) => {
   let s = await snap()
   check('コースを選ぶと、そのコースの下書きが本文に入り、「いいえ」で学籍番号の入力が始まる', !!s.report.basicInfo.courseId && s.report.body.length > 0 && s.report.body.flatMap((c) => c.blocks).some((b) => b.type === 'paragraph' && b.hint), s.report.basicInfo.courseId)
   const noticeText = () => page.evaluate(() => document.querySelector('.side .notice')?.textContent ?? '')
-  check('右の欄に、自分のコースのお知らせが出る', (await noticeText()).includes('映画・舞台衣装デザイナー コースからのお知らせ') && (await noticeText()).includes('衣装コースへのお知らせ'), await noticeText())
+  // 見出しは「コースからのお知らせ」だけ（右の欄の上の半分を詰める。mockups/v35 ①）
+  check('右の欄に、自分のコースのお知らせが出る（見出しは「コースからのお知らせ」）', (await noticeText()).startsWith('コースからのお知らせ') && (await noticeText()).includes('衣装コースへのお知らせ'), await noticeText())
   // 「？ 使い方」のボタン（右の欄の「バックアップ・作り直す」の横。mockups/v27 案A・v34 案A。印刷用の手引きの PDF は、使い方の一覧のいちばん下から開く）
   check('右の欄の「バックアップ・作り直す」の横に「？ 使い方」のボタンがある', await page.evaluate(() => [...document.querySelectorAll('.side .links .link-btn')].map((b) => b.textContent.trim()).join(',').includes('バックアップ・作り直す,使い方')))
   await page.keyboard.type('00ZZ0123')
@@ -210,6 +211,51 @@ await withEdge(async (browser) => {
   await page.waitForFunction(() => !document.querySelector('.tour'), { timeout: 10000 }).catch(() => {})
   check('「おわり」で閉じ、見たことをこの端末に覚える', !(await page.$('.tour')) && (await page.evaluate((k) => localStorage.getItem(k), TOUR_KEY)) === 'done')
 
+  // ---- 右の欄のセルフチェック（mockups/v35 ① 案A）：「まだのところ」（灰色の ○）と「直すところ」（書いた文の間違い）に分ける ----
+  // 表紙を入れただけの書き始めは「直すところ 0」で、赤い字・印が出ない。引用・参考文献のボタンは右の欄にない（使い方から入れる）
+  const freshPanel = await page.evaluate(() => {
+    const sec = document.querySelector('.side .sec.check')
+    const red = [...sec.querySelectorAll('*')].filter((e) => { const cs = getComputedStyle(e); return cs.color === 'rgb(181, 68, 59)' || cs.backgroundColor === 'rgb(181, 68, 59)' }).map((e) => e.className || e.tagName)
+    return {
+      tally: document.querySelector('.side .tally')?.textContent.replace(/\s/g, '') ?? '',
+      rows: [...sec.querySelectorAll('.check-prog li')].map((li) => `${li.className}:${li.querySelector('.l')?.textContent}:${li.querySelector('.v')?.textContent}`),
+      none: sec.querySelector('.check-none')?.textContent ?? '',
+      issues: sec.querySelectorAll('.issue').length,
+      legend: !!sec.querySelector('.sev-legend'),
+      red,
+      note: document.querySelector('.side-foot .export-note')?.textContent ?? '',
+      refs: !!document.querySelector('.side .add-refs, .side .refs-link'),
+      // 保存のようすと締切が1行（2つの縦の真ん中がそろい、締切は右に寄る）
+      metaOneLine: (() => {
+        const [a, b] = [...document.querySelectorAll('.side .meta > *')].map((e) => e.getBoundingClientRect())
+        return !!a && !!b && Math.abs((a.top + a.bottom) / 2 - (b.top + b.bottom) / 2) < 3 && b.left > a.right
+      })(),
+    }
+  })
+  await page.screenshot({ path: `${OUT}/0-check-fresh.png` })
+  check(
+    '書き始め（表紙だけ入れた）の右の欄：「直すところ 0　まだ 3」で赤い字・印がなく、まだのところは表紙 ✓・本文のページ／本文の段落／作品写真 ○・抄録「先生の許可のあと」・図の枚数。直すところは「いま直すところはありません」（凡例は出さない）',
+    freshPanel.tally === '直すところ0まだ3' &&
+      freshPanel.red.length === 0 &&
+      freshPanel.issues === 0 &&
+      !freshPanel.legend &&
+      freshPanel.none.includes('いま直すところはありません') &&
+      freshPanel.rows.map((r) => r.split(':').slice(0, 2).join(':')).join(',') === 'done:表紙,todo:本文のページ,todo:本文の段落,todo:作品写真,wait:抄録,info:図の枚数' &&
+      freshPanel.rows[4].endsWith('先生の許可のあと'),
+    JSON.stringify(freshPanel),
+  )
+  check('「PDFを書き出す」の下は「まだのところが3つあります」。保存のようすと締切は1行。右の欄に「＋ 引用・参考文献を入れる」はない', freshPanel.note === 'まだのところが3つあります' && freshPanel.metaOneLine && !freshPanel.refs, JSON.stringify(freshPanel))
+  // まだの行を押すと、その場所へ移る（本文の段落：まだ書いていない最初の段落が開く）
+  await page.evaluate(() => [...document.querySelectorAll('.side .check-prog li')].find((li) => li.textContent.includes('本文の段落')).querySelector('button').click())
+  await page.waitForFunction(() => !!window.__editor.getSnapshot().editingId, { timeout: 20000 }).catch(() => {})
+  const rowJump = await page.evaluate(() => { const s = window.__editor.getSnapshot(); return { editing: s.editingId, first: s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'paragraph' && b.hint)?.id, kind: s.layout.kinds[s.page] } })
+  check('まだのところの「本文の段落」を押すと、まだ書いていない最初の段落へ移って書き始められる', !!rowJump.editing && rowJump.editing === rowJump.first && rowJump.kind === 'body', JSON.stringify(rowJump))
+  await page.evaluate(() => window.__editor.finishEditing())
+  await ready()
+  // 表紙に戻しておく（このあと読み込み直して、表紙の欄でキーボードを確かめる。最後に見ていたページを開くため）
+  await page.evaluate(() => window.__editor.goToPage(0, 'none'))
+  await ready()
+
   // ---- 使い方（PC：右の欄が使い方に替わる。mockups/v27 案A） ----
   await page.click('.side .help-btn')
   await page.waitForSelector('.side .help-side')
@@ -256,16 +302,39 @@ await withEdge(async (browser) => {
   await page.click('.help-back')
   await page.click('.help-clear')
   await pause0(200)
-  // 学生が探して見つからなかった言葉（引用・参考文献・最初から・やり直・新しく）でも、その項目が先に出る
+  // 学生が探して見つからなかった言葉（引用・参考文献・最初から・作り直す・新しく）でも、その項目が先に出る。
+  // 「やり直」「やり直す」は、元に戻す・やり直すの項目が先（mockups/v35 ④。最初から作り直す項目は、その下に出る）
   const firstHits = []
-  for (const q of ['引用', '参考文献', '最初から', 'やり直', '新しく']) {
+  for (const q of ['引用', '参考文献', '最初から', '作り直す', '新しく', 'やり直', 'やり直す']) {
     await page.type('.help-search input', q)
     await pause0(200)
     firstHits.push(await page.evaluate(() => document.querySelector('.help-results .t')?.textContent ?? ''))
     await page.click('.help-clear')
     await pause0(100)
   }
-  check('「引用」「参考文献」で引用・参考文献の項目、「最初から」「やり直」「新しく」で最初から作り直す項目が先に出る', firstHits.join(',') === ['引用・参考文献', '引用・参考文献', ...Array(3).fill('最初から作り直す（新しく始める）')].join(','), JSON.stringify(firstHits))
+  check(
+    '「引用」「参考文献」で引用・参考文献の項目、「最初から」「作り直す」「新しく」で最初から作り直す項目、「やり直」「やり直す」で元に戻す・やり直すの項目が先に出る',
+    firstHits.join(',') === ['引用・参考文献', '引用・参考文献', ...Array(3).fill('最初から作り直す（新しく始める）'), ...Array(2).fill('原稿を前に戻す（元に戻す・やり直す・自動の控え）')].join(','),
+    JSON.stringify(firstHits),
+  )
+  // 使い方の「引用・参考文献」：「引用・参考文献を入れる」のボタンで、引用・参考文献の窓が開く（右の欄からは外した。mockups/v35 ①）。
+  // PC は使い方を開いたまま。窓を閉じると、ボタンに戻る
+  await page.evaluate(() => document.querySelector('.help-list [data-topic="references"]').click())
+  await page.waitForSelector('.help-topic .help-refs')
+  const refsTopic = await page.evaluate(() => ({ lead: document.querySelector('.help-topic .help-lead')?.textContent ?? '', button: document.querySelector('.help-topic .help-refs')?.textContent ?? '' }))
+  await page.click('.help-topic .help-refs')
+  const refsOpened = await page.waitForSelector('.modal .refs', { timeout: 10000 }).then(() => true, () => false)
+  const refsWhileOpen = { help: !!(await page.$('.side .help-side')), title: await page.evaluate(() => document.querySelector('.modal h2')?.textContent ?? '') }
+  await page.evaluate(() => [...document.querySelectorAll('.modal .row-buttons button')].find((b) => b.textContent === 'やめる').click())
+  await page.waitForFunction(() => !document.querySelector('.modal'), { timeout: 10000 }).catch(() => {})
+  const refsBack = await page.evaluate(() => document.activeElement?.classList.contains('help-refs') ?? false)
+  check(
+    '使い方の「引用・参考文献」に「引用・参考文献を入れる」のボタンがあり、押すと引用・参考文献の窓が開く（使い方は開いたまま。「やめる」でボタンに戻る）',
+    refsTopic.lead === '使うときだけ、下のボタンから入れます。' && refsTopic.button === '引用・参考文献を入れる' && refsOpened && refsWhileOpen.help && refsWhileOpen.title === '引用・参考文献' && refsBack,
+    JSON.stringify({ refsTopic, refsOpened, refsWhileOpen, refsBack }),
+  )
+  await page.click('.help-back')
+  await pause0(200)
   // 使い方の「指差し確認をもう一度見る」→「いま見る」：使い方を閉じて、指差し確認を出す。Esc は「とばす」
   await page.evaluate(() => document.querySelector('.help-list [data-topic="tour"]').click())
   await page.waitForSelector('.help-action')
@@ -386,6 +455,140 @@ await withEdge(async (browser) => {
   await page.evaluate(() => window.__editor.goToPage(0, 'none'))
   await ready()
 
+  // ---- 見開き（mockups/v35 ③ 案A。PC だけ）：いまのページと次のページを並べ、1–2、3–4…と2ページずつめくる。どちらのページでも書ける ----
+  {
+    const spreadInfo = () =>
+      page.evaluate(() => {
+        const s = window.__editor.getSnapshot()
+        const shown = [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].filter((p) => p.getBoundingClientRect().width > 0)
+        const rects = shown.map((p) => p.getBoundingClientRect())
+        return {
+          spread: s.spread,
+          page: s.page,
+          count: s.pageCount,
+          shown: shown.length,
+          sideBySide: rects.length === 2 && rects[1].left >= rects[0].right && Math.abs(rects[0].top - rects[1].top) < 1 && Math.abs(rects[0].width - rects[1].width) < 1,
+          pcount: document.querySelector('.thumbs-col .pcount')?.textContent ?? '',
+          thumbs: [...document.querySelectorAll('.thumbs-col .thumb-list .t')].map((t, i) => (t.classList.contains('on') ? i : -1)).filter((i) => i >= 0).join(','),
+          prevOff: document.querySelector('.arrow.prev').disabled,
+          nextOff: document.querySelector('.arrow.next').disabled,
+          arrowsBelow: rects.length > 0 && document.querySelector('.arrow.prev').getBoundingClientRect().top > rects[0].bottom,
+        }
+      })
+    check('右下の切り替えは「全体／見開き／拡大」の3つ', (await page.evaluate(() => [...document.querySelectorAll('.zoom button')].map((b) => b.textContent.trim()).join('／'))) === '全体／見開き／拡大')
+    // 確かめのあいだだけ、本文を数ページ足す（本文のページが2つ並ぶ組を作る。あとで元に戻す）
+    await page.evaluate(() =>
+      window.__editor.update((r) => ({
+        ...r,
+        body: [...r.body, { id: 'sp-c', title: '見開きの確かめ', blocks: Array.from({ length: 14 }, (_, i) => ({ type: 'paragraph', id: `sp-p${i}`, content: [{ type: 'text', text: `見開きの確かめの${i + 1}つめの段落である。`.repeat(9) }] })) }],
+      })),
+    )
+    await ready()
+    await page.evaluate(() => window.__editor.goToPage(0, 'none'))
+    await ready()
+    await page.evaluate(() => [...document.querySelectorAll('.zoom button')].find((b) => b.textContent.includes('見開き')).click())
+    await ready()
+    let sp = await spreadInfo()
+    check(
+      '「見開き」で、1–2ページを並べて出す（ページ一覧は2ページとも選んだ印、番号は「1–2 / n」、←→は下。最初の組では←は押せない）',
+      sp.spread && sp.page === 0 && sp.shown === 2 && sp.sideBySide && sp.pcount === `1–2 / ${sp.count}` && sp.thumbs === '0,1' && sp.prevOff && sp.arrowsBelow,
+      JSON.stringify(sp),
+    )
+    await page.keyboard.press('ArrowRight')
+    await ready()
+    sp = await spreadInfo()
+    const afterKey = sp.page
+    await page.click('.arrow.next')
+    await ready()
+    sp = await spreadInfo()
+    check('見開きでは、→キー・→ボタンで2ページずつめくる（1–2 → 3–4 → 5–6）', afterKey === 2 && sp.page === 4 && sp.shown === 2 && sp.pcount.startsWith('5–6') && sp.thumbs === '4,5', JSON.stringify({ afterKey, sp }))
+    await page.mouse.move(stageCenter.x, stageCenter.y)
+    await page.mouse.wheel({ deltaY: -100 })
+    await pause()
+    await ready()
+    check('見開きでは、ホイールでも2ページずつめくる（5–6 → 3–4）', (await snap()).page === 2, `${(await snap()).page}`)
+    // ページ一覧で、ほかの組のページを押すと、その組へ（押したページで書く）
+    await page.evaluate(() => document.querySelectorAll('.thumbs-col .thumb-list .t')[5].click())
+    await ready()
+    sp = await spreadInfo()
+    check('見開きで、ページ一覧の6ページ目を押すと 5–6 の組を出す（書くのは6ページ目）', sp.page === 5 && sp.shown === 2 && sp.thumbs === '4,5', JSON.stringify(sp))
+    // 右のページ（左も本文の組）の段落を押すと、めくらずにその場で書ける
+    const pair = await page.evaluate(() => {
+      const ed = window.__editor
+      const s = ed.getSnapshot()
+      const paras = s.report.body.flatMap((c) => c.blocks).filter((b) => b.type === 'paragraph').map((b) => b.id)
+      const kinds = s.layout.kinds
+      const right = paras.find((id) => { const p = ed.pageOfBlock(id); return p % 2 === 1 && kinds[p] === 'body' && kinds[p - 1] === 'body' })
+      const p = right ? ed.pageOfBlock(right) : -1
+      const left = paras.find((id) => ed.pageOfBlock(id) === p - 1 && ed.pageOfBlock(id, 1e9) === p - 1)
+      return { right, left, page: p }
+    })
+    await page.evaluate((p) => window.__editor.goToPage(p - 1, 'none'), pair.page)
+    await ready()
+    const pointOf = (id) =>
+      page.evaluate((id) => {
+        const el = [...document.querySelectorAll(`.page-viewport.front [data-block-id="${id}"]`)].find((e) => e.getBoundingClientRect().width > 0)
+        const r = el.getBoundingClientRect()
+        return { x: r.left + Math.min(r.width / 2, 40), y: r.top + Math.min(r.height / 2, 8) }
+      }, id)
+    const paraTextOf = (id) => page.evaluate((id) => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === id).content.map((n) => n.text ?? '').join(''), id)
+    const editingOn = (p) =>
+      page.evaluate((p) => {
+        const s = window.__editor.getSnapshot()
+        const pr = window.__editor.pageElements()[p].getBoundingClientRect()
+        const box = document.querySelector('.overlay-editor').getBoundingClientRect()
+        const shown = [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].filter((x) => x.getBoundingClientRect().width > 0).length
+        return { editing: s.editingId, page: s.page, shown, inside: box.width > 0 && box.left >= pr.left - 1 && box.right <= pr.right + 1 && box.top >= pr.top - 1 }
+      }, p)
+    let at = await pointOf(pair.right)
+    await page.mouse.click(at.x, at.y)
+    await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 20000 }, pair.right)
+    const onRight = await editingOn(pair.page)
+    await page.keyboard.press('End')
+    await page.keyboard.type('右で書いた。')
+    // 続けて左のページの段落を押す（右で書いた分は確定する）
+    at = await pointOf(pair.left)
+    await page.mouse.click(at.x, at.y)
+    await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 20000 }, pair.left)
+    const onLeft = await editingOn(pair.page - 1)
+    await page.keyboard.press('Escape')
+    await ready()
+    const rightText = await paraTextOf(pair.right)
+    check(
+      '見開きの右のページの段落を押すと、めくらずにその場で書ける。続けて左のページの段落も押して書ける（書く欄は、押したページの上）',
+      !!pair.right && !!pair.left && onRight.page === pair.page && onRight.shown === 2 && onRight.inside && onLeft.page === pair.page - 1 && onLeft.shown === 2 && onLeft.inside && rightText.endsWith('右で書いた。'),
+      JSON.stringify({ pair, onRight, onLeft, rightText: rightText.slice(-12) }),
+    )
+    // 右で書いた分と、足した本文を元に戻す
+    await page.evaluate(() => window.__editor.undo())
+    await ready()
+    check('元に戻すと、右のページで書いた分が消える', !(await paraTextOf(pair.right)).endsWith('右で書いた。'))
+    await page.evaluate(() => window.__editor.undo())
+    await ready()
+    check('足した本文も元に戻る（見開きの確かめの前の原稿）', !(await snap()).report.body.some((c) => c.id === 'sp-c'))
+    // 印刷（PDF）では、見開きの並べ方を使わない（ページを1枚ずつ、ずらさずに出す）
+    await page.emulateMediaType('print')
+    const printed = await page.evaluate(() => {
+      const pages = window.__editor.pageElements()
+      return { shown: pages.filter((p) => getComputedStyle(p).display !== 'none').length, total: pages.length, shifted: pages.filter((p) => getComputedStyle(p).translate !== 'none').length }
+    })
+    await page.emulateMediaType(null)
+    check('見開きのままでも、印刷（PDF）はページを1枚ずつ、ずらさずに出す', printed.shown >= printed.total - 1 && printed.shifted === 0, JSON.stringify(printed))
+    // 表示の仕方は覚える（読み込み直すと見開きに戻る）
+    const stored = await page.evaluate(() => localStorage.getItem('sotsugyo-seisaku-report-zoom'))
+    await page.reload({ waitUntil: 'networkidle0' })
+    await ready()
+    await page.waitForFunction(() => window.__editor.getSnapshot().spread, { timeout: 15000 }).catch(() => {})
+    sp = await spreadInfo()
+    check('見開きにしたことを覚え、読み込み直すと見開きに戻る', stored === 'spread' && sp.spread && sp.shown === 2, JSON.stringify({ stored, sp }))
+    await page.click('.zoom button:first-child')
+    await ready()
+    sp = await spreadInfo()
+    check('「全体」で1ページずつの表示に戻る', !sp.spread && sp.shown === 1 && !sp.pcount.includes('–') && (await page.evaluate(() => localStorage.getItem('sotsugyo-seisaku-report-zoom'))) === 'fit', JSON.stringify(sp))
+    await page.evaluate(() => window.__editor.goToPage(0, 'none'))
+    await ready()
+  }
+
   // ---- 表紙 ----
   await clickBlock('basic:studentId')
   check('表紙の学籍番号をクリックすると入力欄が開く', (await snap()).editingId === 'basic:studentId')
@@ -459,8 +662,14 @@ await withEdge(async (browser) => {
     icons: [...document.querySelectorAll('.side .sev-legend .dot')].map((i) => getComputedStyle(i, '::before').content),
     chips: document.querySelectorAll('.side .issue .src').length,
     chipText: /手順書|補助/.test([...document.querySelectorAll('.side .issue .ttl')].map((t) => t.textContent).join('')),
+    // 凡例と指摘は「直すところ」の中（mockups/v35 ① 案A）。数は「直すところ N、まだ M」で、直すところは赤い数
+    inFix: !!document.querySelector('.side .sec.check .check-sub.fix ~ .sev-legend'),
+    tally: document.querySelector('.side .tally')?.textContent.replace(/\s/g, '') ?? '',
+    tallyRed: getComputedStyle(document.querySelector('.side .tally b')).color === 'rgb(181, 68, 59)',
+    issues: document.querySelectorAll('.side .sec.check .issue').length,
   }))
   check('セルフチェックの一覧の上に「× エラー：直してから出す」「! 要確認：確かめて、必要なら直す」が出て、指摘ごとの札（手順書・補助）はない', legend.text.includes('エラー：直してから出す') && legend.text.includes('要確認：確かめて、必要なら直す') && legend.aboveList && legend.icons.join(',') === '"×","!"' && legend.chips === 0 && !legend.chipText, JSON.stringify(legend))
+  check('書いた文の間違いは「直すところ」に出る（凡例も直すところの中。「直すところ N」の数は赤）', legend.inFix && legend.tallyRed && legend.tally.startsWith(`直すところ${legend.issues}まだ`), JSON.stringify(legend))
   await page.screenshot({ path: `${OUT}/1-findings.png` })
   const issueRows = await page.evaluate(() => ({
     fix: document.querySelectorAll('.side .issue .fix').length,
@@ -734,11 +943,31 @@ await withEdge(async (browser) => {
   await clickBlock(firstParagraph)
   await page.keyboard.press('End')
   await clickPaletteButton('表を入れる')
-  await page.evaluate(() => [...document.querySelectorAll('.palette .side-menu button')].find((b) => b.textContent.includes('空の表')).click())
+  // 表の大きさを最初に選ぶ（mockups/v35 ②）：メニューに、ます目（6列×10行。はじめは 2列×2行に色）と、素材表のボタン
+  const menuInfo = () =>
+    page.evaluate(() => {
+      const m = document.querySelector('.palette .table-menu')
+      return m && { title: m.querySelector('.side-menu-title')?.textContent, cells: m.querySelectorAll('.tgrid button').length, on: m.querySelectorAll('.tgrid button.on').length, head: m.querySelectorAll('.tgrid button.on.h').length, label: m.querySelector('.tgrid-label')?.textContent, more: [...m.querySelectorAll(':scope > button')].map((b) => b.textContent).join(), editing: window.__editor.getSnapshot().editingId, caret: window.__editor.getSnapshot().caret }
+    })
+  const menu0 = await menuInfo()
+  check('「表を入れる」のメニューに、表の大きさを選ぶます目（6列×10行。はじめは 2列×2行）と、その下に素材表のボタンが出る', menu0?.title === '表の大きさを選ぶ' && menu0.cells === 60 && menu0.on === 4 && menu0.head === 2 && menu0.label === '2列×2行1行目は見出し' && menu0.more === '素材表名称・使用箇所・生地見本', JSON.stringify(menu0))
+  // マウスを 3列×4行のます目に乗せると、そこまで色が付く（1行目は濃い色＝見出し）
+  const gridCell = (c, r) => page.evaluate((c, r) => { const b = document.querySelectorAll('.palette .table-menu .tgrid button')[(r - 1) * 6 + (c - 1)].getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 } }, c, r)
+  let gc = await gridCell(3, 4)
+  await page.mouse.move(gc.x, gc.y)
+  await pause(150)
+  const menu34 = await menuInfo()
+  check('ます目にマウスを乗せると、3列×4行まで色が付き（見出しの行は3つ）、「3列×4行 ／ 1行目は見出し」と出る', menu34?.on === 12 && menu34.head === 3 && menu34.label === '3列×4行1行目は見出し', JSON.stringify(menu34))
+  // キーボード：矢印キーで選び直し（書く欄のカーソルは動かない）、Enter で入れる
+  for (const key of ['ArrowLeft', 'ArrowUp', 'ArrowUp', 'ArrowUp']) await page.keyboard.press(key)
+  const menuKey = await menuInfo()
+  check('矢印キーで大きさを選び直せる（2列×2行より小さい行にはならない。書く欄のカーソルは動かない）', menuKey?.label === '2列×2行1行目は見出し' && menuKey.on === 4 && menuKey.caret === menu0.caret && menuKey.editing === menu0.editing, JSON.stringify(menuKey))
+  await page.keyboard.press('Enter')
   await waitEditing(() => window.__editor.getSnapshot().editingKind === 'tableCaption')
   await ready()
   s = await snap()
   const tableBlock = s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'table' && b.id === s.editingId)
+  check('Enter で、選んだ大きさ（2列×2行）の表が入る', JSON.stringify(tableBlock?.rows.map((r) => r.cells.length)) === '[2,2]', JSON.stringify(tableBlock?.rows.map((r) => r.cells.length)))
   check('「表を入れる」で、書いている位置に（表n）が入り、表のタイトルを書く欄が開く（タイトルが空ならエラー）', !!tableBlock && s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.some((n) => n.type === 'ref' && n.targetId === tableBlock.id) && s.findings.some((x) => x.ruleId === 'required-text' && x.blockId === tableBlock.id), tableBlock?.id)
   await page.keyboard.type('使用した生地')
   await page.keyboard.press('Enter')
@@ -753,6 +982,109 @@ await withEdge(async (browser) => {
   await page.evaluate(() => window.__editor.undo())
   await ready()
   check('元に戻す1回で、表の後ろに作った段落が消える', !(await snap()).report.body.flatMap((c) => c.blocks).some((b) => b.id === afterTable?.id))
+  // ---- ます目で 3列×4行を押して入れる。元に戻す・やり直す（mockups/v35 ④ 案A：道具のいちばん下の2つのボタン・Ctrl+Z／Ctrl+Y／Ctrl+Shift+Z） ----
+  {
+    const bodyKey = () => snap().then((x) => JSON.stringify(x.report.body))
+    const before34 = await bodyKey()
+    await clickBlock(firstParagraph)
+    await page.keyboard.press('End')
+    await clickPaletteButton('表を入れる')
+    await page.waitForSelector('.palette .table-menu')
+    gc = await gridCell(3, 4)
+    await page.mouse.move(gc.x, gc.y)
+    await page.mouse.click(gc.x, gc.y)
+    await waitEditing(() => window.__editor.getSnapshot().editingKind === 'tableCaption')
+    await ready()
+    s = await snap()
+    const t34 = s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'table' && b.id === s.editingId)
+    const t34Cells = await page.evaluate((id) => [...document.querySelectorAll(`.page-viewport.front .data-table[data-table-id="${id}"] tr`)].map((tr) => tr.children.length), t34?.id)
+    check('ます目の 3列×4行を押すと、3列×4行（1行目は見出し）の表が入る（紙面の表も 3列×4行）', JSON.stringify(t34?.rows.map((r) => r.cells.length)) === '[3,3,3,3]' && JSON.stringify(t34Cells) === '[3,3,3,3]', JSON.stringify({ model: t34?.rows.map((r) => r.cells.length), paper: t34Cells }))
+    await page.keyboard.press('Escape')
+    await ready()
+    const urState = () =>
+      page.evaluate((id) => {
+        const s = window.__editor.getSnapshot()
+        const bs = [...document.querySelectorAll('.palette .undo-redo .tb')]
+        return { has: s.report.body.flatMap((c) => c.blocks).some((b) => b.id === id), canUndo: s.canUndo, canRedo: s.canRedo, buttons: bs.map((b) => `${b.textContent.trim()}${b.disabled ? '×' : '○'}`).join(',') }
+      }, t34?.id)
+    const after34 = await urState()
+    check('道具のいちばん下に「元に戻す」「やり直す」が並ぶ（まだ戻していないので「やり直す」は押せない）', after34.has && after34.buttons === '元に戻す○,やり直す×', JSON.stringify(after34))
+    await page.evaluate(() => [...document.querySelectorAll('.palette .undo-redo .tb')].find((b) => b.textContent.includes('元に戻す')).click())
+    await ready()
+    const undone34 = await urState()
+    // 「やり直す」にマウスを乗せると、キーボードでの押し方が出る
+    const redoBox = await page.evaluate(() => { const r = [...document.querySelectorAll('.palette .undo-redo .tb')][1].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+    await page.mouse.move(redoBox.x, redoBox.y)
+    await pause(700)
+    const tip = await page.evaluate(() => { const t = document.querySelector('.ur-tip'); const r = t?.getBoundingClientRect(); const b = [...document.querySelectorAll('.palette .undo-redo .tb')][1].getBoundingClientRect(); return t ? { text: t.textContent, right: r.left >= b.right } : null })
+    await page.mouse.click(redoBox.x, redoBox.y)
+    await ready()
+    const redone34 = await urState()
+    check(
+      '「元に戻す」で表が消え、「やり直す」で戻る（マウスを乗せると「やり直す（Ctrl+Y）／Mac は ⌘+Shift+Z」が右に出る）',
+      !undone34.has && undone34.buttons === '元に戻す○,やり直す○' && tip?.text === 'やり直す（Ctrl+Y）Mac は ⌘+Shift+Z' && tip.right && redone34.has && !redone34.canRedo && before34 !== (await bodyKey()),
+      JSON.stringify({ undone34, tip, redone34 }),
+    )
+    await page.mouse.move(5, 5)
+    // キーボード（書く欄の外）：Ctrl+Z で戻し、Ctrl+Y・Ctrl+Shift+Z でやり直す
+    await page.evaluate(() => document.activeElement?.blur())
+    const keyed = []
+    for (const combo of [['Control', 'z'], ['Control', 'y'], ['Control', 'z'], ['Control', 'Shift', 'Z']]) {
+      for (const k of combo) await page.keyboard.down(k)
+      for (const k of [...combo].reverse()) await page.keyboard.up(k)
+      await ready()
+      keyed.push((await urState()).has)
+    }
+    check('キーボード：Ctrl+Z で戻し、Ctrl+Y・Ctrl+Shift+Z でやり直す（書く欄の外）', keyed.join(',') === 'false,true,false,true', keyed.join(','))
+    // 削除をやり直すと、削除の知らせ（［戻す］）がもう一度出る
+    const toast = () => page.evaluate(() => document.querySelector('.stage .undo-area .undo-toast')?.textContent ?? '')
+    await page.evaluate((id) => { window.__editor.select({ kind: 'table', id }); window.__editor.removeSelected() }, t34?.id)
+    await ready()
+    const t1 = await toast()
+    await page.keyboard.down('Control')
+    await page.keyboard.press('z')
+    await page.keyboard.up('Control')
+    await ready()
+    const t2 = await toast()
+    await page.keyboard.down('Control')
+    await page.keyboard.press('y')
+    await page.keyboard.up('Control')
+    await ready()
+    const t3 = await toast()
+    const goneAgain = !(await urState()).has
+    await page.evaluate(() => document.querySelector('.stage .undo-area .undo-toast button')?.click())
+    await ready()
+    check('表を削除 →「元に戻す」→「やり直す」で、また消えて「表を削除しました［戻す］」が出る（［戻す］で戻る）', t1 === '表を削除しました戻す' && t2.includes('表を戻しました') && t3 === '表を削除しました戻す' && goneAgain && (await urState()).has, JSON.stringify({ t1, t2, t3, goneAgain }))
+    // 戻したあとに、ほかを変えると、やり直せなくなる
+    await page.evaluate(() => window.__editor.undo())
+    await ready()
+    const canBefore = (await urState()).canRedo
+    await page.evaluate(() => window.__editor.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, name: r.basicInfo.name } })))
+    await ready()
+    const cleared = await urState()
+    check('戻したあとに原稿を変えると、「やり直す」は押せなくなる', canBefore && !cleared.canRedo && cleared.buttons.endsWith('やり直す×'), JSON.stringify({ canBefore, cleared }))
+    await page.evaluate(() => window.__editor.undo())
+    await ready()
+    // 書く欄の中の Ctrl+Z・Ctrl+Y は、今までどおりブラウザの文字の元に戻す・やり直す（原稿の「やり直す」はしない）
+    await clickBlock(firstParagraph)
+    await page.keyboard.press('End')
+    await page.keyboard.type('いろは')
+    const typed = await page.evaluate(() => document.querySelector('.overlay-editor').textContent)
+    await page.keyboard.down('Control')
+    await page.keyboard.press('z')
+    await page.keyboard.up('Control')
+    const inUndo = await page.evaluate(() => document.querySelector('.overlay-editor').textContent)
+    await page.keyboard.down('Control')
+    await page.keyboard.press('y')
+    await page.keyboard.up('Control')
+    const inRedo = await page.evaluate(() => ({ text: document.querySelector('.overlay-editor').textContent, editing: window.__editor.getSnapshot().editingId }))
+    check('書く欄の中の Ctrl+Z・Ctrl+Y は、書いた文字を戻す・やり直す（書く欄は開いたまま）', typed.endsWith('いろは') && !inUndo.endsWith('いろは') && inRedo.text === typed && inRedo.editing === firstParagraph, JSON.stringify({ typed: typed.slice(-5), inUndo: inUndo.slice(-5), inRedo }))
+    await page.keyboard.press('Escape')
+    await ready()
+    await page.evaluate(() => window.__editor.undo())
+    await ready()
+    check('ます目・元に戻す・やり直すの確かめのあと、原稿は確かめる前のまま', (await bodyKey()) === before34)
+  }
   // 表の操作：セルを書き、行・列を足し、列の幅を切り替え、セルに画像を入れる
   const tableNow = () => snap().then((x) => x.report.body.flatMap((c) => c.blocks).find((b) => b.id === tableBlock.id))
   await clickBlock((await tableNow()).rows[1].cells[0].id)
@@ -1357,7 +1689,8 @@ await withEdge(async (browser) => {
     await ctrlEnd()
     await page.keyboard.press('Enter')
     await clickPaletteButton('表を入れる')
-    await page.evaluate(() => [...document.querySelectorAll('.palette .side-menu button')].find((b) => b.textContent.includes('空の表')).click())
+    // ます目の 2列×2行（いつもの大きさ）を押す
+    await page.evaluate(() => document.querySelectorAll('.palette .table-menu .tgrid button')[1 * 6 + 1].click())
     await waitEditing(() => window.__editor.getSnapshot().editingKind === 'tableCaption')
     await page.keyboard.type('使用した糸')
     await ready()
@@ -1561,8 +1894,15 @@ await withEdge(async (browser) => {
     )
 
     // 引用・参考文献の窓：書いた内容があるまま「×」「やめる」を押すと、窓の中で「書いた内容を反映せずに閉じますか？」と聞く（前は、すぐ閉じて消えた）
+    // 窓は、使い方の「引用・参考文献」の「引用・参考文献を入れる」から開く（右の欄からは外した。mockups/v35 ①。PC の使い方は開いたまま）
     const openRefs = async () => {
-      await page.evaluate(() => [...document.querySelectorAll('.side button')].find((b) => b.textContent.includes('引用・参考文献を入れる')).click())
+      if (!(await page.$('.help-topic .help-refs'))) {
+        if (!(await page.$('.side .help-side'))) await page.click('.side .help-btn')
+        await page.waitForSelector('.help-list button[data-topic="references"]')
+        await page.evaluate(() => document.querySelector('.help-list button[data-topic="references"]').click())
+        await page.waitForSelector('.help-topic .help-refs')
+      }
+      await page.click('.help-topic .help-refs')
       await page.waitForSelector('.modal .ref-card, .modal .row-buttons')
     }
     const refsState = () =>
@@ -1619,6 +1959,15 @@ await withEdge(async (browser) => {
     await ready()
     const kept = await refsState()
     check('「反映して閉じる」で、書いた内容を反映して閉じる', !kept.modal && JSON.stringify(kept.saved) === JSON.stringify(['浜松隆志']), JSON.stringify(kept))
+    // 入れた文献は、使い方のボタンからもう一度開くと、窓の中で直せる（ページをクリックしても開く）
+    await openRefs()
+    const reopened = await page.evaluate(() => [...document.querySelectorAll('.modal .ref-card .field:first-child input')].map((i) => i.value))
+    await refsButton('やめる')
+    await pause0(200)
+    check('入れた引用・参考文献は、使い方の「引用・参考文献を入れる」からもう一度開くと、窓の中に出て直せる', JSON.stringify(reopened) === JSON.stringify(['浜松隆志']) && !(await page.$('.modal')), JSON.stringify(reopened))
+    // 使い方を閉じて、右の欄に戻る
+    await page.click('.side .help-close')
+    await page.waitForSelector('.side .help-btn')
 
     // PC の使い方の題は「クリック」のまま（スマホだけ「タップ」。phone.mjs）
     await page.click('.side .help-btn')
@@ -1691,12 +2040,15 @@ await withEdge(async (browser) => {
   await page.evaluate(() => document.documentElement.classList.add('print-draft'))
   await page.emulateMediaType('print')
   const draftPages = await page.evaluate(() => [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].map((p) => getComputedStyle(p, '::after').content))
+  // 透かしは灰色（先生の赤ペンと見分けやすく。mockups/v35 ⑤ 案B。ツールの中で作る PDF と同じ色）
+  const draftColor = await page.evaluate(() => getComputedStyle(document.querySelector('.page-viewport.front [data-vivliostyle-page-container]'), '::after').color)
   await page.emulateMediaType(null)
   await page.pdf({ path: `${OUT}/draft.pdf`, preferCSSPageSize: true, printBackground: true })
   await page.evaluate(() => window.dispatchEvent(new Event('afterprint')))
   const afterPrint = await page.evaluate(() => ({ draft: document.documentElement.classList.contains('print-draft'), title: document.title }))
   check('エラーが残っていても、下書きの欄の「うまくいかないとき：印刷の画面から保存」から印刷に進め、ファイル名に「_下書き」が付く（終わると元に戻る）', printed.draft && printed.title.endsWith('_下書き') && !afterPrint.draft && afterPrint.title === titleBefore, JSON.stringify(printed))
   check('下書きの PDF は、どのページにも「下書き」の透かしが入る', draftPages.length > 0 && draftPages.every((t) => t.includes('下書き')), draftPages.map((t) => (t.includes('下書き') ? '○' : '×')).join(''))
+  check('印刷の画面から保存する下書きの透かしは灰色', draftColor === 'rgba(140, 140, 140, 0.26)', draftColor)
   await page.emulateMediaType('print')
   const plainPages = await page.evaluate(() => [...document.querySelectorAll('.page-viewport.front [data-vivliostyle-page-container]')].map((p) => getComputedStyle(p, '::after').content))
   await page.emulateMediaType(null)
@@ -2022,6 +2374,35 @@ async function pdfSaveCheck(browser) {
   await pause(800)
   await ready()
   const errorsNow = await page.evaluate(() => window.__editor.getSnapshot().findings.filter((f) => f.severity === 'error').map((f) => f.title))
+  // 右の欄：指摘のない原稿は「直すところ 0、まだ 0」、まだのところは全部 ✓（抄録は書いている・図は目安）、「提出用のPDFを書き出せます」（mockups/v35 ① 案A）
+  const zeroPanel = await page.evaluate(() => ({
+    tally: document.querySelector('.side .tally')?.textContent.replace(/\s/g, '') ?? '',
+    rows: [...document.querySelectorAll('.side .check-prog li')].map((li) => li.className).join(','),
+    note: document.querySelector('.side-foot .export-note')?.textContent ?? '',
+  }))
+  check('指摘のない原稿の右の欄は「直すところ 0　まだ 0」で、まだのところは全部 ✓、PDF のボタンの下は「提出用のPDFを書き出せます」', zeroPanel.tally === '直すところ0まだ0' && zeroPanel.rows === 'done,done,done,done,done,info' && zeroPanel.note === '提出用のPDFを書き出せます', JSON.stringify(zeroPanel))
+  // ツールの中で作る下書きの PDF の透かしは灰色（mockups/v35 ⑤ 案B）：同じページを下書きと提出用で画像にして、違う所（透かし）の色を見る
+  const watermark = await page.evaluate(async () => {
+    const { pagesToPdf } = await import('/src/pdf/pagesToPdf.ts')
+    const ed = window.__editor
+    const target = ed.pageElements()[ed.getSnapshot().layout.kinds.indexOf('toc')]
+    const grab = async (draft) => {
+      let data = null
+      await pagesToPdf([target], { draft, onPage: ({ canvas }) => { data = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height).data } })
+      return data
+    }
+    const a = await grab(true)
+    const b = await grab(false)
+    let changed = 0
+    let gray = 0
+    for (let i = 0; i < a.length; i += 4 * 7) {
+      if (Math.abs(a[i] - b[i]) + Math.abs(a[i + 1] - b[i + 1]) + Math.abs(a[i + 2] - b[i + 2]) < 12) continue
+      changed++
+      if (Math.abs(a[i] - a[i + 1]) <= 6 && Math.abs(a[i + 1] - a[i + 2]) <= 6) gray++
+    }
+    return { changed, gray }
+  })
+  check('ツールの中で作る下書きの PDF の透かしは灰色（透かしの所に赤みがない）', watermark.changed > 1000 && watermark.gray / watermark.changed > 0.95, JSON.stringify(watermark))
   await page.click('.side .export')
   await page.waitForSelector('.modal .checklist')
   const confirm = await page.evaluate(() => ({
@@ -2036,6 +2417,36 @@ async function pdfSaveCheck(browser) {
     errorsNow.length === 0 && confirm.start === 'PDF を保存する' && confirm.disabled && confirm.file === `${title}.pdf` && confirm.fallback?.includes('印刷の画面から保存'),
     JSON.stringify({ errorsNow, ...confirm }),
   )
+  // エラーが0件の窓にも、エラーがあるときと同じ下書きの欄（mockups/v35 ⑤ 案A）。ボタンは目立たない形（青いボタンは「PDF を保存する」だけ）で、下のボタンの前
+  const draftZero = await page.evaluate(() => {
+    const box = document.querySelector('.modal .draft-box')
+    const btn = box?.querySelector('.pdf-draft')
+    const rows = document.querySelector('.modal .row-buttons')
+    return {
+      text: box?.textContent ?? '',
+      button: btn?.textContent ?? '',
+      primary: btn ? btn.classList.contains('primary') : null,
+      primaries: document.querySelectorAll('.modal button.primary').length,
+      beforeButtons: !!box && !!rows && !!(box.compareDocumentPosition(rows) & Node.DOCUMENT_POSITION_FOLLOWING),
+    }
+  })
+  await page.screenshot({ path: `${OUT}/0-pdf-zero-draft-box.png` })
+  check(
+    'エラーが0件の窓にも「先生に途中経過を見せるとき」の下書きの欄があり（3つのチェックは要らない）、ボタンは目立たない形で、下のボタンの前にある',
+    draftZero.text.includes('先生に途中経過を見せるとき') && draftZero.text.includes('上の3つのチェックは要りません') && draftZero.button === '下書きの PDF を保存する' && draftZero.primary === false && draftZero.primaries === 1 && draftZero.beforeButtons,
+    JSON.stringify(draftZero),
+  )
+  // チェックを入れずに、下書きの PDF を作って保存できる（前の確かめで保存した同じ名前のファイルは、先に消しておく）
+  rmSync(`${DOWNLOADS}/${title}_下書き.pdf`, { force: true })
+  await page.click('.modal .draft-box .pdf-draft')
+  await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+  const zeroDraft = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, file: document.querySelector('.modal .pdf-file b')?.textContent }))
+  const zeroSaved = await savedPdf(`${title}_下書き.pdf`)
+  check('エラーが0件でも、チェックを入れずに下書きの PDF を作って保存できる（ファイル名に「_下書き」）', zeroDraft.title === '下書きの PDF を保存しました' && zeroDraft.file === `${title}_下書き.pdf` && zeroSaved.pages > 0, JSON.stringify({ zeroDraft, zeroSaved }))
+  await page.click('.modal .close')
+  await pause(300)
+  await page.click('.side .export')
+  await page.waitForSelector('.modal .checklist')
   // 「うまくいかないとき」を開くと、今までの印刷の画面での選び方と「印刷の画面を開く」が出る
   await page.click('.modal .row-buttons .pdf-fallback')
   check('「うまくいかないとき：印刷の画面から保存」を押すと、印刷の画面での選び方と「印刷の画面を開く」が出る', await page.evaluate(() => !!document.querySelector('.modal .pdf-print-box .print-guide') && !!document.querySelector('.modal .pdf-print-box .pdf-print')))

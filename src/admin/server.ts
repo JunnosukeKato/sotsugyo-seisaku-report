@@ -15,6 +15,8 @@ export interface YearRow {
   config: YearConfig
   updatedAt: string
   updatedBy: string
+  /** 削除できる年度か（一度も公開していない「準備中」。サーバーの deleteYear と同じ決まり。古いサーバーは返さない） */
+  deletable?: boolean
 }
 
 export interface HistoryRow {
@@ -118,5 +120,5 @@ export const server: AdminServer = window.google?.script ? appsScriptServer() : 
 export const isMockServer = !window.google?.script
 
 // 開発中（試験用サーバー）だけ、自動テスト（scripts/e2e/admin.mjs）から試験用サーバーを直接呼べるようにする
-// （画面にまだボタンのない操作＝準備中の年度の削除などを確かめるため）
+// （画面では押せない操作＝公開した年度の削除が断られることなどを確かめるため）
 if (import.meta.env.DEV && isMockServer) Object.assign(window, { __adminServer: server })

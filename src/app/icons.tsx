@@ -108,4 +108,14 @@ export const Icon = {
       <path d="M15.5 15.5L20 20M11 8.5v5M8.5 11h5" />
     </>,
   ),
+  // mockups/v35：やり直す（「元に戻す」の矢印を左右反対にしたもの）・見開き（紙が2枚並ぶ）・表の大きさの［−］［＋］
+  redo: svg(<path d="M15 7.5l4 4-4 4M19 11.5H9.5a4.5 4.5 0 000 9H12" />),
+  spread: svg(
+    <>
+      <rect x="2.8" y="4.5" width="8.6" height="15" rx="1.2" />
+      <rect x="12.6" y="4.5" width="8.6" height="15" rx="1.2" />
+    </>,
+  ),
+  minus: svg(<path d="M6 12h12" />),
+  plus: svg(<path d="M12 5v14M5 12h14" />),
 }

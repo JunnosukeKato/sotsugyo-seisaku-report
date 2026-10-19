@@ -370,7 +370,12 @@ export async function firstTimeV3Pc(browser, check) {
   await ready()
 
   // ---- 引用・参考文献の「反映する」：そのページへ移り、「引用・参考文献を反映しました」と出る ----
-  await page.click('.side .add-refs')
+  // 引用・参考文献は、使い方の「引用・参考文献」の「引用・参考文献を入れる」から入れる（右の欄からは外した。mockups/v35 ①）
+  await page.click('.side .help-btn')
+  await page.waitForSelector('.help-list button[data-topic="references"]')
+  await page.click('.help-list button[data-topic="references"]')
+  await page.waitForSelector('.help-topic .help-refs')
+  await page.click('.help-topic .help-refs')
   await page.waitForSelector('.modal .refs')
   await page.evaluate(() => [...document.querySelectorAll('.modal .row-buttons button')].find((b) => b.textContent.includes('書籍を追加')).click())
   await page.waitForSelector('.modal .ref-card')
@@ -389,6 +394,9 @@ export async function firstTimeV3Pc(browser, check) {
     refs.kinds[refs.page] === 'references' && refsToast === '引用・参考文献を反映しました' && refs.report.references.length === 1,
     JSON.stringify({ kind: refs.kinds[refs.page], refsToast }),
   )
+  // PC は使い方を開いたまま窓を開いたので、閉じて右の欄に戻る
+  await page.click('.help-close')
+  await page.waitForSelector('.side .sec.check')
 
   // ---- 提出用の PDF の窓：警告を一覧で出す（多いときは5件と「ほか◯件」） ----
   await page.evaluate(() =>

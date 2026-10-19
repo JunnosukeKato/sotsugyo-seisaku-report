@@ -419,11 +419,26 @@ function deleteYear(year, expectedUpdatedAt) {
 
 /** その年度を、これまでに学生に公開したことがあるか（変更履歴に「公開」か「初期設定」（setup で公開中として入れた）の行がある） */
 function wasPublished_(year) {
-  return sheet_(SHEET_HISTORY)
-    .getDataRange()
+  return publishedYears_().indexOf(Number(year)) >= 0
+}
+
+/**
+ * これまでに学生に公開したことのある年度の一覧（変更履歴に「公開」か「初期設定」の行がある年度）。
+ * 変更履歴の年度と操作の列（C・D 列）だけを読む（設定の列は大きいため、読まない）
+ */
+function publishedYears_() {
+  const sheet = sheet_(SHEET_HISTORY)
+  const last = sheet.getLastRow()
+  if (last < 2) return []
+  const years = []
+  sheet
+    .getRange(2, 3, last - 1, 2)
     .getValues()
-    .slice(1)
-    .some((r) => r[2] !== '' && Number(r[2]) === Number(year) && (r[3] === '公開' || r[3] === '初期設定'))
+    .forEach((r) => {
+      if (r[0] === '' || (r[1] !== '公開' && r[1] !== '初期設定')) return
+      if (years.indexOf(Number(r[0])) < 0) years.push(Number(r[0]))
+    })
+  return years
 }
 
 function getHistory(year) {
@@ -471,6 +486,10 @@ function readYears_() {
       }
       years.push({ year: year, status: r[1], config: config, updatedAt: updatedAt, updatedBy: r[4] })
     })
+  // 削除できる年度（一度も公開していない「準備中」。deleteYear と同じ決まり。管理ページは、この年度にだけ「この年度を削除」を出す）。
+  // 変更履歴を読むのは、準備中の年度があるときだけ
+  const published = years.some((y) => y.status === STATUS_DRAFT) ? publishedYears_() : []
+  years.forEach((y) => (y.deletable = y.status === STATUS_DRAFT && published.indexOf(y.year) < 0))
   return years.sort((a, b) => b.year - a.year)
 }
 

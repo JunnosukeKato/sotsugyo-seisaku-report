@@ -17,7 +17,7 @@ import { templateSummary } from './templateText'
 import { useLeaveGuard } from './useLeaveGuard'
 import { WordsEditor } from './WordsEditor'
 import { wordSummary } from './wordsText'
-import { deliveryNote, newYearNotice, publishConfirmText, saveButtonLabel, saveConfirmText, savedMessage, templateFootNote } from './yearText'
+import { deleteConfirmText, deletedMessage, deliveryNote, newYearNotice, publishConfirmText, saveButtonLabel, saveConfirmText, savedMessage, templateFootNote, type NoticeItem } from './yearText'
 
 /**
  * 管理ページ（案2：設定と見本を並べる型）。デザインは mockups/admin-2.html。
@@ -30,7 +30,30 @@ import { deliveryNote, newYearNotice, publishConfirmText, saveButtonLabel, saveC
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
 
-type Notice = { kind: 'ok' | 'ng'; text: string }
+/** 画面の上の知らせ。items があれば箇条書きにする（text は太字の1行目、detail はその下の文） */
+type Notice = { kind: 'ok' | 'ng'; text: string; detail?: string; items?: NoticeItem[] }
+
+/**
+ * 画面の上の知らせ（緑・赤の枠）。箇条書きの知らせ（新年度を作ったあとの、前の年度のままの項目）は、
+ * 1行に1つ、直す場所を小さな字で添える（mockups/v35-admin ③ 案A）
+ */
+function MessageBox({ message }: { message: Notice }) {
+  if (!message.items?.length) return <div className={`message ${message.kind}`}>{message.text}</div>
+  return (
+    <div className={`message ${message.kind} list`}>
+      <div className="h">{message.text}</div>
+      {message.detail && <p>{message.detail}</p>}
+      <ul>
+        {message.items.map((item, i) => (
+          <li key={i}>
+            {item.text}
+            {item.where && <small>場所：{item.where}</small>}
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
 
 /**
  * 変更履歴の i 番目の記録で、1つ前の記録から何が変わったか（短く。いちばん古い記録は、比べる相手がないので空）。
@@ -380,8 +403,15 @@ export function AdminApp() {
     }
   }
 
-  /** サーバーの操作。recover を渡すと、別のタブ・ほかの人が先に保存していて断られたときに、自分の変更を入れ直す */
-  const run = async (label: string, fn: () => Promise<AdminState>, options: { nextYear?: number; recover?: { verb: string; button: string } } = {}) => {
+  /**
+   * サーバーの操作。done は、できたときの知らせ（文・箇条書きの知らせ、またはサーバーから返った状態で決める文）。
+   * recover を渡すと、別のタブ・ほかの人が先に保存していて断られたときに、自分の変更を入れ直す
+   */
+  const run = async (
+    done: string | Omit<Notice, 'kind'> | ((s: AdminState) => string),
+    fn: () => Promise<AdminState>,
+    options: { nextYear?: number; recover?: { verb: string; button: string } } = {},
+  ) => {
     // 押したときの年度と内容（断られたときに、最新の内容と合わせるため）
     const base = row
     const mine = draft
@@ -391,7 +421,8 @@ export function AdminApp() {
       const s = await fn()
       setState(s)
       select(s, options.nextYear ?? year!)
-      setMessage({ kind: 'ok', text: label })
+      const notice = typeof done === 'function' ? done(s) : done
+      setMessage(typeof notice === 'string' ? { kind: 'ok', text: notice } : { kind: 'ok', ...notice })
     } catch (e) {
       const recovered = base && mine && options.recover ? await recoverConflict(base, mine, options.recover.verb, options.recover.button).catch(() => null) : null
       setMessage(recovered ?? { kind: 'ng', text: `できませんでした：${String((e as Error)?.message ?? e)}` })
@@ -473,66 +504,97 @@ export function AdminApp() {
     )
   }
 
+  // 削除できる年度（一度も公開していない「準備中」。サーバーの deleteYear と同じ決まりで、サーバーが deletable を付けて返す）。
+  // ほかに年度がないときは出さない（消すと開く年度がなくなり、新年度も作れなくなるため）
+  const otherYears = state.years.filter((y) => y.year !== row.year)
+  const canDelete = row.deletable === true && otherYears.length > 0
+  /** 準備中の年度を削除する（mockups/v35-admin ② 案A）。確かめてから消し、公開中の年度（なければいちばん新しい年度）を開く */
+  const removeYear = () => {
+    // 年度を切り替えるときと同じく、保存していない変更は確かめる（削除すると、その変更も消えるため）
+    if (dirty && !confirm('保存していない変更があります。破棄して、この年度の削除に進みますか？')) return
+    const next = otherYears.find((y) => y.status === '公開中') ?? otherYears[0]
+    if (!confirm(deleteConfirmText(row.year, next))) return
+    void run(
+      (s) => deletedMessage(row.year, s.years.find((y) => y.year === next.year) ?? s.years[0]),
+      () => server.deleteYear(row.year, row.updatedAt),
+      { nextYear: next.year },
+    )
+  }
+
   return (
     <div className={help ? 'admin help-on' : 'admin'}>
+      {/* 見出しは2段（mockups/v35-admin ① 案A）。上の段は年度と保存・公開（どの広さの画面でも見える）、下の細い段はログイン中の人と、ときどき使うリンク */}
       <header className="admin-header">
-        <b>卒業制作報告書 管理ページ</b>
-        <HelpButton open={help} onClick={() => setHelp(!help)} />
-        <select
-          className="sel"
-          value={year ?? ''}
-          onChange={(e) => {
-            if (dirty && !confirm('保存していない変更があります。破棄して年度を切り替えますか？')) return
-            select(state, Number(e.target.value))
-          }}
-        >
-          {state.years.map((y) => (
-            <option key={y.year} value={y.year}>
-              {y.year}年度（{y.status}）
-            </option>
-          ))}
-        </select>
-        <span className={`badge ${isPublished ? 'pub' : row.status === '準備中' ? 'draft' : 'old'}`}>{row.status}</span>
-        {dirty && <span className="badge warn">保存していない変更があります</span>}
-        {isMockServer && <span className="badge old">試験用サーバー</span>}
-        <span className="spacer" />
-        <span className="user">{state.user}</span>
-        <button
-          className="link"
-          onClick={async () => {
-            setHistory(await server.getHistory(row.year))
-            setDialog('history')
-          }}
-        >
-          変更履歴
-        </button>
-        <button className="link" onClick={() => setDialog('members')}>
-          先生の登録
-        </button>
-        <button
-          className="btn"
-          onClick={() => {
-            // 新年度は保存されている内容からコピーするので、保存していない変更は入らない（年度を切り替えるときと同じく確かめる）
-            if (dirty && !confirm('保存していない変更があります。新年度は保存されている内容からコピーして作るため、この変更は入りません。破棄して新年度を作成しますか？')) return
-            setNewYear(String(Math.max(...state.years.map((y) => y.year)) + 1))
-            setDialog('newYear')
-          }}
-        >
-          新年度を作成
-        </button>
-        <button className="btn" disabled={busy || !dirty} onClick={save}>
-          {saveLabel}
-        </button>
-        {!isPublished && (
-          <button className="btn primary" disabled={busy} onClick={publish}>
-            この年度を学生に公開
+        <div className="head-row">
+          <b>卒業制作報告書 管理ページ</b>
+          <HelpButton open={help} onClick={() => setHelp(!help)} />
+          <select
+            className="sel"
+            value={year ?? ''}
+            onChange={(e) => {
+              if (dirty && !confirm('保存していない変更があります。破棄して年度を切り替えますか？')) return
+              select(state, Number(e.target.value))
+            }}
+          >
+            {state.years.map((y) => (
+              <option key={y.year} value={y.year}>
+                {y.year}年度（{y.status}）
+              </option>
+            ))}
+          </select>
+          <span className={`badge ${isPublished ? 'pub' : row.status === '準備中' ? 'draft' : 'old'}`}>{row.status}</span>
+          {dirty && <span className="badge warn">保存していない変更があります</span>}
+          <span className="spacer" />
+          <button className="btn" disabled={busy || !dirty} onClick={save}>
+            {saveLabel}
           </button>
-        )}
+          {!isPublished && (
+            <button className="btn primary" disabled={busy} onClick={publish}>
+              この年度を学生に公開
+            </button>
+          )}
+        </div>
+        <div className="head-sub">
+          <span className="who">ログイン中：</span>
+          <span className="user">{state.user}</span>
+          {isMockServer && <span className="badge old">試験用サーバー</span>}
+          <span className="spacer" />
+          <button
+            className="link"
+            onClick={async () => {
+              setHistory(await server.getHistory(row.year))
+              setDialog('history')
+            }}
+          >
+            変更履歴
+          </button>
+          {canDelete && (
+            <button className="link del" disabled={busy} onClick={removeYear}>
+              {Icon.remove}この年度を削除
+            </button>
+          )}
+          <span className="sep" />
+          <button className="link" onClick={() => setDialog('members')}>
+            先生の登録
+          </button>
+          <span className="sep" />
+          <button
+            className="link"
+            onClick={() => {
+              // 新年度は保存されている内容からコピーするので、保存していない変更は入らない（年度を切り替えるときと同じく確かめる）
+              if (dirty && !confirm('保存していない変更があります。新年度は保存されている内容からコピーして作るため、この変更は入りません。破棄して新年度を作成しますか？')) return
+              setNewYear(String(Math.max(...state.years.map((y) => y.year)) + 1))
+              setDialog('newYear')
+            }}
+          >
+            新年度を作成
+          </button>
+        </div>
       </header>
 
       <main className="admin-main">
         <section className="form">
-          {message && <div className={`message ${message.kind}`}>{message.text}</div>}
+          {message && <MessageBox message={message} />}
           {problems.length > 0 && (
             <div className="problems">
               {problems.map((p, i) => (
@@ -823,34 +885,40 @@ function TeacherView({
   }
   return (
     <div className={help ? 'admin help-on' : 'admin'}>
+      {/* 管理者の画面とそろえて2段（mockups/v35-admin ① 案A）。ログイン中の人は下の段 */}
       <header className="admin-header">
-        <b>卒業制作報告書 管理ページ</b>
-        <HelpButton open={help} onClick={() => setHelp(!help)} />
-        <select
-          className="sel"
-          value={row.year}
-          onChange={(e) => {
-            if (dirty && !confirm('保存していない変更があります。破棄して年度を切り替えますか？')) return
-            onSelectYear(Number(e.target.value))
-          }}
-        >
-          {state.years.map((y) => (
-            <option key={y.year} value={y.year}>
-              {y.year}年度（{y.status}）
-            </option>
-          ))}
-        </select>
-        <span className={`badge ${isPublished ? 'pub' : row.status === '準備中' ? 'draft' : 'old'}`}>{row.status}</span>
-        {dirty && <span className="badge warn">保存していない変更があります</span>}
-        {isMockServer && <span className="badge old">試験用サーバー</span>}
-        <span className="spacer" />
-        <span className="user">{state.user}（先生）</span>
-        <button className="btn primary" disabled={busy || !dirty} onClick={save}>
-          {saveButtonLabel(row.status)}
-        </button>
+        <div className="head-row">
+          <b>卒業制作報告書 管理ページ</b>
+          <HelpButton open={help} onClick={() => setHelp(!help)} />
+          <select
+            className="sel"
+            value={row.year}
+            onChange={(e) => {
+              if (dirty && !confirm('保存していない変更があります。破棄して年度を切り替えますか？')) return
+              onSelectYear(Number(e.target.value))
+            }}
+          >
+            {state.years.map((y) => (
+              <option key={y.year} value={y.year}>
+                {y.year}年度（{y.status}）
+              </option>
+            ))}
+          </select>
+          <span className={`badge ${isPublished ? 'pub' : row.status === '準備中' ? 'draft' : 'old'}`}>{row.status}</span>
+          {dirty && <span className="badge warn">保存していない変更があります</span>}
+          <span className="spacer" />
+          <button className="btn primary" disabled={busy || !dirty} onClick={save}>
+            {saveButtonLabel(row.status)}
+          </button>
+        </div>
+        <div className="head-sub">
+          <span className="who">ログイン中：</span>
+          <span className="user">{state.user}（先生）</span>
+          {isMockServer && <span className="badge old">試験用サーバー</span>}
+        </div>
       </header>
       <main className="teacher-main">
-        {message && <div className={`message ${message.kind}`}>{message.text}</div>}
+        {message && <MessageBox message={message} />}
         <h2>コースごとの下書きのひな形とお知らせ（{draft.fiscalYear}年度）</h2>
         <p className="hint">学生が最初に見る本文の組み立て（大見出し・小見出し・書くことの説明・図の枠・素材表）と、そのコースの学生へのお知らせを、コースごとに決めます。先生は、どのコースも編集できます。</p>
         {draft.courses
