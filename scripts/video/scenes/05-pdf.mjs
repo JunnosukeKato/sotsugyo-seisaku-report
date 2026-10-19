@@ -16,13 +16,14 @@ export const meta = {
   },
 }
 
-const P13 = '最後に全体をアイロンで整え、本番と同じ照明の下で色の見え方を確かめた。袖の刺繍が客席の後ろからも光って見えることを確かめ、完成とした'
+// 「まとめ」の最初の段落（1ページに収まる短い段落。ページをまたぐと、直す場所が動画で分かりにくい）
+const P14 = '本制作では、主人公の成長を一着の衣装で表すことを目標とした。袖の大きな膨らみと金の刺繍によって、旅立ちの若々しさと帰還の頼もしさの両方を表すことができた'
 
 export async function prepare({ page, h }) {
-  await h.setParagraph(page, 'p13', P13)
+  await h.setParagraph(page, 'p14', P14)
   await h.sleep(500)
   await h.ready(page)
-  await h.goToBlock(page, 'p13')
+  await h.goToBlock(page, 'p14')
 }
 
 const exportArea = async (h, page) => h.union(await h.rectOf(page, '.side .export'), await h.rectOf(page, '.side .sec.check'))
@@ -52,13 +53,16 @@ export async function run({ page, rec, h }) {
   await h.clickEl(page, '.side .sec.check li .go', null, { pause: 800 })
   await h.sleep(600)
   await h.ready(page)
-  const p13 = await h.blockRect(page, 'p13')
-  rec.mark('fixType', { focus: { ...p13, y: p13.y - 30, h: p13.h + 60 } })
+  const p14 = await h.blockRect(page, 'p14')
+  rec.mark('fixType', { focus: { ...p14, y: p14.y - 30, h: p14.h + 60 } })
   await h.sleep(1500)
-  const end = await h.endOfBlock(page, 'p13')
+  const end = await h.endOfBlock(page, 'p14')
   await h.clickAt(page, end.x + 2, end.y, { pause: 700 })
-  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p13', { timeout: 30000 })
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p14', { timeout: 30000 })
+  // 段落全体の終わりへ（End だけだと、その行の終わりになる）
+  await page.keyboard.down('Control')
   await page.keyboard.press('End')
+  await page.keyboard.up('Control')
   await h.sleep(600)
   await h.typeSlow(page, '。', 200)
   await h.sleep(900)
@@ -68,11 +72,13 @@ export async function run({ page, rec, h }) {
   if (left) throw new Error(`エラーが残っています（${left}件）`)
   await h.sleep(1200)
 
-  // 4. 提出用：3つを確かめる
+  // 4. 提出用：3つを確かめる（押す前に「PDFを書き出す」へ寄せておく。段落に寄ったまま窓が開くと、窓が見切れるため）
+  rec.mark('final', { focus: await exportArea(h, page) })
+  await h.sleep(1600)
   await h.clickEl(page, '.side .export', null, { pause: 700 })
   await page.waitForSelector('.modal .checklist')
-  await h.sleep(600)
-  rec.mark('final', { focus: await h.rectOf(page, '.modal') })
+  await h.sleep(400)
+  rec.mark('finalDialog', { focus: await h.rectOf(page, '.modal') })
   await h.sleep(2600)
   const boxes = await page.evaluate(() => [...document.querySelectorAll('.modal .checklist input')].map((i) => { const r = i.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } }))
   for (const b of boxes) {
