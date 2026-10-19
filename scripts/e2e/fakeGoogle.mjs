@@ -6,8 +6,9 @@ export function fakeDrive(email = '00zz901@bunka-wu.ac.jp') {
   const files = new Map()
   let seq = 0
   let clock = Date.now()
-  // 学生のアカウント（@ より前は学籍番号の小文字）。pdfCopies：学科の Apps Script（配信の窓口）に届いた PDF の控え（PDF の中身は先頭と大きさだけ）
-  const drive = { files, email, failNext: null, logins: 0, pdfCopies: [] }
+  // 学生のアカウント（@ より前は学籍番号の小文字）。pdfCopies：学科の Apps Script（配信の窓口）に届いた PDF の控え（PDF の中身は先頭と大きさだけ）。
+  // uploadDelay：ファイルを送るのに、わざと時間をかける（ミリ秒。「置いています…」の表示を見るため）
+  const drive = { files, email, failNext: null, logins: 0, pdfCopies: [], uploadDelay: 0 }
   const now = () => new Date((clock += 1000)).toISOString()
   const meta = (f) => ({ id: f.id, name: f.name, size: String(f.content?.length ?? 0), modifiedTime: f.modifiedTime, appProperties: f.appProperties })
   const unquote = (s) => s.replace(/\\'/g, "'").replace(/\\\\/g, '\\')
@@ -40,6 +41,7 @@ export function fakeDrive(email = '00zz901@bunka-wu.ac.jp') {
       drive.failNext = null
       return [status, { error: { code: status, message: 'fake error', errors: [{ reason: status === 401 ? 'authError' : 'backendError' }] } }]
     }
+    if (drive.uploadDelay && u.pathname.startsWith('/upload/')) await new Promise((resolve) => setTimeout(resolve, drive.uploadDelay))
     if (u.pathname === '/drive/v3/about') return [200, { user: { emailAddress: drive.email }, storageQuota: { usage: '1000' } }]
     if (u.pathname === '/drive/v3/files' && method === 'GET') {
       const q = u.searchParams.get('q') ?? ''
@@ -57,6 +59,8 @@ export function fakeDrive(email = '00zz901@bunka-wu.ac.jp') {
       if (!f) return [404, { error: { code: 404, errors: [{ reason: 'notFound' }] } }]
       const { metadata, content } = multipart(body, headers['content-type'])
       f.content = content
+      // 名前を送ってきたら変える（書き出した PDF。名前を直して書き出し直したとき）
+      if (metadata.name) f.name = metadata.name
       // 本物のドライブと同じく、appProperties は足し合わせる
       if (metadata.appProperties) f.appProperties = { ...f.appProperties, ...metadata.appProperties }
       f.modifiedTime = now()
@@ -80,6 +84,11 @@ export function fakeDrive(email = '00zz901@bunka-wu.ac.jp') {
     const f = [...files.values()].find((x) => x.name === '原稿.json' && !x.trashed)
     return f ? JSON.parse(f.content.toString('utf8')) : null
   }
+  /** 「卒業制作報告書」フォルダに置いた PDF（書き出した PDF。app/useDrivePdf.ts）：名前・置き場所のフォルダの名前・印・中身の先頭と大きさ・最後に変わった時刻 */
+  drive.pdfs = () =>
+    [...files.values()]
+      .filter((f) => f.mimeType === 'application/pdf' && !f.trashed)
+      .map((f) => ({ id: f.id, name: f.name, folder: f.parents.map((p) => files.get(p)?.name ?? p).join(','), appProperties: f.appProperties, head: f.content.subarray(0, 5).toString('latin1'), bytes: f.content.length, modifiedTime: f.modifiedTime }))
   return drive
 }
 

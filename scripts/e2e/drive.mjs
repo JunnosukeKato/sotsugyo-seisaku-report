@@ -72,6 +72,30 @@ const clickParagraph = async (page) => {
   await page.mouse.click(box.x, box.y)
   return id
 }
+/** PDF の窓の、ドライブの1行の折り返し（行の数と、最後の行の文字） */
+const lastLine = (page) =>
+  page.evaluate(() => {
+    const text = document.querySelector('.modal .pdf-drive > span')
+    if (!text) return { lines: 0, last: '' }
+    // 1字ずつ、どの行にあるか（前の字より 8px 以上下なら、次の行）
+    const lines = []
+    let top = -Infinity
+    const walker = document.createTreeWalker(text, NodeFilter.SHOW_TEXT)
+    for (let node = walker.nextNode(); node; node = walker.nextNode()) {
+      for (let i = 0; i < node.data.length; i++) {
+        const range = document.createRange()
+        range.setStart(node, i)
+        range.setEnd(node, i + 1)
+        const y = range.getBoundingClientRect().top
+        if (y > top + 8) {
+          lines.push('')
+          top = y
+        }
+        lines[lines.length - 1] += node.data[i]
+      }
+    }
+    return { lines: lines.length, last: lines.at(-1) ?? '', all: lines }
+  })
 const reloginOpen = (page) => page.evaluate(() => [...document.querySelectorAll('.modal h2')].some((h) => h.textContent.includes('もう一度ログイン')))
 const snapshotsOf = (page) =>
   page.evaluate(
@@ -140,14 +164,28 @@ await withEdge(async (browser) => {
   check('「とばす」で閉じ、この端末に覚える', (await pc.page.evaluate(() => localStorage.getItem('sotsugyo-seisaku-report-tour'))) === 'done')
 
   // ---- PDF を書き出すと、同じ PDF の控えを先生のフォルダ（学科の Apps Script の窓口）に送る。学生の画面には出さない ----
+  // ---- 同じ PDF を、自分のドライブの「卒業制作報告書」フォルダにも置き、PDF の窓に1行で知らせる（1366×768 の画面で） ----
   {
     // 保存（ダウンロード）は、ここでは確かめないので止めておく（ほかの場所にファイルを作らない）
     await (await pc.page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'deny', browserContextId: pc.context.id })
+    await pc.page.setViewport({ width: 1366, height: 768 })
     const before = drive.pdfCopies.length
+    const title = await pc.page.evaluate(() => window.__editor.pdfTitle)
+    // ドライブに置くのを少し遅くして、「置いています…」を見る
+    drive.uploadDelay = 2000
     await pc.page.click('.side .export')
     await pc.page.waitForSelector('.modal .pdf-start')
     await pc.page.click('.modal .pdf-start')
     await pc.page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+    // 保存の画面が開いた（窓のフォーカスが外れた）ことにする →「保存しました」
+    const waitingLine = await pc.page.evaluate(() => !!document.querySelector('.modal .pdf-drive'))
+    await pc.page.evaluate(() => window.dispatchEvent(new Event('blur')))
+    await pc.page.waitForFunction(() => document.querySelector('.modal h2')?.textContent === '保存しました', { timeout: 10000 })
+    const sendingLine = await pc.page.evaluate(() => document.querySelector('.modal .pdf-drive.sending')?.textContent ?? '')
+    await pc.page.waitForSelector('.modal .pdf-drive.done', { timeout: 30000 }).catch(() => {})
+    drive.uploadDelay = 0
+    const doneLine = await pc.page.evaluate(() => document.querySelector('.modal .pdf-drive.done')?.textContent ?? '')
+    const doneWrap = await lastLine(pc.page)
     const sent = await until(() => drive.pdfCopies.length > before, 30000)
     await sleep(1000)
     const copy = drive.pdfCopies.at(-1) ?? {}
@@ -170,7 +208,39 @@ await withEdge(async (browser) => {
       JSON.stringify({ ...copy, data: { ...copy.data, token: copy.data?.token === expected.token ? '（いまの許可）' : copy.data?.token } }),
     )
     check('控えを送ったことは、学生の画面（PDF の窓）には出さない', !/控え|先生のフォルダ/.test(shown), shown)
+    const own = drive.pdfs()
+    check(
+      '同じ PDF（作り直さない）を、自分のドライブの「卒業制作報告書」フォルダにも1つ置く（提出用の名前・印 kind: pdf）',
+      own.length === 1 && own[0].name === `${title}.pdf` && title === '00ZZ901_文化花子' && own[0].folder === '卒業制作報告書' && own[0].appProperties?.kind === 'pdf' && own[0].head === '%PDF-' && own[0].bytes === copy.pdfBytes,
+      JSON.stringify({ own, teacherCopyBytes: copy.pdfBytes }),
+    )
+    check(
+      'PDF の窓（保存しました）の「開いて、ページの数と写真を確かめてください。」の下に、置いている間は「…置いています…」、置けたら「…置きました」と1行で出す（保存の画面を待つ間は出さない）',
+      !waitingLine && sendingLine === 'ドライブの「卒業制作報告書」フォルダにも置いています…' && doneLine === 'ドライブの「卒業制作報告書」フォルダにも置きました' && shown.includes('確かめてください。ドライブの'),
+      JSON.stringify({ waitingLine, sendingLine, doneLine }),
+    )
+    check('1366×768 の画面では、ドライブの1行は折り返さない（1字だけ次の行に残らない）', doneWrap.lines === 1, JSON.stringify(doneWrap))
     await pc.page.click('.modal .close')
+
+    // 氏名を直して、もう一度書き出す：同じファイルの中身を新しくし、名前も今の名前にする（2つめのファイルは作らない）
+    await setInfo(pc.page, { name: '文化　花子子' })
+    await pc.page.click('.side .export')
+    await pc.page.waitForSelector('.modal .pdf-start')
+    await pc.page.click('.modal .pdf-start')
+    await pc.page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+    await pc.page.evaluate(() => window.dispatchEvent(new Event('blur')))
+    await pc.page.waitForSelector('.modal .pdf-drive.done', { timeout: 30000 }).catch(() => {})
+    const again = drive.pdfs()
+    check(
+      'もう一度書き出すと、自分のドライブの同じファイルを新しくし、名前も今の提出用の名前にする（2つめのファイルは作らない。前の版はドライブに残る）',
+      again.length === 1 && again[0].id === own[0]?.id && again[0].name === '00ZZ901_文化花子子.pdf' && again[0].modifiedTime !== own[0]?.modifiedTime,
+      JSON.stringify(again),
+    )
+    await pc.page.click('.modal .close')
+    await setInfo(pc.page, { name: '文化　花子' })
+    await until(() => drive.report()?.report.basicInfo.name === '文化　花子')
+    await savedChip(pc.page)
+    await pc.page.setViewport({ width: 1440, height: 900 })
   }
 
   // ---- スマホ：別の端末でログインすると、ドライブの原稿が開く ----
@@ -387,6 +457,7 @@ await withEdge(async (browser) => {
     await until(() => late.page.evaluate((key) => JSON.parse(sessionStorage.getItem(key)).expiresAt - 60_000 < Date.now(), TOKEN_KEY), 30000)
     const loginsBefore = await late.page.evaluate(() => (window.__loginOptions ?? []).length)
     const before = drive.pdfCopies.length
+    const ownBefore = drive.pdfs()
     await late.page.click('.side .export')
     await late.page.waitForSelector('.modal .pdf-start')
     await late.page.click('.modal .pdf-start')
@@ -398,6 +469,15 @@ await withEdge(async (browser) => {
       'パソコン：書き出すときに許可が切れていたら、「PDF を保存する」を押したときに同じアカウントで延ばし（窓が一瞬出て閉じるだけ）、延ばした許可で控えを送る（「もう一度ログイン」は出さない）',
       sent && after.logins === loginsBefore + 1 && after.options?.prompt === '' && after.options?.hint === '00zz901@bunka-wu.ac.jp' && copy?.data?.token === after.token && !(await reloginOpen(late.page)),
       JSON.stringify({ ...after, token: undefined, sent, copyToken: copy?.data?.token === after.token }),
+    )
+    // 延ばした許可で、自分のドライブの PDF も新しくする（同じファイル。今の原稿の提出用の名前）
+    const lateTitle = await late.page.evaluate(() => window.__editor.pdfTitle)
+    const ownPlaced = await until(() => drive.pdfs()[0]?.modifiedTime !== ownBefore[0]?.modifiedTime, 30000)
+    const ownAfter = drive.pdfs()
+    check(
+      'パソコン：書き出すときに許可が切れていても、延ばした許可で、自分のドライブの PDF も新しくする（同じファイルのまま）',
+      ownPlaced && ownAfter.length === 1 && ownAfter[0].id === ownBefore[0]?.id && ownAfter[0].name === `${lateTitle}.pdf`,
+      JSON.stringify({ ownBefore, ownAfter, lateTitle }),
     )
     await late.context.close()
   }
@@ -421,13 +501,91 @@ await withEdge(async (browser) => {
     await local.page.evaluate(() => document.querySelector('.g-later').click())
     await editorReady(local.page)
     const before = drive.pdfCopies.length
+    const ownBefore = JSON.stringify(drive.pdfs())
     await local.page.click('.side .export')
     await local.page.waitForSelector('.modal .pdf-start')
     await local.page.click('.modal .pdf-start')
     await local.page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+    await local.page.evaluate(() => window.dispatchEvent(new Event('blur')))
+    await local.page.waitForFunction(() => document.querySelector('.modal h2')?.textContent === '保存しました', { timeout: 10000 })
     await sleep(3000)
     check('この端末だけに保存するとき（?nodrive）は、PDF を書き出しても控えを送らない', drive.pdfCopies.length === before, `${drive.pdfCopies.length - before}件`)
+    const localLine = await local.page.evaluate(() => document.querySelector('.modal .pdf-drive')?.textContent ?? '')
+    check('この端末だけに保存するとき（?nodrive）は、ドライブに PDF を置かず、PDF の窓にもドライブの1行を出さない', !localLine && JSON.stringify(drive.pdfs()) === ownBefore, localLine)
     await local.context.close()
+  }
+
+  // ---- 管理ページでドライブ保存を止めているときも、ドライブに PDF を置かず、1行も出さない ----
+  {
+    config.driveSave = 'off'
+    const off = await device(browser, drive)
+    await off.page.evaluateOnNewDocument(() => {
+      try {
+        localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+      } catch {}
+    })
+    await (await off.page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'deny', browserContextId: off.context.id })
+    await off.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+    await editorReady(off.page)
+    await off.page.waitForSelector('.drive-stopped', { timeout: 30000 })
+    await off.page.waitForSelector('.guide.step-course .g-opts button')
+    await off.page.evaluate(() => document.querySelector('.g-opts button').click())
+    await off.page.waitForSelector('.guide.step-word .g-word-opt.no')
+    await off.page.evaluate(() => document.querySelector('.g-word-opt.no').click())
+    await off.page.waitForSelector('.g-later')
+    await off.page.evaluate(() => document.querySelector('.g-later').click())
+    await editorReady(off.page)
+    const ownBefore = JSON.stringify(drive.pdfs())
+    await off.page.click('.side .export')
+    await off.page.waitForSelector('.modal .pdf-start')
+    await off.page.click('.modal .pdf-start')
+    await off.page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+    await off.page.evaluate(() => window.dispatchEvent(new Event('blur')))
+    await off.page.waitForFunction(() => document.querySelector('.modal h2')?.textContent === '保存しました', { timeout: 10000 })
+    await sleep(3000)
+    const offLine = await off.page.evaluate(() => document.querySelector('.modal .pdf-drive')?.textContent ?? '')
+    check('管理ページでドライブ保存を止めているときは、ドライブに PDF を置かず、PDF の窓にもドライブの1行を出さない', !offLine && JSON.stringify(drive.pdfs()) === ownBefore, offLine)
+    await off.context.close()
+    delete config.driveSave
+  }
+
+  // ---- iPhone（共有の画面から保存する）：できた窓（PDF ができました）にも、ドライブの1行を出す。390px の画面で1字だけ次の行に残らない ----
+  {
+    const iphone = await device(browser, drive, { phone: true })
+    await iphone.page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
+    await iphone.page.evaluateOnNewDocument(() => {
+      try {
+        localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
+      } catch {}
+    })
+    await iphone.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+    await editorReady(iphone.page)
+    await iphone.page.click('.login-btn')
+    await gateClosed(iphone.page)
+    await editorReady(iphone.page)
+    const ownBefore = drive.pdfs()
+    const title = await iphone.page.evaluate(() => window.__editor.pdfTitle)
+    await iphone.page.evaluate(() => document.querySelector('.p-nav .nav-pdf').click())
+    await iphone.page.waitForSelector('.modal .pdf-start')
+    await iphone.page.evaluate(() => document.querySelector('.modal .pdf-start').click())
+    await iphone.page.waitForSelector('.modal .pdf-save', { timeout: 120000 })
+    await iphone.page.waitForSelector('.modal .pdf-drive.done', { timeout: 30000 }).catch(() => {})
+    const shareInfo = await iphone.page.evaluate(() => ({
+      title: document.querySelector('.modal h2')?.textContent,
+      line: document.querySelector('.modal .pdf-drive.done')?.textContent ?? '',
+      // 「「保存する」を押して…」のすぐ下
+      after: document.querySelector('.modal .lead')?.nextElementSibling?.classList.contains('pdf-drive'),
+    }))
+    const wrap = await lastLine(iphone.page)
+    const ownAfter = drive.pdfs()
+    await iphone.page.screenshot({ path: 'poc-output/e2e/drive-pdf-iphone.png' })
+    check(
+      'iPhone：できた窓（PDF ができました）にも「ドライブの「卒業制作報告書」フォルダにも置きました」を出し、自分のドライブの同じファイルを新しくする',
+      shareInfo.title === 'PDF ができました' && shareInfo.line === 'ドライブの「卒業制作報告書」フォルダにも置きました' && shareInfo.after && ownAfter.length === 1 && ownAfter[0].id === ownBefore[0]?.id && ownAfter[0].name === `${title}.pdf`,
+      JSON.stringify({ shareInfo, ownAfter }),
+    )
+    check('390px の画面では、ドライブの1行は言葉の切れ目で折り返し、1字だけ次の行に残らない', wrap.lines <= 2 && wrap.last.length >= 2, JSON.stringify(wrap))
+    await iphone.context.close()
   }
 
   await phone.context.close()

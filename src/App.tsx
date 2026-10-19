@@ -29,6 +29,7 @@ import { Tour } from './app/Tour'
 import { firstOpenInTab, forgetGuide, guideLeftAt, markTourSeen, markTourShown, rememberGuide, tourSeen } from './app/tourMemory'
 import { useTabLock } from './app/useTabLock'
 import { useTokenRenewal } from './app/useTokenRenewal'
+import { useDrivePdf } from './app/useDrivePdf'
 import { usePdfCopy } from './app/usePdfCopy'
 import { useAutosave } from './app/useAutosave'
 import { usePanelWidths } from './app/usePanelWidths'
@@ -795,6 +796,8 @@ export default function App() {
   useTokenRenewal(drive, !!gate || !!driveDialog || reloginShown || tabLock.locked || driveStopped)
   // 書き出した PDF の控えを、先生のドライブのフォルダに送る（ドライブにログインして使っているときだけ。学生の画面には出さない）
   const pdfCopy = usePdfCopy(drive, !driveStopped)
+  // 書き出した PDF を、自分のドライブの「卒業制作報告書」フォルダにも置く（ログインして使っているときだけ。PDF の窓に1行で知らせる）
+  const drivePdf = useDrivePdf(drive, !driveStopped)
   // 指差し確認を出さないとき：ログインの窓・どの原稿で続けるか・学籍番号の確かめ・Word の読み込みなどの窓・別のタブで開いている・
   // はじめての案内・使い方を開いている
   const tourBlocked = !snap?.layout || !!loadError || !!guide || !!gate || !!dialog || !!driveDialog || tabLock.locked || help || reloginShown
@@ -1007,7 +1010,11 @@ export default function App() {
           snap={snap}
           config={config}
           onStart={pdfCopy.onStart}
-          onBuilt={(pdf) => pdfCopy.onBuilt(pdf, editor.getSnapshot().report)}
+          onBuilt={(pdf) => {
+            pdfCopy.onBuilt(pdf, editor.getSnapshot().report)
+            drivePdf.onBuilt(pdf)
+          }}
+          drivePdf={drivePdf.state}
           onClose={() => {
             setDialog(null)
             pdfCopy.onClosed()

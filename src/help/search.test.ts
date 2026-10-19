@@ -31,6 +31,11 @@ describe('言葉で探す：項目を探す', () => {
     expect(hits[0].line.label).toBe('PDF が出ないとき')
   })
 
+  it('「PDF ドライブ」「PDF どこ」：PDF の出し方の項目が先に出る（同じ PDF が、自分のドライブの「卒業制作報告書」フォルダにも入る）', () => {
+    for (const q of ['PDF ドライブ', 'PDF どこ', 'PDF グーグルドライブ']) expect(ids(searchTopics(STUDENT_TOPICS, q).hits)[0], q).toBe('pdf')
+    expect(searchTopics(STUDENT_TOPICS, 'PDF ドライブ').hits[0].line.text).toContain('「卒業制作報告書」フォルダにも入ります')
+  })
+
   it('全角・大文字で入れても、同じ項目が見つかる', () => {
     expect(ids(searchTopics(STUDENT_TOPICS, 'ｐｄｆ').hits)).toEqual(ids(searchTopics(STUDENT_TOPICS, 'PDF').hits))
   })

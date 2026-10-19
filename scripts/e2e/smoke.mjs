@@ -2257,6 +2257,12 @@ await withEdge(async (browser) => {
     check('作っている途中の「やめる」で止まり、最初の窓に戻る（保存しない）', !!(await page.$('.modal .pdf-left .fix-list')) && !existsSync(`${DOWNLOADS}/${title}.pdf`))
     await page.click('.modal .pdf-start')
     await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+    // 保存の画面が開かない（「ダウンロード」にそのまま保存する。窓のフォーカスも外れない）ときは、約4秒で「保存しました」になる
+    const waitStart = Date.now()
+    const waitTitle = await page.$eval('.modal h2', (e) => e.textContent)
+    await page.waitForFunction(() => document.querySelector('.modal h2')?.textContent === '保存しました', { timeout: 15000 }).catch(() => {})
+    const waited = Date.now() - waitStart
+    check('保存の画面が開かないブラウザ（「ダウンロード」にそのまま保存）では、「保存の画面を開いています…」が約4秒で「保存しました」になる', waitTitle === '保存の画面を開いています…' && waited > 2500 && waited < 6000, JSON.stringify({ waitTitle, waited }))
     const done = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, file: document.querySelector('.modal .pdf-file b')?.textContent, note: document.querySelector('.modal .lead')?.textContent ?? '' }))
     const printedPages = await page.evaluate(() => window.__editor.pageElements().filter((p) => !p.classList.contains('print-skip')).length)
     const saved = await savedPdf(`${title}.pdf`)
@@ -2606,12 +2612,85 @@ async function pdfSaveCheck(browser) {
   await page.click('.modal .row-buttons .pdf-fallback')
   check('「うまくいかないとき：印刷の画面から保存」を押すと、印刷の画面での選び方と「印刷の画面を開く」が出る', await page.evaluate(() => !!document.querySelector('.modal .pdf-print-box .print-guide') && !!document.querySelector('.modal .pdf-print-box .pdf-print')))
   await page.click('.modal .row-buttons .pdf-fallback')
+  // 保存の画面を待つ間の見張り（窓のフォーカス）と時計（約4秒）を数える（「保存しました」になったら・窓を閉じたら、残さず外すか）
+  await page.evaluate(() => {
+    window.__blurWatch = 0
+    window.__waitTimers = new Set()
+    const add = window.addEventListener
+    const remove = window.removeEventListener
+    window.addEventListener = function (type, fn, options) {
+      if (type === 'blur') window.__blurWatch++
+      return add.call(this, type, fn, options)
+    }
+    window.removeEventListener = function (type, fn, options) {
+      if (type === 'blur') window.__blurWatch--
+      return remove.call(this, type, fn, options)
+    }
+    const set = window.setTimeout.bind(window)
+    const clear = window.clearTimeout.bind(window)
+    window.setTimeout = (fn, ms, ...args) => {
+      if (ms !== 4000) return set(fn, ms, ...args)
+      const id = set((...a) => {
+        window.__waitTimers.delete(id)
+        fn(...a)
+      }, ms, ...args)
+      window.__waitTimers.add(id)
+      return id
+    }
+    window.clearTimeout = (id) => {
+      window.__waitTimers.delete(id)
+      return clear(id)
+    }
+  })
+  const watching = () => page.evaluate(() => ({ blur: window.__blurWatch, timers: window.__waitTimers.size }))
   await page.click('.modal .pdf-start')
   // 作っている途中：進み具合と、できたページの小さな絵
   await page.waitForFunction(() => document.querySelectorAll('.modal .pdf-thumbs img').length >= 1, { timeout: 60000 })
   const building = await page.evaluate(() => ({ title: document.querySelector('.modal h2')?.textContent, progress: document.querySelector('.modal .pdf-progress span')?.textContent ?? '', tiles: document.querySelectorAll('.modal .pdf-thumbs figure').length }))
   await page.screenshot({ path: `${OUT}/0-pdf-building.png` })
   await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+  await pause(150)
+  // できたら、まず保存の画面を待つ（パソコン・Android）：「保存の画面を開いています…」と回る印・「数秒かかることがあります」。ファイル名・小さな絵・ボタンはそのまま
+  const waitInfo = await page.evaluate(() => ({
+    title: document.querySelector('.modal h2')?.textContent,
+    label: document.querySelector('.modal')?.getAttribute('aria-label'),
+    spinner: !!document.querySelector('.modal h2 .pdf-wait') && !document.querySelector('.modal h2 .pdf-ok'),
+    lead: document.querySelector('.modal .lead')?.textContent,
+    file: document.querySelector('.modal .pdf-file b')?.textContent,
+    tiles: document.querySelectorAll('.modal .pdf-thumbs figure').length,
+    buttons: [...document.querySelectorAll('.modal .row-buttons button')].map((b) => `${b.textContent}${b.disabled ? '(押せない)' : ''}`).join('|'),
+    focus: document.activeElement?.classList.contains('pdf-open'),
+    drive: !!document.querySelector('.modal .pdf-drive'),
+  }))
+  const waitWatch = await watching()
+  await page.screenshot({ path: `${OUT}/0-pdf-waiting.png` })
+  check(
+    'できたら、まず「保存の画面を開いています…」（回る印）と「数秒かかることがあります」を出す。ファイル名・小さな絵はそのまま、「PDF を開く」「閉じる」「もう一度保存」も押せ、「PDF を開く」に移る',
+    waitInfo.title === '保存の画面を開いています…' &&
+      waitInfo.label === waitInfo.title &&
+      waitInfo.spinner &&
+      waitInfo.lead === '数秒かかることがあります' &&
+      waitInfo.file === `${title}.pdf` &&
+      waitInfo.tiles > 0 &&
+      waitInfo.buttons === '保存されていないときは、もう一度保存|閉じる|PDF を開く' &&
+      waitInfo.focus &&
+      !waitInfo.drive &&
+      waitWatch.blur === 1 &&
+      waitWatch.timers === 1,
+    JSON.stringify({ ...waitInfo, ...waitWatch }),
+  )
+  // ブラウザの保存の画面が開いた（窓のフォーカスが外れた）ことにする：すぐ「保存しました」になり、見張りと時計を外す
+  const afterBlur = await page.evaluate(async () => {
+    window.dispatchEvent(new Event('blur'))
+    await new Promise((r) => setTimeout(r, 100))
+    return { title: document.querySelector('.modal h2')?.textContent, ok: !!document.querySelector('.modal h2 .pdf-ok'), focus: document.activeElement?.classList.contains('pdf-open') }
+  })
+  const savedWatch = await watching()
+  check(
+    '保存の画面が開くと（窓のフォーカスが外れると）、すぐ「✓ 保存しました」になり、見張り・時計は残さない（「PDF を開く」のまま）',
+    afterBlur.title === '保存しました' && afterBlur.ok && afterBlur.focus && savedWatch.blur === 0 && savedWatch.timers === 0,
+    JSON.stringify({ ...afterBlur, ...savedWatch }),
+  )
   await pause(300)
   const done = await page.evaluate(() => ({
     title: document.querySelector('.modal h2')?.textContent,
@@ -2632,6 +2711,21 @@ async function pdfSaveCheck(browser) {
   await page.click('.modal .close')
   await pause(300)
   check('窓を閉じると、ふだんの画面に戻る', !(await page.$('.modal')))
+  // 保存の画面を待っている間に窓を閉じても、見張り・時計を残さない（あとで窓が出てきたりしない）
+  await page.click('.side .export')
+  await page.waitForSelector('.modal .pdf-start')
+  await page.click('.modal .pdf-start')
+  await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+  const closingTitle = await page.$eval('.modal h2', (e) => e.textContent)
+  await page.click('.modal .close')
+  await pause(300)
+  const closedWatch = await watching()
+  await pause(4500)
+  check(
+    '保存の画面を待っている間に窓を閉じると、見張り・時計を残さない（4秒たっても窓は出ない）',
+    closingTitle === '保存の画面を開いています…' && closedWatch.blur === 0 && closedWatch.timers === 0 && !(await page.$('.modal')),
+    JSON.stringify({ closingTitle, ...closedWatch }),
+  )
   await context.close()
 }
 

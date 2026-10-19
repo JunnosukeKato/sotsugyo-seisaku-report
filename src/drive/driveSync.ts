@@ -14,6 +14,7 @@ import { account, DriveError, ensureFolder, findFile, getFileState, listChildren
  *   書き続けていれば「もう一度ログイン」はほとんど出ず、切れる前の10分ほどクリックしなかったときだけ出る
  *
  * ドライブには「卒業制作報告書」フォルダを作り、原稿（原稿.json）と「写真」フォルダ（写真1枚ずつ）を置く。
+ * 書き出した PDF も、同じフォルダに1つ置く（提出用の名前。書き出すたびに新しくする。savePdf）。
  */
 
 const LINK_KEY = 'sotsugyo-seisaku-report-drive'
@@ -21,6 +22,8 @@ const TOKEN_KEY = 'sotsugyo-seisaku-report-drive-token'
 const KIND = 'sotsugyo-seisaku-report-drive'
 const REPORT_NAME = '原稿.json'
 const PHOTOS_FOLDER = '写真'
+/** 書き出した PDF に付ける印（appProperties の kind）。次に書き出したときは、この印のファイルを新しくする */
+const PDF_KIND = 'pdf'
 /** 書くのをやめてから、ドライブに送るまで */
 const SYNC_DELAY_MS = 5000
 /** 送れなかった（電波がない・Google 側の問題）ときに、やり直すまで */
@@ -177,6 +180,8 @@ export class DriveSync {
   private lastRenew = -Infinity
   /** 許可を延ばしている途中（Google の窓の答えを待っている） */
   private renewing: Promise<boolean> | null = null
+  /** 書き出した PDF を置き終えるまで（続けて書き出したときは、前のを置き終えてから置く） */
+  private pdfQueue: Promise<unknown> = Promise.resolve()
 
   constructor(clientId: string) {
     this.clientId = clientId
@@ -304,6 +309,40 @@ export class DriveSync {
   async copyToken(): Promise<Token | null> {
     if (this.renewing) await this.renewing
     return this.tokenValid ? this.token : null
+  }
+
+  /**
+   * 書き出した PDF を、原稿と同じ「卒業制作報告書」フォルダにも置けるか（app/useDrivePdf.ts）。
+   * ログインして使っていて、許可が使える（延ばしている途中も含む）・つながっているときだけ
+   */
+  get canSavePdf(): boolean {
+    return this.active && !!this.link && !!this.state.email && (this.tokenValid || !!this.renewing) && navigator.onLine
+  }
+
+  /**
+   * 書き出した PDF（name：提出用の名前。例：00ZZ0123_文化花子.pdf）を、原稿と同じ「卒業制作報告書」フォルダにも置く。
+   * 前に置いた PDF（印 kind: pdf）があれば、その中身を新しくし、名前も今の名前にする（ドライブが前の版を残す。ファイルは1つのまま）。
+   * 置けたら true。置けないとき（ログインしていない・許可が切れている・フォルダがゴミ箱に入っている）は、何もせずに false。
+   * ログインの窓は出さない。ドライブのエラーは投げる（DriveError）。
+   * 続けて書き出したときは、前のを置き終えてから置く（同じ PDF のファイルが2つできないように）
+   */
+  savePdf(pdf: Blob, name: string): Promise<boolean> {
+    const run = this.pdfQueue.then(() => this.putPdf(pdf, name))
+    this.pdfQueue = run.catch(() => false)
+    return run
+  }
+
+  private async putPdf(pdf: Blob, name: string): Promise<boolean> {
+    if (!this.canSavePdf) return false
+    const token = await this.copyToken()
+    const link = this.link
+    if (!token || !link || !this.active) return false
+    // フォルダがゴミ箱に入っていたら置かない（原稿を送るときに、フォルダを作り直す。checkFolders）
+    if ((await getFileState(token, link.folderId)) === null) return false
+    const [placed] = (await listChildren(token, link.folderId)).filter((f) => f.appProperties?.kind === PDF_KIND)
+    const content = pdf.type === 'application/pdf' ? pdf : new Blob([pdf], { type: 'application/pdf' })
+    await saveFile(token, { name, folderId: link.folderId, content, fileId: placed?.id, appProperties: { kind: PDF_KIND }, rename: true })
+    return true
   }
 
   /**

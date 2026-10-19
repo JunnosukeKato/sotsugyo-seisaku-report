@@ -10,11 +10,18 @@ import { checkSummary, goToTarget } from './checkSummary'
 import { Modal } from './dialogs'
 import { Icon } from './icons'
 import { AREA_LABELS } from './labels'
+import type { DrivePdfState } from './useDrivePdf'
+
+/** 保存の画面が開くのを待つ長さ（これを過ぎたら「保存しました」にする。保存の画面を出さずに「ダウンロード」へ保存するブラウザのため） */
+const SAVE_WAIT_MS = 4000
 
 /**
  * 「PDFを書き出す」の窓（mockups/v28 案C「窓の中で、できたページを見せる」）。
  * PDF をツールの中で作る（進み具合と、できたページの小さな絵が1枚ずつ並ぶ）→ できた。
  * パソコン・Android は、できたらそのまま「ダウンロード」に保存する。iPhone・iPad は「保存する」を押して、共有の画面から保存する。
+ * パソコン・Android は、ブラウザが保存の画面を開くまで数秒かかることがあるので、その間は「保存の画面を開いています…」と出し、
+ * 保存の画面が開いたら（窓のフォーカスが外れたら）か、約4秒で「保存しました」にする（依頼者の判断 2026-10-19 案A）。
+ * ドライブにログインして使っているときは、同じ PDF を自分のドライブの「卒業制作報告書」フォルダにも置き、できた窓に1行で知らせる（app/useDrivePdf.ts）。
  * PDF は1つだけ（依頼者の判断 2026-10-19）：前の「下書きの PDF」（透かし入り）と、提出用の PDF の前の3つの確かめ（チェック欄）はなくした。
  * 直すところ・まだのところが残っているときは、右の欄と同じ言葉で一覧にし（押すと、その場所へ）、提出の前に直すよう伝える。そのまま書き出すこともできる。
  * 作れなかったとき・うまくいかないときのために、今までの印刷の画面から保存する道も残す（窓の左下）
@@ -97,6 +104,24 @@ function FileBox({ fileName, note }: { fileName: string; note: string }) {
   )
 }
 
+/**
+ * 自分のドライブにも置いたこと（置いている途中・置いた）の1行。置かない・置けなかったときは出さない。
+ * 狭い画面では言葉の切れ目で折り返す（1字だけ次の行に残らないように）
+ */
+function DriveLine({ state }: { state: DrivePdfState }) {
+  if (!state) return null
+  return (
+    <p className={`pdf-drive ${state}`} role="status">
+      <i aria-hidden="true">{state === 'done' && Icon.check}</i>
+      <span>
+        <span>ドライブの「卒業制作報告書」</span>
+        <span>フォルダにも</span>
+        <span>{state === 'done' ? '置きました' : '置いています…'}</span>
+      </span>
+    </p>
+  )
+}
+
 /** できたページの小さな絵（できていないページは空の枠、いま作っているページは枠を光らせる） */
 function Thumbs({ urls, total }: { urls: string[]; total: number }) {
   return (
@@ -124,8 +149,10 @@ interface Props {
   onClose: () => void
   /** 「PDF を保存する（作る）」を押したとき（押した処理の中で呼ぶ。ドライブの許可が切れそうなら延ばしておく。app/usePdfCopy.ts） */
   onStart?: () => void
-  /** PDF ができたとき（作り直さずに、同じ PDF の控えを先生のドライブのフォルダに送る。app/usePdfCopy.ts） */
+  /** PDF ができたとき（作り直さずに、同じ PDF の控えを先生のドライブのフォルダに送る。app/usePdfCopy.ts。自分のドライブにも置く。app/useDrivePdf.ts） */
   onBuilt?: (pdf: BuiltPdf) => void
+  /** 自分のドライブの「卒業制作報告書」フォルダにも置いている途中・置いた（できた窓に1行で出す。置かないときは null） */
+  drivePdf?: DrivePdfState
 }
 
 /** 直すところの一覧で、はじめに見せる数（多いときは「ほか◯件」で開く） */
@@ -199,7 +226,7 @@ function NotYetList({ rows, editor, onClose }: { rows: ProgressRow[]; editor: Re
   )
 }
 
-export function ExportDialog({ editor, snap, config, onClose, onStart, onBuilt }: Props) {
+export function ExportDialog({ editor, snap, config, onClose, onStart, onBuilt, drivePdf = null }: Props) {
   // 残っている直すところ（書いた文の間違い。要確認も含む）と、まだのところ（まだの行。抄録の「先生の許可のあと」は数えない）。右の欄と同じ分け方
   const { rows, fixes } = checkSummary(snap, config)
   const notYet = rows.filter((r) => r.state === 'todo')
@@ -215,6 +242,10 @@ export function ExportDialog({ editor, snap, config, onClose, onStart, onBuilt }
   /** 使い終えたら解放する URL（小さな絵・PDF） */
   const urls = useRef<string[]>([])
   const pdfUrls = useRef<string[]>([])
+  /** 保存の画面が開くのを待っている（パソコン・Android。「保存の画面を開いています…」） */
+  const [waiting, setWaiting] = useState(false)
+  /** 待つのをやめる（時計と、フォーカス・画面の切り替えの見張りを外す） */
+  const stopWatch = useRef<(() => void) | null>(null)
   const fileName = `${editor.pdfTitle}.pdf`
 
   /** PDF に入れるページ（写真のない作品写真のページは入れない。pdf/exportPages.ts） */
@@ -233,14 +264,46 @@ export function ExportDialog({ editor, snap, config, onClose, onStart, onBuilt }
     pdfUrls.current = []
     if (done.length) window.setTimeout(() => done.forEach((url) => URL.revokeObjectURL(url)), 60_000)
   }
-  // 窓を閉じたら、作っている途中なら止め、絵と PDF の URL を解放する
+  /** 保存の画面を待つのをやめる */
+  const endWatch = () => {
+    stopWatch.current?.()
+    stopWatch.current = null
+  }
+  // 窓を閉じたら、作っている途中なら止め、保存の画面を待つのもやめ、絵と PDF の URL を解放する
   useEffect(
     () => () => {
       abort.current?.abort()
+      endWatch()
       releaseUrls()
     },
     [],
   )
+
+  /**
+   * パソコン・Android：「ダウンロード」に保存する。ブラウザが保存の画面を開くまで（数秒かかることがある）「保存の画面を開いています…」と出し、
+   * 保存の画面が開いたら（窓のフォーカスが外れた・画面が隠れた）か、SAVE_WAIT_MS たったら「保存しました」にする。
+   * 「保存されていないときは、もう一度保存」で保存し直したときも、同じように待つ
+   */
+  const save = (pdf: BuiltPdf) => {
+    endWatch()
+    downloadPdf(pdf)
+    setWaiting(true)
+    const opened = () => {
+      endWatch()
+      setWaiting(false)
+    }
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') opened()
+    }
+    const timer = window.setTimeout(opened, SAVE_WAIT_MS)
+    window.addEventListener('blur', opened)
+    document.addEventListener('visibilitychange', onVisibility)
+    stopWatch.current = () => {
+      window.clearTimeout(timer)
+      window.removeEventListener('blur', opened)
+      document.removeEventListener('visibilitychange', onVisibility)
+    }
+  }
 
   /** 印刷の画面から保存する（作れなかったとき・うまくいかないとき） */
   const print = () => {
@@ -268,6 +331,8 @@ export function ExportDialog({ editor, snap, config, onClose, onStart, onBuilt }
     abort.current?.abort()
     const controller = new AbortController()
     abort.current = controller
+    endWatch()
+    setWaiting(false)
     releaseUrls()
     setThumbs([])
     const pages = pagesToExport()
@@ -290,8 +355,8 @@ export function ExportDialog({ editor, snap, config, onClose, onStart, onBuilt }
       pdfUrls.current.push(pdf.url)
       if (controller.signal.aborted) return
       setPhase({ kind: 'done', pdf, saved: '' })
-      if (mode === 'download') downloadPdf(pdf)
-      // 保存を始めてから、先生のフォルダへの控えを送る（送るのは後ろで。保存・共有を待たせない）
+      if (mode === 'download') save(pdf)
+      // 保存を始めてから、先生のフォルダへの控えを送り、自分のドライブにも置く（後ろで。保存・共有を待たせない）
       onBuilt?.(pdf)
     } catch (e) {
       // 「やめる」で止めたときは、最初の画面に戻っている
@@ -360,6 +425,7 @@ export function ExportDialog({ editor, snap, config, onClose, onStart, onBuilt }
                 ? '保存の画面を開けなかったため、ダウンロードしました。「PDF を開く」からも保存できます。'
                 : '「保存する」を押して、「"ファイル"に保存」を選んでください。'}
           </p>
+          <DriveLine state={drivePdf} />
           <button className="primary pdf-save" data-autofocus onClick={() => void share(pdf)}>
             {Icon.share}
             {saved ? 'もう一度保存する' : '保存する'}
@@ -374,13 +440,27 @@ export function ExportDialog({ editor, snap, config, onClose, onStart, onBuilt }
         </Modal>
       )
     }
+    // 保存の画面を待っている間も、同じ窓のまま（ボタンは押せる。「保存しました」に変わっても、いま選んでいるボタンから動かない）
+    const title = waiting ? '保存の画面を開いています…' : '保存しました'
     return (
-      <Modal key="done" title="保存しました" heading={<><span className="pdf-ok">{Icon.check}</span>保存しました</>} onClose={onClose} className="pdf-modal">
+      <Modal
+        key="done"
+        title={title}
+        heading={
+          <>
+            {waiting ? <span className="pdf-wait" aria-hidden="true" /> : <span className="pdf-ok">{Icon.check}</span>}
+            {title}
+          </>
+        }
+        onClose={onClose}
+        className="pdf-modal"
+      >
         <FileBox fileName={pdf.fileName} note={`${size}　「ダウンロード」のフォルダ`} />
         <Thumbs urls={thumbs} total={pdf.pageCount} />
-        <p className="lead">開いて、ページの数と写真を確かめてください。</p>
+        <p className="lead">{waiting ? '数秒かかることがあります' : '開いて、ページの数と写真を確かめてください。'}</p>
+        {!waiting && <DriveLine state={drivePdf} />}
         <div className="row-buttons">
-          <button className="link pdf-fallback" onClick={() => downloadPdf(pdf)}>
+          <button className="link pdf-fallback" onClick={() => save(pdf)}>
             保存されていないときは、もう一度保存
           </button>
           <span className="spacer" />

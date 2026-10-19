@@ -15,7 +15,8 @@
  * - 送った人は、学生のツールのログインの許可（アクセストークン）を Google に確かめる（このツールの OAuth クライアント・大学のアカウント・確かめ済みのアドレス）。
  *   学生のアカウント（@ より前が学籍番号の形）なら、表紙の学籍番号と同じであること。教職員のアカウントも、見本の原稿で試せるように通す
  * - フォルダの中に、コースごとのフォルダを作り（なければ）、学生ごとに1つのファイルを置く。送るたびに中身を新しい版にする（前の版はドライブに残る）
- * - ファイル名は「氏名（空白を詰める）_学籍番号_2026年度卒業制作報告書.pdf」。ファイルの説明に、送った人のアドレスを書く
+ * - ファイル名は提出の決まりと同じ「学籍番号_氏名（空白を詰める）.pdf」（例：00ZZ0123_文化花子.pdf。学生が書き出す PDF と同じ名前）。
+ *   教職員が試しに送った控えは、頭に「試し_」を付ける。ファイルの説明に、送った人のアドレスを書く
  * OAuth クライアント ID と大学のドメインも、ビルド時（.env の VITE_GOOGLE_CLIENT_ID・VITE_GOOGLE_DOMAIN）に入る
  * （入っていなければスクリプト プロパティの GOOGLE_CLIENT_ID・GOOGLE_DOMAIN）。
  * PDF の控えには、ドライブ（高度なサービス Drive API v3）と外部への接続の権限がいる。デプロイしたあと、エディタで1回だけ authorizePdfCopy を実行して承認する。
@@ -195,7 +196,8 @@ function pdfCopy_(request) {
   const courses = config && Array.isArray(config.courses) ? config.courses : []
   const course = courseId ? courses.find((c) => c && c.id === courseId) : null
   const courseName = cleanName_(course && course.name, 80) || 'コース未設定'
-  const fileName = pdfFileName_(name, accountId || coverId, year)
+  // 教職員のアカウント（学籍番号の形でない）は「試し_」を付ける（学生のファイルと見分けられるように）
+  const fileName = pdfFileName_(accountId || coverId, name, config && config.reportName, !accountId)
   // 学生ごとに1つのファイル（年度と学籍番号。教職員はアドレスごと。学生のファイルを上書きしないように）
   const key = year + ':' + (accountId || 'staff:' + email)
   const description = '卒業制作報告書ツールから送られた PDF\n送った人：' + email + '\n送った日時：' + Utilities.formatDate(new Date(), 'Asia/Tokyo', 'yyyy-MM-dd HH:mm')
@@ -265,10 +267,14 @@ function cleanName_(value, max) {
     .slice(0, max)
 }
 
-/** 控えのファイル名（例：文化花子_00ZZ0123_2026年度卒業制作報告書.pdf）。氏名の空白は詰める。空の部分は付けない */
-function pdfFileName_(name, studentId, year) {
-  const parts = [cleanName_(String(name || '').replace(/[\s　]/g, ''), 50), cleanName_(studentId, 40), year + '年度卒業制作報告書']
-  return parts.filter(Boolean).join('_') + '.pdf'
+/**
+ * 控えのファイル名：提出の決まり「学籍番号_氏名.pdf」（例：00ZZ0123_文化花子.pdf。学生用ツールの src/model/fileName.ts の submissionTitle と同じ形）。
+ * 氏名の空白は詰める。空の部分は付けない。両方とも空なら、報告書の名前（年度の設定の reportName。読めなければ「卒業制作報告書」）。
+ * staff：教職員が試しに送った控え。学生のファイルと見分けられるよう、頭に「試し_」を付ける（例：試し_00ZZ0123_見本花子.pdf）
+ */
+function pdfFileName_(studentId, name, reportName, staff) {
+  const title = [cleanName_(studentId, 40), cleanName_(String(name || '').replace(/[\s　]/g, ''), 50)].filter(Boolean).join('_') || cleanName_(reportName, 80) || '卒業制作報告書'
+  return (staff ? '試し_' : '') + title + '.pdf'
 }
 
 /** ドライブの検索の条件に入れる文字（' と \ をエスケープする） */

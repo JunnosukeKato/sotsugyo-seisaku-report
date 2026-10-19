@@ -1417,3 +1417,16 @@ button.row { cursor: pointer; }
 .app.phone .range-bar .photo-arrange .tb svg { width: 20px; height: 20px; }
 /* スマホ（横）：右の列は今までどおり3列×2段。並べ方4つの後ろに「ページを足す」「ページを消す」を続けて並べる（並べ方の入れ物は、札の並びにそのまま入れる） */
 .app.phone .page-side .photo-arrange .layouts { display: contents; }
+
+/* ---- PDF の保存の待ち・ドライブの控え ---- */
+/* パソコン・Android：ブラウザが保存の画面を開くまでの「保存の画面を開いています…」の回る印（「保存しました」の ✓ と同じ場所。app/ExportDialog.tsx） */
+.modal h2 .pdf-wait { display: inline-block; box-sizing: border-box; width: 20px; height: 20px; margin: 0 11px 0 3px; vertical-align: -3px; border-radius: 50%; border: 2.5px solid var(--accent-soft); border-top-color: var(--accent); animation: login-spin 0.8s linear infinite; }
+/* 自分のドライブの「卒業制作報告書」フォルダにも置いた1行（「開いて、ページの数と写真を確かめてください。」のすぐ下）。
+   折り返すときは言葉の切れ目で（「置きました」などが、まとまって次の行に行く。1字だけ残らないように） */
+.pdf-drive { display: flex; align-items: flex-start; gap: 6px; margin: -8px 0 14px; font-size: 13px; line-height: 1.7; color: var(--muted); }
+.pdf-drive > span > span { white-space: nowrap; }
+.pdf-drive > i { flex: none; display: grid; place-items: center; box-sizing: border-box; width: 15px; height: 15px; margin-top: 3.5px; border-radius: 50%; }
+.pdf-drive.sending > i { border: 2px solid var(--accent-soft); border-top-color: var(--accent); animation: login-spin 0.8s linear infinite; }
+.pdf-drive.done > i { background: var(--ok); color: #fff; }
+.pdf-drive.done > i svg { width: 11px; height: 11px; stroke-width: 2.6; }
+@media (prefers-reduced-motion: reduce) { .modal h2 .pdf-wait, .pdf-drive.sending > i { animation: none; } }

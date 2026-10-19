@@ -828,24 +828,24 @@ describe('PDF の控え（api-project の doPost）', () => {
     expect(logs.some((l) => rejected.some((t) => l.includes(t)))).toBe(false)
   })
 
-  it('学生：コースのフォルダを作り、「氏名（空白を詰める）_学籍番号_年度卒業制作報告書.pdf」で置く。2回目からは同じファイルの新しい版（ファイルは1つ）', () => {
+  it('学生：コースのフォルダを作り、提出の決まりと同じ「学籍番号_氏名（空白を詰める）.pdf」で置く。2回目からは同じファイルの新しい版（ファイルは1つ）', () => {
     const api = setup()
     const token = tokenOf('00zz0123@example.ac.jp')
     expect(post(api, request(token))).toEqual({ ok: true })
     expect(drive.folders().map((f) => `${f.name}<${drive.nameOf(f.parents[0])}`)).toEqual([`${FILM.name}<先生のフォルダ`])
     const [first] = drive.pdfs()
-    expect(first).toMatchObject({ name: '文化花子_00ZZ0123_2026年度卒業制作報告書.pdf', parents: [drive.folders()[0].id], appProperties: { reportKey: '2026:00ZZ0123' }, versions: 1 })
+    expect(first).toMatchObject({ name: '00ZZ0123_文化花子.pdf', parents: [drive.folders()[0].id], appProperties: { reportKey: '2026:00ZZ0123' }, versions: 1 })
     expect(first.content).toContain('%PDF-1.4\n1\n')
     expect(first.description).toContain('送った人：00zz0123@example.ac.jp')
     // もう一度書き出した（氏名も直した）：同じファイルの中身を新しい版にし、名前も今のものにする
     expect(post(api, request(token, { name: '文化 花子子', pdf: pdfBase64('2') }))).toEqual({ ok: true })
     expect(drive.pdfs()).toHaveLength(1)
-    expect(drive.pdfs()[0]).toMatchObject({ id: first.id, name: '文化花子子_00ZZ0123_2026年度卒業制作報告書.pdf', versions: 2 })
+    expect(drive.pdfs()[0]).toMatchObject({ id: first.id, name: '00ZZ0123_文化花子子.pdf', versions: 2 })
     expect(drive.pdfs()[0].content).toContain('%PDF-1.4\n2\n')
     // 同じコースの別の学生：同じコースのフォルダに、別のファイル
     expect(post(api, request(tokenOf('00zz0456@example.ac.jp'), { studentId: '00zz0456', name: '衣装　次郎' }))).toEqual({ ok: true })
     expect(drive.folders()).toHaveLength(1)
-    expect(drive.pdfs().map((f) => f.name)).toEqual(['文化花子子_00ZZ0123_2026年度卒業制作報告書.pdf', '衣装次郎_00ZZ0456_2026年度卒業制作報告書.pdf'])
+    expect(drive.pdfs().map((f) => f.name)).toEqual(['00ZZ0123_文化花子子.pdf', '00ZZ0456_衣装次郎.pdf'])
   })
 
   it('学生のアカウントで、表紙の学籍番号が違えば断る（表紙が空なら、アカウントの学籍番号で置く）', () => {
@@ -854,14 +854,14 @@ describe('PDF の控え（api-project の doPost）', () => {
     expect(post(api, request(token, { studentId: '00ZZ0999' }))).toEqual({ ok: false, error: '表紙の学籍番号が、ログインしたアカウントと違います' })
     expect(drive.pdfs()).toEqual([])
     expect(post(api, request(token, { studentId: '', name: '' }))).toEqual({ ok: true })
-    expect(drive.pdfs()[0].name).toBe('00ZZ0123_2026年度卒業制作報告書.pdf')
+    expect(drive.pdfs()[0].name).toBe('00ZZ0123.pdf')
   })
 
   it('学生のアドレスは「wu」＋学籍番号（提出ガイド）：先頭の wu を除いて学籍番号と比べ、学生のファイルとして置く', () => {
     const api = setup()
     const token = tokenOf('wu00zz0123@example.ac.jp')
     expect(post(api, request(token))).toEqual({ ok: true })
-    expect(drive.pdfs()[0]).toMatchObject({ name: '文化花子_00ZZ0123_2026年度卒業制作報告書.pdf', appProperties: { reportKey: '2026:00ZZ0123' } })
+    expect(drive.pdfs()[0]).toMatchObject({ name: '00ZZ0123_文化花子.pdf', appProperties: { reportKey: '2026:00ZZ0123' } })
     expect(post(api, request(token, { studentId: '00ZZ0999' }))).toEqual({ ok: false, error: '表紙の学籍番号が、ログインしたアカウントと違います' })
   })
 
@@ -872,8 +872,35 @@ describe('PDF の控え（api-project の doPost）', () => {
     const [student, staff] = drive.pdfs()
     expect(student.content).toContain('\n1\n')
     expect(student.versions).toBe(1)
-    expect(staff).toMatchObject({ name: '見本花子_00ZZ0123_2026年度卒業制作報告書.pdf', appProperties: { reportKey: '2026:staff:sensei.a@example.ac.jp' } })
+    expect(staff).toMatchObject({ name: '試し_00ZZ0123_見本花子.pdf', appProperties: { reportKey: '2026:staff:sensei.a@example.ac.jp' } })
     expect(staff.description).toContain('送った人：sensei.a@example.ac.jp')
+  })
+
+  it('教職員の試しの控えは、頭に「試し_」。先に試しの控えがあっても、同じ表紙の学生は自分のファイルを作る（試しの控えを取らない）', () => {
+    const api = setup()
+    expect(post(api, request(tokenOf('sensei.a@example.ac.jp')))).toEqual({ ok: true })
+    expect(post(api, request(tokenOf('00zz0123@example.ac.jp')))).toEqual({ ok: true })
+    expect(drive.pdfs().map((f) => `${f.name}|${f.appProperties?.reportKey}|${f.versions}`)).toEqual(['試し_00ZZ0123_文化花子.pdf|2026:staff:sensei.a@example.ac.jp|1', '00ZZ0123_文化花子.pdf|2026:00ZZ0123|1'])
+  })
+
+  it('学籍番号も氏名も空なら（教職員の試し）、報告書の名前（年度の設定の reportName）。教職員が直して送り直すと、同じファイルを今の名前にする', () => {
+    const api = setup()
+    sheetRows('年度設定')[1][2] = JSON.stringify({ ...initialConfig, reportName: '卒業研究報告書' })
+    const token = tokenOf('sensei.a@example.ac.jp')
+    expect(post(api, request(token, { studentId: '', name: '' }))).toEqual({ ok: true })
+    expect(drive.pdfs()[0].name).toBe('試し_卒業研究報告書.pdf')
+    expect(post(api, request(token, { studentId: '', name: '見本 花子' }))).toEqual({ ok: true })
+    expect(drive.pdfs()).toHaveLength(1)
+    expect(drive.pdfs()[0]).toMatchObject({ name: '試し_見本花子.pdf', versions: 2 })
+  })
+
+  it('前の形の名前（氏名_学籍番号_年度卒業制作報告書.pdf）で置いた控えも、印（reportKey）で見つけて新しい版にし、今の名前に直す（ファイルは1つのまま）', () => {
+    const api = setup()
+    const course = drive.api.Files.create({ name: FILM.name, mimeType: FOLDER, parents: ['root-folder'] }, null)
+    const old = drive.api.Files.create({ name: '文化花子_00ZZ0123_2026年度卒業制作報告書.pdf', mimeType: 'application/pdf', parents: [course.id], appProperties: { reportKey: '2026:00ZZ0123' } }, { bytes: [...Buffer.from('%PDF-old')] })
+    expect(post(api, request(tokenOf('00zz0123@example.ac.jp')))).toEqual({ ok: true })
+    expect(drive.pdfs()).toHaveLength(1)
+    expect(drive.pdfs()[0]).toMatchObject({ id: old.id, name: '00ZZ0123_文化花子.pdf', versions: 2 })
   })
 
   it('PDF でない中身・形の正しくない内容・大きすぎる中身は断る（Google にも確かめない）', () => {
@@ -913,7 +940,7 @@ describe('PDF の控え（api-project の doPost）', () => {
   it('同じ名前のファイルが前からあれば（印がない）、そのファイルを新しい版にする。フォルダが見つからなければ、くわしいこと（ID）は返さない', () => {
     const api = setup()
     const course = drive.api.Files.create({ name: FILM.name, mimeType: FOLDER, parents: ['root-folder'] }, null)
-    drive.api.Files.create({ name: '文化花子_00ZZ0123_2026年度卒業制作報告書.pdf', mimeType: 'application/pdf', parents: [course.id] }, { bytes: [...Buffer.from('%PDF-old')] })
+    drive.api.Files.create({ name: '00ZZ0123_文化花子.pdf', mimeType: 'application/pdf', parents: [course.id] }, { bytes: [...Buffer.from('%PDF-old')] })
     expect(post(api, request(tokenOf('00zz0123@example.ac.jp')))).toEqual({ ok: true })
     expect(drive.pdfs()).toHaveLength(1)
     expect(drive.pdfs()[0]).toMatchObject({ versions: 2, appProperties: { reportKey: '2026:00ZZ0123' } })

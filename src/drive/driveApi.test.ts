@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { explainApiError, explainAuthError, explainPopupError, multipartBody, quote, signIn, signInReady } from './driveApi'
+import { explainApiError, explainAuthError, explainPopupError, multipartBody, quote, saveFile, signIn, signInReady } from './driveApi'
 
 describe('ドライブのエラーの説明', () => {
   it('大学の設定で止められているときは、そうと分かる言葉にする', () => {
@@ -22,6 +22,46 @@ describe('ドライブへの送り方', () => {
   it('情報と中身を1回で送る本文を作る', async () => {
     const body = await multipartBody({ name: 'a.json' }, new Blob(['{"x":1}'], { type: 'application/json' }), 'B').text()
     expect(body).toBe('--B\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n{"name":"a.json"}\r\n--B\r\nContent-Type: application/json\r\n\r\n{"x":1}\r\n--B--')
+  })
+
+  it('上書きするとき、rename なら名前も今の名前にする（書き出した PDF）。rename でなければ名前は送らない（原稿.json）', async () => {
+    const sent: { at: string; body: string }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      sent.push({ at: `${init.method} ${url}`, body: await (init.body as Blob).text() })
+      return new Response(JSON.stringify({ id: 'f1', name: 'x', modifiedTime: 't' }), { status: 200 })
+    })
+    try {
+      const token = { accessToken: 'tok', expiresAt: Date.now() + 3600_000 }
+      const content = new Blob(['%PDF-1'], { type: 'application/pdf' })
+      await saveFile(token, { name: '00ZZ0123_文化花子.pdf', content, folderId: 'folder', fileId: 'f1', appProperties: { kind: 'pdf' }, rename: true })
+      await saveFile(token, { name: '原稿.json', content, folderId: 'folder', fileId: 'f2', appProperties: { writer: 'w' } })
+      // 本文の1つめの部分（情報）
+      const metadata = (body: string) => JSON.parse(body.split('\r\n\r\n')[1].split('\r\n')[0])
+      expect(sent[0].at).toMatch(/^PATCH https:\/\/www\.googleapis\.com\/upload\/drive\/v3\/files\/f1\?uploadType=multipart/)
+      expect(metadata(sent[0].body)).toEqual({ name: '00ZZ0123_文化花子.pdf', appProperties: { kind: 'pdf' } })
+      expect(metadata(sent[1].body)).toEqual({ appProperties: { writer: 'w' } })
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
+  it('大きい PDF（4MB を超える）は分けて送れる方式で送り、上書きのときも、はじめの問い合わせで名前を今の名前にする', async () => {
+    const sent: { at: string; body: unknown; type?: string }[] = []
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      sent.push({ at: `${init.method} ${url}`, body: init.body, type: (init.headers as Record<string, string> | undefined)?.['X-Upload-Content-Type'] })
+      if (url.includes('uploadType=resumable')) return new Response('', { status: 200, headers: { Location: 'https://www.googleapis.com/upload/drive/v3/files/f1?upload_id=u1' } })
+      return new Response(JSON.stringify({ id: 'f1', name: 'x', modifiedTime: 't' }), { status: 200 })
+    })
+    try {
+      const content = new Blob([new Uint8Array(4 * 1024 * 1024 + 1)], { type: 'application/pdf' })
+      await saveFile({ accessToken: 'tok', expiresAt: Date.now() + 3600_000 }, { name: '00ZZ0123_文化花子.pdf', content, folderId: 'folder', fileId: 'f1', appProperties: { kind: 'pdf' }, rename: true })
+      expect(sent.map((s) => s.at.replace(/\?.*$/, ''))).toEqual(['PATCH https://www.googleapis.com/upload/drive/v3/files/f1', 'PUT https://www.googleapis.com/upload/drive/v3/files/f1'])
+      expect(JSON.parse(sent[0].body as string)).toEqual({ name: '00ZZ0123_文化花子.pdf', appProperties: { kind: 'pdf' } })
+      expect(sent[0].type).toBe('application/pdf')
+      expect(sent[1].body).toBe(content)
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('検索の条件に入れる名前の \' と \\ をエスケープする', () => {

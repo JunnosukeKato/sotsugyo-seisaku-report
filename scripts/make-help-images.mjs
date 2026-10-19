@@ -190,6 +190,10 @@ async function studentShots(browser) {
   await page.waitForSelector('.modal .pdf-start')
   await page.evaluate(() => document.querySelector('.modal .pdf-start').click())
   await page.waitForSelector('.modal .pdf-open', { timeout: 120000 })
+  // 保存の画面が開いた（窓のフォーカスが外れた）ことにして、「保存しました」と、ドライブにも置いた1行を出してから撮る
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')))
+  await page.waitForFunction(() => document.querySelector('.modal h2')?.textContent === '保存しました', { timeout: 10000 })
+  await page.waitForSelector('.modal .pdf-drive.done', { timeout: 30000 }).catch(() => {})
   await page.evaluate(() => document.activeElement?.blur())
   await sleep(500)
   await capture(page, 'export', await R(page, '.modal'))

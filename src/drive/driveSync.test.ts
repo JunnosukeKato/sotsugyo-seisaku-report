@@ -24,6 +24,12 @@ vi.stubGlobal('navigator', { onLine: true, userAgent: 'test', maxTouchPoints: 0 
 // 偽物のドライブ：remote にある原稿（1つ）と、写真のファイルを持つ
 let remote: { id: string; modifiedTime: string; report: Report; appProperties?: Record<string, string> } | null = null
 let photoFiles: DriveFile[] = []
+/** 「卒業制作報告書」フォルダ（folder-root）に置いた PDF（書き出した PDF。savePdf） */
+let pdfFiles: (DriveFile & { content: string })[] = []
+/** ゴミ箱に入れたフォルダ */
+const trashedFolders = new Set<string>()
+/** 次に PDF を置くときのエラー（null なら置ける） */
+let pdfError: (() => Error) | null = null
 let email = 'test@bunka-wu.ac.jp'
 /** ドライブに保存した（作った・上書きした）ファイル */
 const saved: { name: string; fileId?: string }[] = []
@@ -49,12 +55,23 @@ vi.mock('./driveApi', async (importOriginal) => {
     signInReady: () => true,
     account: async () => ({ email, usage: 0 }),
     ensureFolder: async (_t: unknown, name = 'root') => `folder-${name}`,
-    listChildren: async () => photoFiles,
+    listChildren: async (_t: unknown, folderId: string) => (folderId === 'folder-root' ? pdfFiles : photoFiles),
     findFile: async () => (remote ? { id: remote.id, name: '原稿.json', modifiedTime: remote.modifiedTime, appProperties: remote.appProperties } : null),
     readFile: async () => new Blob([JSON.stringify({ kind: 'sotsugyo-seisaku-report-drive', savedAt: remote!.modifiedTime, device: 'iPhone・Safari', report: remote!.report })]),
-    saveFile: async (_t: unknown, file: { name: string; fileId?: string; content: Blob; appProperties?: Record<string, string> }) => {
+    saveFile: async (_t: unknown, file: { name: string; fileId?: string; folderId: string; content: Blob; appProperties?: Record<string, string>; rename?: boolean }) => {
       saved.push({ name: file.name, fileId: file.fileId })
       const modifiedTime = `2026-10-06T10:${String(++clock).padStart(2, '0')}:00.000Z`
+      if (file.name.endsWith('.pdf')) {
+        // 本物のドライブと同じく、送っている間は少し待つ（続けて置いたときに、ファイルが2つにならないかを見る）
+        await new Promise((resolve) => setTimeout(resolve, 5))
+        const error = pdfError
+        pdfError = null
+        if (error) throw error()
+        const before = pdfFiles.find((f) => f.id === file.fileId)
+        const pdf = { id: before?.id ?? `pdf-${clock}`, name: before && !file.rename ? before.name : file.name, modifiedTime, appProperties: { ...before?.appProperties, ...file.appProperties }, content: `${file.content.type}|${await file.content.text()}` }
+        pdfFiles = [pdf, ...pdfFiles.filter((f) => f.id !== pdf.id)]
+        return pdf
+      }
       if (file.name !== '原稿.json') {
         const photo = { id: `photo-${clock}`, name: file.name, modifiedTime, appProperties: file.appProperties }
         photoFiles = [...photoFiles, photo]
@@ -68,7 +85,7 @@ vi.mock('./driveApi', async (importOriginal) => {
       }
       return { id, name: file.name, modifiedTime, appProperties: file.appProperties }
     },
-    getFileState: async (_t: unknown, id: string) => (id.startsWith('folder-') ? { modifiedTime: 'x' } : id === remote?.id ? { modifiedTime: remote.modifiedTime, appProperties: remote.appProperties } : null),
+    getFileState: async (_t: unknown, id: string) => (trashedFolders.has(id) ? null : id.startsWith('folder-') ? { modifiedTime: 'x' } : id === remote?.id ? { modifiedTime: remote.modifiedTime, appProperties: remote.appProperties } : null),
   }
 })
 
@@ -88,6 +105,9 @@ beforeEach(() => {
   sessionStorage.clear()
   remote = null
   photoFiles = []
+  pdfFiles = []
+  trashedFolders.clear()
+  pdfError = null
   saved.length = 0
   loseNextResponse = false
   email = 'test@bunka-wu.ac.jp'
@@ -394,6 +414,72 @@ describe('PDF の控えを先生のフォルダに送るときの許可（app/us
     const drive = await writing()
     drive.noticeExpired()
     expect(drive.getState().status.kind).not.toBe('expired')
+  })
+})
+
+describe('書き出した PDF を、自分のドライブの「卒業制作報告書」フォルダにも置く（app/useDrivePdf.ts）', () => {
+  const MIN = 60_000
+  const nav = navigator as { onLine: boolean }
+  async function writing() {
+    const drive = await loggedIn()
+    await drive.resolve(written('花子'))
+    drive.activate()
+    signIns.length = 0
+    return drive
+  }
+  const pdf = (text: string) => new Blob([`%PDF-${text}`], { type: 'application/pdf' })
+  afterEach(() => {
+    vi.useRealTimers()
+    nav.onLine = true
+  })
+
+  it('提出用の名前で1つ置き（印 kind: pdf）、2回目からは同じファイルの中身を新しくして、名前も今の名前にする（ファイルは1つ）', async () => {
+    const drive = await writing()
+    expect(drive.canSavePdf).toBe(true)
+    expect(await drive.savePdf(pdf('1'), '00ZZ0123_文化花子.pdf')).toBe(true)
+    expect(pdfFiles.map((f) => `${f.name}|${f.appProperties?.kind}|${f.content}`)).toEqual(['00ZZ0123_文化花子.pdf|pdf|application/pdf|%PDF-1'])
+    const first = pdfFiles[0].id
+    // 氏名を直して、もう一度書き出した
+    expect(await drive.savePdf(pdf('2'), '00ZZ0123_文化花子子.pdf')).toBe(true)
+    expect(pdfFiles.map((f) => `${f.id}|${f.name}|${f.content}`)).toEqual([`${first}|00ZZ0123_文化花子子.pdf|application/pdf|%PDF-2`])
+    // 原稿のファイルには触らない
+    expect(saved.filter((x) => x.name === '原稿.json')).toEqual([])
+  })
+
+  it('続けて書き出しても、前のを置き終えてから置く（PDF のファイルは1つ）', async () => {
+    const drive = await writing()
+    expect(await Promise.all([drive.savePdf(pdf('1'), 'a.pdf'), drive.savePdf(pdf('2'), 'b.pdf')])).toEqual([true, true])
+    expect(pdfFiles.map((f) => `${f.name}|${f.content}`)).toEqual(['b.pdf|application/pdf|%PDF-2'])
+  })
+
+  it('始める前・電波がない・フォルダがゴミ箱に入っている・許可が切れているときは置かない（ログインの窓も「もう一度ログイン」も出さない）', async () => {
+    const before = await loggedIn()
+    expect(before.canSavePdf).toBe(false)
+    expect(await before.savePdf(pdf('0'), 'a.pdf')).toBe(false)
+    const drive = await writing()
+    nav.onLine = false
+    expect(drive.canSavePdf).toBe(false)
+    expect(await drive.savePdf(pdf('1'), 'a.pdf')).toBe(false)
+    nav.onLine = true
+    trashedFolders.add('folder-root')
+    expect(await drive.savePdf(pdf('2'), 'a.pdf')).toBe(false)
+    trashedFolders.clear()
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(Date.now() + 70 * MIN)
+    expect(drive.canSavePdf).toBe(false)
+    expect(await drive.savePdf(pdf('3'), 'a.pdf')).toBe(false)
+    expect(pdfFiles).toEqual([])
+    expect(signIns).toEqual([])
+    expect(drive.getState().status.kind).not.toBe('expired')
+  })
+
+  it('ドライブのエラーは投げる（そのあとも、次に書き出したときは置ける）', async () => {
+    const { DriveError } = await import('./driveApi')
+    const drive = await writing()
+    pdfError = () => new DriveError('server', 'Google 側で一時的な問題が起きています')
+    await expect(drive.savePdf(pdf('1'), 'a.pdf')).rejects.toMatchObject({ code: 'server' })
+    expect(await drive.savePdf(pdf('2'), 'a.pdf')).toBe(true)
+    expect(pdfFiles).toHaveLength(1)
   })
 })
 

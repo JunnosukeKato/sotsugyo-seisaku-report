@@ -317,16 +317,15 @@ export function multipartBody(metadata: object, content: Blob, boundary: string)
 
 /**
  * ファイルを保存する。fileId があれば上書き、なければ folderId のフォルダに新しく作る。
+ * rename：上書きするときに、名前も name にする（書き出した PDF。名前を直したら、ドライブのファイルの名前も変わる）。
  * 大きいファイルは、分けて送れる方式で送る。
  */
 export async function saveFile(
   token: Token,
-  file: { name: string; content: Blob; folderId: string; fileId?: string; appProperties?: Record<string, string> },
+  file: { name: string; content: Blob; folderId: string; fileId?: string; appProperties?: Record<string, string>; rename?: boolean },
 ): Promise<DriveFile> {
   const metadata = file.fileId
-    ? file.appProperties
-      ? { appProperties: file.appProperties }
-      : {}
+    ? { ...(file.rename ? { name: file.name } : {}), ...(file.appProperties ? { appProperties: file.appProperties } : {}) }
     : { name: file.name, parents: [file.folderId], mimeType: file.content.type || 'application/octet-stream', ...(file.appProperties ? { appProperties: file.appProperties } : {}) }
   const target = file.fileId ? `${UPLOAD}/files/${file.fileId}` : `${UPLOAD}/files`
   const method = file.fileId ? 'PATCH' : 'POST'
