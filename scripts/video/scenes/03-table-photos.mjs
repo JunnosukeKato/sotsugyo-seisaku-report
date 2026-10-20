@@ -1,5 +1,5 @@
 // 動画 3：表・作品写真（パソコン）
-// 2026-10-20 の画面：表の大きさはマス目で選ぶ・マスの中は Enter で改行・列の幅（そろえる・中身に合わせる・自分で決める）、
+// 2026-10-21 の画面：表の大きさはマス目で選ぶ・マスの中は Enter で改行・「表の形を整える」の窓で列の幅（そろえる・字の多い列を広く・自分で決める）、
 // 作品写真は、つかんでずらしてトリミング・「写真のページを足す」（1ページに4枚まで）
 import { resolve } from 'node:path'
 
@@ -13,7 +13,8 @@ export const meta = {
     tcaption: '表の上のタイトルを打ちます。番号と、本文の「（表2）」は自動です',
     cell: 'マスをクリックして、中身を書きます',
     newline: 'マスの中で Enter を押すと、改行できます',
-    widths: '列の幅は、左の道具で「中身に合わせる」などに変えられます',
+    widths: '列の幅などは、左の道具の「表の形を整える」で変えます',
+    shapePanel: '絵を見て選ぶと、すぐ表が変わります',
     photos: '作品写真のページでは、左の「並べ方」で写真の数を選びます',
     photoAdd: '空いている枠をクリックして、写真を選びます',
     trim: '写真をつかんでずらすと、写る所（トリミング）を変えられます',
@@ -117,24 +118,26 @@ export async function run({ page, rec, h }) {
   await h.typeSlow(page, '（裾のゴムを含む）', 85)
   await h.sleep(1200)
 
-  // 5. 列の幅：中身に合わせる（左の道具の「列の幅」「左端の列」「行の高さ」に寄ってから押し、表に寄って結果を見せる）
-  const widthSeg = await page.evaluate(() => {
-    const segs = [...document.querySelectorAll('.palette .seg')].filter((s) => s.getBoundingClientRect().width > 0)
-    const rs = segs.map((s) => s.getBoundingClientRect())
-    const x = Math.min(...rs.map((r) => r.left))
-    const y = Math.min(...rs.map((r) => r.top)) - 22
-    const seg = segs.find((s) => s.getAttribute('aria-label') === '列の幅')
-    const b = [...seg.querySelectorAll('button')].find((x) => x.textContent.includes('中身')).getBoundingClientRect()
-    return { segs: { x, y, w: Math.max(...rs.map((r) => r.right)) - x, h: Math.max(...rs.map((r) => r.bottom)) - y }, fit: { x: b.left + b.width / 2, y: b.top + b.height / 2 } }
-  })
-  rec.mark('widths', { focus: widthSeg.segs })
-  await h.moveTo(page, widthSeg.fit.x, widthSeg.fit.y)
+  // 5. 列の幅：左の道具の「表の形を整える」を押すと、絵の付いた窓が出る（mockups/v45 案A）。「字の多い列を広く」を押し、表に寄って結果を見せる
+  const shapeBtn = await h.centerOf(page, '.palette .shape-btn', '表の形')
+  rec.mark('widths', { focus: await h.rectOf(page, '.palette .shape-btn') })
+  await h.moveTo(page, shapeBtn.x, shapeBtn.y)
+  await h.sleep(1200)
+  await h.clickAt(page, shapeBtn.x, shapeBtn.y, { pause: 300 })
+  await page.waitForSelector('.shape-panel .so-choice[data-value="auto"]')
+  await h.sleep(500)
+  rec.mark('shapePanel', { focus: h.union(await h.rectOf(page, '.shape-panel'), await h.rectOf(page, '.palette .shape-btn')) })
+  const fit = await h.centerOf(page, '.shape-panel .so-choice[data-value="auto"]')
+  await h.moveTo(page, fit.x, fit.y)
   await h.sleep(1500)
-  await h.clickAt(page, widthSeg.fit.x, widthSeg.fit.y, { pause: 300 })
+  await h.clickAt(page, fit.x, fit.y, { pause: 300 })
   await h.sleep(400)
   await h.ready(page).catch(() => {})
   rec.mark('widthsDone', { focus: await tableOnly() })
   await h.sleep(2000)
+  // 窓を閉じる（Esc は窓だけを閉じる）・書いているマスも閉じる
+  await page.keyboard.press('Escape')
+  await h.sleep(300)
   await page.keyboard.press('Escape')
   await h.ready(page)
   await h.sleep(500)
