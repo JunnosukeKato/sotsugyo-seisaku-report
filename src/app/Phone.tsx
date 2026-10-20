@@ -563,7 +563,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
 
       {sheet === 'pages' && (
         <Sheet title="ページ一覧" extra={<span className="pcount"><b>{snap.page + 1}</b> / {snap.pageCount}</span>} onClose={close}>
-          <PageThumbs editor={editor} snap={snap} onPick={close} />
+          <PageThumbs editor={editor} snap={snap} config={config} onPick={close} />
         </Sheet>
       )}
       {sheet === 'add' && (

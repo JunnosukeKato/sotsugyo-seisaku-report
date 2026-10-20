@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, type ReactNode } from 'react'
 import { findCourse, type YearConfig } from '../config'
-import { exportNote, type ProgressRow } from '../checker/progress'
+import { exportNote, splitFindings, type ProgressRow } from '../checker/progress'
 import type { ReportFinding } from '../checker/reportChecks'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import type { PageKind } from '../layout/measure'
@@ -93,7 +93,7 @@ const SHORT_NAMES: Record<PageKind, string> = { cover: '表紙', abstract: '抄�
  * 画面の左端の、ページの一覧の欄（PC。PowerPoint と同じ形）。
  * excluded：ひな形を作る画面（mockups/v44）で、ひな形に入らないページ（表紙・作品写真）。見本を薄くし「ひな形に入らない」の札を付ける
  */
-export function PageColumn({ editor, snap, excluded }: { editor: ReportEditor; snap: EditorSnapshot; excluded?: (kind: PageKind) => boolean }) {
+export function PageColumn({ editor, snap, config, excluded }: { editor: ReportEditor; snap: EditorSnapshot; config?: YearConfig; excluded?: (kind: PageKind) => boolean }) {
   return (
     <aside className="thumbs-col" aria-label="ページの一覧">
       <div className="sec-h">
@@ -104,7 +104,7 @@ export function PageColumn({ editor, snap, excluded }: { editor: ReportEditor; s
           </span>
         )}
       </div>
-      <PageThumbs editor={editor} snap={snap} excluded={excluded} />
+      <PageThumbs editor={editor} snap={snap} config={config} excluded={excluded} />
     </aside>
   )
 }
@@ -146,8 +146,12 @@ function copyInherited(from: HTMLElement, to: HTMLElement): void {
   }
 }
 
-/** ページ一覧。紙面を縮小した本物の見た目を出し、エラーのあるページに赤い点を付ける */
-export function PageThumbs({ editor, snap, onPick, excluded }: { editor: ReportEditor; snap: EditorSnapshot; onPick?: () => void; excluded?: (kind: PageKind) => boolean }) {
+/**
+ * ページ一覧。紙面を縮小した本物の見た目を出し、エラーのあるページに赤い点を付ける。
+ * config：年度の設定。赤い点は、右の欄の「直すところ」のエラーのあるページだけに付ける（まだ書いていない所・先生の許可を待つ抄録などは
+ * 「進み具合」なので付けない。前は付けていたので、直すところに無いのに赤い点が出て、探しても見つからなかった：はじめて使う学生の試し 2026-10-21）
+ */
+export function PageThumbs({ editor, snap, config, onPick, excluded }: { editor: ReportEditor; snap: EditorSnapshot; config?: YearConfig; onPick?: () => void; excluded?: (kind: PageKind) => boolean }) {
   const ref = useRef<HTMLDivElement>(null)
   const kinds = snap.layout?.kinds ?? []
   let body = 0
@@ -155,7 +159,8 @@ export function PageThumbs({ editor, snap, onPick, excluded }: { editor: ReportE
   let photo = 0
   const photos = kinds.filter((k) => k === 'photos').length
   const names = kinds.map((k) => (k === 'body' ? `${SHORT_NAMES.body} ${++body}` : k === 'photos' ? photoPageName(photo++, photos) : SHORT_NAMES[k]))
-  const errorPages = new Set(snap.findings.filter((f) => f.severity === 'error').map((f) => editor.pageOfFinding(f)))
+  const fixes = config ? splitFindings(snap.findings, { report: snap.report, config, layout: snap.layout }).fixes : snap.findings
+  const errorPages = new Set(fixes.filter((f) => f.severity === 'error').map((f) => editor.pageOfFinding(f)))
   // 見ているページ（見開きなら、並べている2ページとも選んだ印）
   const shown = new Set(shownPages(snap))
 

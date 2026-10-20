@@ -889,7 +889,7 @@ export default function App() {
 
   return (
     <div className={`app${narrow ? ' phone' : ''}${phoneDirect ? ' phone-direct' : ''}`} style={narrow ? undefined : panels.style}>
-      {!narrow && (ready ? <PageColumn editor={editor} snap={snap} /> : <aside className="thumbs-col" />)}
+      {!narrow && (ready ? <PageColumn editor={editor} snap={snap} config={config} /> : <aside className="thumbs-col" />)}
       {/* 左右の欄の境目：つかんで動かすと幅が変わる。ダブルクリックで元の幅 */}
       {!narrow &&
         (['left', 'right'] as const).map((side) => (

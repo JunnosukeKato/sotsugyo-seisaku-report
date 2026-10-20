@@ -1491,6 +1491,13 @@ export class OverlayEditor {
       e.preventDefault()
       return this.enterFromInput()
     }
+    // 紙面と同じ組み方で書いていない欄（表のセル・見出しなど）：開いてから何も書いていないときの「元に戻す」（ブラウザのメニューからも）は、
+    // ブラウザに任せない（同じ書く欄で前に書いていた欄の、消した字を戻してしまう）。原稿の「元に戻す」にする（onUndoEmpty）
+    if (!this.typeset && this.target && e.inputType === 'historyUndo' && this.text === this.target.text) {
+      e.preventDefault()
+      this.callbacks.onUndoEmpty?.()
+      return
+    }
     if (!this.typeset || !this.target || e.inputType === 'insertCompositionText') return
     // スマホで紙面に直接書く：日本語の変換中の入力（変換中の字を消すなど）は、ブラウザに任せる（変換を終えたら、書く欄の中身から読み直す）
     if (this.direct && (this.composingNow || e.isComposing)) return

@@ -20,6 +20,7 @@ import { tableShapePc } from './tableShape.mjs'
 import { paletteFitPc, tableCustomPc } from './tableCustom.mjs'
 import { cellBorderPc } from './cellBorder.mjs'
 import { tableSettingsPc } from './tableSettings.mjs'
+import { trialFixesPc } from './trialFixes.mjs'
 import { closeShape, pickWidth } from './shapeUi.mjs'
 import { waitingPc } from './waiting.mjs'
 import { templateStudentPc } from './templateStudent.mjs'
@@ -2399,6 +2400,9 @@ await withEdge(async (browser) => {
 
   // ---- 「表の形を整える」の窓（mockups/v45 案A：開く・閉じる（×・Esc・外を押す）・選ぶとすぐ変わる・元に戻す1回・キーボード・線のつまみ。scripts/e2e/tableSettings.mjs） ----
   await tableSettingsPc(browser, check)
+
+  // ---- はじめて使う学生の試し（2026-10-21）の直し：Ctrl+Z・元に戻すの空振り・列を足したあとのマス・ページの一覧の赤い点・抄録の案内の折り返し（scripts/e2e/trialFixes.mjs） ----
+  await trialFixesPc(browser, check)
 
   // ---- 待つ間の表示（押したボタンに回る印と言葉・2秒を過ぎたら「数秒かかることがあります」・終わったら知らせ。依頼者の要望 2026-10-20。scripts/e2e/waiting.mjs） ----
   await waitingPc(browser, check)

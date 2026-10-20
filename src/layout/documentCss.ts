@@ -82,6 +82,7 @@ section.body { counter-reset: page 1; }
 .abstract .body { position: relative; }
 .abstract .abstract-lock { position: absolute; left: 0; right: 0; top: 6mm; padding: 9mm 8mm; border: 1.2px dashed #9aa3c4; border-radius: 3mm; background: #f6f7fb; text-align: center; text-indent: 0; letter-spacing: 0.04em; line-height: 1.8; color: #3f4660; font-family: 'BIZ UDPGothic', sans-serif; }
 .abstract .abstract-lock b { display: block; font-size: 11pt; margin-bottom: 2mm; }
+.abstract .abstract-lock .ph { font-style: normal; white-space: nowrap; }
 .abstract .abstract-lock span { display: block; font-size: 9pt; color: #6b7290; margin-bottom: 6mm; }
 .abstract .abstract-lock .abstract-start { display: inline-block; margin: 0; padding: 3mm 8mm; border-radius: 2.5mm; background: #2f3e75; color: #fff; font-size: 10.5pt; font-weight: 700; cursor: pointer; }
 .abstract .body p {

@@ -352,6 +352,29 @@ export function mergeBackward(report: Report, id: string, text: string): { repor
   return null
 }
 
+/**
+ * 空の段落・見出しで Backspace（段落の先頭で、前とつなげられないとき：前が図・表・見出しの段落、章の初め、空の見出し）：
+ * その空の段落・見出しを消して、前の欄（↑で移る欄）の終わりへ移る。大見出しは、中が空の段落だけで、ほかに章があるときだけ消す。
+ * スマホのキーボードの上の道具には「削除」がなく、足してしまった空の段落・見出しを消せなかった（はじめて使う学生の試し 2026-10-21）。
+ * 消せないとき（字がある・抄録・前に移る欄がない）は null
+ */
+export function removeEmptyBackward(report: Report, id: string, text: string): { report: Report; targetId: string; caret: number; what: '段落' | '小見出し' | '大見出し（章）' } | null {
+  if (text !== '') return null
+  const kind = findEditable(report, id)?.kind
+  const prev = neighbor(report, id, 'prev')
+  if (!prev || prev.kind === 'field' || prev.kind === 'abstractParagraph') return null
+  const to = { targetId: prev.id, caret: prev.text.length }
+  if (kind === 'paragraph') return { report: removeBlock(report, id), ...to, what: '段落' }
+  if (kind === 'subheading') return { report: removeBlock(report, id), ...to, what: '小見出し' }
+  if (kind === 'chapter') {
+    const num = numbering(report)
+    const chapter = report.body.find((c) => c.id === id)
+    const empty = !!chapter && chapter.blocks.every((b) => b.type === 'paragraph' && !contentToText(b.content, num).trim())
+    return empty && report.body.length > 1 ? { report: removeChapter(report, id), ...to, what: '大見出し（章）' } : null
+  }
+  return null
+}
+
 /** 複数行の貼り付け：1行目で今の段落を置き換え、残りを新しい段落として後ろに入れる。ids：行ごとの段落の ID（1行目は今の段落の ID） */
 export function replaceWithParagraphs(report: Report, id: string, texts: string[]): { report: Report; lastId: string; ids: string[] } {
   const ids = texts.map((_, i) => (i === 0 ? id : newId('p')))

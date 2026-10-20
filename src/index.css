@@ -1759,12 +1759,14 @@ p.busy-line { display: flex; }
 .tpl-reset-ask { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid #e7c46e; border-radius: 10px; background: #fff8e6; color: #4d3500; font-size: 13.5px; line-height: 1.6; }
 .tpl-reset-ask .btns { display: flex; justify-content: flex-end; gap: 8px; }
 
-/* ---- 右の欄・チェックの欄の文：最後の行に1字だけ残らないように（例：「…空いてい／る」。依頼者の要望） ---- */
+/* ---- 右の欄・チェックの欄・スマホの紙面の下の帯の文：最後の行に1字だけ残らないように（例：「…空いてい／る」。依頼者の要望） ---- */
 .issue .ttl,
 .issue .detail,
 .check-prog li,
 .export-note,
-.course-notice {
+.course-notice,
+.page-band .t,
+.page-band p {
   /* 言葉の切れ目で折り返す（「空／いている」のように言葉の途中で分けない。対応していないブラウザは、ふつうの折り返し） */
   word-break: auto-phrase;
   text-wrap: pretty;

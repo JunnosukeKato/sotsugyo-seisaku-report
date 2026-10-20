@@ -440,11 +440,11 @@ export class ReportEditor {
         }
         this.showNotice(what === 'table' ? '表は「表を入れる」で作ります（貼り付けた表は文になりました）' : 'この欄は1行なので、1行目だけを貼り付けました')
       },
-      // 書く欄でまだ何も書いていないときの Ctrl+Z：直前に段落を見出しにしていれば、それを戻す（知らせの「戻す」と同じ）
+      // 書く欄でまだ何も書いていないときの Ctrl+Z：左の道具の「元に戻す」と同じく、直前の操作を戻す（行を足した・図を入れた・段落を見出しにしたなど）。
+      // 前は見出しにしたときだけで、ほかはブラウザに任せていたため、同じ書く欄で前に書いていたマスの字（消した字）が、
+      // 足した行のマスに入ることがあった（はじめて使う学生の試し 2026-10-21）。戻すものがなければ何もしない
       onUndoEmpty: () => {
-        const shown = this.currentNotice
-        if (!shown || !headingNotice(shown)) return false
-        this.undo()
+        if (this.history.canUndo) this.undo()
         return true
       },
       // 紙面で選んでコピーした・切り取ったまとまり（段落・図表など）を、書いている段落に貼り付ける（rangeOps.ts の pasteClip）
@@ -1776,7 +1776,9 @@ export class ReportEditor {
     }
     if (this.continuing?.id === id) this.continuing = null
     this.report = committed
-    if (this.reportBeforeEdit && JSON.stringify(this.reportBeforeEdit) !== JSON.stringify(this.report)) this.pushHistory(this.reportBeforeEdit)
+    // 書く前と中身が同じなら、元に戻す1回分を積まない（打って消しただけでも、保存の時刻 updatedAt は変わるので、時刻は比べない。
+    // 前は積んでいたので、そのあとの「元に戻す」の1回目が、見た目の変わらない空振りになっていた：はじめて使う学生の試し 2026-10-21）
+    if (this.reportBeforeEdit && JSON.stringify({ ...this.reportBeforeEdit, updatedAt: '' }) !== JSON.stringify({ ...this.report, updatedAt: '' })) this.pushHistory(this.reportBeforeEdit)
     // 見出しにした：元に戻すと、まず打ったままの段落に戻る（もう一度戻すと、書く前に戻る）
     if (heading) {
       this.pushHistory(committed)
@@ -3507,7 +3509,19 @@ export class ReportEditor {
   /** 列を足す（書いているセルの列の右） */
   addTableColumn(tableId: string): void {
     const at = this.currentCell(tableId)
-    if (at) this.changeTable(tableId, (t) => addColumn(t, at.column, ops.newId))
+    if (!at) return
+    // 足した列の、書いていた行のマスへ移る（行を足すと足した行のマスへ移るのと同じ。前は書いていたマスのままで、
+    // 生地見本の画像のマスを書いていたときは、続けて打った字が画像の下に入っていた：はじめて使う学生の試し 2026-10-21）
+    let added: string | undefined
+    this.changeTable(
+      tableId,
+      (t) => {
+        const next = addColumn(t, at.column, ops.newId)
+        added = next.rows[at.row]?.cells[at.column + 1]?.id
+        return next
+      },
+      () => added,
+    )
   }
 
   /** 書いているセルの列を消す（最後の1列は残す。消せないときは、わけと表ごと消す方法を知らせる） */
@@ -3602,13 +3616,14 @@ export class ReportEditor {
    * 表を書き換える。書いていたセル（keep を渡せばそのセル）が残っていれば、続けてそのセルを書く。
    * なくなったら表を選んだ状態にする（どちらでも、表の道具が出たままになり、続けて操作できる）
    */
-  private changeTable(tableId: string, fn: (table: TableBlock) => TableBlock, keep?: string): void {
+  private changeTable(tableId: string, fn: (table: TableBlock) => TableBlock, keep?: string | (() => string | undefined)): void {
     const editing = this.overlay.blockId
     const caret = editing ? this.overlay.caret : 0
     this.commitForChange()
     this.pushHistory(this.report)
     this.report = ops.updateTable(this.report, tableId, fn)
-    const cellId = keep ?? editing
+    // keep：変えたあとに書くマス（関数なら、表を変えてから決める：足した列のマス）
+    const cellId = (typeof keep === 'function' ? keep() : keep) ?? editing
     if (cellId && ops.findEditable(this.report, cellId)) {
       this.reopenAfterRender(cellId, cellId === editing ? caret : (ops.findEditable(this.report, cellId)?.text.length ?? 0))
     } else {

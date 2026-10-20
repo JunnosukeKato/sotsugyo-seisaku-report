@@ -156,11 +156,22 @@ export function refitLineFontPt(pt: number, ratio: number, box: LineBox, tooBig 
 /**
  * 抄録を書き始める前の案内の言葉（紙面の抄録の欄に出す。スマホは、同じ言葉を紙面の下の帯に出す。app/PageBand.tsx）
  */
+/**
+ * 案内の言葉を、折り返してよい所で分けたもの。紙面の欄では、この切れ目でだけ折り返す（前は「…PDF には入りませ／ん）。」のように
+ * 言葉の途中で折れ、最後の行に字が少しだけ残っていた：はじめて使う学生の試し 2026-10-21）
+ */
+const LOCK_PHRASES = {
+  title: ['抄録は、', '本文を書き終えて、', '先生のチェックで', '許可が出てから', '書きます。'],
+  note: ['許可が出たら、', '下のボタンを', '押してください', '（それまで、', 'このページは', 'PDF には', '入りません）。'],
+}
 export const ABSTRACT_LOCK_TEXT = {
-  title: '抄録は、本文を書き終えて、先生のチェックで許可が出てから書きます。',
-  note: '許可が出たら、下のボタンを押してください（それまで、このページは PDF には入りません）。',
+  title: LOCK_PHRASES.title.join(''),
+  note: LOCK_PHRASES.note.join(''),
   button: '先生の許可が出た（抄録を書き始める）',
 } as const
+
+/** 言葉の切れ目のまとまり（まとまりの中では折り返さない。documentCss.ts の .abstract-lock .ph） */
+const phrased = (parts: string[]) => parts.map((part) => `<i class="ph">${part}</i>`).join('')
 
 export function abstractHtml(report: Report, config: YearConfig): string {
   const course = findCourse(config, report.basicInfo.courseId)
@@ -176,7 +187,7 @@ export function abstractHtml(report: Report, config: YearConfig): string {
   // 書き始めるまでは、抄録の欄に案内と「先生の許可が出た」ボタンを出す（画面だけ。PDF では空欄）
   const locked = report.abstract.started === false
   const paragraphs = locked
-    ? `<div class="abstract-lock"><b>${ABSTRACT_LOCK_TEXT.title}</b><span>${ABSTRACT_LOCK_TEXT.note}</span><span class="abstract-start" data-abstract-start>${ABSTRACT_LOCK_TEXT.button}</span></div>`
+    ? `<div class="abstract-lock"><b>${phrased(LOCK_PHRASES.title)}</b><span>${phrased(LOCK_PHRASES.note)}</span><span class="abstract-start" data-abstract-start>${ABSTRACT_LOCK_TEXT.button}</span></div>`
     : report.abstract.paragraphs
     .map((p) => {
       const text = p.content.map((n) => (n.type === 'text' ? n.text : '')).join('')

@@ -110,6 +110,32 @@ describe('split / mergeBackward / replaceWithParagraphs', () => {
     expect(text(r, 'p4')).toBe('袖を大きくした（図1）。')
   })
 
+  it('空の段落・小見出し・大見出しで Backspace（前とつなげられない）：消して、前の欄の終わりへ移る。字がある・抄録・中身のある章は消さない', () => {
+    const blocks = report.body.flatMap((c) => c.blocks)
+    // 見出し・図などのすぐ後ろ（前とつなげられない）の段落を空にする
+    const after = report.body.flatMap((c) => c.blocks.filter((x, i) => x.type === 'paragraph' && i > 0 && c.blocks[i - 1].type !== 'paragraph'))[0]
+    const withEmpty = ops.setText(report, after.id, '')
+    const r1 = ops.removeEmptyBackward(withEmpty, after.id, '')!
+    expect(r1.what).toBe('段落')
+    expect(r1.report.body.flatMap((c) => c.blocks).some((b) => b.id === after.id)).toBe(false)
+    expect(r1.targetId).toBe(ops.neighbor(withEmpty, after.id, 'prev')!.id)
+    expect(r1.caret).toBe(ops.neighbor(withEmpty, after.id, 'prev')!.text.length)
+    expect(ops.removeEmptyBackward(withEmpty, after.id, 'x')).toBeNull()
+    // 空の小見出し
+    const sub = blocks.find((b) => b.type === 'subheading')!
+    const r2 = ops.removeEmptyBackward(ops.setText(report, sub.id, ''), sub.id, '')!
+    expect(r2.what).toBe('小見出し')
+    // 大見出し：中身のある章は消さない。空の段落だけの章は消す
+    const c2 = report.body[1]
+    expect(ops.removeEmptyBackward(ops.setText(report, c2.id, ''), c2.id, '')).toBeNull()
+    const emptyChapter = { ...report, body: [...report.body, { id: 'cx', title: '', blocks: [{ type: 'paragraph' as const, id: 'px', content: [] }] }] }
+    const r3 = ops.removeEmptyBackward(emptyChapter, 'cx', '')!
+    expect(r3.what).toBe('大見出し（章）')
+    expect(r3.report.body.some((c) => c.id === 'cx')).toBe(false)
+    // 抄録の段落は消さない
+    expect(ops.removeEmptyBackward(ops.setText(report, 'a2', ''), 'a2', '')).toBeNull()
+  })
+
   it('抄録の最初の段落ではつなげない', () => {
     expect(ops.mergeBackward(report, 'a1', 'x')).toBeNull()
   })
