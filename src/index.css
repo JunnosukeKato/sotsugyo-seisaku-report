@@ -263,6 +263,8 @@ body.resizing .page-viewport { pointer-events: none; }
 .thumb-list .t { position: relative; border: 0; background: none; padding: 0; display: flex; flex-direction: column; align-items: center; gap: 5px; font-size: 12px; white-space: nowrap; color: var(--muted); }
 .mini { position: relative; width: 36px; height: 51px; background: #fff; border-radius: 2px; overflow: hidden; box-shadow: 0 0 0 1px var(--line); transition: box-shadow 0.15s; pointer-events: none; }
 .mini .mini-page { display: block !important; position: absolute !important; left: 0; top: 0; margin: 0 !important; transform: scale(0.04536); transform-origin: 0 0; }
+/* 縮小コピーの中身は元のページと同じ測り方に戻す（.sheet * / .side * の border-box が効くと本文の幅が狭まる） */
+.mini .mini-page, .mini .mini-page * { box-sizing: content-box; }
 .thumb-list .t:hover .mini { box-shadow: 0 0 0 1px var(--accent); }
 .thumb-list .t.on { color: var(--accent); font-weight: 700; }
 .thumb-list .t.on .mini { box-shadow: 0 0 0 2px var(--accent); }
