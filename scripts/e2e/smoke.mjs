@@ -17,7 +17,8 @@ import { tocLinksPc } from './tocLinks.mjs'
 import { autoHeadingPc } from './autoHeading.mjs'
 import { captionGapPc } from './captionGap.mjs'
 import { tableShapePc } from './tableShape.mjs'
-import { tableCustomPc } from './tableCustom.mjs'
+import { paletteFitPc, tableCustomPc } from './tableCustom.mjs'
+import { cellBorderPc } from './cellBorder.mjs'
 import { waitingPc } from './waiting.mjs'
 import { templateStudentPc } from './templateStudent.mjs'
 import { setupWriting } from './sampleReport.mjs'
@@ -2385,6 +2386,12 @@ await withEdge(async (browser) => {
 
   // ---- 表の列の幅を「自分で決める」（mockups/v42：縦の線をドラッグ・5% ずつ・10% 以上・そろえ直す・元に戻す・PDF。scripts/e2e/tableCustom.mjs） ----
   await tableCustomPc(browser, check)
+
+  // ---- 左の道具の中を上下に動かすときも、中身が狭まらない（1280×720・1366×768。1字だけの行ができない。scripts/e2e/tableCustom.mjs） ----
+  await paletteFitPc(browser, check)
+
+  // ---- 表のセルを書いている間も、そのセルの罫線（上下左右）が見える（細い列・見出しの行・最後の行。scripts/e2e/cellBorder.mjs） ----
+  await cellBorderPc(browser, check)
 
   // ---- 待つ間の表示（押したボタンに回る印と言葉・2秒を過ぎたら「数秒かかることがあります」・終わったら知らせ。依頼者の要望 2026-10-20。scripts/e2e/waiting.mjs） ----
   await waitingPc(browser, check)

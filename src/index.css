@@ -1617,7 +1617,7 @@ button.row { cursor: pointer; }
 .col-drag i { font-style: normal; font-weight: 400; color: rgba(255, 255, 255, 0.55); }
 .col-tip { position: absolute; z-index: 9; padding: 4px 9px; border-radius: 7px; background: #23262b; color: #fff; font-size: 12px; line-height: 1.4; white-space: nowrap; pointer-events: none; transform: translateY(-50%); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); }
 /* スマホ：書いているマスの列をうすく色付けし（紙面の字の上に重ねて、掛け合わせる）、その列の両側の内側の線に、丸いつまみ（30px。指で押せる所は 44px 四方） */
-.col-tint { position: absolute; background: #e3e7f4; mix-blend-mode: multiply; box-shadow: inset 0 0 0 2px var(--accent); }
+.col-tint { position: absolute; background: rgba(47, 62, 117, 0.08); box-shadow: inset 0 0 0 2px var(--accent); }
 .col-line { position: absolute; width: 0; margin-left: -1px; border-left: 2px solid var(--accent); }
 .col-pknob { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; display: grid; place-items: center; pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
 .col-pknob span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; box-shadow: 0 0 0 2px #fff, 0 2px 6px rgba(0, 0, 0, 0.3); }
@@ -1814,3 +1814,18 @@ p.busy-line { display: flex; }
   word-break: auto-phrase;
   text-wrap: pretty;
 }
+
+/* ---- 左の道具の中を上下に動かすとき（画面の低いパソコン。表のセルを書いているときなど） ---- */
+/* 道具が画面に入らないときは、道具の中を上下に動かす。そのときに出る棒（細い棒）は、中身を狭めずに、道具の幅を棒の分だけ広げて置く
+   （道具の幅は中身に合わせて決まる。中身の幅は今までどおり 72px）。前は棒の分だけ中身が狭くなり、
+   「クリックし／て」「画像を入れ／る」のように1字だけの行ができ、列の幅などのボタンも大きく切れていた。動かさないときの形は今までどおり */
+.palette { width: auto; min-width: 86px; scrollbar-width: thin; }
+.palette > * { flex: none; width: 72px; }
+.palette > .group.undo-redo { width: 80px; }
+
+/* ---- 表のセルを書いている間も、セルの罫線を見せる（依頼者の指摘 2026-10-20「細い欄に文字入力する際、罫線が消えて見える」） ---- */
+/* 紙面に重ねる書く欄は白い地で、細い欄では右どなりのセルまで広がり（120px より狭くしなかった）、見出しの行などでは下の線にもかかって、罫線を白く隠していた。
+   セルの書く欄は、セルの枠線の内側に置き（editor/reportEditor.ts の overlayPlacement）、地を透かす（紙面のセルの字は、書いている間は隠してある）。
+   書いているセルは、セルの中だけうすく色付けして示す（reportEditor.ts の editingStyle）。書き終えた直後の写し（組み直した紙面が出るまで）も同じ。
+   予備の下の書く欄（in-sheet）は今までどおり */
+.overlay-editor[data-kind='cell']:not(.in-sheet), .overlay-frozen > div[data-kind='cell'] { background: transparent !important; }

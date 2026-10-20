@@ -1982,7 +1982,7 @@ export class ReportEditor {
     }
     // 見出し・図のタイトル・表紙の項目・表のセル：入力部分の左端から、行（セル）の右端まで
     const kind = this.overlayKind(editable.kind)
-    const box = (fragment.closest('td, h1, h2, figcaption, p, .el') as HTMLElement | null) ?? fragment
+    const box = (fragment.closest('td, th, h1, h2, figcaption, p, .el') as HTMLElement | null) ?? fragment
     const own = fragment.getBoundingClientRect()
     const boxRect = box.getBoundingClientRect()
     // 図表のタイトル：番号（「図4.」）も書く欄の前に出し（OverlayPlacement の label）、紙面と同じ幅の中で、番号とタイトルを一緒に真ん中にそろえる。
@@ -1997,8 +1997,9 @@ export class ReportEditor {
       const a = area.getBoundingClientRect()
       return { rect: { left: a.left, top: boxRect.top, right: a.right }, clip, scale, alignOffset: 0, label }
     }
+    // 表のセル：書く欄は、セルの枠線の内側だけ（細い欄でも広げない。前は 120px より狭くならず、右どなりのセルまで重なって、セルの罫線を隠していた）
     const left = kind === 'cell' ? boxRect.left + 2 * scale : own.left
-    const right = Math.max(boxRect.right - (kind === 'cell' ? 2 * scale : 0), own.left + 120 * scale)
+    const right = kind === 'cell' ? boxRect.right - 2 * scale : Math.max(boxRect.right, own.left + 120 * scale)
     return { rect: { left, top: kind === 'cell' ? own.top : boxRect.top, right }, clip, scale, alignOffset: 0 }
   }
 
@@ -2107,9 +2108,11 @@ export class ReportEditor {
   /** 書いているブロックの紙面での見せ方。PC は入力欄を重ねるので隠し、スマホは下の欄で書くので枠で示す */
   private editingStyle(id: string): string {
     const selector = `.page-viewport [data-block-id="${CSS.escape(id)}"]`
+    // 表のセルを紙面に重ねて書くとき：書く欄は地が透けている（罫線を隠さない。index.css）ので、書いているセルを、セルの中だけうすく色付けして示す
+    const cell = `.page-viewport :is(td, th):has(${selector.slice('.page-viewport '.length)}) { background-color: rgba(47, 62, 117, 0.07); }`
     return this.overlay.inSheet
       ? `${selector} { outline: 2px solid #2f3e75; outline-offset: 2px; background: rgba(47, 62, 117, 0.08); }`
-      : `${selector} { visibility: hidden !important; }`
+      : [`${selector} { visibility: hidden !important; }`, cell].join(' ')
   }
 
   /**

@@ -2,6 +2,7 @@ import { findCourse, subtitleInputOnly, type YearConfig } from '../config'
 import { contentToText, editables, numbering, parenthetical, type EditableKind } from '../editor/reportOps'
 import { COVER_SUBTITLE, OVERFLOW_RATIO, yearDigits } from '../layout/document'
 import type { LayoutInfo } from '../layout/measure'
+import { typedHeading } from '../model/headingText'
 import type { Report } from '../model/types'
 import { pagePhotoCount } from '../model/photos'
 import { swatchColumn } from '../model/table'
@@ -177,6 +178,24 @@ export function toolFindings(report: Report, config: YearConfig): ReportFinding[
   return findings
 }
 
+/** 行の頭のローマ数字（見出しの番号の形） */
+const LEADING_ROMAN = /^[\s　]*([ⅠⅡⅢⅣⅤⅥⅦⅧⅨⅩⅪⅫⅰⅱⅲⅳⅴⅵⅶⅷⅸⅹⅺⅻ]{1,3})/
+
+/**
+ * 本文の段落に、見出しの形（「Ⅲ．まとめ」）で打っている途中：行の頭のローマ数字の位置（なければ null）。
+ * この段落は Enter・書き終えたときに見出しになり、番号は組版で付くものに替わる（editor/reportEditor.ts。決まりは model/headingText.ts の typedHeading）。
+ * そのため、この番号には「機種依存文字を使わない」を出さない（前は、打っている間だけ右の欄にエラーが出て、見出しになると消えていた）。
+ * 名前を打ち始める前（「Ⅲ」「Ⅲ．」だけ）も、打っている途中なので出さない
+ */
+function typedHeadingNumeral(kind: EditableKind, text: string): { start: number; end: number } | null {
+  if (kind !== 'paragraph') return null
+  const m = LEADING_ROMAN.exec(text)
+  if (!m) return null
+  const rest = text.slice(m[0].length)
+  if (!typedHeading(text) && !/^[\s　]*[．.、，,:：)）]?[\s　]*$/.test(rest)) return null
+  return { start: m[0].length - m[1].length, end: m[0].length }
+}
+
 /** セルフチェック。includeAcknowledged を付けないと、学生が「確認済み」にした指摘は除く */
 export function checkReport(report: Report, config: YearConfig, layout?: LayoutInfo | null, includeAcknowledged = false): ReportFinding[] {
   const findings: ReportFinding[] = []
@@ -188,8 +207,11 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   // ---- 文章のルール ----
   for (const e of list) {
     const area = AREA_OF_KIND[e.kind]
+    const numeral = typedHeadingNumeral(e.kind, e.text)
     for (const { locked, ...f } of checkText(e.text, words) as TextFinding[]) {
       if (SENTENCE_RULES.includes(f.ruleId) && !SENTENCE_KINDS.includes(e.kind)) continue
+      // 見出しになる番号（「Ⅲ．まとめ」の Ⅲ）は、機種依存文字として指摘しない（番号だけ。名前の中の ① などは今までどおり）
+      if (numeral && f.ruleId === 'machine-dependent' && f.start >= numeral.start && f.end <= numeral.end) continue
       // 書き間違えやすい語のエラー（locked）は「このままにする」にできない（提出の前に直す）
       const key = f.source === 'supplementary' && !locked ? `${f.ruleId}|${e.id}|${e.text.slice(f.start, f.end)}` : undefined
       findings.push({ ...f, area, blockId: e.id, ...(key ? { key } : {}) })

@@ -574,10 +574,96 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     console.log(`${ok ? '✓' : '✗'} ${name}${detail ? `  (${detail})` : ''}`)
   }
   await withEdge(async (browser) => {
+    if (only === 'fit') return paletteFitPc(browser, check)
     if (only !== 'phone') await tableCustomPc(browser, check)
     if (only !== 'pc') await tableCustomPhone(browser, check)
+    if (only !== 'phone') await paletteFitPc(browser, check)
   })
   const failed = results.filter((ok) => !ok).length
   console.log(`\n${results.length - failed}/${results.length} 件 合格`)
   process.exitCode = failed ? 1 : 0
+}
+
+/**
+ * 画面の低いノートパソコン（1280×720・1366×768）で、表のセル・タイトルを書いている・表を選んでいるとき（列の幅の3つの形のどれでも）、
+ * 左の道具の中を上下に動かすことになっても、棒で中身が狭まらない（中身の幅は 72px のまま）。1字だけの行ができない。
+ * 前は、上下に動かす棒で中身が狭まって「クリックし／て」「画像を入れ／る」のように1字だけの行ができていた。
+ * （道具が画面に入りきらないこと自体は、表の道具の作り直し（mockups/v45）で直す）
+ */
+export async function paletteFitPc(browser, check) {
+  const { context, page, ready } = await openSample(browser, false)
+  const OUT_FIT = 'poc-output/palette-fit'
+  mkdirSync(OUT_FIT, { recursive: true })
+  for (const [w, h] of [
+    [1280, 720],
+    [1366, 768],
+  ]) {
+    await page.setViewport({ width: w, height: h })
+    await wait(600)
+    await ready()
+    const bad = []
+    const seen = []
+    let scrolled = 0
+    for (const mode of ['equal', 'auto', 'custom']) {
+      await page.evaluate((mode) => window.__editor.update((r) => ({ ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 't1' ? { ...b, widths: mode, colWidths: mode === 'custom' ? [40, 30, 30] : b.colWidths } : b)) })) })), mode)
+      await ready()
+      await showTable(page, ready, ID)
+      for (const state of ['cell', 'title', 'selected']) {
+        await page.evaluate(() => window.__editor.finishEditing())
+        await ready()
+        if (state === 'selected') await page.evaluate((id) => window.__editor.select({ kind: 'table', id }), ID)
+        else {
+          const id = state === 'cell' ? 'm1:name' : ID
+          await page.evaluate((id) => window.__editor.openWhenReady(id, 0), id)
+          await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 10000 }, id).catch(() => {})
+        }
+        await wait(400)
+        const m = await page.evaluate(() => {
+          const p = document.querySelector('.palette')
+          const linesOf = (el) => {
+            const out = []
+            let last = null
+            const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+            while (walker.nextNode()) {
+              const n = walker.currentNode
+              for (let i = 0; i < n.length; i++) {
+                if (/\s/.test(n.data[i])) continue
+                const r = document.createRange()
+                r.setStart(n, i)
+                r.setEnd(n, i + 1)
+                const q = [...r.getClientRects()].find((x) => x.height > 0)
+                if (!q) continue
+                if (last === null || q.top > last + q.height * 0.5) {
+                  out.push('')
+                  last = q.top
+                }
+                out[out.length - 1] += n.data[i]
+              }
+            }
+            return out
+          }
+          const labels = [...p.querySelectorAll('.p-head b, .p-head span, .tb span, .seg button, .ctx-label, .custom-hint span')]
+          return {
+            tools: !!p.querySelector('.group.ctx .ctx-label'),
+            scrolls: p.scrollHeight > p.clientHeight,
+            sizes: `${p.scrollHeight}/${p.clientHeight} w${p.offsetWidth}`,
+            lone: labels.map(linesOf).filter((l) => l.some((x) => x.length === 1) && l.join('').length > 1).map((l) => l.join('／')),
+            inner: Math.round(p.querySelector('.group.ctx')?.getBoundingClientRect().width ?? 0),
+            head: Math.round(p.querySelector('.p-head')?.getBoundingClientRect().width ?? 0),
+          }
+        })
+        seen.push(`${mode}/${state}:${m.sizes}${m.scrolls ? ' scroll' : ''}`)
+        if (m.scrolls) scrolled += 1
+        if (!m.tools || m.lone.length || m.inner !== 72 || m.head !== 72) bad.push({ mode, state, ...m })
+        if (state === 'cell') await page.screenshot({ path: `${OUT_FIT}/e2e-${w}x${h}-${mode}.png` })
+      }
+    }
+    await page.evaluate(() => window.__editor.finishEditing())
+    check(
+      `パソコン（${w}×${h}）：表のセル・タイトルを書いている・表を選んでいるとき、列の幅のどの形でも（左端の列も出して）、左の道具の中を上下に動かす棒が出ても、中身は狭まらない（72px のまま）。1字だけの行はない（このうち ${scrolled} 回は、道具の中を動かす）`,
+      bad.length === 0,
+      JSON.stringify(bad.length ? bad : seen),
+    )
+  }
+  await context.close()
 }

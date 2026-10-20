@@ -1317,6 +1317,8 @@ export class OverlayEditor {
       Object.assign(el.style, GHOST_STYLE)
       // 図表のタイトル：番号も一緒に写す（組み直した紙面が出るまで、番号が消えて見えないように）
       if (from.dataset.label) el.dataset.label = from.dataset.label
+      // 表のセル：地を透かすため（罫線を隠さない。index.css）、どの欄の写しかを付けておく
+      if (from.dataset.kind) el.dataset.kind = from.dataset.kind
       if (typeset) {
         el.dataset.typeset = ''
         el.append(...[...from.childNodes].map((n) => n.cloneNode(true)))

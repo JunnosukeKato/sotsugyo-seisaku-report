@@ -17,6 +17,7 @@ import { phoneLivePhone } from './phoneLive.mjs'
 import { phoneDirectPhone } from './phoneDirect.mjs'
 import { tableShapePhone } from './tableShape.mjs'
 import { tableCustomPhone } from './tableCustom.mjs'
+import { cellBorderPhone } from './cellBorder.mjs'
 import { waitingPhone } from './waiting.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
@@ -701,6 +702,9 @@ await withEdge(async (browser) => {
 
   // 表の列の幅を「自分で決める」（mockups/v42 案B の窓・案D の丸いつまみ。scripts/e2e/tableCustom.mjs）
   await tableCustomPhone(browser, check)
+
+  // 表のセルを紙面の上で書いている間も、そのセルの罫線（上下左右）が見える（細い列・見出しの行・最後の行。scripts/e2e/cellBorder.mjs）
+  await cellBorderPhone(browser, check)
 
   // 待つ間の表示（押したボタンに回る印と言葉・2秒を過ぎたら「数秒かかることがあります」・終わったら知らせ。ボタンは 44px 以上。依頼者の要望 2026-10-20。scripts/e2e/waiting.mjs）
   await waitingPhone(browser, check)
