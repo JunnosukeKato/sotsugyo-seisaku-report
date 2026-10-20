@@ -1,0 +1,256 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v42 表の列の幅を自分で決める（必要なときだけ）</title>
+<!-- 画面の絵は node scripts/mockup-shots-v42.mjs で作る（本物の学生用ツールを開き、案の部分だけ書き足して写したもの）。このページの写し（shots/review-table-widths.png）は同じスクリプトの review で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; --ng: #b5443b; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 40px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); word-break: auto-phrase; text-wrap: pretty; }
+  main { max-width: 1136px; }
+  .top { margin: 0 0 18px; font-size: 13.5px; color: var(--muted); line-height: 1.8; }
+  .top b { color: var(--ink); font-size: 13.5px; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  h2 { font-size: 17px; margin: 28px 0 10px; letter-spacing: 0.04em; }
+  h2 small { font-size: 13px; font-weight: 400; color: var(--muted); margin-left: 8px; letter-spacing: 0; }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 3px; }
+  figcaption span { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff !important; font-size: 11.5px !important; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .why { display: block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #e8ebf5; color: var(--accent) !important; font-size: 13px !important; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > div { background: #fff; align-self: stretch; }
+  .row > .lbl { grid-column: 1 / -1; padding: 7px 16px 5px !important; background: #f4f2ee !important; font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 8px; border: 1px solid #ddd; }
+  .ph a { display: block; }
+  .ph a + a, .ph small + a { margin-top: 10px; }
+  .ph small { display: block; padding: 6px 4px 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .ph small b { color: var(--ink); }
+  .ph .step { display: block; padding: 4px 0 6px; text-align: center; font-size: 12.5px; font-weight: 700; color: var(--accent); }
+  .note { display: flex; flex-direction: column; justify-content: center; padding: 14px 18px !important; font-size: 13.5px; color: var(--muted); line-height: 1.8; background: #faf9f7 !important; }
+  .note b { color: var(--ink); }
+  .note p { margin: 0 0 8px; }
+  .note p:last-child { margin-bottom: 0; }
+  .say { color: var(--accent); font-weight: 700; }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 9px 16px 11px; font-size: 13.5px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: var(--ok); }
+  .pw .weak b { color: var(--ng); }
+  .common { margin: 0 0 18px; padding: 12px 18px 14px; border-radius: 14px; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.05); font-size: 13.5px; line-height: 1.8; }
+  .common > b { font-size: 13px; letter-spacing: 0.06em; color: var(--accent); }
+  .common ul { margin: 2px 0 0; padding-left: 20px; }
+  .ask { margin: 0 0 18px; padding: 12px 18px; border-radius: 12px; background: #fff8e6; border: 1.5px solid #e6c46a; font-size: 13.5px; line-height: 1.8; }
+  .ask > b { font-size: 14px; color: #7a5a00; letter-spacing: 0.04em; }
+  .ask ol { margin: 4px 0 0; padding-left: 22px; }
+  .ask li b { color: var(--ink); }
+  .ask small { color: var(--muted); font-size: 12.5px; }
+  /* 言葉の表 */
+  table.words { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 13px; line-height: 1.6; background: #fff; }
+  table.words th, table.words td { padding: 7px 12px; border-top: 1px solid var(--line); text-align: left; vertical-align: top; }
+  table.words thead th { background: #f4f2ee; color: var(--muted); font-size: 12.5px; letter-spacing: 0.06em; border-top: 0; }
+  table.words tbody th { font-weight: 700; color: var(--muted); background: #faf9f7; }
+  table.words td.old { color: var(--muted); }
+  table.words td.new { color: var(--accent); font-weight: 700; }
+  table.words td.new span { font-weight: 400; }
+
+  /* 行の形 */
+  .r-now { grid-template-columns: 380px 190px 1fr; }
+  .r-1 { grid-template-columns: 1fr; }
+  .r-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .r-ph-a { grid-template-columns: 190px 410px 1fr; }
+  .r-ph-b { grid-template-columns: 190px 410px 1fr; }
+  .r-ph-c { grid-template-columns: 190px 410px 1fr; }
+  .r-paper { grid-template-columns: 340px 1fr; }
+  .ph a.nat { max-width: 390px; }
+  .stack > * + * { margin-top: 10px; }
+  /* パソコンの切り替え：左の道具の所と、表 */
+  .swc { display: grid; grid-template-columns: 104px 1fr; gap: 8px; align-items: start; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>v42　表の列の幅を自分で決める（必要なときだけ）</h1>
+<p class="top">希望：列の幅は、いま「そろえる」「中身に合わせる」の2つ。どちらでも合わないときだけ、学生が列の幅を自分で変えられるように。<br>
+そこで、3つ目の<b>「自分で決める」</b>を足します。そろえる・中身に合わせるの表は、いまのまま（つまみもボタンも出ません）。<br>
+画面は本物のツールに、案の部分だけ書き足して写したものです（絵を押すと大きく見られます）。見本の素材表に、説明の列「特徴」を足しています。「左端の列」「行の高さ」は、別に作っている途中のものです。</p>
+
+<!-- ===================================================================== -->
+<figure>
+  <figcaption><b>いま</b><span>列の幅は「そろえる」「中身に合わせる」の2つだけ。列ごとの幅は決められません。</span></figcaption>
+  <div class="row r-now">
+    <div class="ph"><a href="shots/now-pc.png"><img src="shots/now-pc.png" alt=""></a><small><b>パソコン</b>：左の道具で2つから選ぶ</small></div>
+    <div class="ph"><a href="shots/now-ph.png"><img src="shots/now-ph.png" alt=""></a><small><b>スマホ</b>：押すたびに切り替え</small></div>
+    <div class="note">
+      <p>「そろえる」は、どの列も同じ幅。説明の長い列は、行が増えて表が縦に長くなります。</p>
+      <p>「中身に合わせる」は、字の多い列が広くなりますが、短い列が狭くなりすぎることがあります（④の真ん中の絵）。</p>
+    </div>
+  </div>
+</figure>
+
+<div class="common"><b>どの案でも同じ（決まり）</b>
+  <ul>
+    <li>列の幅に <span class="say">自分で決める</span> を足します。つまみやボタンが出るのは、自分で決めるの表を書いている間だけ。</li>
+    <li>幅は <b>5% ずつ</b>変わります。どの列も <b>10%（3字ほど）</b>より狭くなりません。合計は、いつも本文の幅いっぱい。</li>
+    <li>自分で決めるにすると、<b>いま見えている幅</b>から始まります。ほかに切り替えても、決めた幅は覚えておき、戻すと元の幅です。</li>
+    <li>列を足したときは、となりの列と幅を半分ずつ。列を消したときは、その幅を左どなりの列へ。</li>
+    <li>紙面（PDF・印刷）には、線の印もつまみも出ません。</li>
+  </ul>
+</div>
+
+<!-- ===================================================================== -->
+<h2>① 列の幅の切り替え</h2>
+<figure>
+  <figcaption><b>パソコン：3つを縦に並べる（案A・案B どちらでも同じ）</b><span>いまの2つの下に「自分で決める」を足すだけ。押したものに、すぐ変わります。「左端の列」は、そろえるのときだけ出ます。</span></figcaption>
+  <div class="row r-3">
+    <div class="ph"><div class="swc"><a href="shots/sw-pc-equal.png"><img src="shots/sw-pc-equal.png" alt=""></a><a href="shots/sw-pc-equal-table.png"><img src="shots/sw-pc-equal-table.png" alt=""></a></div><small><b>そろえる</b>：どの列も同じ幅。「左端の列」も出る</small></div>
+    <div class="ph"><div class="swc"><a href="shots/sw-pc-auto.png"><img src="shots/sw-pc-auto.png" alt=""></a><a href="shots/sw-pc-auto-table.png"><img src="shots/sw-pc-auto-table.png" alt=""></a></div><small><b>中身に合わせる</b>：字の多い列が広い</small></div>
+    <div class="ph"><div class="swc"><a href="shots/sw-pc-custom.png"><img src="shots/sw-pc-custom.png" alt=""></a><a href="shots/sw-pc-custom-table.png"><img src="shots/sw-pc-custom-table.png" alt=""></a></div><small><b>自分で決める</b>：いまの幅から始まり、縦の線に細いつまみ。左の道具に一言と「幅をそろえ直す」</small></div>
+  </div>
+  <div class="pw"><div class="good"><b>よいところ</b><br>3つが全部見えていて、1回で選べる。いまの形と同じ並べ方。</div><div class="weak"><b>弱いところ</b><br>左の道具が少し長くなる。画面の低いパソコンでは、左の道具の中を動かして見ることがある。</div></div>
+</figure>
+
+<figure>
+  <figcaption><b>案A　スマホ：押すたびに切り替え</b><span>いまと同じボタン1つ。押すたびに「そろえる → 中身に合わせる → 自分で決める → そろえる」と変わります。</span></figcaption>
+  <div class="row r-ph-a">
+    <div class="ph"><a href="shots/a-ph.png"><img src="shots/a-ph.png" alt=""></a><small>表のセルを書いているとき（仮のキーボード）</small></div>
+    <div class="ph">
+      <a class="nat" href="shots/a-ph-1.png"><img src="shots/a-ph-1.png" alt=""></a><span class="step">押す ↓</span>
+      <a class="nat" href="shots/a-ph-2.png"><img src="shots/a-ph-2.png" alt=""></a><span class="step">押す ↓</span>
+      <a class="nat" href="shots/a-ph-3.png"><img src="shots/a-ph-3.png" alt=""></a><span class="step">押す ↓（そろえるに戻る）</span>
+    </div>
+    <div class="note">
+      <p>自分で決めるになると、道具の下に1段増えます（③の案C）。</p>
+    </div>
+  </div>
+  <div class="pw"><div class="good"><b>よいところ</b><br>いまと同じ押し方。ボタンは1つのまま。</div><div class="weak"><b>弱いところ</b><br>3つになると、次に何になるか分かりにくい。中身に合わせるへ戻すには2回押す。途中の形でも、表が組み直される。</div></div>
+</figure>
+
+<figure class="is-rec">
+  <figcaption><b>案B　スマホ：押すと3つから選ぶ<span class="rec">おすすめ</span></b><span>ボタンに小さな下向きの印。押すと、すぐ上に小さな窓が開き、3つから選びます（いまの形に印）。選ぶと窓は閉じます。</span><span class="why">おすすめの理由：3つを見比べて1回で選べるので、押すたびに何になるか迷わない。</span></figcaption>
+  <div class="row r-ph-b">
+    <div class="ph"><a href="shots/b-ph.png"><img src="shots/b-ph.png" alt=""></a><small>押したあと</small></div>
+    <div class="ph stack">
+      <a class="nat" href="shots/b-ph-closed.png"><img src="shots/b-ph-closed.png" alt=""></a><small><b>押す前</b>：「列の幅　そろえる」に下向きの印</small>
+      <a class="nat" href="shots/b-ph-zoom.png"><img src="shots/b-ph-zoom.png" alt=""></a><small><b>押したあと</b>：選ぶ所は、どれも指で押しやすい高さ</small>
+    </div>
+    <div class="note">
+      <p><span class="say">そろえる</span><br>どの列も同じ幅</p>
+      <p><span class="say">中身に合わせる</span><br>字の多い列を広く</p>
+      <p><span class="say">自分で決める</span><br>列ごとに広く・狭く</p>
+      <p>「左端の列」「行の高さ」は2つだけなので、いまのまま押すたびに切り替えます。</p>
+    </div>
+  </div>
+  <div class="pw"><div class="good"><b>よいところ</b><br>3つを見比べて、1回で選べる。それぞれの意味も一言で分かる。</div><div class="weak"><b>弱いところ</b><br>押す回数が1回増える（開く・選ぶ）。開いている間は、紙面の一部が隠れる。</div></div>
+</figure>
+
+<!-- ===================================================================== -->
+<h2>② パソコン：自分で決める<small>表の縦の線をドラッグ</small></h2>
+<figure>
+  <figcaption><b>セル・タイトルを書いている間（表を選んでいる間）だけ、内側の縦の線に細いつまみ</b><span>線にマウスを乗せると、左右の矢印のカーソル。ドラッグすると線が 5% ずつ止まり、となりの2列の幅を小さな札で見せます。離すと、表が組み直されます。</span></figcaption>
+  <div class="row r-1">
+    <div class="ph"><a href="shots/c-pc-edit.png"><img src="shots/c-pc-edit.png" alt=""></a><small><b>書いているとき</b>：自分で決めるにした直後（そろえるの幅から始まる）。左の道具に <span class="say">縦の線を／ドラッグして／幅を変える</span> と <span class="say">幅をそろえ直す</span></small></div>
+  </div>
+  <div class="row r-3">
+    <div class="lbl">近くで</div>
+    <div class="ph"><a href="shots/c-pc-edit-zoom.png"><img src="shots/c-pc-edit-zoom.png" alt=""></a><small><b>ふだん</b>：うすい線と、細いつまみ</small></div>
+    <div class="ph"><a href="shots/c-pc-hover-zoom.png"><img src="shots/c-pc-hover-zoom.png" alt=""></a><small><b>線にマウス</b>：線が濃くなり、<span class="say">左右にドラッグ</span></small></div>
+    <div class="ph"><a href="shots/c-pc-drag-zoom.png"><img src="shots/c-pc-drag-zoom.png" alt=""></a><small><b>ドラッグ中</b>：<span class="say">20%｜30%</span>（線の左の列｜右の列）。点線は元の位置</small></div>
+  </div>
+  <div class="row r-3">
+    <div class="lbl">決めたあと</div>
+    <div class="ph"><a href="shots/c-pc-idle-zoom.png"><img src="shots/c-pc-idle-zoom.png" alt=""></a><small><b>書いていないとき</b>：ふつうの表。つまみは出ない</small></div>
+    <div class="ph"><a href="shots/c-pc-done-zoom.png"><img src="shots/c-pc-done-zoom.png" alt=""></a><small><b>また書き始めると</b>：つまみが出て、続けて直せる</small></div>
+    <div class="note">
+      <p>動かせるのは、となりの2列の間だけ。ほかの列の幅は変わりません。</p>
+      <p>となりの列が 10% になると、それ以上は動きません。</p>
+    </div>
+  </div>
+  <div class="pw"><div class="good"><b>よいところ</b><br>表を見ながら、思った所へ動かせる。書いていないときは、ふつうの表のまま。</div><div class="weak"><b>弱いところ</b><br>細い線をつかむのに、少し慣れがいる。動かせるのは、表を書いている間だけ。</div></div>
+</figure>
+
+<!-- ===================================================================== -->
+<h2>③ スマホ：自分で決める<small>390×844・仮のキーボード</small></h2>
+<figure class="is-rec">
+  <figcaption><b>案C　ボタンで広く・狭く<span class="rec">おすすめ</span></b><span>セルを押すと、その列がうすく色付きます。道具の下の段の「この列を狭く」「この列を広く」で、5% ずつ変わります。</span><span class="why">おすすめの理由：指で細い線をつかまなくてよく、押すたびに 5% ずつ確実に変わる。</span></figcaption>
+  <div class="row r-ph-c">
+    <div class="ph"><a href="shots/c-ph.png"><img src="shots/c-ph.png" alt=""></a><small>「特徴」の列のセルを書いているとき</small></div>
+    <div class="ph"><a class="nat" href="shots/c-ph-bar.png"><img src="shots/c-ph-bar.png" alt=""></a><small>近くで：キーボードの上の道具。ボタンはどれも 44px 以上で、名前は1行</small></div>
+    <div class="note">
+      <p><span class="say">この列を狭く</span>・<span class="say">この列を広く</span><br>5% ずつ。広げた分は、右どなりの列が狭くなります（いちばん右の列なら左どなり）。</p>
+      <p><span class="say">この列　35%</span><br>いまの幅。</p>
+      <p><span class="say">幅をそろえ直す</span><br>全部の列を同じ幅に戻します（自分で決めるのまま）。</p>
+    </div>
+  </div>
+  <div class="pw"><div class="good"><b>よいところ</b><br>指で細い線をつかまなくてよい。押すたびに 5% ずつ、確実に変わる。</div><div class="weak"><b>弱いところ</b><br>大きく変えるには、何回か押す。道具が1段増え、紙面の見える所が少し狭くなる。</div></div>
+</figure>
+
+<figure>
+  <figcaption><b>案D　丸いつまみを指で動かす</b><span>セルを押すと、その列の両側の線に、丸いつまみ。指で左右に動かすと、5% ずつ止まります。</span></figcaption>
+  <div class="row r-ph-c">
+    <div class="ph"><a href="shots/d-ph.png"><img src="shots/d-ph.png" alt=""></a><small>右のつまみに指を置いたところ</small></div>
+    <div class="ph"><a class="nat" href="shots/d-ph-paper.png"><img src="shots/d-ph-paper.png" alt=""></a><small>近くで：道具の下の段には、一言といまの幅、「幅をそろえ直す」</small></div>
+    <div class="note">
+      <p><span class="say">丸を左右に動かす</span></p>
+      <p>つまみは、指で押しやすい大きさ（30px）にすると、見出しの字に重なります。</p>
+    </div>
+  </div>
+  <div class="pw"><div class="good"><b>よいところ</b><br>パソコンと同じ考えで、見ながら動かせる。</div><div class="weak"><b>弱いところ</b><br>指でつまみと字が隠れる。列が狭いと、つまみ同士が近くて押しまちがえやすい。紙面を動かすつもりで、つまみを動かしてしまうことがある。</div></div>
+</figure>
+
+<!-- ===================================================================== -->
+<h2>④ 仕上がり<small>PDF・印刷と同じ紙面</small></h2>
+<figure>
+  <figcaption><b>自分で決めた幅（名称 25%・使用箇所 20%・特徴 35%・生地見本 20%）</b><span>紙面には線の印もつまみもなく、ふつうの表です。見本の写真の列を少し狭くしたので、表が短くなりました。</span></figcaption>
+  <div class="row r-3">
+    <div class="ph"><a href="shots/p-equal-table.png"><img src="shots/p-equal-table.png" alt=""></a><small><b>そろえる</b>（25% ずつ）：特徴が3行になり、表が長い</small></div>
+    <div class="ph"><a href="shots/p-auto-table.png"><img src="shots/p-auto-table.png" alt=""></a><small><b>中身に合わせる</b>：名称・使用箇所が狭くなり、「使用箇／所」のように1字だけ次の行に（いまのツールの組み方）</small></div>
+    <div class="ph"><a href="shots/p-custom-table.png"><img src="shots/p-custom-table.png" alt=""></a><small><b>自分で決める</b>：どの列も字がきれいに収まり、表がいちばん短い</small></div>
+  </div>
+  <div class="row r-paper">
+    <div class="ph"><a href="shots/p-custom.png"><img src="shots/p-custom.png" alt=""></a><small>ページ全体（自分で決める）</small></div>
+    <div class="note">
+      <p>表の高さは、そろえるを 100 とすると、中身に合わせる 94・<b>自分で決める 81</b>（この見本）。</p>
+      <p>幅を 5% ずつにしているので、列の線の位置がそろい、手で動かしても雑に見えません。</p>
+    </div>
+  </div>
+</figure>
+
+<!-- ===================================================================== -->
+<h2>言葉の表</h2>
+<figure>
+  <table class="words">
+    <colgroup><col style="width:190px"><col style="width:230px"><col></colgroup>
+    <thead><tr><th>場所</th><th>いま</th><th>案</th></tr></thead>
+    <tbody>
+      <tr><th>列の幅（パソコン）</th><td class="old">そろえる／中身に合わせる</td><td class="new">そろえる／中身に合わせる／自分で決める</td></tr>
+      <tr><th>自分で決めるのとき<br>（パソコンの左の道具）</th><td class="old">（なし）</td><td class="new">縦の線を／ドラッグして／幅を変える<br>［幅をそろえ直す］</td></tr>
+      <tr><th>線にマウス・ドラッグ中<br>（パソコン）</th><td class="old">（なし）</td><td class="new">左右にドラッグ<br>20%｜30%<span>（線の左の列｜右の列）</span></td></tr>
+      <tr><th>列の幅（スマホ）</th><td class="old">列の幅<br>そろえる<span style="font-weight:400">（押すと切り替え）</span></td><td class="new">案A：押すたびに　そろえる → 中身に合わせる → 自分で決める<br>案B：列の幅　そろえる<span>（下向きの印）</span><br><span>（窓）</span>そろえる<span>　どの列も同じ幅</span><br>中身に合わせる<span>　字の多い列を広く</span><br>自分で決める<span>　列ごとに広く・狭く</span></td></tr>
+      <tr><th>自分で決めるのとき<br>（スマホの道具）</th><td class="old">（なし）</td><td class="new">案C：この列を狭く／この列　35%／この列を広く／幅をそろえ直す<br>案D：丸を左右に動かす／この列　35%／幅をそろえ直す</td></tr>
+    </tbody>
+  </table>
+</figure>
+
+<div class="ask"><b>決めていただきたいこと</b>
+  <ol>
+    <li>スマホの切り替えは、<b>案A・案B</b>のどちらにしますか。<small>（おすすめは案B）</small></li>
+    <li>スマホで幅を変えるのは、<b>案C・案D</b>のどちらにしますか。<small>（おすすめは案C）</small></li>
+    <li>スマホの「この列を広く」で狭くなるのは、<b>右どなりの列</b>でよいですか。<small>（ほかに「いちばん広い列」もあります）</small></li>
+  </ol>
+</div>
+
+</main>
+</body>
+</html>
