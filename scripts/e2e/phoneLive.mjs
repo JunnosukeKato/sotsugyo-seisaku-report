@@ -128,7 +128,7 @@ export async function openSample(browser) {
   await page.setViewport(PHONE)
   const ready = () =>
     page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 120000 })
-  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0', timeout: 90000 })
+  await page.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0', timeout: 90000 })
   await page.waitForSelector('.guide.step-course .g-opts button', { timeout: 60000 })
   await page.evaluate(() => document.querySelector('.g-opts button').click())
   await page.waitForSelector('.guide.step-word .g-word-opt.no')

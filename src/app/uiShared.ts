@@ -142,19 +142,34 @@ export function useWheelPaging(target: React.RefObject<HTMLElement | null>, scro
   }, [target, scroller, editor, enabled])
 }
 
-/** 紙面を指で左右・上下にはらうと、ページをめくる（スマホ。上下は、拡大していないときだけ） */
+/**
+ * 紙面を指で左右・上下にはらうと、ページをめくる（スマホ。上下は、拡大していないときだけ）。
+ * 2本の指で紙面を広げる・縮めるときは、めくらない（指を離すまで。広げ終えた直後も：editor/pinchZoom.ts）
+ */
 export function useSwipe(target: React.RefObject<HTMLElement | null>, editor: ReportEditor | null, enabled: boolean): void {
   const start = useRef<{ x: number; y: number } | null>(null)
   useEffect(() => {
     const el = target.current
     if (!el || !editor || !enabled) return
-    // 作品写真をつかんで動かすときは、ページを送らない（「全体を入れる（切らない）」の写真は動かせないので、はらうとページを送る）
-    const down = (e: PointerEvent) =>
-      (start.current = e.pointerType === 'mouse' || (e.target as HTMLElement).closest?.('[data-photo-slot]:not(.whole) img') ? null : { x: e.clientX, y: e.clientY })
+    // 置いている指（2本になったら、離し終えるまで、はらいとみなさない）
+    const fingers = new Set<number>()
+    let multi = false
+    // 押して選んだ作品写真をつかんで動かすときは、ページを送らない（選んでいない写真・「全体を入れる（切らない）」の写真の上で、はらうとページを送る）
+    const down = (e: PointerEvent) => {
+      if (e.pointerType !== 'mouse') fingers.add(e.pointerId)
+      if (fingers.size >= 2) multi = true
+      start.current = e.pointerType === 'mouse' || multi || (e.target as HTMLElement).closest?.('[data-photo-slot].is-selected:not(.whole) img') ? null : { x: e.clientX, y: e.clientY }
+    }
+    const release = (e: PointerEvent) => {
+      fingers.delete(e.pointerId)
+      const wasMulti = multi
+      if (fingers.size === 0) multi = false
+      return wasMulti
+    }
     const up = (e: PointerEvent) => {
       const s = start.current
       start.current = null
-      if (!s) return
+      if (release(e) || !s || editor.pinching) return
       const dx = e.clientX - s.x
       const dy = e.clientY - s.y
       const snap = editor.getSnapshot()
@@ -168,11 +183,18 @@ export function useSwipe(target: React.RefObject<HTMLElement | null>, editor: Re
         else editor.prevPage()
       }
     }
+    // ブラウザがスクロールに使った指（拡大中に紙面を動かした）など：はらいとみなさない
+    const cancel = (e: PointerEvent) => {
+      start.current = null
+      release(e)
+    }
     el.addEventListener('pointerdown', down)
     el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', cancel)
     return () => {
       el.removeEventListener('pointerdown', down)
       el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', cancel)
     }
   }, [target, editor, enabled])
 }

@@ -22,7 +22,7 @@
  * 組み直した紙面が書いた字に追いついたら、写しをやめて紙面の段落を見せる（reportEditor の syncLive）。
  * 写しと仮の表示を入れる枠は、紙面と一緒にスクロールするよう、紙面の表示枠の中に置く（PC は今までどおり、重ねる層）
  *
- * 試作（スマホで紙面に直接書く。app/phoneDirect.ts）：スマホでも、PC と同じく紙面に重ねた書く欄で書く（direct）。
+ * スマホで紙面に直接書く（スマホのふつう。app/phoneDirect.ts）：スマホでも、PC と同じく紙面に重ねた書く欄で書く（direct）。
  * 書く欄の枠は、紙面と一緒にスクロールするよう、紙面の表示枠の中に置く。Android の文字入力は、Enter・Backspace のキーの知らせを出さず、
  * 改行・消す入力だけを出すことがあるので、その入力でも段落を分ける・前の段落とつなげる
  */
@@ -197,7 +197,7 @@ const COPIED_STYLES = ['fontFamily', 'fontSize', 'lineHeight', 'letterSpacing', 
 /**
  * キーボードで書く欄からここへ移っても、書き終わりにしない（道具の「図を入れる」などを、書いていた位置で使えるように）。
  * .table-size：スマホの書く欄の「表を入れる」で出る、表の大きさを選ぶ欄（app/TableSize.tsx。選んでいる間も、書いていた位置を覚えておく）。
- * .direct-bar：試作（スマホで紙面に直接書く）の、キーボードの上の道具（app/Phone.tsx）
+ * .direct-bar：スマホで紙面に直接書くの、キーボードの上の道具（app/Phone.tsx）
  */
 const KEEP_OPEN = '.palette, .es-tools, .table-size, .direct-bar'
 
@@ -389,7 +389,7 @@ export class OverlayEditor {
 
   /**
    * 書く場所を切り替える。host を渡すと、その中で（大きな文字で）書く。null なら紙面に重ねる。
-   * direct：試作（スマホで紙面に直接書く）。紙面に重ね、書く欄の枠を紙面の表示枠の中に置く（紙面と一緒にスクロールする）
+   * direct：スマホで紙面に直接書く。紙面に重ね、書く欄の枠を紙面の表示枠の中に置く（紙面と一緒にスクロールする）
    */
   setSheetHost(host: HTMLElement | null, direct = false): void {
     if (this.target) this.commit()
@@ -406,14 +406,14 @@ export class OverlayEditor {
       if (this.clip.parentElement !== this.scroller) this.scroller.append(this.clip)
     } else {
       this.clip.append(el)
-      // 試作：紙面に直接書くスマホも、書く欄の枠を紙面の表示枠の中に置く（指で紙面を動かしても、書く欄が遅れてずれないように）
+      // スマホで紙面に直接書くときも、書く欄の枠を紙面の表示枠の中に置く（指で紙面を動かしても、書く欄が遅れてずれないように）
       const parent = this.direct ? this.scroller : this.layer
       if (this.clip.parentElement !== parent) parent.append(this.clip)
     }
   }
 
   private sheetHost: HTMLElement | null = null
-  /** 試作：スマホで紙面に直接書いている（紙面に重ねた書く欄。枠は紙面の表示枠の中） */
+  /** スマホで紙面に直接書く：スマホで紙面に直接書いている（紙面に重ねた書く欄。枠は紙面の表示枠の中） */
   private direct = false
 
   get inSheet(): boolean {
@@ -586,7 +586,7 @@ export class OverlayEditor {
    * - 書き換えた所が、包んだ要素の外の1つのテキストノードの中なら、その字を入れ替える（打った句読点・英数字も、包まず・すき間を入れずに入れる）
    * - 包んだ句読点1つを消したなら、その要素を外す
    * 図表の参照（「（図1）」のまとまり）が変わるときは、入れ替えない。句読点の包み方・すき間は、打つ手が止まったら測り直す（flushMirror）。
-   * box：入れ替える要素（ふだんは写し。試作の、紙面で直接書く書く欄も同じように入れ替える：patchTyped）
+   * box：入れ替える要素（ふだんは写し。スマホで紙面に直接書く書く欄も同じように入れ替える：patchTyped）
    */
   private patchMirror(old: string, text: string, p: number, q: number, box: HTMLElement = this.mirror): boolean {
     const oldEnd = old.length - q
@@ -678,15 +678,15 @@ export class OverlayEditor {
     this.mirrorJob = null
   }
 
-  // ---- 試作（スマホで紙面に直接書く）：打つたびには測らない ----
+  // ---- スマホで紙面に直接書く：打つたびには測らない ----
   // PC と同じく打つたびに測り直すと、スマホは測るのが遅く、長い段落では1字ごとに遅いスマホで 0.1 秒以上かかった。
   // スマホの写しと同じく、打った・消した所の字だけを書く欄の中で入れ替え（patchTyped）、打つ手が止まったら、見えない下書きの要素で
   // 時間を分けて測り直し、測り終えたら書く欄の中身と入れ替える（flushTyped。カーソルの位置は保つ）。日本語の変換中は入れ替えない
 
-  /** 試作：打つ手が止まってから、書く欄を測り直している途中（見えない下書きの要素 scratch で） */
+  /** スマホで紙面に直接書く：打つ手が止まってから、書く欄を測り直している途中（見えない下書きの要素 scratch で） */
   private typedJob: { text: string; scratch: HTMLElement; steps: Generator<void, SpacingPlan>; timer: number } | null = null
 
-  /** 試作：書く欄の中の、打った・消した所の字だけを入れ替える（できたら true。selection：入れ替えたあとに選ぶ範囲） */
+  /** スマホで紙面に直接書く：書く欄の中の、打った・消した所の字だけを入れ替える（できたら true。selection：入れ替えたあとに選ぶ範囲） */
   private patchTyped(selection: { start: number; end: number } | null): boolean {
     const old = this.renderedText
     const text = this.model
@@ -700,7 +700,7 @@ export class OverlayEditor {
     return true
   }
 
-  /** 試作：書く欄の字が old から text に変わった（前の p 字・後ろの q 字は同じ）。包み方の記録をずらし、打つ手が止まったら測り直す */
+  /** スマホで紙面に直接書く：書く欄の字が old から text に変わった（前の p 字・後ろの q 字は同じ）。包み方の記録をずらし、打つ手が止まったら測り直す */
   private markTyped(old: string, text: string, p: number, q: number): void {
     this.plan = shiftPlan(this.plan!, p, old.length - q, text.length - old.length)
     this.renderedText = text
@@ -710,7 +710,7 @@ export class OverlayEditor {
   }
 
   /**
-   * 試作：まだ測り直していない所（dirtyFrom の行の1つ前の行、または pendingFrom）から後ろを、時間を分けて測り直す。
+   * スマホで紙面に直接書く：まだ測り直していない所（dirtyFrom の行の1つ前の行、または pendingFrom）から後ろを、時間を分けて測り直す。
    * now：いま全部測る（書き終えるとき）。日本語の変換中は、変換を終えるまで待つ
    */
   private flushTyped(now: boolean): void {
@@ -766,7 +766,7 @@ export class OverlayEditor {
     job.timer = window.setTimeout(() => this.runTypedJob(false), 0)
   }
 
-  /** 試作：書く欄を測り直している途中なら、やめる（字が変わった・閉じた） */
+  /** スマホで紙面に直接書く：書く欄を測り直している途中なら、やめる（字が変わった・閉じた） */
   private cancelTypedJob(): void {
     if (!this.typedJob) return
     clearTimeout(this.typedJob.timer)
@@ -858,7 +858,7 @@ export class OverlayEditor {
       return
     }
     const text = this.model
-    // 試作（紙面で直接書く）：打つたびには測らず、打った・消した所の字だけを入れ替える（打つ手が止まったら測り直す：flushTyped）
+    // スマホで紙面に直接書く：打つたびには測らず、打った・消した所の字だけを入れ替える（打つ手が止まったら測り直す：flushTyped）
     if (this.direct && !how.full && !how.page && this.patchTyped(selection)) return
     if (this.direct) {
       // 入れ替えられないとき・はじめから組むとき：測り直すのを待っていた所も、下の組み直しで測る（測り直している途中ならやめる）
@@ -951,7 +951,7 @@ export class OverlayEditor {
   private flushTypeset(now = false): void {
     clearTimeout(this.typesetTimer)
     if (this.spacingBox === this.mirror) return this.flushMirror(now)
-    // 試作（紙面で直接書く）：時間を分けて測り直す（測り終えたら、書く欄の中身と入れ替える）
+    // スマホで紙面に直接書く：時間を分けて測り直す（測り終えたら、書く欄の中身と入れ替える）
     if (this.direct && this.typeset && (this.dirtyFrom !== null || this.pendingFrom !== null)) return this.flushTyped(now)
     if (this.pendingFrom === null || !this.typeset) return
     if (this.composingNow) {
@@ -1413,7 +1413,7 @@ export class OverlayEditor {
   private syncFromDom(before: TextState | null): void {
     const text = this.domText()
     const caret = this.selectionOffsets().end
-    // 試作（紙面で直接書く）：書く欄の中身は、もう書いた字になっている。日本語の変換を終えるたびに中身を作り直して測ると、
+    // スマホで紙面に直接書く：書く欄の中身は、もう書いた字になっている。日本語の変換を終えるたびに中身を作り直して測ると、
     // スマホでは続けて打つ字が遅れるため、作り直さない。包み方の記録をずらし、打つ手が止まったら測り直す（markTyped）
     const typed = this.direct && this.renderedText !== null && !!this.plan
     if (text === this.model) {
@@ -1439,13 +1439,13 @@ export class OverlayEditor {
    * 変える範囲は、ブラウザが変えようとした範囲（getTargetRanges。図表の参照の途中なども、ブラウザと同じ）
    */
   private onBeforeInput(e: InputEvent): void {
-    // 試作（スマホで紙面に直接書く）：Enter のキーの知らせがなく、改行の入力だけが来た（Android の文字入力など）。キーの Enter と同じことをする
+    // スマホで紙面に直接書く：Enter のキーの知らせがなく、改行の入力だけが来た（Android の文字入力など）。キーの Enter と同じことをする
     if (this.direct && this.target && !this.composingNow && !e.isComposing && (e.inputType === 'insertParagraph' || e.inputType === 'insertLineBreak')) {
       e.preventDefault()
       return this.enterFromInput()
     }
     if (!this.typeset || !this.target || e.inputType === 'insertCompositionText') return
-    // 試作：日本語の変換中の入力（変換中の字を消すなど）は、ブラウザに任せる（変換を終えたら、書く欄の中身から読み直す）
+    // スマホで紙面に直接書く：日本語の変換中の入力（変換中の字を消すなど）は、ブラウザに任せる（変換を終えたら、書く欄の中身から読み直す）
     if (this.direct && (this.composingNow || e.isComposing)) return
     e.preventDefault()
     const type = e.inputType
@@ -1466,7 +1466,7 @@ export class OverlayEditor {
       this.edit(start, end, data, 'insert')
       if (type !== 'insertText') this.lastEdit = null
     } else if (type.startsWith('delete')) {
-      // 試作：段落の先頭で消した（Backspace のキーの知らせがなかった。Android の文字入力など）：前の段落とつなげる（キーの Backspace と同じ）
+      // スマホで紙面に直接書く：段落の先頭で消した（Backspace のキーの知らせがなかった。Android の文字入力など）：前の段落とつなげる（キーの Backspace と同じ）
       if (this.direct && this.target.kind === 'paragraph' && /Backward/.test(type) && start === 0 && end === 0) {
         const { blockId } = this.target
         const text = this.model
@@ -1627,7 +1627,7 @@ export class OverlayEditor {
   }
 
   /**
-   * 試作（スマホで紙面に直接書く）：改行の入力（Enter のキーの知らせがなかった）。キーの Enter と同じく、段落は分け、見出しは後ろに段落を作り、
+   * スマホで紙面に直接書く：改行の入力（Enter のキーの知らせがなかった）。キーの Enter と同じく、段落は分け、見出しは後ろに段落を作り、
    * 1行の欄は書き終える
    */
   private enterFromInput(): void {
@@ -1643,14 +1643,14 @@ export class OverlayEditor {
     }
   }
 
-  /** 試作の道具の「戻す」：書く欄の中で書いた文字を戻す（紙面と同じ組み方で書いている段落だけ。戻すものがなければ false） */
+  /** スマホのキーボードの上の道具の「戻す」：書く欄の中で書いた文字を戻す（紙面と同じ組み方で書いている段落だけ。戻すものがなければ false） */
   undoTyping(): boolean {
     if (!this.typeset || !this.target || this.undoStack.length === 0) return false
     this.undoStep()
     return true
   }
 
-  /** 試作の道具の「やり直す」：書く欄の中で戻した文字を、もう一度入れる（なければ false） */
+  /** スマホのキーボードの上の道具の「やり直す」：書く欄の中で戻した文字を、もう一度入れる（なければ false） */
   redoTyping(): boolean {
     if (!this.typeset || !this.target || this.redoStack.length === 0) return false
     this.redoStep()

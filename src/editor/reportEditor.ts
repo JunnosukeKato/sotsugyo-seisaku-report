@@ -14,6 +14,7 @@ import { ContinueRow, endsPageWithRoom, type ContinueTarget } from './continueRo
 import { EditHistory } from './history'
 import { OverlayEditor, offsetInCopy, type OverlayKind, type OverlayPlacement, type OverlayTarget } from './overlayEditor'
 import { PageStage, TEXT_LEFT, TEXT_W } from './pageStage'
+import { loadWritingZoom, PinchZoom, saveWritingZoom, type Point } from './pinchZoom'
 import { blockPaperKey, fixedTitleNote, markFocusable, PAPER_FOCUSABLE, paperElement, paperKeyOf, paperOrder, rememberTabStop, setTabStop } from './paperFocus'
 import * as ops from './reportOps'
 import { ReportRenderer, type FirstShow, type PageEffect } from './reportRenderer'
@@ -100,9 +101,9 @@ export interface EditorSnapshot {
   turning: boolean
   /** スマホ：下の欄で書いているか */
   sheet: boolean
-  /** 試作（スマホで紙面に直接書く。app/phoneDirect.ts）：紙面に重ねた書く欄で書いているか */
+  /** スマホで紙面に直接書く（app/phoneDirect.ts）：紙面に重ねた書く欄で書いているか */
   onPaper: boolean
-  /** 書く欄の中で、書いた文字を戻せる・やり直せるか（紙面と同じ組み方で書いている段落。試作の道具の「戻す」「やり直す」） */
+  /** 書く欄の中で、書いた文字を戻せる・やり直せるか（紙面と同じ組み方で書いている段落。スマホのキーボードの上の道具の「戻す」「やり直す」） */
   typingUndo: boolean
   typingRedo: boolean
   /** 書いている欄のカーソルの位置（書いていなければ null） */
@@ -211,6 +212,10 @@ export class ReportEditor {
   private readonly stage: PageStage
   private readonly scroller: HTMLElement
   private readonly layer: HTMLElement
+  /** 紙面を置く台の要素 */
+  private readonly stageEl: HTMLElement
+  /** スマホ：2本の指で紙面を広げる・縮める（editor/pinchZoom.ts） */
+  private readonly pinchZoom: PinchZoom
   private readonly marker: HTMLDivElement
   private readonly hideStyle: HTMLStyleElement
   /** 削除したものを、組み直すまで紙面で隠す（removed） */
@@ -275,6 +280,7 @@ export class ReportEditor {
     this.report = report
     this.callbacks = callbacks
     this.scroller = scroller
+    this.stageEl = stage
     this.layer = layer
     this.renderer = new ReportRenderer(scroller)
     this.hideStyle = document.createElement('style')
@@ -316,7 +322,7 @@ export class ReportEditor {
         // カーソルがページの下からはみ出した（書き足して、段落が次のページへ続いた）：打つ手が止まるのを待たずに組み直し、次のページへ移る（followCaret）。
         // スマホは、次の絵を描く前に調べる（runLiveFrame）
         if (!this.overlay.inSheet && this.caretBelowContent()) void this.render(false)
-        // 試作（紙面で直接書く）：書いている行が、キーボードの上の道具・キーボードに隠れないようにする
+        // スマホで紙面に直接書く：書いている行が、キーボードの上の道具・キーボードに隠れないようにする
         if (this.writingOnPaper) this.scheduleCaretReveal()
       },
       onCommit: (id, text, byKey, frozen) => this.onCommitEdit(id, text, byKey, frozen),
@@ -420,7 +426,7 @@ export class ReportEditor {
       onExtend: (id, text, anchor, direction) => this.extendFromEditor(id, text, anchor, direction),
       onResize: () => {
         this.shiftFollowing()
-        // 試作（紙面で直接書く）：段落の行が増えた（日本語の変換中も）：書いている行が隠れないようにする
+        // スマホで紙面に直接書く：段落の行が増えた（日本語の変換中も）：書いている行が隠れないようにする
         if (this.writingOnPaper) this.scheduleCaretReveal()
       },
       // スマホ：打った字をその場で見せる写しを出した・やめた：紙面のその段落を隠す・見せる。後ろの文章を、写しの下端に合わせてずらす（やめたら戻す）
@@ -450,6 +456,13 @@ export class ReportEditor {
       if (this.phone) this.revealEditing(false)
       this.notify()
     })
+    // スマホ：2本の指で紙面を広げる・縮める（紙面の倍率だけを変える。上の帯・道具・タブは大きくしない）
+    this.pinchZoom = new PinchZoom(stage, {
+      enabled: () => this.phone && !!this.layout,
+      start: (mid) => this.pinchStart(mid),
+      move: (k, mid) => this.pinchMove(k, mid),
+      end: () => this.pinchEnd(),
+    })
 
     // カーソルが動いたら知らせる（右の一覧で、カーソルのある箇所の指摘を示すため）
     document.addEventListener('selectionchange', () => {
@@ -463,7 +476,7 @@ export class ReportEditor {
         }
         // ページをまたぐ段落で、カーソルを見えているページの下の続き（次のページ）へ動かした（Ctrl+End など）：そのページへ移る
         else if (!this.turning && this.caretBelowContent() && this.renderer.pageView.pageOfOffset(this.overlay.blockId, caret) !== this.page) this.followCaret()
-        // 試作（紙面で直接書く）：カーソルを動かした行が、キーボードの上の道具・キーボードに隠れないようにする
+        // スマホで紙面に直接書く：カーソルを動かした行が、キーボードの上の道具・キーボードに隠れないようにする
         if (this.writingOnPaper) this.scheduleCaretReveal()
         this.notify()
       }
@@ -474,7 +487,7 @@ export class ReportEditor {
       this.scheduleSelectionUi()
     })
     scroller.addEventListener('mousedown', (e) => {
-      // 試作（紙面で直接書く）：書いている間に紙面のほかの所を押しても、押した瞬間には書く欄からフォーカスを外さない
+      // スマホで紙面に直接書く：書いている間に紙面のほかの所を押しても、押した瞬間には書く欄からフォーカスを外さない
       // （外すとキーボードがいったん閉じ、押した段落を開くとまた出てくるため。書き終える・ほかの段落を開くのは、押したあと：onClick）
       if (this.writingOnPaper && !(e.target instanceof Node && this.overlay.element.contains(e.target))) e.preventDefault()
       if (e.button !== 0 || this.phone) return
@@ -956,10 +969,10 @@ export class ReportEditor {
     return null
   }
 
-  /** 指摘の箇所があるページ（0 から）。わからなければ -1 */
-  pageOfFinding(finding: ReportFinding): number {
+  /** 指摘の箇所があるページ（0 から。offset：段落の中の何文字目のページか。ふだんは指摘の初め）。わからなければ -1 */
+  pageOfFinding(finding: ReportFinding, offset = finding.start ?? 0): number {
     if (finding.blockId) {
-      const page = this.renderer.pageView.pageOfOffset(finding.blockId, finding.start ?? 0)
+      const page = this.renderer.pageView.pageOfOffset(finding.blockId, offset)
       if (page >= 0) return page
     }
     return this.pageOfArea(finding.area, finding.photoPage)
@@ -1022,16 +1035,20 @@ export class ReportEditor {
     return best?.el ?? null
   }
 
-  /** 指摘の箇所へ移動する（文字の指摘なら入力欄を開く） */
+  /**
+   * 指摘の箇所へ移動する（文字の指摘なら入力欄を開く）。
+   * カーソルは指摘の文字の後ろに置く（Backspace でそのまま消して打ち直せるように。依頼者の要望）。位置だけの指摘（「。」がない など）は、その位置
+   */
   async goToFinding(finding: ReportFinding): Promise<void> {
-    const page = this.pageOfFinding(finding)
+    const caret = finding.end ?? finding.start ?? 0
+    const page = this.pageOfFinding(finding, caret)
     if (page < 0) return
     await this.goToPage(page, 'fade')
     const id = finding.blockId
     if (!id) return
     const fragment = this.renderer.pageView.fragments(id).find((f) => this.renderer.pageView.pageIndexOf(f) === this.page)
     if (this.stage.zoomed) fragment?.scrollIntoView({ block: 'center' })
-    if (fragment && ops.findEditable(this.report, id)) requestAnimationFrame(() => this.openEditor(id, finding.start ?? 0))
+    if (fragment && ops.findEditable(this.report, id)) requestAnimationFrame(() => this.openEditor(id, caret))
   }
 
   // ---- ページ送り ----
@@ -1173,6 +1190,7 @@ export class ReportEditor {
   setView(view: 'fit' | 'spread' | 'zoom'): void {
     this.setRevealRoom(0, 0)
     this.scroller.scrollTop = 0
+    this.scroller.scrollLeft = 0
     if (view === 'spread') this.stage.setSpread(true)
     else this.stage.setZoom(view === 'zoom')
   }
@@ -1184,8 +1202,8 @@ export class ReportEditor {
 
   /**
    * スマホ：書く欄を画面の下に出す（host はその中の、入力欄を置く要素）。null なら紙面に重ねる（PC）。
-   * direct：試作（スマホで紙面に直接書く。app/phoneDirect.ts）。段落・見出しは、PC と同じく紙面に重ねた書く欄で書き、
-   * 表紙の項目・図表のタイトル・表のセルは、今までどおり下の欄（host）で書く（書き始めるときに置き換える：placeEditorFor）
+   * direct：スマホで紙面に直接書く（スマホのふつう。app/phoneDirect.ts）。段落・見出し・図表のタイトル・表のセル・表紙の項目を、
+   * PC と同じく紙面に重ねた書く欄で書く（紙面を拡大して）。host は、予備の ?direct=0 の端末で、下から出る書く欄にするときに使う
    */
   setSheetHost(host: HTMLElement | null, direct = false): void {
     this.hideStyle.textContent = ''
@@ -1205,28 +1223,27 @@ export class ReportEditor {
 
   /** スマホの書く欄を置く要素（PC は null） */
   private sheetHostEl: HTMLElement | null = null
-  /** 試作：スマホで紙面に直接書く（setSheetHost） */
+  /** スマホで紙面に直接書く（setSheetHost。予備の ?direct=0 の端末では false） */
   private direct = false
 
-  /** スマホの並べ方か（下の欄で書く・試作の紙面で直接書く、のどちらも） */
+  /** スマホの並べ方か（紙面で直接書く・予備の下の欄で書く、のどちらも） */
   private get phone(): boolean {
     return this.sheetHostEl !== null
   }
 
-  /** 試作：いま、紙面に重ねた書く欄で書いているか */
+  /** スマホ：いま、紙面に重ねた書く欄で書いているか */
   private get writingOnPaper(): boolean {
     return this.direct && !this.overlay.inSheet && !!this.overlay.blockId
   }
 
-  /** 試作：紙面に直接書く欄か（本文・抄録の段落と、見出し。表紙の項目・図表のタイトル・表のセルは、下の欄で書く） */
+  /** スマホ：紙面に直接書く欄か（紙面で直接書く端末では、書ける欄はすべて。段落・見出し・図表のタイトル・表のセル・表紙の項目） */
   private writesOnPaper(id: string): boolean {
-    if (!this.direct) return false
-    const kind = ops.findEditable(this.report, id)?.kind
-    return kind === 'paragraph' || kind === 'abstractParagraph' || kind === 'chapter' || kind === 'subheading'
+    return this.direct && !!ops.findEditable(this.report, id)
   }
 
   /**
-   * 試作：書く欄を、欄 id の種類に合わせて、紙面に重ねるか下の欄に置く（書き始める前に。置き場所を替えるときは、書いていた欄を書き終える）
+   * スマホ：書く欄を、紙面に重ねるか下の欄に置く（書き始める前に。置き場所を替えるときは、書いていた欄を書き終える）。
+   * 紙面で直接書く端末では、いつも紙面に重ねる（下の欄に置くことはない）
    */
   private placeEditorFor(id: string): void {
     if (!this.direct) return
@@ -1236,37 +1253,49 @@ export class ReportEditor {
   }
 
   /**
-   * 試作：紙面に直接書き始める前に、紙面を拡大する（本文の幅を画面の幅に合わせる。スマホの「拡大」と同じ：pageStage.ts の --zoom-to-text）。
+   * スマホ：紙面に直接書き始める前に、紙面を拡大する（本文の幅を画面の幅に合わせる。スマホの「拡大」と同じ：pageStage.ts の --zoom-to-text）。
+   * 書いている間に指で広げた・縮めた大きさを覚えていれば、その大きさにする（押した点が指の下から横に動かないように。editor/pinchZoom.ts）。
    * 入力欄の位置と倍率は、拡大したあとの紙面で測る
    */
   private zoomForPaper(): void {
     if (this.stage.zoomed) return
     this.setRevealRoom(0, 0)
     this.scroller.scrollTop = 0
-    this.stage.setZoom(true)
+    this.scroller.scrollLeft = 0
+    const ratio = loadWritingZoom()
+    if (Math.abs(ratio - 1) < 0.04) return this.stage.setZoom(true)
+    const page = this.renderer.pageView.pages()[this.page]
+    const before = page?.getBoundingClientRect()
+    const tap = this.lastTap && performance.now() - this.lastTap.time < 1000 ? this.lastTap : null
+    const s0 = this.stage.scale
+    // 押した点の、紙面の上の横の位置（押していなければ、本文の左の端）
+    const cx = tap && before ? (tap.x - before.left) / s0 : TEXT_LEFT
+    this.stage.setFreeZoom(this.stage.textScale * ratio)
+    const after = page?.getBoundingClientRect()
+    if (!this.stage.panX || !after) return
+    const x = tap ? tap.x : this.scroller.getBoundingClientRect().left + 10
+    this.scroller.scrollLeft += after.left + cx * this.stage.scale - x
   }
 
   /**
-   * スマホ：書く欄の「完了」。書き終えて、紙面を1ページ全体の表示に戻す。
-   * 試作（紙面で直接書く）の「完了」は、拡大したままにする（読んでいた所から、続けて読む・押して直すことができるように。全体に戻すのは「ページ全体に戻す」）
+   * スマホ：書く欄の「完了」。書き終えて、紙面を1ページ全体の表示に戻す（書いていたページ）。
+   * 紙面で直接書くときも同じ（試作では拡大したままにしていたが、「ページ全体に戻す」を押すのが分かりにくかった。依頼者の判断）
    */
   finishEditing(): void {
     const onPaper = this.writingOnPaper
+    const sheet = this.overlay.inSheet
     this.overlay.commit()
-    if (onPaper) {
-      // キーボードを閉じる（書く欄は閉じて隠れているが、フォーカスが残っていることがあるため）
-      if (document.activeElement === this.overlay.element) this.overlay.element.blur()
-      return
-    }
-    if (this.overlay.inSheet) this.setZoom(false)
+    // キーボードを閉じる（紙面に重ねた書く欄は閉じて隠れているが、フォーカスが残っていることがあるため）
+    if (onPaper && document.activeElement === this.overlay.element) this.overlay.element.blur()
+    if (onPaper || sheet) this.setZoom(false)
   }
 
-  /** 試作の道具の「戻す」：書く欄の中で書いた文字を戻す（戻せたら true。なければ、呼び出し側が原稿を戻す） */
+  /** スマホの道具の「戻す」：書く欄の中で書いた文字を戻す（戻せたら true。なければ、呼び出し側が原稿を戻す） */
   undoTyping(): boolean {
     return this.overlay.undoTyping()
   }
 
-  /** 試作の道具の「やり直す」：書く欄の中で戻した文字を、もう一度入れる（入れたら true） */
+  /** スマホの道具の「やり直す」：書く欄の中で戻した文字を、もう一度入れる（入れたら true） */
   redoTyping(): boolean {
     return this.overlay.redoTyping()
   }
@@ -1304,7 +1333,7 @@ export class ReportEditor {
    * force が false なら、欄がもう見えているときは動かさない（書く欄の高さやキーボードが変わったとき。学生が自分で動かした位置を崩さないように）
    */
   revealEditing(force = true): void {
-    // 試作（紙面で直接書く）：紙面に重ねた書く欄の、カーソルの行を見せる
+    // 紙面で直接書く：紙面に重ねた書く欄の、カーソルの行を見せる
     if (this.writingOnPaper) return this.revealCaret()
     const id = this.overlay.blockId
     if (!id || !this.overlay.inSheet || !this.stage.zoomed) return
@@ -1330,15 +1359,17 @@ export class ReportEditor {
   }
 
   /**
-   * 試作（紙面で直接書く）：書き始めたとき、カーソルの行を置く高さ（画面の上からの px。押した点。NaN：見えている所の上の方。null：隠れていれば見せるだけ）。
-   * revealCaret が1回使ったら null に戻す
+   * 紙面で直接書く：書き始めたとき、カーソルの行を置く高さ（画面の上からの px。押した点。NaN：見えている所の上の方。null：隠れていれば見せるだけ）。
+   * revealCaret が1回使ったら null に戻す。図表のタイトルは、高さの代わりに、図・表とタイトルの行が一緒に見えるように置く
    */
   private revealAt: number | null = null
-  /** 試作：紙面を押した点と時刻（押して書き始めたとき、押した行を指の下に置くため） */
-  private lastTap: { y: number; time: number } | null = null
+  /** 紙面で直接書く：紙面を押した点と時刻（押して書き始めたとき、押した行を指の下に置くため） */
+  private lastTap: { x: number; y: number; time: number } | null = null
+  /** 紙面で直接書く：入れたばかりの図・表のタイトル（紙面に出たら、図・表と一緒に見せる：settleContinued） */
+  private revealObjectFor: string | null = null
   private caretFrame = 0
 
-  /** 試作：次の絵を描く前に、カーソルの行が見えているか確かめる（打った・カーソルを動かした・行が増えた。何回呼ばれても1回） */
+  /** 紙面で直接書く：次の絵を描く前に、カーソルの行が見えているか確かめる（打った・カーソルを動かした・行が増えた。何回呼ばれても1回） */
   private scheduleCaretReveal(): void {
     if (this.caretFrame) return
     this.caretFrame = requestAnimationFrame(() => {
@@ -1348,34 +1379,151 @@ export class ReportEditor {
   }
 
   /**
-   * 試作（紙面で直接書く）：書いているカーソルの行が、紙面の見えている所（上の帯より下、キーボードの上の道具・キーボードより上）に来るよう、紙面を上下に動かす。
+   * 紙面で直接書く：書いているカーソルの行が、紙面の見えている所（上の帯より下、キーボードの上の道具・キーボードより上）に来るよう、紙面を動かす。
    * 書き始めたとき（revealAt）は、押した行を押した高さに置く（キーボードがまだ出ていなければ、キーボードに隠れない上の方に）。
-   * それ以外は、隠れているときだけ動かす（学生が自分で動かした位置を崩さないように）
+   * 図のタイトルは、タイトルの行をキーボードに隠れない所に置き、その上の図をできるだけ見せる（図が高すぎれば、タイトルの行を優先）。
+   * 表のタイトルは、タイトルの行を上の方に置き、その下の表をできるだけ見せる。
+   * それ以外は、隠れているときだけ動かす（学生が自分で動かした位置を崩さないように）。指で広げて紙面が画面より広いときは、横にも動かす
    */
   private revealCaret(): void {
     const at = this.revealAt
     this.revealAt = null
-    if (!this.overlay.blockId || !this.stage.zoomed || this.turning) return
-    const caret = this.overlay.caretClientRect()
-    if (!caret) return
+    const id = this.overlay.blockId
+    if (!id || !this.stage.zoomed || this.turning) return
     const box = this.overlay.element.getBoundingClientRect()
+    // 何も書いていない欄（足したばかりのタイトル・空の表紙の項目など）は、カーソルの四角が取れないので、欄の四角（1行）で決める
+    const caret = this.overlay.caretClientRect() ?? (box.height > 0 ? { left: box.left, top: box.top, bottom: box.bottom } : null)
+    if (!caret) return
     const { top, bottom } = this.paperArea({ left: box.left, top: caret.top, right: box.right, bottom: caret.bottom })
     const line = caret.bottom - caret.top
     if (bottom - top < line + 4) return
     const margin = Math.min(12, (bottom - top - line) / 2)
-    let want: number | null = null
-    if (at !== null) {
-      // キーボードがまだ出ていない（これから出る）ときは、画面の上の方（見えている所の 45% より上）に置く
-      const vv = window.visualViewport
-      const keyboardUp = !!vv && vv.height < window.innerHeight * 0.85
-      const limit = keyboardUp ? bottom - margin - line : top + (bottom - top) * 0.45
+    const kind = ops.findEditable(this.report, id)?.kind
+    const object = at !== null ? this.captionObject(id, kind) : null
+    let delta: number | null = null
+    if (object) {
+      const safe = this.keyboardSafeBottom(top, bottom) - margin
+      // 動かす量の範囲 [lo, hi] のうち、いちばん小さく動かす量（範囲がなければ、タイトルの行を優先）
+      const [lo, hi] = kind === 'figureCaption' ? [caret.bottom - safe, object.top - (top + margin)] : [object.bottom - safe, caret.top - (top + margin)]
+      delta = lo <= hi ? Math.min(Math.max(0, lo), hi) : kind === 'figureCaption' ? lo : hi
+    } else if (at !== null) {
+      const limit = this.keyboardSafeBottom(top, bottom) - margin - line
       const y = Number.isNaN(at) ? top + (bottom - top) * 0.3 : at - line / 2
-      want = Math.max(top + margin, Math.min(y, limit))
-    } else if (caret.bottom > bottom - 2) want = bottom - margin - line
-    else if (caret.top < top + 2) want = top + margin
-    if (want === null) return
-    const delta = caret.top - want
-    if (Math.abs(delta) >= 1) this.scrollPaperTo(this.scroller.scrollTop - this.revealTop + delta)
+      delta = caret.top - Math.max(top + margin, Math.min(y, limit))
+    } else if (caret.bottom > bottom - 2) delta = caret.bottom - (bottom - margin)
+    else if (caret.top < top + 2) delta = caret.top - (top + margin)
+    if (delta !== null && Math.abs(delta) >= 1) this.scrollPaperTo(this.scroller.scrollTop - this.revealTop + delta)
+    // 指で広げて紙面が画面より広い：カーソルが左右に隠れていれば、横にも動かす
+    if (this.stage.panX) {
+      const s = this.scroller.getBoundingClientRect()
+      const edge = Math.min(48, s.width / 4)
+      if (caret.left < s.left + edge / 2) this.scroller.scrollLeft -= s.left + edge - caret.left
+      else if (caret.left > s.right - edge / 2) this.scroller.scrollLeft += caret.left - (s.right - edge)
+    }
+  }
+
+  /**
+   * キーボードに隠れない、見えている所の下端（画面座標）。キーボードがまだ出ていなければ、出たときに隠れない高さの見込み
+   * （キーボードは画面の高さの 4 割ほど。その上の道具の分も見込む）
+   */
+  private keyboardSafeBottom(top: number, bottom: number): number {
+    const vv = window.visualViewport
+    if (vv && vv.height < window.innerHeight * 0.85) return bottom
+    return Math.max(top + 40, Math.min(bottom, window.innerHeight * 0.6 - 56))
+  }
+
+  /** 図・表のタイトル id と一緒に見せる、見ているページの図（写真）・表の上端と下端（画面座標。タイトルでなければ null） */
+  private captionObject(id: string, kind: ops.EditableKind | undefined): { top: number; bottom: number } | null {
+    if (kind !== 'figureCaption' && kind !== 'tableCaption') return null
+    const view = this.renderer.pageView
+    const e = CSS.escape(id)
+    const selector = kind === 'figureCaption' ? `figure[data-figure-id="${e}"] > :is(img, .figure-slot)` : `.data-table[data-table-id="${e}"] table`
+    const rects = [...this.viewport.querySelectorAll<HTMLElement>(selector)]
+      .filter((el) => view.pageIndexOf(el) === this.page)
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.height > 0)
+    if (!rects.length) return null
+    return { top: Math.min(...rects.map((r) => r.top)), bottom: Math.max(...rects.map((r) => r.bottom)) }
+  }
+
+  // ---- スマホ：2本の指で紙面を広げる・縮める（依頼者の要望。指の動きは editor/pinchZoom.ts） ----
+  // 指を置いている間は、紙面の表示枠と重ねる層を CSS の transform で広げて見せる（組み直さないので、なめらか）。
+  // 指を離したら、本当の倍率にして（pageStage.ts の setFreeZoom）、指の間にあった紙面の点が、指の間の点に来るように紙面を動かす。
+  // 1ページ全体の倍率より小さくはしない（近ければ全体の表示に戻す）。上限は、本文の幅に合わせる倍率の3倍（pageStage.ts の PINCH_MAX）。
+  // 紙面で直接書いている間に広げた・縮めた大きさは覚えておき、次に段落を押して書き始めるときも、その大きさにする（zoomForPaper）
+
+  /** 指で広げている途中：始めの倍率 s0・始めに指の間にあった紙面の点 c（縮小前の px）・始めの指の間の点 mid0・いまの倍率の比 k と指の間の点 mid */
+  private pinch: { s0: number; c: Point; mid0: Point; k: number; mid: Point } | null = null
+
+  private pinchStart(mid: Point): boolean {
+    if (this.turning || this.removed.size > 0) return false
+    const page = this.renderer.pageView.pages()[this.page]?.getBoundingClientRect()
+    if (!page?.width) return false
+    const s0 = this.stage.scale
+    this.pinch = { s0, c: { x: (mid.x - page.left) / s0, y: (mid.y - page.top) / s0 }, mid0: mid, k: 1, mid }
+    // 指で押した点は使わない（広げ終えたあとのタップで、書き始める欄を決めるのに使わないように）。写真を動かし始めていたら、やめる
+    this.touchPoint = null
+    this.cancelPhotoDrag()
+    this.suppressSelectionBar()
+    this.marker.hidden = true
+    const st = this.stageEl.getBoundingClientRect()
+    for (const el of [this.scroller, this.layer]) {
+      el.style.transformOrigin = `${mid.x - st.left}px ${mid.y - st.top}px`
+      el.style.willChange = 'transform'
+    }
+    return true
+  }
+
+  private pinchMove(k: number, mid: Point): void {
+    const p = this.pinch
+    if (!p) return
+    p.k = this.stage.clampPinch(p.s0 * k) / p.s0
+    p.mid = mid
+    const transform = `translate(${mid.x - p.mid0.x}px, ${mid.y - p.mid0.y}px) scale(${p.k})`
+    for (const el of [this.scroller, this.layer]) el.style.transform = transform
+  }
+
+  private pinchEnd(): void {
+    const p = this.pinch
+    this.pinch = null
+    if (!p) return
+    for (const el of [this.scroller, this.layer]) {
+      el.style.transform = ''
+      el.style.transformOrigin = ''
+      el.style.willChange = ''
+    }
+    this.applyPinch(p.s0 * p.k, p.c, p.mid)
+  }
+
+  /**
+   * 指を離した：紙面を倍率 scale にし、紙面の点 c（縮小前の px）が画面の点 at に来るよう、紙面を動かす。
+   * 1ページ全体の倍率に近ければ、全体の表示に戻す。紙面で直接書いている間なら、その大きさを覚える
+   */
+  private applyPinch(scale: number, c: Point, at: Point): void {
+    const writing = this.writingOnPaper
+    if (scale <= this.stage.fitScale * 1.03) {
+      if (this.stage.zoomed) this.setZoom(false)
+      this.notify()
+      return
+    }
+    this.stage.setFreeZoom(scale)
+    const page = this.renderer.pageView.pages()[this.page]?.getBoundingClientRect()
+    if (page) {
+      const s = this.stage.scale
+      if (this.stage.panX) this.scroller.scrollLeft += page.left + c.x * s - at.x
+      else this.scroller.scrollLeft = 0
+      this.scrollPaperTo(this.scroller.scrollTop - this.revealTop + (page.top + c.y * s - at.y))
+    }
+    if (writing) saveWritingZoom(this.stage.scale / this.stage.textScale)
+    this.realignOverlay()
+    this.realignFrozen()
+    this.placeContinueRow()
+    this.notify()
+  }
+
+  /** スマホ：2本の指で紙面を広げている途中か、広げ終えた直後か（このときのタップ・はらいで、書き始めない・ページを送らない） */
+  get pinching(): boolean {
+    return this.pinchZoom.busy
   }
 
   /** スマホ：紙面のうち、書いている欄 r（画面座標）を見せてよい高さの範囲（画面座標。上の案内より下、下の書く欄・キーボードより上） */
@@ -1532,7 +1680,7 @@ export class ReportEditor {
     const placement = this.overlayPlacement(id)
     if (placement) this.overlay.moveTo(placement)
     this.shiftFollowing()
-    // 試作（紙面で直接書く）：組み直した紙面・続きのページで、書いている行が隠れていれば見せる
+    // スマホで紙面に直接書く：組み直した紙面・続きのページで、書いている行が隠れていれば見せる
     if (this.writingOnPaper) this.scheduleCaretReveal()
   }
 
@@ -1581,10 +1729,16 @@ export class ReportEditor {
     }
     this.afterChange({ render: 'now', save: true })
     if (heading) this.noticeHeading(heading.step)
-    // 試作（紙面で直接書く）：書き終えて、ほかの欄を開かなかったら、キーボードを閉じる（書く欄は隠れても、フォーカスが残ることがあるため）
+    // スマホで紙面に直接書く：書き終えて、ほかの欄を開かなかったら、キーボードを閉じる（書く欄は隠れても、フォーカスが残ることがあるため）。
+    // 図・表なども選ばず、続けて開く欄もなければ（紙面の外を押した・iPhone のキーボードの「完了」など）、「完了」と同じく1ページ全体の表示に戻す
+    // （拡大したまま残り、「ページ全体に戻す」を押すのが分かりにくかったため。依頼者の判断）。
+    // ただし表のセルで Enter を押して書き終えたときは、拡大したまま（続けて隣のセルを押して書けるように）
     if (this.direct) {
+      const cellByKey = byKey && ops.findEditable(this.report, id)?.kind === 'tableCell'
       queueMicrotask(() => {
-        if (!this.overlay.blockId && document.activeElement === this.overlay.element) this.overlay.element.blur()
+        if (this.overlay.blockId) return
+        if (document.activeElement === this.overlay.element) this.overlay.element.blur()
+        if (!cellByKey && !this.pendingOpen && !this.selection && !this.turning && this.stage.zoomed) this.setZoom(false)
       })
     }
   }
@@ -1819,8 +1973,8 @@ export class ReportEditor {
     }
     // 書き終えたばかりの同じ欄をまた書くときは、仮の表示を外す（書く欄が、組み直す前の紙面の上で開く）
     this.clearFrozen(Infinity, (f) => f.id !== id)
-    // 試作（紙面で直接書く）：段落・見出しは紙面に重ねた書く欄で書く。先に紙面を拡大してから、書く欄の位置を測る。
-    // 押して書き始めたときは、押した行を、押した高さに置く（キーボードがまだ出ていなければ、隠れない上の方に。revealCaret）
+    // スマホで紙面に直接書く：紙面に重ねた書く欄で書く。先に紙面を拡大してから、書く欄の位置を測る。
+    // 押して書き始めたときは、押した行を、押した高さに置く（キーボードがまだ出ていなければ、隠れない上の方に。図表のタイトルは、図・表と一緒に見せる：revealCaret）
     this.placeEditorFor(id)
     if (this.direct && !this.overlay.inSheet) {
       const zoomIn = !this.stage.zoomed
@@ -1921,6 +2075,9 @@ export class ReportEditor {
     this.overlay.settle(this.renderer.pageView.fragments(id)[0], this.renderer.pageView.fragments(id))
     this.hideStyle.textContent = this.editingStyle(id)
     this.followCaret()
+    // 入れたばかりの図・表のタイトルが紙面に出た：図・表と一緒に見せる（revealCaret）
+    if (this.revealObjectFor === id && this.writingOnPaper) this.revealAt = Number.NaN
+    this.revealObjectFor = null
     if (this.phone) this.revealEditing()
     this.refreshHighlights()
   }
@@ -1947,7 +2104,7 @@ export class ReportEditor {
    * 入力欄がすでに開いているとき（貼り付けで段落が増えたなど）は、確定せずに書く先を移す（前の欄の文字は、呼び出し側が原稿に入れ済み）
    */
   private openBeforeRender(id: string, caret: number, near: InsertNear | null): boolean {
-    // スマホは、組み直してから開く（試作の、紙面で直接書く段落・見出しは、PC と同じく、すぐ開く。紙面を拡大してから）
+    // スマホは、組み直してから開く（紙面で直接書くときは、PC と同じく、すぐ開く。紙面を拡大してから）
     if (this.phone && !this.writesOnPaper(id)) return false
     this.placeEditorFor(id)
     if (this.writesOnPaper(id)) this.zoomForPaper()
@@ -1962,6 +2119,9 @@ export class ReportEditor {
     if (this.writingOnPaper) {
       this.hideStyle.textContent = this.editingStyle(id)
       this.revealEditing()
+      // 入れたばかりの図・表のタイトル：紙面に出たら、図・表と一緒に見せる（settleContinued）
+      const kind = editable.kind
+      this.revealObjectFor = !shown && (kind === 'figureCaption' || kind === 'tableCaption') ? id : null
     }
     this.pendingOpen = null
     this.continuing = { id, anchor: null }
@@ -2182,7 +2342,7 @@ export class ReportEditor {
     this.selection = null
     this.markSelection()
     this.currentId = created.newId
-    // スマホは、すぐ下の書く欄で開く（試作の紙面で直接書くときは、PC と同じく、紙面の上ですぐ開く）
+    // 予備の下の書く欄（?direct=0）は、すぐ下の書く欄で開く（紙面で直接書くときは、PC と同じく、紙面の上ですぐ開く）
     if (this.phone && !this.direct) this.openUnrendered(created.newId)
     else this.reopenAfterRender(created.newId, 0, { id: objectId, place: 'after' })
   }
@@ -2285,7 +2445,12 @@ export class ReportEditor {
       this.suppressClick = false
       return
     }
-    // 試作（紙面で直接書く）：紙面に重ねた書く欄（紙面の表示枠の中にある）を押した：書く欄の中でカーソルが動くだけ（開き直さない）
+    // 2本の指で紙面を広げている途中・広げ終えた直後のタップ：書き始めない（editor/pinchZoom.ts）
+    if (this.pinchZoom.busy) {
+      this.touchPoint = null
+      return
+    }
+    // スマホで紙面に直接書く：紙面に重ねた書く欄（紙面の表示枠の中にある）を押した：書く欄の中でカーソルが動くだけ（開き直さない）
     if (this.writingOnPaper && e.target instanceof Node && this.overlay.element.contains(e.target)) {
       this.touchPoint = null
       return
@@ -2300,8 +2465,8 @@ export class ReportEditor {
     const { clientX: x, clientY: y } = touch ?? e
     const target = (touch?.target ?? e.target) as HTMLElement
     if (this.writingOnPaper && this.overlay.element.contains(target)) return
-    // 試作：押した高さ（書き始めるとき、押した行をその高さに置く）
-    this.lastTap = this.direct && keyHit === undefined ? { y, time: performance.now() } : null
+    // スマホで紙面に直接書く：押した点（書き始めるとき、押した行をその高さに置く。覚えた大きさで広げるとき、押した点を指の下に置く）
+    this.lastTap = this.direct && keyHit === undefined ? { x, y, time: performance.now() } : null
     // 見開き：並べている隣のページを押した：紙面はそのままで、そのページで書く（このあとは、そのページを押したときと同じ）
     if (this.stage.spread) {
       const at = this.renderer.pageView.pageIndexOf(target)
@@ -2441,7 +2606,7 @@ export class ReportEditor {
    * byKey：キーボードで紙面の欄に移って Enter を押した（すぐ書き始める）
    */
   private openOrSelect(id: string, offset: number, byKey: boolean): void {
-    const selectFirst = this.phone && !byKey && ops.findEditable(this.report, id)?.kind === 'tableCaption'
+    const selectFirst = this.phone && !this.direct && !byKey && ops.findEditable(this.report, id)?.kind === 'tableCaption'
     if (selectFirst && !(this.selection?.kind === 'table' && this.selection.id === id)) return this.select({ kind: 'table', id })
     this.openEditor(id, offset)
   }
@@ -3202,8 +3367,10 @@ export class ReportEditor {
   private removeTableHow(): string {
     // PC：表のセル・タイトルを書いている間も、表を選んでいる間も、左の道具に「この表」の「削除」がある
     if (!this.phone) return '表ごと消すときは、左の「この表」の「削除」を押します。'
-    // スマホ：表のセル・タイトルを書いている間は、書く欄の道具に「この表を削除」がある。表を選んでいる間は、下の「この表」の道具に「削除」がある
-    return this.overlay.blockId ? '表ごと消すときは、書く欄の「この表を削除」を押します。' : '表ごと消すときは、「この表」の「削除」を押します。'
+    // スマホ：表のセル・タイトルを書いている間は、キーボードの上の道具に「表を削除」がある（予備の下の書く欄では「この表を削除」）。
+    // 表を選んでいる間は、下の「この表」の道具に「削除」がある
+    if (!this.overlay.blockId) return '表ごと消すときは、「この表」の「削除」を押します。'
+    return this.direct ? '表ごと消すときは、キーボードの上の道具の「表を削除」を押します。' : '表ごと消すときは、書く欄の「この表を削除」を押します。'
   }
 
   /**
@@ -3672,6 +3839,11 @@ export class ReportEditor {
     const photos = this.report.workPhotos[page]
     // 全体を入れている写真は切り抜いていないので、動かさない（押すと、ふつうのクリック＝写真を選ぶ）
     if (!photos || photos.whole?.[index] || slot.classList.contains('whole')) return
+    // スマホ：押して選んだ写真だけを、指で動かせる（選んでいない写真の上で左右にはらうとページを送り、拡大中は紙面を動かす。
+    // 前は、ページを送ろうとして写真の見える所を動かしてしまうことが多かった。依頼者の判断：案A）。PC は今までどおり、選ばずに動かせる
+    if (this.phone && !(this.selection?.kind === 'photos' && this.selection.page === page && this.selection.index === index)) return
+    // 2本の指を置いた（紙面を広げる）ときは動かさない
+    if (this.pinchZoom.active) return
     const cell = slot.getBoundingClientRect()
     const k = Math.max(cell.width / img.naturalWidth, cell.height / img.naturalHeight)
     this.photoDrag = {

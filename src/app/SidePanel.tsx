@@ -420,15 +420,16 @@ export function CheckBody({ editor, snap, config, onPick, pc }: { editor: Report
   }, [here])
   const { rows, fixes, notYet } = checkSummary(snap, config)
   // PC：小見出しの横の数（紙面を組み終えるまでは出さない。ページ数などのチェックが加わって、数が変わるため）
-  const count = (n: number, error?: boolean) => pc && !snap.pageChecksPending && n > 0 && <span className={`count-badge${error ? ' e' : ''}`}>{n}</span>
+  const count = (n: number, error?: boolean, prefix = '') => pc && !snap.pageChecksPending && n > 0 && <span className={`count-badge${error ? ' e' : ''}`}>{prefix}{n}</span>
   // PC で直すところがあるときは、済んだ行を1行にたたむ（まだ・先生の許可のあとなどの行は、そのまま）
   const fold = !!pc && fixes.length > 0
   const done = fold ? rows.filter((r) => r.state === 'done') : []
   return (
     <>
       <div className="check-sub" title={pc ? '押すと、その場所へ' : undefined}>
-        <b>まだのところ</b>
-        {pc ? count(notYet) : <span>押すと、その場所へ</span>}
+        {/* 見出しは「進み具合」（前は「まだのところ」。全部済んだときに合わないため。依頼者の選択）。残りの数は「あと3」 */}
+        <b>進み具合</b>
+        {pc ? count(notYet, false, 'あと') : <span>押すと、その場所へ</span>}
       </div>
       <ul className="check-prog">
         {rows

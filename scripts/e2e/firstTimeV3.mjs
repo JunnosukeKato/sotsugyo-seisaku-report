@@ -66,7 +66,7 @@ async function openPageOnce(browser, { phone = false, downloads } = {}) {
     await page.setViewport({ width: 1440, height: 900 })
   }
   try {
-    await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+    await page.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0' })
   } catch (e) {
     await context.close().catch(() => {})
     throw e

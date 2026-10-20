@@ -48,7 +48,7 @@ async function openSample(browser, vp) {
   })
   if (vp.isMobile) await page.setUserAgent(UA_IPHONE)
   await page.setViewport(vp)
-  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0', timeout: 90000 })
+  await page.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0', timeout: 90000 })
   const ready = () =>
     page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
   await ready()

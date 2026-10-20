@@ -9,7 +9,7 @@ import type { ReportEditor } from '../editor/reportEditor'
 
 /**
  * 書いている欄を隠しうるもののうち、画面の下に出しているもの（書く欄・削除の知らせ・紙面の下の帯・ページ送りなど）。
- * .direct-bar：試作（紙面で直接書く）の、キーボードの上の道具（app/Phone.tsx）
+ * .direct-bar：スマホで紙面に直接書くときの、キーボードの上の道具（app/Phone.tsx）
  */
 const BOTTOM_COVERS = '.edit-sheet.open, .undo-toast, .page-band, .pager, .unzoom, .sel-bar > *, .direct-bar'
 /** 上に出していることがあるもの（はじめての案内。書く欄を出している間は、画面の上） */

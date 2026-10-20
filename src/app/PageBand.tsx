@@ -32,11 +32,16 @@ const Mark = {
   auto: svg(<path d="M19.2 12a7.2 7.2 0 1 1-2.1-5.1M19.4 4.6v3.6h-3.6" />),
 }
 
+/** 押して選んだ作品写真の言葉（帯の幅で1行に収まる長さ。PC の道具の「つかんでずらして、トリミングを調整」と同じ意味。言葉は依頼者の判断） */
+const PHOTO_MOVE_TEXT = '指でずらして、トリミングを調整'
+
 /** 帯に出すもの */
 type Band =
   | { kind: 'abstract' }
   | { kind: 'toc' }
   | { kind: 'photos'; text: string; page: number; index: number }
+  /** 押して選んだ作品写真（切り抜いている写真）：指でずらすと、トリミングを調整できること（選んだ写真だけを動かせる：editor/reportEditor.ts の onPhotoPointerDown） */
+  | { kind: 'photoMove' }
   | { kind: 'fields'; todo: BandTodo; text: string; sub: string | null; button: string }
 
 /** 紙面と帯の間・帯と下の道具の間（画面の px） */
@@ -52,6 +57,9 @@ function bandOf(editor: ReportEditor, snap: EditorSnapshot): Band | null {
     // 何ページ目の作品写真か（mockups/v38 案A）
     const page = snap.photoPage ?? 0
     const photos = snap.report.workPhotos[page]
+    // 写真を押して選んでいる：その写真を指で動かせることを知らせる（全体を入れている写真は、切り抜いていないので動かせない）
+    const s = snap.selection
+    if (s?.kind === 'photos' && s.index !== undefined && photos?.imageIds[s.index] && !photos.whole?.[s.index]) return { kind: 'photoMove' }
     const photo = photos && photoBand(photos)
     return photo ? { kind: 'photos', page, ...photo } : null
   }
@@ -146,6 +154,15 @@ function BandView({ editor, band, inColumn }: { editor: ReportEditor; band: Band
           <span>{TOC_BAND.text}</span>
         </div>
         <p>{TOC_BAND.sub}</p>
+      </section>
+    )
+  }
+  if (band.kind === 'photoMove') {
+    return (
+      <section className="page-band photo-move-band" aria-label="このページの案内" ref={ref}>
+        <div className="t">
+          <span>{PHOTO_MOVE_TEXT}</span>
+        </div>
       </section>
     )
   }

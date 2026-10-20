@@ -145,7 +145,7 @@ function UndoRedo({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot
 
 /**
  * 作品写真のスイッチ「全体を入れる（切らない）」（mockups/v32 ③ 案A）。その写真だけ、枠の中に全体を入れる（まわりは白）。
- * 切ると、今までどおり枠いっぱいに切り抜く（つかんで動かすと、見える位置を変えられる）
+ * 切ると、今までどおり枠いっぱいに切り抜く（つかんでずらすと、トリミングを調整できる）
  */
 function WholeSwitch({ on, index, onToggle }: { on: boolean; index: number; onToggle: (on: boolean) => void }) {
   return (
@@ -236,7 +236,7 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
                 key={a.label}
                 className={`lay${current === a ? ' on' : ''}`}
                 aria-pressed={current === a}
-                title={`${a.label}（写真をつかんで動かすと、見える位置を変えられます）`}
+                title={`${a.label}（つかんでずらして、トリミングを調整）`}
                 onClick={() => editor.setPhotoLayout(page, a.layout, a.columns)}
               >
                 <span className="lay-grid" style={{ gridTemplate: `repeat(${a.rows}, 1fr) / repeat(${a.columns}, 1fr)` }}>
@@ -249,15 +249,15 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
               </button>
             ))}
           </div>
-          {/* 並べ方の枠の中は1行6字ほど。言葉の切れ目で折り返す（1字だけ次の行に残らないように） */}
+          {/* 並べ方の枠の中は1行6字ほど。言葉の切れ目で折り返す（1字だけ次の行に残らないように。言葉は依頼者の判断） */}
           <div className="ctx-note">
-            写真は、
-            <br />
             つかんで
             <br />
-            見える所を
+            ずらして、
             <br />
-            変えられます
+            トリミングを
+            <br />
+            調整
           </div>
           {/* スマホ：並べ方の横に、区切りの線と「ページを足す」「ページを消す」（下の道具は1列に並べるため） */}
           {phone && (

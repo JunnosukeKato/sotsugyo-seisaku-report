@@ -44,7 +44,7 @@ async function openSample(browser, vp) {
   })
   if (vp.isMobile) await page.setUserAgent(UA_IPHONE)
   await page.setViewport(vp)
-  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0', timeout: 90000 })
+  await page.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0', timeout: 90000 })
   const ready = () =>
     page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
   await ready()
@@ -221,7 +221,7 @@ export async function photoPagesPc(browser, check) {
   await stubConfig(again)
   await again.evaluateOnNewDocument((old) => localStorage.setItem('sotsugyo-seisaku-report-leaving', old), old)
   await again.setViewport({ width: 1366, height: 768, deviceScaleFactor: 1 })
-  await again.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0', timeout: 90000 })
+  await again.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0', timeout: 90000 })
   await again.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !document.querySelector('.loading') }, { timeout: 60000 })
   await pause(800)
   const migrated = await again.evaluate(() => ({ photos: window.__editor.getSnapshot().report.workPhotos, version: window.__editor.getSnapshot().report.formatVersion }))

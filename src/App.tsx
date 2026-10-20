@@ -19,7 +19,7 @@ import { Palette } from './app/Palette'
 import { PageBand } from './app/PageBand'
 import { TocNotice } from './app/TocNotice'
 import { PhoneChrome } from './app/Phone'
-import { readPhoneDirect, rememberPhoneDirect, useNoFocusZoom } from './app/phoneDirect'
+import { readPhoneDirect, useNoFocusZoom } from './app/phoneDirect'
 import { UndoBar } from './app/UndoBar'
 import { useUndoNotice } from './app/useUndoNotice'
 import { useKeyboardInset, useNarrow, useSwipe, useWheelPaging } from './app/uiShared'
@@ -232,10 +232,10 @@ export default function App() {
   const localAtStart = useRef<Report | null>(null)
   // スマホ（画面の幅が狭いとき）は、並べ方と書き方を変える
   const narrow = useNarrow()
-  // 試作：スマホで紙面に直接書く（リンクの ?direct=1 で入り、この端末に覚える。?direct=0・メニューの「下の書く欄に戻す」でやめる。app/phoneDirect.ts）
-  const [direct, setDirect] = useState(readPhoneDirect)
+  // スマホは紙面に直接書く（予備：リンクの ?direct=0 で、その端末だけ前の「下から出る書く欄」に。app/phoneDirect.ts）
+  const [direct] = useState(readPhoneDirect)
   const phoneDirect = narrow && direct
-  // 試作の間、iPhone で書き始めるたびに画面が勝手に拡大されないようにする
+  // 紙面に直接書く間、iPhone で書き始めるたびに画面が勝手に拡大されないようにする
   useNoFocusZoom(phoneDirect)
   const panels = usePanelWidths()
   const hasLayout = !!snap?.layout
@@ -930,10 +930,6 @@ export default function App() {
           wordTodo={wordTodo ? todoCard : undefined}
           checkRequest={checkRequest}
           direct={phoneDirect}
-          onDirectOff={() => {
-            rememberPhoneDirect(false)
-            setDirect(false)
-          }}
         />
       ) : ready && help ? (
         // PC の使い方：右の欄がまるごと使い方に替わる（紙面と道具は、そのまま使える）
@@ -1008,7 +1004,7 @@ export default function App() {
       {/* スマホの使い方：画面いっぱいの欄（メニューの「？ 使い方」から） */}
       {ready && narrow && help && helpView('sheet')}
       {/* 指差し確認（ほかの窓や案内が出ている間は出さない） */}
-      {ready && tourOn && !tourBlocked && <Tour narrow={narrow} drive={!!drive && !driveStopped} onDone={endTour} />}
+      {ready && tourOn && !tourBlocked && <Tour narrow={narrow} drive={!!drive && !driveStopped} direct={direct} onDone={endTour} />}
       {dialog?.kind === 'word' && snap && editor && (
         <WordImportDialog config={config} report={snap.report} onImport={importWord} onClose={() => setDialog(null)} />
       )}

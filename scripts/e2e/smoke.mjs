@@ -266,8 +266,8 @@ await withEdge(async (browser) => {
   })
   await page.screenshot({ path: `${OUT}/0-check-fresh.png` })
   check(
-    '書き始め（表紙だけ入れた）の右の欄：「まだのところ 3」（数は小見出しの横。直すところは 0 なので数を出さない）で赤い字・印がなく、まだのところは表紙 ✓・本文のページ／本文の段落／作品写真 ○・抄録「先生の許可のあと」（図の枚数の行はない。直すところがないので ✓ の行はたたまない）。直すところは「いま直すところはありません」（凡例は出さない）。「押すと、その場所へ」「書いた文の間違い」はマウスを乗せたときだけ',
-    freshPanel.tally === 'まだのところ3,直すところ' &&
+    '書き始め（表紙だけ入れた）の右の欄：「進み具合 あと3」（数は小見出しの横。直すところは 0 なので数を出さない）で赤い字・印がなく、まだのところは表紙 ✓・本文のページ／本文の段落／作品写真 ○・抄録「先生の許可のあと」（図の枚数の行はない。直すところがないので ✓ の行はたたまない）。直すところは「いま直すところはありません」（凡例は出さない）。「押すと、その場所へ」「書いた文の間違い」はマウスを乗せたときだけ',
+    freshPanel.tally === '進み具合あと3,直すところ' &&
       !freshPanel.oldTally &&
       freshPanel.hints === '押すと、その場所へ,書いた文の間違い' &&
       !freshPanel.fold &&
@@ -1057,19 +1057,19 @@ await withEdge(async (browser) => {
   s = await snap()
   const refsNow = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
   check('（図1）と書くと、確定したときに図とつながる（番号が変わっても自動でそろう）', refsNow === 2 && !s.findings.some((x) => x.ruleId === 'figure-unreferenced' || x.ruleId === 'manual-ref'))
-  // 同じ段落に（図1）が2つ並んだ：二重になっているとエラーで知らせ、下線の（図1）を消すように書く。指摘を押すと、その（図1）の前にカーソルが来る
+  // 同じ段落に（図1）が2つ並んだ：二重になっているとエラーで知らせ、下線の（図1）を消すように書く。指摘を押すと、その（図1）の後ろにカーソルが来る（Backspace で消せる）
   const dup = await page.evaluate((id) => {
     const f = window.__editor.getSnapshot().findings.find((x) => x.ruleId === 'duplicate-ref' && x.blockId === id)
     return f ? { severity: f.severity, detail: f.detail, start: f.start, end: f.end } : null
   }, firstParagraph)
   await page.evaluate(() => [...document.querySelectorAll('.side .issue')].find((li) => li.textContent.includes('が2つある')).click())
   await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 30000 }, firstParagraph)
-  for (let k = 0; dup && k < dup.end - dup.start; k++) await page.keyboard.press('Delete')
+  for (let k = 0; dup && k < dup.end - dup.start; k++) await page.keyboard.press('Backspace')
   await page.keyboard.press('Escape')
   await ready()
   s = await snap()
   const refsFixed = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === firstParagraph).content.filter((n) => n.type === 'ref').length
-  check('同じ段落に（図1）が2つあるとエラーになり、下線の（図1）を消して1つにできる（押すと、その前にカーソルが来る）', dup?.severity === 'error' && dup.detail.includes('下線の（図1）を消して1つにします') && refsFixed === 1 && !s.findings.some((x) => x.ruleId === 'duplicate-ref'), JSON.stringify({ dup, refsFixed }))
+  check('同じ段落に（図1）が2つあるとエラーになり、下線の（図1）を消して1つにできる（押すと、その後ろにカーソルが来る）', dup?.severity === 'error' && dup.detail.includes('下線の（図1）を消して1つにします') && refsFixed === 1 && !s.findings.some((x) => x.ruleId === 'duplicate-ref'), JSON.stringify({ dup, refsFixed }))
   await page.screenshot({ path: `${OUT}/2-figure.png` })
 
   // ---- 図・表は、文中の入れたい位置で入れる（書いていないときは押せない） ----
@@ -1339,7 +1339,7 @@ await withEdge(async (browser) => {
   await ready()
   page.off('filechooser', onChooser)
   const moved = (await snap()).report.workPhotos[0].positions?.[0]
-  check('作品写真をつかんで動かすと、見える位置が変わる（写真は選び直さない）', !!moved && moved.y < 50 && moved.x === 50 && !chooserOpened, JSON.stringify(moved))
+  check('作品写真をつかんでずらすと、トリミングが変わる（写真は選び直さない。パソコンは選ばずにずらせる）', !!moved && moved.y < 50 && moved.x === 50 && !chooserOpened, JSON.stringify(moved))
   await chooseArrangement('1枚')
   const oneShown = await page.evaluate(() => document.querySelectorAll('.page-viewport.front [data-photo-slot]').length)
   await chooseArrangement('2枚（上下')
@@ -1777,7 +1777,7 @@ await withEdge(async (browser) => {
     }))
     check('ひな形の説明のある空の段落を開いて、何も書かずに閉じても、説明（「ここに書くこと」）は消えない', kept.hint === '工夫した点を書く' && kept.placeholder.includes('工夫した点を書く'), JSON.stringify(kept))
 
-    // 小見出しに手で書いた「（1）」：警告で、消す番号を書く（番号の「ⅰ．」は自動で付く）。押すと見出しの初めにカーソルが来るので、自分で消す
+    // 小見出しに手で書いた「（1）」：警告で、消す番号を書く（番号の「ⅰ．」は自動で付く）。押すと「（1）」の後ろにカーソルが来るので、Backspace で自分で消す
     const headingFix = await page.evaluate(() => {
       const li = [...document.querySelectorAll('.side .issue')].find((x) => x.textContent.includes('小見出しに番号を手で書いている'))
       const info = { shown: !!li, warning: !!li?.classList.contains('warning'), fix: !!li?.querySelector('.fix'), detail: li?.querySelector('.detail')?.textContent ?? '' }
@@ -1785,7 +1785,7 @@ await withEdge(async (browser) => {
       return info
     })
     await waitEditing(() => window.__editor.getSnapshot().editingId === 'fsN')
-    for (let k = 0; k < 3; k++) await page.keyboard.press('Delete')
+    for (let k = 0; k < 3; k++) await page.keyboard.press('Backspace')
     await page.keyboard.press('Escape')
     await ready()
     const fixedTitle = (await blocksOf('fc1')).find((b) => b.id === 'fsN')?.title
@@ -2596,7 +2596,7 @@ async function pdfSaveCheck(browser) {
     rows: [...document.querySelectorAll('.side .check-prog li')].map((li) => li.className).join(','),
     note: document.querySelector('.side-foot .export-note')?.textContent ?? '',
   }))
-  check('指摘のない原稿の右の欄は、まだのところ・直すところの数を出さず（0）、まだのところは全部 ✓ の行のまま（直すところがないので、たたまない）、PDF のボタンの下は「直すところ・まだのところはありません」', zeroPanel.tally === 'まだのところ,直すところ' && zeroPanel.rows === 'done,done,done,done,done' && zeroPanel.note === '直すところ・まだのところはありません', JSON.stringify(zeroPanel))
+  check('指摘のない原稿の右の欄は、まだのところ・直すところの数を出さず（0）、まだのところは全部 ✓ の行のまま（直すところがないので、たたまない）、PDF のボタンの下は「直すところ・まだのところはありません」', zeroPanel.tally === '進み具合,直すところ' && zeroPanel.rows === 'done,done,done,done,done' && zeroPanel.note === '直すところ・まだのところはありません', JSON.stringify(zeroPanel))
   await page.click('.side .export')
   await page.waitForSelector('.modal .pdf-start')
   const confirm = await page.evaluate(() => ({

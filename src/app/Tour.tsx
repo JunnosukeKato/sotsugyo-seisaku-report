@@ -51,16 +51,17 @@ const PC_STEPS = (drive: boolean): Step[] => [
     targets: first('.side .meta > :first-child'),
     sides: ['left', 'below'],
   },
-  { title: 'セルフチェック', text: 'まだのところと、直すところの一覧です。押すと、その場所へ移ります。', targets: first('.side .sec.check'), sides: ['left'] },
+  { title: 'セルフチェック', text: '進み具合と、直すところの一覧です。押すと、その場所へ移ります。', targets: first('.side .sec.check'), sides: ['left'] },
   { title: 'PDFを書き出す', text: 'ここから PDF にします。提出の前に、直すところ・まだのところを0にします。', targets: first('.side .export'), sides: ['left', 'above'] },
   // 「？ 使い方」は、右の欄の「メニュー」の中（mockups/v37 案C）。光はメニューのボタンに当てる
   { title: '？ 使い方', text: '困ったときの「？ 使い方」は、右上の「メニュー」の中です。言葉で探せます。', targets: first('.side .menu-btn'), sides: ['left', 'below'] },
 ]
-const PHONE_STEPS = (drive: boolean): Step[] => [
-  { title: '紙面', text: '文をタップすると、書く欄が出ます。', targets: paper, sides: ['below', 'above'] },
+const PHONE_STEPS = (drive: boolean, direct: boolean): Step[] => [
+  // 紙面で直接書く（スマホのふつう）。予備の ?direct=0 の端末では、下から書く欄が出る（app/phoneDirect.ts）
+  { title: '紙面', text: direct ? '文をタップすると、大きくなって、その場で書けます。「完了」で、ページ全体に戻ります。' : '文をタップすると、書く欄が出ます。', targets: paper, sides: ['below', 'above'] },
   {
     title: 'チェックと PDF',
-    text: 'まだのところ・直すところと、PDF の書き出しは、ここです。',
+    text: '進み具合・直すところと、PDF の書き出しは、ここです。',
     targets: () => [...first('.p-nav .nav-check')(), ...first('.p-nav .nav-pdf')()],
     sides: ['above'],
   },
@@ -129,17 +130,19 @@ interface Props {
   narrow: boolean
   /** Google ドライブにも保存しているか（保存のようすの説明を変える） */
   drive: boolean
+  /** スマホで紙面に直接書く（ふつう。予備の ?direct=0 の端末では false：紙面の説明を変える） */
+  direct?: boolean
   /** 見終えた・とばした */
   onDone: () => void
 }
 
-export function Tour({ narrow, drive, onDone }: Props) {
+export function Tour({ narrow, drive, direct = true, onDone }: Props) {
   // 始めたときに、場所が見つかる段だけにする。使い方を閉じてすぐ（右の欄が戻る前）にも始めるため、画面ができてから（次のフレームで）調べる
   const [steps, setSteps] = useState<Step[] | null>(null)
   useLayoutEffect(() => {
-    const frame = requestAnimationFrame(() => setSteps((narrow ? PHONE_STEPS(drive) : PC_STEPS(drive)).filter((s) => rectOf(s))))
+    const frame = requestAnimationFrame(() => setSteps((narrow ? PHONE_STEPS(drive, direct) : PC_STEPS(drive)).filter((s) => rectOf(s))))
     return () => cancelAnimationFrame(frame)
-  }, [narrow, drive])
+  }, [narrow, drive, direct])
   // 見せる場所が1つもなければ、すぐ終える
   useEffect(() => {
     if (steps && !steps.length) onDone()

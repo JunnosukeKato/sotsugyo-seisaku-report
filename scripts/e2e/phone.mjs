@@ -1,5 +1,7 @@
 // スマホ版の動作確認（Edge をスマホの画面の大きさ・タッチ操作にして動かす）。
 // 使い方: node scripts/e2e/phone.mjs（開発サーバーが http://localhost:5173 で動いていること）
+// スマホのふつうの書き方は「紙面で直接書く」（2026-10-20 から）。ここのほとんどの確かめは、予備の「下から出る書く欄」（?direct=0）で動かす
+// （予備が壊れないように）。紙面で直接書く・2本の指で広げる・作品写真を選んでから動かす、は scripts/e2e/phoneDirect.mjs（このファイルの最後で呼ぶ）
 import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { withEdge } from '../poc/edge.mjs'
@@ -90,7 +92,7 @@ await withEdge(async (browser) => {
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
   await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36')
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
-  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  await page.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0' })
   await page.evaluate(() => new Promise((r) => { const req = indexedDB.deleteDatabase('sotsugyo-seisaku-report'); req.onsuccess = req.onerror = req.onblocked = () => r() }))
   await page.reload({ waitUntil: 'networkidle0' })
   const ready = () =>
@@ -717,7 +719,7 @@ async function bandCheck(browser) {
   const LANDSCAPE = { width: 844, height: 390, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
   await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
   await page.setViewport(PORTRAIT)
-  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  await page.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0' })
   const ready = () =>
     page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
   await ready()
@@ -1084,7 +1086,7 @@ async function iphoneShareCheck(browser) {
   await (await page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: downloads, browserContextId: context.id })
   await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
-  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  await page.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0' })
   const ready = () =>
     page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
   await ready()
@@ -1156,7 +1158,7 @@ async function phoneWordCheck(browser) {
   page.on('pageerror', (e) => console.log('pageerror(word):', e.message))
   await page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36')
   await page.setViewport({ width: 360, height: 640, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
-  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  await page.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0' })
   const ready = () =>
     page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
   await ready()
@@ -1253,7 +1255,7 @@ async function firstTimeFixesPhone(browser) {
   const LANDSCAPE = { width: 844, height: 390, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
   await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
   await page.setViewport(PORTRAIT)
-  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  await page.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0' })
   const ready = () =>
     page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
   await ready()
@@ -1600,7 +1602,7 @@ async function sideToolsCheck(browser) {
   const SMALL = { width: 800, height: 360, deviceScaleFactor: 2, isMobile: true, hasTouch: true }
   await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
   await page.setViewport(PORTRAIT)
-  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  await page.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0' })
   const ready = () =>
     page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
   await ready()
@@ -1670,7 +1672,7 @@ async function sideToolsCheck(browser) {
         pressedOk: lays.every((l) => l.pressed === String(l.on)) && lays.filter((l) => l.on).length === 1,
         band: band?.textContent ?? '',
         bandInColumn: !!band && !!col?.contains(band),
-        bandButtonH: band ? Math.round(band.querySelector('button').getBoundingClientRect().height) : 0,
+        bandButtonH: band ? Math.round(band.querySelector('button')?.getBoundingClientRect().height ?? 0) : 0,
         bandAbove: !bandR || (cards.length === 2 && bandR.bottom <= cards[1].top + 0.5),
         overPage: cards.some((c) => hit(c, pageEl)) || (!!bandR && hit(bandR, pageEl)),
         overBand: !!bandR && buttons.some((b) => hit(b.r, bandR)),
@@ -1743,8 +1745,8 @@ async function sideToolsCheck(browser) {
   await tapButton('.page-side .photo-sw', '全体を入れる（切らない）')
   const switched = { checked: await page.evaluate(() => document.querySelector('.page-side .photo-sw')?.getAttribute('aria-checked')), whole: (await photos()).whole?.[0] }
   check(
-    '横向き：写真を押して選ぶと、「この写真（1枚目）」の道具（差し替え・外す・全体を入れる（切らない））が下の道具ではなく右の列に出て（高さ 44px 以上）、スイッチで切り替えられる',
-    placed(chosen) && chosen.label.join() === 'この写真（1枚目）' && chosen.tools.map((t) => t.split(':')[0]).join() === '差し替え,外す,全体を入れる（切らない）' && chosen.tools[2].includes('switch=false') && chosen.bandInColumn && chosen.bandAbove && switched.checked === 'true' && switched.whole === true,
+    '横向き：写真を押して選ぶと、「この写真（1枚目）」の道具（差し替え・外す・全体を入れる（切らない））が下の道具ではなく右の列に出て（高さ 44px 以上）、スイッチで切り替えられる。帯は「指でずらして、トリミングを調整」（選んだ写真だけ指でずらせる）',
+    placed(chosen) && chosen.label.join() === 'この写真（1枚目）' && chosen.tools.map((t) => t.split(':')[0]).join() === '差し替え,外す,全体を入れる（切らない）' && chosen.tools[2].includes('switch=false') && chosen.bandInColumn && chosen.bandAbove && chosen.band.includes('指でずらして、トリミングを調整') && switched.checked === 'true' && switched.whole === true,
     JSON.stringify({ chosen, switched }),
   )
   await page.evaluate(() => window.__editor.select(null))
@@ -1821,7 +1823,7 @@ async function writingVisibleCheck(browser) {
     }, config)
     await page.setUserAgent('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1')
     await page.setViewport(view)
-    await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+    await page.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0' })
     const ready = () =>
       page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 60000 })
     await ready()
@@ -1981,7 +1983,7 @@ async function quickOpenCheck(browser) {
   await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
   const ready = () =>
     page.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && s.sheet && !s.rendering && !s.turning && !document.querySelector('.loading') }, { timeout: 120000 })
-  await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
+  await page.goto(`${APP}/?nodrive&direct=0`, { waitUntil: 'networkidle0' })
   await ready()
   const firstTexts = await page.evaluate(() => window.__loadingTexts)
   // 見本の原稿にして、本文の3ページ目を見る（最後に見ていたページとして覚える）

@@ -145,7 +145,7 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
   // 光を当てる欄。Word で書き始めているかを聞く段階は、どの欄も指さない（画面の真ん中に出し、紙面は一様に暗くする。mockups/v24 ① 案C）
   const spot = step === 'word' ? null : rect
 
-  // スマホで欄を書いている間（下から書く欄が出ている）
+  // スマホで欄を書いている間（紙面の上で書いている。予備の端末では、下から書く欄が出ている）
   const typingOnPhone = narrow && !!field && snap.editingId === field
   // 画面の大きさ・キーボードが変わったら、スマホの案内の置き方を決め直す
   const [viewportTick, setViewportTick] = useState(0)
@@ -176,7 +176,8 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
     tip.style.top = ''
     if (isChoiceStep(step) || step === 'done' || !field) return
     if (typingOnPhone) {
-      const sheet = document.querySelector('.edit-sheet.open')?.getBoundingClientRect()
+      // 書く欄（紙面で直接書くときは、キーボードの上の道具。予備の ?direct=0 の端末では、下から出る書く欄）
+      const sheet = document.querySelector('.edit-sheet.open, .direct-bar')?.getBoundingClientRect()
       if (sheet && sheet.height > 0 && sheet.top - tip.getBoundingClientRect().bottom < TYPING_ROOM) tip.classList.add('tucked')
       return
     }
