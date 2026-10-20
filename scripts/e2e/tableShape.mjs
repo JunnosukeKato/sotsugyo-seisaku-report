@@ -619,15 +619,15 @@ export async function tableShapePhone(browser, check) {
       return { tools: out, scrolls: row.scrollWidth > row.clientWidth + 0.5, rowRight: row.getBoundingClientRect().right <= innerWidth + 0.5 }
     })
   const opts = { phone: true, ready }
-  // ---- セルを押して紙面の上で書く：キーボードの上の道具の2段目は、横にずらさない1段（行・列を足す・画像・行・列を消す・表の形・表を削除。44px 以上） ----
+  // ---- セルを押して紙面の上で書く：キーボードの上の道具の2段目は、横にずらさない1段（画像・行・列を足す・行・列を消す・表の形・表を削除。44px 以上） ----
   await tapCell(cellId(1, 1))
   const db0 = await dbTools()
   const dbLines = await linesOfText(page, '.direct-bar .db-table button')
   await page.screenshot({ path: `${OUT}/phone-toolbar.png` })
   check(
-    'スマホ：表のセルを書いている間、キーボードの上の道具の2段目は「行を足す・列を足す・画像・行を消す・列を消す・表の形・表を削除」の7つ（どれも 44px 以上。名前は1行）',
+    'スマホ：表のセルを書いている間、キーボードの上の道具の2段目は「画像・行を足す・列を足す・行を消す・列を消す・表の形・表を削除」の7つ（どれも 44px 以上。名前は1行）',
     !!db0 &&
-      JSON.stringify(db0.tools.map((t) => t.name)) === JSON.stringify(['行を足す', '列を足す', '画像', '行を消す', '列を消す', '表の形', '表を削除']) &&
+      JSON.stringify(db0.tools.map((t) => t.name)) === JSON.stringify(['画像', '行を足す', '列を足す', '行を消す', '列を消す', '表の形', '表を削除']) &&
       db0.tools.every((t) => t.w >= 44 && t.h >= 44) &&
       dbLines.every((l) => l.length === 1),
     JSON.stringify({ tools: db0?.tools, lines: dbLines }),

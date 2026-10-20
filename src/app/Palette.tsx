@@ -350,8 +350,7 @@ export function SelectionTools({ editor, snap, phone, template }: SelectionTools
     return (
       <div className="group ctx">
         <div className="ctx-label">この表</div>
-        <Tool label="行を足す" icon={Icon.rowAdd} title="書いているセルの行の下に、行を足す" onClick={() => editor.addTableRow(tableId)} />
-        <Tool label="列を足す" icon={Icon.colAdd} title="書いているセルの列の右に、列を足す" onClick={() => editor.addTableColumn(tableId)} />
+        {/* 画像は、書いているマス1つに入れるので、表全体を変える道具（行・列・表の形・削除）より前に置く（依頼者の判断） */}
         {editingKind === 'tableCell' &&
           !template &&
           (editor.currentCellHasImage(tableId) ? (
@@ -359,6 +358,8 @@ export function SelectionTools({ editor, snap, phone, template }: SelectionTools
           ) : (
             <Tool label="画像を入れる" icon={Icon.image} title="このセルに画像（生地見本など）を入れる" onClick={() => void editor.setCellImage(tableId)} />
           ))}
+        <Tool label="行を足す" icon={Icon.rowAdd} title="書いているセルの行の下に、行を足す" onClick={() => editor.addTableRow(tableId)} />
+        <Tool label="列を足す" icon={Icon.colAdd} title="書いているセルの列の右に、列を足す" onClick={() => editor.addTableColumn(tableId)} />
         <Tool label="行を消す" icon={Icon.rowRemove} title="書いているセルの行を消す（見出しの行は消せません）" onClick={() => editor.removeTableRow(tableId)} />
         <Tool label="列を消す" icon={Icon.colRemove} title="書いているセルの列を消す" onClick={() => editor.removeTableColumn(tableId)} />
         {/* 表の形（列の幅・項目の列・行の高さ）は、ボタン1つ。パソコンは左の道具のとなりに窓、スマホは下から出る欄で、絵を見て選ぶ（mockups/v45 案A。app/tableShape.tsx） */}

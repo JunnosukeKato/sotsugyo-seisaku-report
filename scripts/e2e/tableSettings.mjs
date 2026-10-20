@@ -1,5 +1,5 @@
 // 表の形を整える（mockups/v45 案A。依頼者の選んだ形。src/app/tableShape.tsx）を確かめる（Edge を自動で操作する。パソコンとスマホ）。
-// - パソコン：左の道具の表の所は「行を足す・列を足す・画像を入れる・行を消す・列を消す・表の形を整える・削除」。「表の形を整える」を押すと、左の道具の左に窓。
+// - パソコン：左の道具の表の所は「画像を入れる・行を足す・列を足す・行を消す・列を消す・表の形を整える・削除」。「表の形を整える」を押すと、左の道具の左に窓。
 //   窓には、列の幅（絵の付いた3つ：列の幅をそろえる・字の多い列を広く・自分で決める）・項目の列（左端）は字に合わせる（列の幅をそろえるのときだけ）・
 //   行の高さをそろえる・「押すと、すぐ表が変わります」。選ぶとすぐ紙面の表が変わり（窓は開いたまま）、元に戻す1回で1つずつ戻る。
 //   自分で決めるでは「表の縦の線を左右にドラッグ」と「同じ幅に戻す」。閉じるのは ×・Esc・窓の外を押す。キーボード：Tab で窓の中を回り、Space・Enter で選ぶ
@@ -77,7 +77,7 @@ export async function tableSettingsPc(browser, check) {
     await wait(300)
   }
 
-  // ---- 左の道具：表の所は7つ（行・列を足す・画像・行・列を消す・表の形を整える・削除）。前の切り替え（列の幅・左端の列・行の高さのボタン）はない ----
+  // ---- 左の道具：表の所は7つ（画像・行・列を足す・行・列を消す・表の形を整える・削除。画像は書いているマス1つに入れるので先頭）。前の切り替え（列の幅・左端の列・行の高さのボタン）はない ----
   await clickCell('m2:feat')
   const tools = await page.evaluate(() => ({
     names: [...document.querySelectorAll('.palette .group.ctx .tb')].map((b) => b.textContent.trim()),
@@ -86,8 +86,8 @@ export async function tableSettingsPc(browser, check) {
   }))
   await shotAround(page, 'pc-0-palette', ['.palette', `.page-viewport.front .data-table[data-table-id="t1"]`])
   check(
-    'パソコン：表のセルを書いているとき、左の道具の表の所は「行を足す・列を足す・画像を入れる・行を消す・列を消す・表の形を整える・削除」（列の幅・左端の列・行の高さの切り替えのボタンはない）',
-    JSON.stringify(tools.names) === JSON.stringify(['行を足す', '列を足す', '画像を入れる', '行を消す', '列を消す', '表の形を整える', '削除']) && tools.old === 0 && tools.expanded === 'false',
+    'パソコン：表のセルを書いているとき、左の道具の表の所は「画像を入れる・行を足す・列を足す・行を消す・列を消す・表の形を整える・削除」（列の幅・左端の列・行の高さの切り替えのボタンはない）',
+    JSON.stringify(tools.names) === JSON.stringify(['画像を入れる', '行を足す', '列を足す', '行を消す', '列を消す', '表の形を整える', '削除']) && tools.old === 0 && tools.expanded === 'false',
     JSON.stringify(tools),
   )
 
@@ -354,8 +354,8 @@ export async function tableSettingsPhone(browser, check) {
   const barLines = await linesIn(page, '.direct-bar .db-table button')
   await page.screenshot({ path: `${OUT}/ph-1-bar.png` })
   check(
-    'スマホ：表のセルを書いている間、キーボードの上の道具の表の段は「行を足す・列を足す・画像・行を消す・列を消す・表の形・表を削除」の7つ。横にずらさず全部が画面に入り、どれも 44px 以上（「表の形」は表の絵つき）。名前は1行',
-    JSON.stringify(bar.tools.map((t) => t.name)) === JSON.stringify(['行を足す', '列を足す', '画像', '行を消す', '列を消す', '表の形', '表を削除']) &&
+    'スマホ：表のセルを書いている間、キーボードの上の道具の表の段は「画像・行を足す・列を足す・行を消す・列を消す・表の形・表を削除」の7つ。横にずらさず全部が画面に入り、どれも 44px 以上（「表の形」は表の絵つき）。名前は1行',
+    JSON.stringify(bar.tools.map((t) => t.name)) === JSON.stringify(['画像', '行を足す', '列を足す', '行を消す', '列を消す', '表の形', '表を削除']) &&
       bar.tools.every((t) => t.w >= 44 && t.h >= 44 && t.inside) &&
       !bar.scrolls &&
       bar.overflowX !== 'auto' &&

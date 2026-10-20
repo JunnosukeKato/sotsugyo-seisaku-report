@@ -149,18 +149,19 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
         )}
         {tableId && (
           <>
-            <button onMouseDown={keepFocus} onClick={() => editor.addTableRow(tableId)}>
-              {Icon.rowAdd}行
-            </button>
-            <button onMouseDown={keepFocus} onClick={() => editor.addTableColumn(tableId)}>
-              {Icon.colAdd}列
-            </button>
+            {/* 画像は、書いているマス1つに入れるので、表全体を変える道具より前に置く（依頼者の判断） */}
             {snap.editingKind === 'tableCell' && (
               <button onMouseDown={keepFocus} onClick={() => (editor.currentCellHasImage(tableId) ? editor.removeCellImage(tableId) : void editor.setCellImage(tableId))}>
                 {Icon.image}
                 {editor.currentCellHasImage(tableId) ? '画像を外す' : '画像'}
               </button>
             )}
+            <button onMouseDown={keepFocus} onClick={() => editor.addTableRow(tableId)}>
+              {Icon.rowAdd}行
+            </button>
+            <button onMouseDown={keepFocus} onClick={() => editor.addTableColumn(tableId)}>
+              {Icon.colAdd}列
+            </button>
             <button onMouseDown={keepFocus} onClick={() => editor.removeTableRow(tableId)}>
               {Icon.rowRemove}行を消す
             </button>
@@ -293,14 +294,7 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
         {/* 表のセル・タイトルを書いているとき：表の道具（画面の幅に入る1段。名前は「画像を／外す」のほかは1行） */}
         {tableId && (
           <div className="db-row db-table" aria-label="表の道具">
-            <button onMouseDown={keepFocus} onClick={() => editor.addTableRow(tableId)}>
-              {Icon.rowAdd}
-              <span>行を足す</span>
-            </button>
-            <button onMouseDown={keepFocus} onClick={() => editor.addTableColumn(tableId)}>
-              {Icon.colAdd}
-              <span>列を足す</span>
-            </button>
+            {/* 画像は、書いているマス1つに入れるので、表全体を変える道具（行・列・表の形・削除）より前に置く（依頼者の判断） */}
             {snap.editingKind === 'tableCell' && (
               <button onMouseDown={keepFocus} onClick={() => (cellImage ? editor.removeCellImage(tableId) : void editor.setCellImage(tableId))}>
                 {Icon.image}
@@ -317,6 +311,14 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
                 </span>
               </button>
             )}
+            <button onMouseDown={keepFocus} onClick={() => editor.addTableRow(tableId)}>
+              {Icon.rowAdd}
+              <span>行を足す</span>
+            </button>
+            <button onMouseDown={keepFocus} onClick={() => editor.addTableColumn(tableId)}>
+              {Icon.colAdd}
+              <span>列を足す</span>
+            </button>
             <button onMouseDown={keepFocus} onClick={() => editor.removeTableRow(tableId)}>
               {Icon.rowRemove}
               <span>行を消す</span>
