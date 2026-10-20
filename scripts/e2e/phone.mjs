@@ -761,13 +761,13 @@ async function bandCheck(browser) {
       const grow = a.content !== 'none' && a.position === 'absolute' ? -(parseFloat(a.top) || 0) - (parseFloat(a.bottom) || 0) : 0
       return Math.round(Math.max(r.height, r.height + grow))
     }, sel)
-  /** 帯のようす：文字の大きさ（いちばん小さいもの）・ボタンの高さ・位置（紙面・ページ送り・下の道具と重ならないか）・横にはみ出していないか */
+  /** 帯のようす：文字の大きさ（いちばん小さいもの）・ボタンの高さ・位置（ページ送り・下の道具と重ならないか）・紙面の上の端・横にはみ出していないか */
   const band = () =>
     page.evaluate(() => {
       const el = document.querySelector('.page-band')
       const pageEl = document.querySelector('.page-viewport.front [data-vivliostyle-page-container].is-current').getBoundingClientRect()
       const scrollX = document.documentElement.scrollWidth > innerWidth + 1
-      if (!el) return { shown: false, scrollX, pageW: Math.round(pageEl.width) }
+      if (!el) return { shown: false, scrollX, pageW: Math.round(pageEl.width), pageTop: Math.round(pageEl.top) }
       const r = el.getBoundingClientRect()
       const texts = [...el.querySelectorAll('.t, .t small, p, button')].filter((e) => e.textContent.trim())
       const btn = el.querySelector('button').getBoundingClientRect()
@@ -780,10 +780,10 @@ async function bandCheck(browser) {
         button: el.querySelector('button').textContent,
         buttonH: Math.round(btn.height),
         inside: r.left >= 0 && r.right <= innerWidth + 0.5 && r.top >= 0 && r.bottom <= innerHeight,
-        belowPage: r.top >= pageEl.bottom - 0.5,
         rightOfPage: r.left >= pageEl.right - 0.5,
         overlapsBar,
         pageW: Math.round(pageEl.width),
+        pageTop: Math.round(pageEl.top),
         scrollX,
       }
     })
@@ -829,6 +829,9 @@ async function bandCheck(browser) {
   await wait(500)
   await ready()
 
+  // 帯のないページ（本文のはじめのページ）の紙面の上の端。帯が出るページでも、紙面はこの位置のまま（帯は紙面に重ねる。mockups/v46 案B）
+  await showKind('body')
+  const plain = await band()
   // 抄録：説明と「先生の許可が出た（抄録を書き始める）」は帯に（ふつうの文字の大きさ・高さ 44px のボタン）。紙面の欄は「↓」の印だけ
   await showKind('abstract')
   const abs = await band()
@@ -845,9 +848,9 @@ async function bandCheck(browser) {
   const portraitTurn = await markTurn()
   await page.screenshot({ path: `${OUT}/12-band-abstract.png` })
   check(
-    '抄録：「先生の許可が出た（抄録を書き始める）」と説明は、紙面の下の帯にふつうの文字（13px 以上）で出て、ボタンは高さ 44px 以上。紙面には「↓」の印だけ',
-    abs.shown && abs.text.includes('先生のチェックで許可が出てから') && abs.button === '先生の許可が出た（抄録を書き始める）' && abs.minFont >= 13 && abs.buttonH >= 44 && abs.belowPage && !abs.overlapsBar && abs.inside && !abs.scrollX && lock.childrenHidden && lock.mark,
-    JSON.stringify({ abs, lock }),
+    '抄録：「先生の許可が出た（抄録を書き始める）」と説明は、紙面の下の帯にふつうの文字（13px 以上）で出て、ボタンは高さ 44px 以上。紙面には「↓」の印だけ。紙面は帯のないページと同じ位置（上に動かない）',
+    abs.shown && abs.text.includes('先生のチェックで許可が出てから') && abs.button === '先生の許可が出た（抄録を書き始める）' && abs.minFont >= 13 && abs.buttonH >= 44 && !plain.shown && abs.pageTop === plain.pageTop && !abs.overlapsBar && abs.inside && !abs.scrollX && lock.childrenHidden && lock.mark,
+    JSON.stringify({ abs, plain, lock }),
   )
 
   // PDF・印刷に帯は入らない（帯は紙面の外の部品。印刷のときは出さず、紙面の案内も小さな印にしない）
@@ -907,9 +910,9 @@ async function bandCheck(browser) {
   })
   await page.screenshot({ path: `${OUT}/13-band-photo.png` })
   check(
-    '作品写真：空いている枠は「＋」の印だけになり、帯に「下の枠に、まだ写真がありません」と「写真を選ぶ」（13px 以上・高さ 44px 以上。並べ方の道具に重ならない）',
-    ph.shown && ph.text.includes('下の枠に、まだ写真がありません') && ph.button === '写真を選ぶ' && ph.minFont >= 13 && ph.buttonH >= 44 && ph.belowPage && !ph.overlapsBar && ph.inside && !ph.scrollX && !slotMark.content.includes('クリック'),
-    JSON.stringify({ ph, slotMark }),
+    '作品写真：空いている枠は「＋」の印だけになり、帯に「下の枠に、まだ写真がありません」と「写真を選ぶ」（13px 以上・高さ 44px 以上。並べ方の道具に重ならない。紙面は上に動かない）',
+    ph.shown && ph.text.includes('下の枠に、まだ写真がありません') && ph.button === '写真を選ぶ' && ph.minFont >= 13 && ph.buttonH >= 44 && ph.pageTop === plain.pageTop && !ph.overlapsBar && ph.inside && !ph.scrollX && !slotMark.content.includes('クリック'),
+    JSON.stringify({ ph, plain, slotMark }),
   )
 
   // 作品写真を押すと、下の道具にスイッチ「全体を入れる（切らない）」（mockups/v32 ③ 案A）。入れると枠の中に全体が入る

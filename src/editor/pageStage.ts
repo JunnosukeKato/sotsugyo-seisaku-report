@@ -114,8 +114,8 @@ export class PageStage {
     this.stage.classList.toggle('spread', this.spread)
     const side = this.inset('--inset-side', 180)
     const top = this.inset('--inset-top', 18)
-    // スマホ：紙面の下に案内の帯を出すときは、その分も空ける（--inset-band。app/PageBand.tsx。拡大しているときは帯を出さない）
-    const bottom = Math.max(this.inset('--inset-bottom', 18), this.zoomed ? 0 : this.inset('--inset-band', 0))
+    // スマホの紙面の下の案内の帯は、紙面に重ねる（帯の分は空けない。どのページも紙面が同じ位置に出る。app/PageBand.tsx・mockups/v46 案B）
+    const bottom = this.inset('--inset-bottom', 18)
     // スマホで拡大するときは、余白を外して本文の幅を画面の幅に合わせる（--zoom-to-text: 1）
     const toText = this.zoomed && this.inset('--zoom-to-text', 0) === 1
     const byWidth = (w - side * 2) / (toText ? TEXT_W : PAGE_W)

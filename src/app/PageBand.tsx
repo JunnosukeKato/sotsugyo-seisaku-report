@@ -81,10 +81,11 @@ function bandOf(editor: ReportEditor, snap: EditorSnapshot): Band | null {
 }
 
 /**
- * 帯を置く。縦向き：紙面の下（ページ送り・選んでいる物の道具のすぐ上）。横向き：紙面の右（下の道具に重ならない高さの真ん中）。
- * 縦向きのときは、帯の分だけ紙面を上に寄せる幅（台の --inset-band）を返す
+ * 帯を置く。縦向き：ページ送り・選んでいる物の道具のすぐ上。横向き：紙面の右（下の道具に重ならない高さの真ん中）。
+ * 縦向きでも紙面は動かさず、帯を紙面の下の方に重ねる（mockups/v46 案B。前は帯の分だけ紙面を上に寄せていたので、
+ * 帯が出るページ（目次・まだ書いていない所があるページなど）だけ、めくると紙面が上に動いていた）
  */
-function place(band: HTMLElement, stage: HTMLElement): number {
+function place(band: HTMLElement, stage: HTMLElement): void {
   const st = stage.getBoundingClientRect()
   // 画面の下の道具（ページ送り・選んでいる物の道具。どちらも画面に固定して置いている）
   const bars = [...document.querySelectorAll<HTMLElement>('.pager, .sel-bar > *')].map((e) => e.getBoundingClientRect()).filter((r) => r.height > 0)
@@ -93,7 +94,7 @@ function place(band: HTMLElement, stage: HTMLElement): number {
     band.style.top = ''
     band.style.maxHeight = ''
     band.style.bottom = `${above}px`
-    return above + band.offsetHeight + GAP
+    return
   }
   band.style.bottom = ''
   band.style.maxHeight = ''
@@ -103,7 +104,6 @@ function place(band: HTMLElement, stage: HTMLElement): number {
   const room = Math.max(0, limit - st.top - GAP)
   band.style.maxHeight = `${room}px`
   band.style.top = `${GAP + Math.max(0, (room - band.offsetHeight) / 2)}px`
-  return 0
 }
 
 /** 紙面のその所を押したのと同じことをする（書く欄を開く・コースを選ぶ・写真を選ぶ。紙面を押したときの動きを、そのまま使う） */
@@ -122,28 +122,21 @@ function tapPaper(editor: ReportEditor, todo: BandTodo): void {
 function BandView({ editor, band, inColumn }: { editor: ReportEditor; band: Band; inColumn?: boolean }) {
   const ref = useRef<HTMLElement>(null)
   const stageRef = useRef<HTMLElement | null>(null)
-  // 帯を出している間だけ、台に印（data-band）を付けて紙面の中の案内を小さな印にし、帯の分だけ紙面を上に寄せる。帯を消したら元に戻す
+  // 帯を出している間だけ、台に印（data-band）を付けて紙面の中の案内を小さな印にする。帯を消したら元に戻す
   useLayoutEffect(() => {
     const stage = ref.current?.closest<HTMLElement>('.stage') ?? null
     stageRef.current = stage
     return () => {
-      if (!stage) return
-      delete stage.dataset.band
-      stage.style.removeProperty('--inset-band')
-      editor.refitPage()
+      if (stage) delete stage.dataset.band
     }
-  }, [editor])
-  // 描くたびに置き直す（帯の中身・画面の向き・下の道具が変わるため）。紙面を寄せる幅が変わったときだけ、紙面の倍率を求め直す
+  }, [])
+  // 描くたびに置き直す（帯の中身・画面の向き・下の道具が変わるため）
   useLayoutEffect(() => {
     const el = ref.current
     const stage = stageRef.current
     if (!el || !stage) return
     stage.dataset.band = band.kind
-    const inset = inColumn ? '0px' : `${Math.round(place(el, stage))}px`
-    if (stage.style.getPropertyValue('--inset-band') !== inset) {
-      stage.style.setProperty('--inset-band', inset)
-      editor.refitPage()
-    }
+    if (!inColumn) place(el, stage)
   })
 
   if (band.kind === 'toc') {
