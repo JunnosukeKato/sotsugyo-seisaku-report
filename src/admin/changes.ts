@@ -138,32 +138,62 @@ export function sameConfig(a: YearConfig, b: YearConfig): boolean {
 }
 
 /**
- * before から after への変更を、項目の名前で返す（画面の並び順。同じ名前は1つにまとめる）。
- * 例：「共通の題目」「映画・舞台衣装デザイナー コースの下書きのひな形」「書き間違えやすい語」
+ * 変更が、管理ページの左の見出しのどの区切りにあるか（左の見出しに、区切りごとの変更の数を出すため）。
+ * year：年度の設定、course：コース、words：書き方のチェック、details：詳細設定、other：そのほか
  */
-export function describeChanges(before: YearConfig, after: YearConfig): string[] {
-  const out: string[] = []
-  const push = (label: string) => {
-    if (!out.includes(label)) out.push(label)
+export type ChangeSection = 'year' | 'course' | 'words' | 'details' | 'other'
+export interface Change {
+  label: string
+  section: ChangeSection
+}
+
+/** before から after への変更を、項目の名前と区切りで返す（画面の並び順。同じ名前は1つにまとめる） */
+export function listChanges(before: YearConfig, after: YearConfig): Change[] {
+  const out: Change[] = []
+  const push = (label: string, section: ChangeSection) => {
+    if (!out.some((c) => c.label === label)) out.push({ label, section })
   }
   const paths = topPaths([before, after]).filter((p) => !sameTop(p, before, after))
-  const inGroup = (labels: [string, string][]) => labels.forEach(([p, label]) => paths.some((x) => x.join('.') === p) && push(label))
-  inGroup(TOP_LABELS)
+  const inGroup = (labels: [string, string][], section: ChangeSection) => labels.forEach(([p, label]) => paths.some((x) => x.join('.') === p) && push(label, section))
+  inGroup(TOP_LABELS, 'year')
   // コース（追加・削除・順番・中の項目）
   const b = courseList(before)
   const a = courseList(after)
   for (const course of a) {
     const old = b.find((x) => x.id === course.id)
-    if (!old) push(`${courseName(course)} コース（追加）`)
-    else courseKeys(old, course).forEach((k) => !sameCourseKey(k, old, course) && push(k === 'name' ? `${courseName(course)} コースの名前（元は「${courseName(old)}」）` : courseLabel(course, k)))
+    if (!old) push(`${courseName(course)} コース（追加）`, 'course')
+    else courseKeys(old, course).forEach((k) => !sameCourseKey(k, old, course) && push(k === 'name' ? `${courseName(course)} コースの名前（元は「${courseName(old)}」）` : courseLabel(course, k), 'course'))
   }
-  for (const old of b) if (!a.some((x) => x.id === old.id)) push(`${courseName(old)} コース（削除）`)
+  for (const old of b) if (!a.some((x) => x.id === old.id)) push(`${courseName(old)} コース（削除）`, 'course')
   const kept = (list: Course[], other: Course[]) => order(list.filter((c) => other.some((x) => x.id === c.id)))
-  if (kept(a, b) !== kept(b, a)) push('コースの順番')
-  inGroup([WORDS_LABEL])
-  inGroup(DETAIL_LABELS)
-  if (paths.some((p) => topLabel(p) === OTHER)) push(OTHER)
+  if (kept(a, b) !== kept(b, a)) push('コースの順番', 'course')
+  inGroup([WORDS_LABEL], 'words')
+  inGroup(DETAIL_LABELS, 'details')
+  if (paths.some((p) => topLabel(p) === OTHER)) push(OTHER, 'other')
   return out
+}
+
+/**
+ * before から after への変更を、項目の名前で返す（画面の並び順。同じ名前は1つにまとめる）。
+ * 例：「共通の題目」「映画・舞台衣装デザイナー コースの下書きのひな形」「書き間違えやすい語」
+ */
+export function describeChanges(before: YearConfig, after: YearConfig): string[] {
+  return listChanges(before, after).map((c) => c.label)
+}
+
+/** 年度の項目（例：'commonTitle'・'abstract.minChars'・'wordChecks'）が変わったか（意味の同じ書き方の違いは見ない）。「変更あり」の印に使う */
+export function fieldChanged(before: YearConfig, after: YearConfig, path: string): boolean {
+  const [a, b] = path.split('.')
+  return !sameTop(b === undefined ? [a] : [a, b], before, after)
+}
+
+/** コース（ID）が変わったか。key を渡すとその項目だけを見る（なければ、追加したコースか、どれかの項目が変わったか） */
+export function courseChanged(before: YearConfig, after: YearConfig, id: string, key?: string): boolean {
+  const old = courseList(before).find((c) => c.id === id)
+  const now = courseList(after).find((c) => c.id === id)
+  if (!now) return false
+  if (!old) return true
+  return key ? !sameCourseKey(key, old, now) : !sameCourse(old, now)
 }
 
 /** 変更の一覧を短く（変更履歴の1行に出す。多いときは「ほか○件」） */

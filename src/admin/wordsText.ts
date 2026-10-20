@@ -1,4 +1,5 @@
 import type { WordCheck } from '../config'
+import { LIMITS, tooLong } from '../config/validate'
 
 /** 書き間違いと正しい語が入っている行だけ（前後の空白は取る） */
 export function cleanWords(rows: WordCheck[]): WordCheck[] {
@@ -8,23 +9,26 @@ export function cleanWords(rows: WordCheck[]): WordCheck[] {
 }
 
 /**
- * cleanWords で外す行の説明（「反映する」のときに、どの行を使わないかを示す）。
- * 例：「3行目：空の行」「5行目「見頃」：正しい語が空です」「6行目「同じ」：書き間違いと正しい語が同じです」
+ * 書き方のチェックの1行を「反映する」前に確かめる（直してもらうことの言葉。問題がなければ null）。
+ * 空の欄・同じ語・長すぎる字（上限は src/config/validate.ts の LIMITS。サーバーと同じ）・一覧にもうある語・語の数の上限。
+ * list は、いまの一覧。index は直している行（足すときは -1）
  */
-export function skippedWords(rows: WordCheck[]): string[] {
-  return rows.flatMap((w, i) => {
-    const wrong = w.wrong.trim()
-    const right = w.right.trim()
-    const row = `${i + 1}行目`
-    if (!wrong && !right) return [`${row}：空の行`]
-    if (!wrong) return [`${row}「→ ${right}」：書き間違いが空です`]
-    if (!right) return [`${row}「${wrong}」：正しい語が空です`]
-    if (wrong === right) return [`${row}「${wrong}」：書き間違いと正しい語が同じです`]
-    return []
-  })
+export function wordRowProblem(row: WordCheck, list: WordCheck[], index: number): string | null {
+  const wrong = row.wrong.trim()
+  const right = row.right.trim()
+  const note = (row.note ?? '').trim()
+  if (!wrong || !right) return '書き間違いと正しい語の、両方を入れてください'
+  if (wrong === right) return '書き間違いと正しい語が同じです'
+  if (wrong.length > LIMITS.word) return `書き間違い${tooLong(LIMITS.word, wrong.length)}`
+  if (right.length > LIMITS.word) return `正しい語${tooLong(LIMITS.word, right.length)}`
+  if (note.length > LIMITS.wordNote) return `説明${tooLong(LIMITS.wordNote, note.length)}`
+  if (list.some((w, i) => i !== index && w.wrong.trim() === wrong)) return `「${wrong}」は、もう一覧にあります`
+  if (index < 0 && list.length >= LIMITS.words) return `語が多すぎます（${LIMITS.words}語まで）`
+  return null
 }
 
+/** 左の見出しの「書き方のチェック」の下に出す、語の数（例：「言葉 13語（エラー7）」） */
 export function wordSummary(words: WordCheck[]): string {
   const errors = words.filter((w) => w.severity === 'error').length
-  return `${words.length}語（エラー${errors}・要確認${words.length - errors}）`
+  return `言葉 ${words.length}語（エラー${errors}）`
 }

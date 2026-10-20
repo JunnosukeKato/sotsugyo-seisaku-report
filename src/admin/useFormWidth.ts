@@ -1,15 +1,15 @@
 import { useEffect, useState, type CSSProperties, type KeyboardEvent, type PointerEvent as ReactPointerEvent } from 'react'
 
 /**
- * 管理ページの左の入力欄の幅。右の見本との境目をつかんで動かすと変わり、ダブルクリックで元の幅に戻る。
+ * 管理ページの区切りの中身（左の見出しと右の見本の間）の幅。見本との境目をつかんで動かすと変わり、ダブルクリックで元の幅に戻る。
  * キーボードでは、境目を選んで ←・→ で変える。決めた幅はこのブラウザに覚えておく
  * （学生用ツールの src/app/usePanelWidths.ts と同じ考え方。覚えておけなくても既定の幅で動く）
  */
 
 const KEY = 'sotsugyo-admin-form-width'
-/** 既定の幅・いちばん狭い幅（サブタイトルの形式の行が収まる幅）・いちばん広い幅 */
-export const FORM_WIDTH = { initial: 480, min: 400, max: 760 } as const
-/** 見本の欄に残す幅（入力欄を広げても、見本がこれより狭くならない。admin.css の .admin-main と同じ値） */
+/** 既定の幅（mockups/v43 案B）・いちばん狭い幅（ラベルの列とサブタイトルの形式の行が収まる幅）・いちばん広い幅 */
+export const FORM_WIDTH = { initial: 560, min: 480, max: 900 } as const
+/** 見本の欄に残す幅（中身を広げても、見本がこれより狭くならない。admin.css の .work と同じ値） */
 const STAGE_MIN = 360
 /** ←・→ を1回押したときに変わる幅 */
 const STEP = 16
@@ -48,7 +48,7 @@ export function useFormWidth() {
 
   /** 今の画面で広げられるいちばん広い幅（見本の欄に STAGE_MIN を残す） */
   const maxFor = (handle: HTMLElement) => Math.min(FORM_WIDTH.max, (handle.parentElement?.clientWidth ?? Infinity) - STAGE_MIN)
-  /** 画面に出ている入力欄の幅（狭い画面では、決めた幅より狭く出ていることがある） */
+  /** 画面に出ている中身の幅（狭い画面では、決めた幅より狭く出ていることがある） */
   const shownWidth = (handle: HTMLElement) => handle.parentElement?.firstElementChild?.getBoundingClientRect().width ?? width
 
   /** 境目をつかんだ：動かした分だけ幅を変える（つかんでいる間は、見本の iframe の上でも動きを受け取る） */

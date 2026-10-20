@@ -1,14 +1,14 @@
 import { describe, expect, it } from 'vitest'
 import { currentConfig } from '../config'
-import { skippedWords } from './wordsText'
+import { wordRowProblem, wordSummary } from './wordsText'
 import { deleteConfirmText, deletedMessage, deliveryNote, formatDate, newYearNotice, publishConfirmText, saveConfirmText, savedMessage, templateFootNote } from './yearText'
 
 describe('年度の状態で変わる言葉', () => {
   it('「反映する」の後どうすれば届くかは、公開中・準備中・終了で違う（ボタンの名前どおり）', () => {
-    expect(deliveryNote('公開中', 'admin')).toBe('上の「保存して学生に反映」を押すと、学生のツールに届きます')
-    expect(deliveryNote('準備中', 'admin')).toBe('上の「保存」を押すと保存されます。学生に届くのは、「この年度を学生に公開」を押してからです')
-    expect(deliveryNote('準備中', 'teacher')).toBe('上の「保存」を押すと保存されます。学生に届くのは、管理者がこの年度を学生に公開してからです')
-    expect(deliveryNote('終了', 'teacher')).toBe('上の「保存」を押すと、この年度に書き始めた学生のツールに届きます')
+    expect(deliveryNote('公開中', 'admin')).toBe('「保存して学生に反映」を押すと、学生のツールに届きます')
+    expect(deliveryNote('準備中', 'admin')).toBe('「保存」を押すと保存されます。学生に届くのは、「この年度を学生に公開」を押してからです')
+    expect(deliveryNote('準備中', 'teacher')).toBe('「保存」を押すと保存されます。学生に届くのは、管理者がこの年度を学生に公開してからです')
+    expect(deliveryNote('終了', 'teacher')).toBe('「保存」を押すと、この年度に書き始めた学生のツールに届きます')
     expect(templateFootNote('公開中')).toContain('「保存して学生に反映」で学生のツールに届きます')
     expect(templateFootNote('準備中')).toContain('学生に届くのは、この年度を学生に公開してから')
     expect(savedMessage('公開中', 'admin')).toContain('反映しました')
@@ -54,16 +54,16 @@ describe('年度の状態で変わる言葉', () => {
       '抄録の書き出し例（映画・舞台衣装デザイナー コース。前の年度の題目の言葉「シンドバッド」が入っています）',
     ])
     expect(notice.items.map((i) => i.where)).toEqual([
-      'この下の「毎年設定する項目」のいちばん上',
-      '共通の題目のすぐ下',
-      'コースのカードの「このコースの学生へのお知らせ」',
-      'コースのカードの「下書きのひな形」の「編集する」',
+      '「年度の設定」の「共通の題目」',
+      '「年度の設定」の「最終締切」',
+      '「コース」で、コースを開いた所の「お知らせ」',
+      '「コース」で、コースを開いた所の「ひな形を直す」',
     ])
     // 詳細設定の書き出し例に題目の言葉があれば、詳細設定の欄も場所に添える
     const opening = { ...from, abstract: { ...from.abstract, openingExample: '本制作報告書は、卒業イベント「シンドバッド」において、' } }
     expect(newYearNotice(opening, 2027).items.at(-1)).toEqual({
       text: '抄録の書き出し例（映画・舞台衣装デザイナー コース、詳細設定。前の年度の題目の言葉「シンドバッド」が入っています）',
-      where: 'コースのカードの「下書きのひな形」の「編集する」と、「詳細設定」の中の「抄録の書き出し例」',
+      where: '「コース」で、コースを開いた所の「ひな形を直す」と、「詳細設定」の「書き出しの例」',
     })
     // 題目の言葉が入っていなければ、書き出し例は出さない
     const plain = { ...currentConfig, courses: currentConfig.courses.map((c) => ({ ...c, abstractExample: '本制作報告書は、' })) }
@@ -86,15 +86,22 @@ describe('年度の状態で変わる言葉', () => {
   })
 })
 
-describe('書き間違えやすい語の、使わない行', () => {
-  it('空の行・片方が空の行・同じ語の行を、行の番号と語で示す', () => {
-    const rows = [
-      { wrong: '見頃', right: '身頃', severity: 'error' as const },
-      { wrong: '', right: '', severity: 'error' as const },
-      { wrong: '見頃', right: ' ', severity: 'error' as const },
-      { wrong: '', right: '生地', severity: 'error' as const },
-      { wrong: '同じ', right: ' 同じ ', severity: 'warning' as const },
-    ]
-    expect(skippedWords(rows)).toEqual(['2行目：空の行', '3行目「見頃」：正しい語が空です', '4行目「→ 生地」：書き間違いが空です', '5行目「同じ」：書き間違いと正しい語が同じです'])
+describe('書き方のチェックの1行（「反映する」の前に確かめる）', () => {
+  const list = [
+    { wrong: '見頃', right: '身頃', severity: 'error' as const },
+    { wrong: '記事', right: '生地', severity: 'warning' as const },
+  ]
+  it('空の欄・同じ語・長すぎる字・一覧にもうある語を、直してもらう言葉で返す（問題がなければ null）', () => {
+    expect(wordRowProblem({ wrong: '見幅', right: '身幅', severity: 'error' }, list, -1)).toBeNull()
+    expect(wordRowProblem({ wrong: ' ', right: '身幅', severity: 'error' }, list, -1)).toBe('書き間違いと正しい語の、両方を入れてください')
+    expect(wordRowProblem({ wrong: '同じ', right: ' 同じ ', severity: 'error' }, list, -1)).toBe('書き間違いと正しい語が同じです')
+    expect(wordRowProblem({ wrong: 'あ'.repeat(51), right: '身幅', severity: 'error' }, list, -1)).toBe('書き間違いが長すぎます（50字まで。今は51字）')
+    expect(wordRowProblem({ wrong: '見幅', right: '身幅', note: 'い'.repeat(201), severity: 'error' }, list, -1)).toBe('説明が長すぎます（200字まで。今は201字）')
+    expect(wordRowProblem({ wrong: '記事', right: '生地', severity: 'error' }, list, -1)).toBe('「記事」は、もう一覧にあります')
+    // 直している行そのものは、もう一覧にある語に数えない
+    expect(wordRowProblem({ wrong: '記事', right: '生地', note: '布', severity: 'warning' }, list, 1)).toBeNull()
+  })
+  it('左の見出しには、語の数とエラーの数', () => {
+    expect(wordSummary(list)).toBe('言葉 2語（エラー1）')
   })
 })

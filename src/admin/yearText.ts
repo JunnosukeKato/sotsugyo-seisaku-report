@@ -28,16 +28,16 @@ export const saveButtonLabel = (status: YearStatus) => (status === '公開中' ?
 
 /** 「反映する」の後に、どうすれば学生に届くか（ひな形・書き間違えやすい語を反映したときの知らせ） */
 export function deliveryNote(status: YearStatus, who: Who): string {
-  if (status === '公開中') return '上の「保存して学生に反映」を押すと、学生のツールに届きます'
-  if (status === '終了') return '上の「保存」を押すと、この年度に書き始めた学生のツールに届きます'
-  return `上の「保存」を押すと保存されます。学生に届くのは、${who === 'admin' ? '「この年度を学生に公開」を押して' : '管理者がこの年度を学生に公開して'}からです`
+  if (status === '公開中') return '「保存して学生に反映」を押すと、学生のツールに届きます'
+  if (status === '終了') return '「保存」を押すと、この年度に書き始めた学生のツールに届きます'
+  return `「保存」を押すと保存されます。学生に届くのは、${who === 'admin' ? '「この年度を学生に公開」を押して' : '管理者がこの年度を学生に公開して'}からです`
 }
 
 /** 下書きのひな形の窓のいちばん下の案内 */
 export function templateFootNote(status: YearStatus): string {
-  if (status === '公開中') return '「反映する」の後、上の「保存して学生に反映」で学生のツールに届きます。すでに書き始めた学生の原稿は変わりません。'
-  if (status === '終了') return '「反映する」の後、上の「保存」で、この年度に書き始めた学生のツールに届きます。書き始めた学生の原稿は変わりません。'
-  return '「反映する」の後、上の「保存」で保存します。学生に届くのは、この年度を学生に公開してからです。'
+  if (status === '公開中') return '「反映する」の後、「保存して学生に反映」で学生のツールに届きます。すでに書き始めた学生の原稿は変わりません。'
+  if (status === '終了') return '「反映する」の後、「保存」で、この年度に書き始めた学生のツールに届きます。書き始めた学生の原稿は変わりません。'
+  return '「反映する」の後、「保存」で保存します。学生に届くのは、この年度を学生に公開してからです。'
 }
 
 /** 保存できたときの知らせ */
@@ -93,7 +93,7 @@ export function publishConfirmText(config: YearConfig, currentYear: number | nul
 }
 
 /** 題目の中の、年度ごとに変わる言葉（「」『』の中。なければ題目そのもの） */
-function titleWords(title: string): string[] {
+export function titleWords(title: string): string[] {
   const quoted = [...title.matchAll(/[「『"“]([^」』"”]{2,})[」』"”]/g)].map((m) => m[1].trim()).filter(Boolean)
   if (quoted.length) return [...new Set(quoted)]
   return title.trim().length >= 2 ? [title.trim()] : []
@@ -112,13 +112,13 @@ export interface ListNotice {
   items: NoticeItem[]
 }
 
-/** 管理ページの画面で、項目を直す場所 */
+/** 管理ページの画面で、項目を直す場所（左の見出しの区切りと、その中の欄の名前） */
 const PLACE = {
-  commonTitle: 'この下の「毎年設定する項目」のいちばん上',
-  deadline: '共通の題目のすぐ下',
-  notice: 'コースのカードの「このコースの学生へのお知らせ」',
-  courseExample: 'コースのカードの「下書きのひな形」の「編集する」',
-  openingExample: '「詳細設定」の中の「抄録の書き出し例」',
+  commonTitle: '「年度の設定」の「共通の題目」',
+  deadline: '「年度の設定」の「最終締切」',
+  notice: '「コース」で、コースを開いた所の「お知らせ」',
+  courseExample: '「コース」で、コースを開いた所の「ひな形を直す」',
+  openingExample: '「詳細設定」の「書き出しの例」',
 }
 
 /**

@@ -95,7 +95,7 @@ p[data-block-id]:empty::before { color: #8a90a0; }
 h1.chapter:not(:first-child) { margin-top: 2em; }
 `
 
-function TemplatePreview({ blocks }: { blocks: TemplateBlock[] }) {
+export function TemplatePreview({ blocks }: { blocks: TemplateBlock[] }) {
   const wrap = useRef<HTMLDivElement>(null)
   const [zoom, setZoom] = useState(0.6)
   useEffect(() => {
