@@ -1,0 +1,98 @@
+{
+  "now-admin": {
+    "fields": 10,
+    "buttons": 11,
+    "chars": 511,
+    "small": 30
+  },
+  "now-form-screens": 1.9,
+  "now-sizes": {
+    "h2": 13,
+    "label": 12,
+    "hint": 11,
+    "input": 14,
+    "sublink": 12.5,
+    "badge": 11,
+    "legend": 12
+  },
+  "now-admin-1920": {
+    "fields": 16,
+    "buttons": 16,
+    "chars": 748,
+    "small": 47
+  },
+  "now-template": {
+    "fields": 13,
+    "buttons": 40,
+    "chars": 480,
+    "small": 17
+  },
+  "now-words": {
+    "fields": 53,
+    "buttons": 15,
+    "chars": 423,
+    "small": 5
+  },
+  "now-members": {
+    "fields": 4,
+    "buttons": 4,
+    "chars": 206,
+    "small": 3
+  },
+  "now-history": {
+    "fields": 0,
+    "buttons": 4,
+    "chars": 166,
+    "small": 3
+  },
+  "now-newyear-after": {
+    "fields": 6,
+    "buttons": 7,
+    "chars": 600,
+    "small": 18
+  },
+  "now-teacher": {
+    "fields": 3,
+    "buttons": 5,
+    "chars": 618,
+    "small": 18
+  },
+  "a-admin": {
+    "fields": 4,
+    "buttons": 8,
+    "chars": 370,
+    "small": 0
+  },
+  "a-teacher": {
+    "fields": 3,
+    "buttons": 4,
+    "chars": 378,
+    "small": 0
+  },
+  "b-admin": {
+    "fields": 4,
+    "buttons": 9,
+    "chars": 352,
+    "small": 0
+  },
+  "b-teacher": {
+    "fields": 2,
+    "buttons": 7,
+    "chars": 347,
+    "small": 0
+  },
+  "c-admin": {
+    "fields": 1,
+    "buttons": 10,
+    "chars": 389,
+    "small": 0
+  },
+  "c-teacher": {
+    "fields": 1,
+    "buttons": 5,
+    "chars": 247,
+    "small": 0
+  },
+  "a-form-screens": 1.5,
+  "b-content-screens": 1
+}

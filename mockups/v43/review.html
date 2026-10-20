@@ -1,0 +1,224 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v43 管理ページを見やすく</title>
+<!-- 画面の絵は node scripts/mockup-shots-v43.mjs で作る（本物の管理ページを試験用サーバーで開き、案の部分だけ書き足して写したもの）。
+     数（はじめの画面に見える入力欄・ボタン・字）は、同じスクリプトが数えて shots/counts.json に書いたもの。このページの写し（shots/review-admin.png）も同じスクリプトの review で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; --ng: #b5443b; --pin: #d4380d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 40px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); word-break: auto-phrase; text-wrap: pretty; }
+  main { max-width: 1136px; }
+  .top { margin: 0 0 16px; font-size: 14px; color: var(--muted); line-height: 1.8; }
+  .top b { color: var(--ink); }
+  h1 { font-size: 22px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  h2 { font-size: 18px; margin: 28px 0 10px; letter-spacing: 0.04em; }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 17px; margin-bottom: 3px; }
+  figcaption span { font-size: 14px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 10px; border-radius: 999px; background: var(--accent); color: #fff !important; font-size: 12.5px !important; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .why { display: block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #e8ebf5; color: var(--accent) !important; font-size: 14px !important; font-weight: 700; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > div { background: #fff; align-self: stretch; }
+  .row > .lbl { grid-column: 1 / -1; padding: 7px 16px 5px !important; background: #f4f2ee !important; font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 8px; border: 1px solid #ddd; }
+  .ph a { display: block; }
+  .ph small { display: block; padding: 6px 4px 0; font-size: 13.5px; color: var(--muted); line-height: 1.6; }
+  .ph small b { color: var(--ink); }
+  .ph small .n { display: inline-grid; place-items: center; width: 20px; height: 20px; margin-right: 4px; border-radius: 50%; background: var(--pin); color: #fff; font-size: 12px; font-weight: 700; vertical-align: 1px; }
+  .note { padding: 14px 18px !important; font-size: 14px; color: var(--muted); line-height: 1.75; background: #faf9f7 !important; }
+  .note b { color: var(--ink); }
+  .pts { margin: 0; padding: 0; list-style: none; counter-reset: p; }
+  .pts li { position: relative; margin: 0 0 11px; padding-left: 30px; }
+  .pts li::before { counter-increment: p; content: counter(p); position: absolute; left: 0; top: 1px; display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--pin); color: #fff; font-size: 12.5px; font-weight: 700; }
+  .pts li b { display: block; color: var(--ink); }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 9px 16px 11px; font-size: 14px; line-height: 1.75; }
+  .pw b { font-size: 13px; letter-spacing: 0.06em; }
+  .pw .good b { color: var(--ok); }
+  .pw .weak b { color: var(--ng); }
+  .cnt { padding: 8px 16px 9px; border-top: 1px solid var(--line); background: #f7f8fb; font-size: 14px; color: var(--muted); }
+  .cnt b { color: var(--accent); }
+  .common { margin: 0 0 18px; padding: 12px 18px; border-radius: 14px; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.05); font-size: 14px; line-height: 1.8; }
+  .common > b { font-size: 13.5px; letter-spacing: 0.06em; color: var(--accent); }
+  .common ul { margin: 2px 0 0; padding-left: 20px; }
+  .ask { margin: 0 0 18px; padding: 12px 18px; border-radius: 12px; background: #fff8e6; border: 1.5px solid #e6c46a; font-size: 14px; line-height: 1.8; }
+  .ask > b { font-size: 14.5px; color: #7a5a00; letter-spacing: 0.04em; }
+  .ask ol { margin: 4px 0 0; padding-left: 22px; }
+  .ask small { color: var(--muted); font-size: 13px; }
+  /* 数の表 */
+  table.num { width: 100%; border-collapse: collapse; font-size: 14px; background: #fff; }
+  table.num th, table.num td { padding: 8px 14px; border-top: 1px solid var(--line); text-align: right; }
+  table.num thead th { background: #f4f2ee; color: var(--muted); font-size: 13px; line-height: 1.5; letter-spacing: 0.06em; border-top: 0; }
+  table.num th:first-child, table.num td:first-child { text-align: left; }
+  table.num tbody th { font-weight: 700; color: var(--muted); background: #faf9f7; text-align: left; }
+  table.num td.c { background: #f5f6fb; font-weight: 700; color: var(--accent); }
+  table.num td.old { color: var(--muted); }
+  table.num tr.sep th, table.num tr.sep td { border-top: 2px solid #dcd9d3; }
+  .tnote { padding: 8px 16px 10px; font-size: 13px; color: var(--muted); line-height: 1.7; border-top: 1px solid var(--line); }
+  /* 行の形 */
+  .r-now { grid-template-columns: minmax(0, 1fr) 330px; }
+  .r-2 { grid-template-columns: 1fr 1fr; }
+  .r-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .r-4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .r-1 { grid-template-columns: 1fr; }
+  .r-tall { grid-template-columns: 180px 1fr 1fr; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>v43　管理ページを見やすく</h1>
+<p class="top">依頼：「管理ページが見づらい。情報が多く、ぱっと見で操作がしにくい」。<br>
+<b>3つの案から1つ選んでください</b>（組み合わせもできます）。<br>
+画面は、本物の管理ページ（試験用サーバー）に、案の部分だけ書き足して写したものです。大きさはノートパソコンの 1366×768。見本は2026年度（公開中）、コースは2つです。絵を押すと大きく見られます。</p>
+
+<div class="common"><b>どの案でも同じ</b>
+  <ul>
+    <li>いま直している6つを入れて描きました：コース名の右に「コース」／サブタイトルの「―」は欄の外／お知らせの説明は1文だけ／並べ替えは ⋮⋮ をドラッグ／左の欄の幅は境目をドラッグ／詳細設定のボタンは「止める」。</li>
+    <li><b>保存のし忘れを防ぐ帯：</b>直すと、画面の下に黄色い帯が出ます。「まだ学生に届いていない変更が3か所あります」と、保存のボタン。直した欄には「変更あり」。変更がないときは、帯は出ず、ボタンは静かです（数は、いまの変更の一覧の仕組みで数えます。押したあとの確かめは、いまのまま）。</li>
+    <li>保存と公開の流れ・「反映する」・変更履歴・表紙と抄録の見本・年度を選ぶ欄は、いまのまま。字は15pxを基本に、小さくても13px。</li>
+  </ul>
+</div>
+
+<!-- ===================================================================== -->
+<h2>いまの画面で見づらいところ</h2>
+<figure>
+  <figcaption><b>いま（管理者・1366×768）</b><span>赤い番号は、右の番号と同じ所です。</span></figcaption>
+  <div class="row r-now">
+    <div class="ph"><a href="shots/now-admin-1366-pins.png"><img src="shots/now-admin-1366-pins.png" alt=""></a></div>
+    <div class="note">
+      <ol class="pts">
+        <li><b>一度に出るものが多い</b>はじめの画面だけで、入力欄10・ボタン11。コースのカード1枚に、欄が6つと説明が4つ。</li>
+        <li><b>まとまりの見出しが弱い</b>「毎年設定する項目」は13pxの灰色。欄の名前（12px）とほぼ同じで、区切りが見えない。</li>
+        <li><b>字が小さく、行がくっつく</b>説明は11px。2行になると、上下の行が重なりかける。</li>
+        <li><b>保存のボタンが遠い</b>右上の端。押せないときは薄い灰色で、押し忘れやすい。</li>
+        <li><b>ときどき使う所が小さい</b>変更履歴・先生の登録・新年度を作成が、小さな文字のリンク。</li>
+        <li><b>左が細く、下に長い</b>入力の欄は幅480pxのまま。見本が残りを使い、左は画面1.9枚分。</li>
+      </ol>
+    </div>
+  </div>
+  <div class="row r-tall">
+    <div class="ph"><a href="shots/now-admin-tall.png"><img src="shots/now-admin-tall.png" alt=""></a><small><span class="n">6</span>左の欄を下まで。コースが増えると、もっと長い</small></div>
+    <div class="ph"><a href="shots/now-details.png"><img src="shots/now-details.png" alt=""></a><small><span class="n">7</span><b>詳細設定</b>：15の欄が2列。右の列が切れ、横にスクロールが出る</small>
+      <a href="shots/now-admin-1920.png" style="margin-top:12px"><img src="shots/now-admin-1920.png" alt=""></a><small><span class="n">6</span><b>1920×1080</b>：左は細いまま、字はもっと小さく見える</small></div>
+    <div class="ph"><a href="shots/now-course.png"><img src="shots/now-course.png" alt=""></a><small><span class="n">1</span><b>コースのカード</b>：名前・サブタイトル・指導教員・ひな形・お知らせ・並べ替えが、全部開いたまま</small></div>
+  </div>
+  <div class="row r-4">
+    <div class="ph"><a href="shots/now-template.png"><img src="shots/now-template.png" alt=""></a><small><span class="n">8</span><b>ひな形の窓</b>：種類の名前は11px。行ごとに↑↓✕が並ぶ（ボタン40）</small></div>
+    <div class="ph"><a href="shots/now-words.png"><img src="shots/now-words.png" alt=""></a><small><span class="n">8</span><b>言葉の窓</b>：53の欄が一度に並ぶ。長い説明は途中で切れる</small></div>
+    <div class="ph"><a href="shots/now-members.png"><img src="shots/now-members.png" alt=""></a><small><span class="n">8</span><b>先生の登録</b>：はじめに長い説明。メモの小さな字が、上の行にくっつく</small></div>
+    <div class="ph"><a href="shots/now-history.png"><img src="shots/now-history.png" alt=""></a><small><span class="n">8</span><b>変更履歴</b>：同じボタンが、行の数だけ並ぶ</small></div>
+  </div>
+  <div class="row r-4">
+    <div class="ph"><a href="shots/now-newyear-modal.png"><img src="shots/now-newyear-modal.png" alt=""></a><small><span class="n">9</span><b>新年度を作成</b>：窓は短く、分かりやすい</small></div>
+    <div class="ph"><a href="shots/now-newyear-after.png"><img src="shots/now-newyear-after.png" alt=""></a><small><span class="n">9</span><b>作ったあと</b>：緑の知らせと黄色の確認が上に出て、直す欄は下へ押し出される</small></div>
+    <div class="ph"><a href="shots/now-teacher-1366.png"><img src="shots/now-teacher-1366.png" alt=""></a><small><span class="n">10</span><b>先生の画面</b>：短いが、説明の字が小さい。保存は右上の端</small></div>
+    <div class="ph"><a href="shots/now-teacher-1920.png"><img src="shots/now-teacher-1920.png" alt=""></a><small><span class="n">10</span><b>先生の画面（1920）</b>：左右が大きく空き、字は小さいまま</small></div>
+  </div>
+  <div class="note" style="border-top:1px solid var(--line)">
+    <ol class="pts" start="7" style="counter-reset: p 6">
+      <li><b>大事な所が、いちばん下</b>書き間違えやすい語と詳細設定は、下までスクロールしないと見えない。</li>
+      <li><b>窓の形がばらばら</b>ひな形・言葉・先生の登録・変更履歴で、ボタンの場所も字の大きさも違う。</li>
+      <li><b>新年度のあと、直す所を探す</b>知らせに「場所」は書いてあるが、その欄はスクロールした先。</li>
+      <li><b>先生の画面も字が小さい</b>同じ説明がコースごとにくり返され、保存のボタンは遠い。</li>
+    </ol>
+  </div>
+</figure>
+
+<!-- ===================================================================== -->
+<h2>ひと目で見えるものの数（1366×768 のはじめの画面）</h2>
+<figure>
+  <table class="num">
+    <colgroup><col style="width:230px"><col><col><col><col></colgroup>
+    <thead><tr><th></th><th>いま</th><th>案A 整える</th><th>案B 左の見出し<br>（おすすめ）</th><th>案C 入口</th></tr></thead>
+    <tbody>
+      <tr><th>管理者：入力欄</th><td class="old">10</td><td>4</td><td class="c">4</td><td>1</td></tr>
+      <tr><th>管理者：ボタン</th><td class="old">11</td><td>8</td><td class="c">9</td><td>10</td></tr>
+      <tr><th>管理者：読む字の数</th><td class="old">511字</td><td>370字</td><td class="c">352字</td><td>389字</td></tr>
+      <tr><th>管理者：12px以下の字</th><td class="old">30か所</td><td>0</td><td class="c">0</td><td>0</td></tr>
+      <tr class="sep"><th>先生：入力欄</th><td class="old">3</td><td>3</td><td class="c">2</td><td>1</td></tr>
+      <tr><th>先生：ボタン</th><td class="old">5</td><td>4</td><td class="c">7</td><td>5</td></tr>
+      <tr><th>先生：読む字の数</th><td class="old">618字</td><td>378字</td><td class="c">347字</td><td>247字</td></tr>
+      <tr><th>下へのスクロール</th><td class="old">画面1.9枚分</td><td>約1.5枚分</td><td class="c">ほぼなし</td><td>なし</td></tr>
+    </tbody>
+  </table>
+  <div class="tnote">画面に半分以上見えている部品を、スクリプトで数えました（見本の紙の中の字は数えません）。案C はボタンが多めですが、そのうち6つは大きな「すること」のカードです。案B のボタンは、左の見出しの6つが中心です。</div>
+</figure>
+
+<!-- ===================================================================== -->
+<h2>3つの案</h2>
+<figure>
+  <figcaption><b>案A　整える</b><span>いまの並び（左に入力・右に見本）のまま。番号つきのまとまり、ラベルの列、15pxの字。コースと詳細設定は閉じておき、押すと開きます。</span></figcaption>
+  <div class="row r-2">
+    <div class="lbl">管理者（1366×768）</div>
+    <div class="ph"><a href="shots/a-main.png"><img src="shots/a-main.png" alt=""></a><small><b>はじめの画面</b>：コースは1行ずつ（指導教員と、お知らせ・ひな形の有無）</small></div>
+    <div class="ph"><a href="shots/a-dirty.png"><img src="shots/a-dirty.png" alt=""></a><small><b>直したあと</b>：下に帯。直した欄とコースに「変更あり」</small></div>
+  </div>
+  <div class="row r-3">
+    <div class="ph"><a href="shots/a-course.png"><img src="shots/a-course.png" alt=""></a><small><b>コースを開いたところ</b>：欄の名前は左の列にそろう</small></div>
+    <div class="ph"><a href="shots/a-details.png"><img src="shots/a-details.png" alt=""></a><small><b>詳細設定を開いたところ</b>：障害のとき・言葉・分量・学籍番号に分け、1列に</small></div>
+    <div class="ph"><a href="shots/a-teacher.png"><img src="shots/a-teacher.png" alt=""></a><small><b>先生の画面</b>：コースごとに、お知らせとひな形</small></div>
+  </div>
+  <div class="cnt">はじめの画面：入力欄 <b>10→4</b>・ボタン <b>11→8</b>・読む字 <b>511→370</b>・12px以下の字 <b>30→0</b></div>
+  <div class="pw"><div class="good"><b>よいところ</b><br>並びが同じなので、慣れた先生も迷いません。作る手間がいちばん少ない。</div><div class="weak"><b>弱いところ</b><br>まとまりが4つ縦に並ぶのは同じで、下へのスクロールは残ります。何から直すかは、まだ自分で探します。</div></div>
+</figure>
+
+<figure class="is-rec">
+  <figcaption><b>案B　左の見出し<span class="rec">おすすめ</span></b><span>左に6つの区切り（年度の設定・コース・書き方のチェック・先生の登録・変更履歴・詳細設定）。右には、選んだ1つだけ。見本は、要る区切りだけ右の端に出します。</span>
+    <span class="why">おすすめの理由：一度に見えるのは1つの区切りだけで、どこに何があるかが、いつも左に見えているから。</span></figcaption>
+  <div class="row r-2">
+    <div class="lbl">管理者（1366×768）：変更がないときと、直したあと</div>
+    <div class="ph"><a href="shots/b-main.png"><img src="shots/b-main.png" alt=""></a><small><b>はじめの画面（変更なし）</b>：帯は出ず、保存のボタンは静か。「変更はありません」</small></div>
+    <div class="ph"><a href="shots/b-dirty.png"><img src="shots/b-dirty.png" alt=""></a><small><b>直したあと</b>：下に帯とボタン。左の見出しにも、変えた数（年度の設定 1・コース 2）</small></div>
+  </div>
+  <div class="row r-3">
+    <div class="ph"><a href="shots/b-course.png"><img src="shots/b-course.png" alt=""></a><small><b>コース</b>：上でコースを選び、下で直す。右に、そのコースの表紙と抄録</small></div>
+    <div class="ph"><a href="shots/b-words.png"><img src="shots/b-words.png" alt=""></a><small><b>書き方のチェック</b>：窓ではなく画面の中に。行を押すと、その行だけ直せる（「反映する」は同じ）</small></div>
+    <div class="ph"><a href="shots/b-main-1920.png"><img src="shots/b-main-1920.png" alt=""></a><small><b>1920×1080</b>：同じ並びのまま、見本が大きくなる</small></div>
+  </div>
+  <div class="row r-2">
+    <div class="lbl">先生の画面（1366×768）</div>
+    <div class="ph"><a href="shots/b-teacher.png"><img src="shots/b-teacher.png" alt=""></a><small><b>左の見出しは2つだけ</b>：右は、学生が最初に見る本文の組み立て</small></div>
+    <div class="note"><p style="margin:0 0 8px">先生は、コースと書き方のチェックだけ。年度の設定・先生の登録などは、出しません。</p><p style="margin:0">ひな形の窓（「反映する」まで）は、いまのまま開きます。</p></div>
+  </div>
+  <div class="cnt">はじめの画面：入力欄 <b>10→4</b>・ボタン <b>11→9</b>・読む字 <b>511→352</b>・12px以下の字 <b>30→0</b>。下へのスクロールは、ほぼなし</div>
+  <div class="pw"><div class="good"><b>よいところ</b><br>区切りごとに1画面に収まり、窓が重なりません。行き先がいつも左に見え、迷っても戻れます。先生の画面は、2つだけ。</div><div class="weak"><b>弱いところ</b><br>区切りを切り替える手間が、1回ふえます。何をするかは、見出しの名前から自分で選びます。</div></div>
+</figure>
+
+<figure>
+  <figcaption><b>案C　入口</b><span>はじめは「すること」のカードだけ。押すと、その作業だけの画面になり、上の「はじめの画面」で戻ります。新年度は、手順に沿って進めます。</span></figcaption>
+  <div class="row r-2">
+    <div class="lbl">管理者（1366×768）</div>
+    <div class="ph"><a href="shots/c-home.png"><img src="shots/c-home.png" alt=""></a><small><b>はじめの画面</b>：6つのカード。下に、変更履歴と詳細設定</small></div>
+    <div class="ph"><a href="shots/c-newyear.png"><img src="shots/c-newyear.png" alt=""></a><small><b>新年度の準備</b>：上に5つの手順。いまは「題目と締切」。前の年度のままの所に、黄色の印</small></div>
+  </div>
+  <div class="row r-2">
+    <div class="ph"><a href="shots/c-notice.png"><img src="shots/c-notice.png" alt=""></a><small><b>コースのお知らせを書く（直したあと）</b>：右に、学生の画面での見え方。下に帯</small></div>
+    <div class="ph"><a href="shots/c-teacher.png"><img src="shots/c-teacher.png" alt=""></a><small><b>先生の画面</b>：カードは3つだけ</small></div>
+  </div>
+  <div class="cnt">はじめの画面：入力欄 <b>10→1</b>・ボタン <b>11→10</b>（うち6つはカード）・読む字 <b>511→389</b>・12px以下の字 <b>30→0</b></div>
+  <div class="pw"><div class="good"><b>よいところ</b><br>はじめの画面で、することがすぐ分かります。年に1回の新年度も、手順のとおりに進めば済みます。</div><div class="weak"><b>弱いところ</b><br>作る画面がいちばん多い。1か所だけ直すときも、カードを選んでから。題目のように、同じ欄が2つの作業に出ます。</div></div>
+</figure>
+
+<div class="ask"><b>決めていただきたいこと</b>
+  <ol>
+    <li><b>案A・案B・案C</b>のどれにしますか。<small>（おすすめは案B）</small></li>
+    <li>案B のとき、準備中の年度の「年度の設定」に、<b>案C の手順</b>（新年度を作る〜学生に公開の5つ）も出しますか？</li>
+    <li>保存の帯の言葉は、<b>「まだ学生に届いていない変更が3か所あります」</b>でよいですか？<small>（準備中の年度は「保存していない変更が3か所あります」）</small></li>
+  </ol>
+</div>
+
+</main>
+</body>
+</html>
