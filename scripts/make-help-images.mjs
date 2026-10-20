@@ -369,7 +369,7 @@ async function studentShots(browser) {
   await sleep(400)
   await ready(page)
 
-  // ---- 表のマスを書いているところ：列の幅を「自分で決める」にして、縦の線のつまみにマウスを乗せる（左の道具に、列の幅・左端の列・行の高さ） ----
+  // ---- 表のマスを書いているところ：「表の形を整える」の窓で列の幅を「自分で決める」にして、縦の線のつまみにマウスを乗せる（mockups/v45 案A。窓・左の道具・表を写す） ----
   await goToBlock(page, 't1')
   {
     const at = await page.evaluate(() => {
@@ -380,8 +380,13 @@ async function studentShots(browser) {
     await page.mouse.click(at.x, at.y)
     await page.waitForFunction(() => window.__editor.getSnapshot().editingKind === 'tableCell', { timeout: 10000 })
     await sleep(300)
-    const press = (name, text) => page.evaluate((name, text) => [...document.querySelectorAll(`.palette .seg[aria-label="${name}"] button`)].find((b) => b.textContent === text).click(), name, text)
-    await press('列の幅', '自分で決める')
+    // 「表の形を整える」の窓で選ぶ（窓は開いたまま）
+    const press = async (value) => {
+      if (!(await page.$('.shape-panel'))) await page.click('.palette .shape-btn')
+      await page.waitForSelector('.shape-panel')
+      await page.click(`.shape-panel .so-choice[data-value="${value}"]`)
+    }
+    await press('custom')
     await sleep(400)
     await ready(page)
     await page.waitForSelector('.col-handles .col-grip', { visible: true, timeout: 10000 })
@@ -395,10 +400,13 @@ async function studentShots(browser) {
     await page.mouse.move(grip.x, grip.y)
     await sleep(500)
     const palette = await R(page, '.palette')
+    const panel = await R(page, '.shape-panel')
     const table = await R(page, `${CUR} [data-table-id="t1"]`)
-    const top = Math.min(palette.y, table.y) - 14
-    await capture(page, 'table', { x: palette.x - 18, y: top, w: table.x + table.w + 30 - (palette.x - 18), h: Math.max(palette.y + palette.h, table.y + table.h) + 16 - top })
-    await press('列の幅', 'そろえる')
+    const left = Math.min(palette.x, panel.x) - 18
+    const top = Math.min(palette.y, panel.y, table.y) - 14
+    await capture(page, 'table', { x: Math.max(0, left), y: Math.max(0, top), w: table.x + table.w + 30 - Math.max(0, left), h: Math.max(palette.y + palette.h, panel.y + panel.h, table.y + table.h) + 16 - Math.max(0, top) })
+    await press('equal')
+    await page.keyboard.press('Escape')
     await sleep(300)
     await page.mouse.move(5, 5)
     await page.keyboard.press('Escape')

@@ -17,7 +17,10 @@ import { tocLinksPc } from './tocLinks.mjs'
 import { autoHeadingPc } from './autoHeading.mjs'
 import { captionGapPc } from './captionGap.mjs'
 import { tableShapePc } from './tableShape.mjs'
-import { tableCustomPc } from './tableCustom.mjs'
+import { paletteFitPc, tableCustomPc } from './tableCustom.mjs'
+import { cellBorderPc } from './cellBorder.mjs'
+import { tableSettingsPc } from './tableSettings.mjs'
+import { closeShape, pickWidth } from './shapeUi.mjs'
 import { waitingPc } from './waiting.mjs'
 import { templateStudentPc } from './templateStudent.mjs'
 import { setupWriting } from './sampleReport.mjs'
@@ -1238,11 +1241,13 @@ await withEdge(async (browser) => {
   await clickPaletteButton('列を足す')
   await pause(300)
   await ready()
-  await page.evaluate(() => [...document.querySelectorAll('.palette .seg button')].find((b) => b.textContent.includes('中身に合わせる')).click())
+  // 列の幅は「表の形を整える」の窓で選ぶ（mockups/v45 案A。scripts/e2e/shapeUi.mjs）
+  await pickWidth(page, 'auto', { ready })
+  await closeShape(page)
   await pause(300)
   await ready()
   let t = await tableNow()
-  check('表に行と列を足し、列の幅を「中身に合わせる」にできる', t.rows.length === 3 && t.rows.every((r) => r.cells.length === 3) && t.widths === 'auto' && t.rows[1].cells[0].text === 'サテン', JSON.stringify(t.rows.map((r) => r.cells.length)))
+  check('表に行と列を足し、列の幅を「字の多い列を広く」にできる（「表の形を整える」の窓）', t.rows.length === 3 && t.rows.every((r) => r.cells.length === 3) && t.widths === 'auto' && t.rows[1].cells[0].text === 'サテン', JSON.stringify(t.rows.map((r) => r.cells.length)))
   await clickBlock(t.rows[1].cells[0].id)
   const [cellChooser] = await Promise.all([page.waitForFileChooser(), clickPaletteButton('画像を入れる')])
   await cellChooser.accept([pngPath])
@@ -2385,6 +2390,15 @@ await withEdge(async (browser) => {
 
   // ---- 表の列の幅を「自分で決める」（mockups/v42：縦の線をドラッグ・5% ずつ・10% 以上・そろえ直す・元に戻す・PDF。scripts/e2e/tableCustom.mjs） ----
   await tableCustomPc(browser, check)
+
+  // ---- 画面の低いパソコン（1280×720・1366×768・1280×586）でも左の道具は全部見え、「表の形を整える」の窓も入る。もっと低い画面で道具の中を動かしても、中身が狭まらない（1字だけの行ができない。scripts/e2e/tableCustom.mjs） ----
+  await paletteFitPc(browser, check)
+
+  // ---- 表のセルを書いている間も、そのセルの罫線（上下左右）が見える（細い列・見出しの行・最後の行。scripts/e2e/cellBorder.mjs） ----
+  await cellBorderPc(browser, check)
+
+  // ---- 「表の形を整える」の窓（mockups/v45 案A：開く・閉じる（×・Esc・外を押す）・選ぶとすぐ変わる・元に戻す1回・キーボード・線のつまみ。scripts/e2e/tableSettings.mjs） ----
+  await tableSettingsPc(browser, check)
 
   // ---- 待つ間の表示（押したボタンに回る印と言葉・2秒を過ぎたら「数秒かかることがあります」・終わったら知らせ。依頼者の要望 2026-10-20。scripts/e2e/waiting.mjs） ----
   await waitingPc(browser, check)

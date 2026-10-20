@@ -81,6 +81,13 @@ const paperHeadings = (page) =>
     ed.renderer.viewport.classList.remove('measuring')
     return hs
   })
+/** 右の欄の「機種依存文字を使わない」の指摘のうち、段落 id のもの（指摘した字） */
+const machineFindings = (page, id) =>
+  page.evaluate((id) => {
+    const s = window.__editor.getSnapshot()
+    const text = s.report.body.flatMap((c) => c.blocks).find((b) => b.id === id)?.content?.map((n) => n.text ?? '').join('') ?? ''
+    return s.findings.filter((f) => f.ruleId === 'machine-dependent' && f.blockId === id).map((f) => text.slice(f.start, f.end))
+  }, id)
 /** 段落 id を、終わりにカーソルを置いて書き始める（そのページへ移ってから） */
 const openAtEnd = async (page, ready, id) => {
   await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), id)
@@ -133,8 +140,14 @@ export async function autoHeadingPc(browser, check) {
   await enterNew(page, 'p8')
   await ready()
   const typedId = (await state(page)).editing
-  await page.keyboard.type('Ⅴ．仕上げと確認')
-  await wait(200)
+  // 打っている途中（「Ⅴ」「Ⅴ．」「Ⅴ．仕上げと確認」）は、右の欄に「機種依存文字を使わない」を出さない（見出しになると、番号は組版で付く。依頼者の指摘 2026-10-20）
+  const flashes = []
+  for (const part of ['Ⅴ', '．', '仕上げと確認']) {
+    await page.keyboard.type(part)
+    await wait(200)
+    flashes.push(...(await machineFindings(page, typedId)))
+  }
+  check('段落に「Ⅴ．仕上げと確認」と打っている途中（Enter の前）は、右の欄に番号の「Ⅴ」の「機種依存文字を使わない」が出ない', flashes.length === 0, JSON.stringify(flashes))
   await page.screenshot({ path: `${OUT}/pc-1-before-enter.png` })
   await page.keyboard.press('Enter')
   await page.waitForFunction(() => window.__editor.getSnapshot().report.body.length === 4, { timeout: 30000 })
@@ -179,6 +192,8 @@ export async function autoHeadingPc(browser, check) {
     undone.blocks[1][i + 1] === typedId && undone.texts[1][i + 1] === 'Ⅴ．仕上げと確認' && undone.blocks[1][i + 2] === 'p9' && undoneToast.includes('見出しにする前に戻しました'),
     JSON.stringify({ after: undone.texts[1].slice(i, i + 3), undoneToast }),
   )
+  const kept = await machineFindings(page, typedId)
+  check('「戻す」で段落のままにした「Ⅴ．仕上げと確認」には、今までどおり「機種依存文字を使わない」が出る（PDF に Ⅴ が残るため）', kept.join('') === 'Ⅴ', JSON.stringify(kept))
   // 戻した段落で、同じ文のまま Enter を押しても、もう見出しにしない（ふつうに段落を分ける）
   await openAtEnd(page, ready, typedId)
   await enterNew(page, typedId)

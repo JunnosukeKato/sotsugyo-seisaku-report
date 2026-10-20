@@ -1,8 +1,9 @@
-// 表の形（行の高さ・左端の列）と、表のマスの中の改行（Edge を自動で操作する。パソコンとスマホ）。
+// 表の形（行の高さ・項目の列（左端））と、表のマスの中の改行（Edge を自動で操作する。パソコンとスマホ）。
 // 依頼者の判断（2026-10-20）：
 // - 行の高さ「そろえる」：見出しの行のほかの行を、その中でいちばん高い行と同じ高さにする（見出しの行は中身に合わせたまま。比べるときにも入れない）。
 //   画面でも PDF・印刷でも同じ（組んだ紙面で測った高さを HTML に書く：src/layout/tableFit.ts）
-// - 左端の列「中身に合わせる」（列の幅が「そろえる」のときだけ出す）：左端の列は字の幅、ほかの列は残りを同じ幅で分ける
+// - 項目の列（左端）は字に合わせる（列の幅が「列の幅をそろえる」のときだけ使える）：左端の列は字の幅、ほかの列は残りを同じ幅で分ける
+// - 切り替えは「表の形を整える」の窓（スマホは「表の形」の下から出る欄。mockups/v45 案A。操作は scripts/e2e/shapeUi.mjs）
 // - 表のマスの中は、Enter（Shift+Enter も）で改行。書き終えるのは Esc・Tab（隣のマスへ）・ほかの所を押す・スマホの「完了」。
 //   Android の文字入力の、キーの知らせのない改行の入力（insertParagraph）も改行にする
 // 確かめること：そろえると、見出しの行のほかの行の高さが 0.5px 以内で同じ（画面と PDF の絵）。見出しの行の高さは変わらない。
@@ -12,6 +13,7 @@ import { mkdirSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { stubConfig } from './configStub.mjs'
 import { setupWriting } from './sampleReport.mjs'
+import { closeShape, openShape, pickWidth, setCheck, shapeState } from './shapeUi.mjs'
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'poc-output/table-heights'
@@ -268,7 +270,7 @@ export async function tableShapePc(browser, check) {
   const pdfAuto = await pdfShape(page)
   saveCrop('pc-table-auto-pdf', pdfAuto)
 
-  // ---- 表のセルを押すと、左の道具に「列の幅」「左端の列」「行の高さ」（2つのボタンから選ぶ。押すと切り替わる方に、いまの形と押すとどうなるか） ----
+  // ---- 表のセルを押すと、左の道具に「表の形を整える」。押すと窓が開き、列の幅・項目の列（左端）・行の高さを選ぶ（mockups/v45 案A。窓は tableSettings.mjs でも確かめる） ----
   const clickCell = async (id) => {
     const at = await page.evaluate((id) => {
       const el = document.querySelector(`.page-viewport.front [data-cell-id="${id}"]`)
@@ -280,21 +282,9 @@ export async function tableShapePc(browser, check) {
     await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 10000 }, id).catch(() => {})
     await wait(250)
   }
-  const segs = () =>
-    page.evaluate(() =>
-      [...document.querySelectorAll('.palette .seg')].map((g) => ({
-        name: g.getAttribute('aria-label') ?? g.previousElementSibling?.textContent,
-        buttons: [...g.querySelectorAll('button')].map((b) => ({ text: b.textContent, on: b.classList.contains('on'), title: b.title })),
-      })),
-    )
-  const pressSeg = async (name, text) => {
-    await page.evaluate((name, text) => [...document.querySelectorAll(`.palette .seg[aria-label="${name}"] button`)].find((b) => b.textContent === text).click(), name, text)
-    await wait(300)
-    await ready()
-    await wait(200)
-  }
   await clickCell(cellId(1, 1))
-  const tools0 = await segs()
+  await openShape(page)
+  const tools0 = await shapeState(page)
   const shotPalette = async (name) => {
     const clip = await page.evaluate((id) => {
       const p = document.querySelector('.palette').getBoundingClientRect()
@@ -305,28 +295,22 @@ export async function tableShapePc(browser, check) {
     await page.screenshot({ path: `${OUT}/${name}.png`, clip, captureBeyondViewport: false })
   }
   await shotPalette('pc-toggle-auto')
-  const seg = (list, name) => list.find((g) => g.name === name)
-  const heights0 = seg(tools0, '行の高さ')
   check(
-    'パソコン：表のセルを書いているとき、左の道具に「列の幅」「左端の列」「行の高さ」が並ぶ（そろえる・中身に合わせるのボタン。行の高さは、はじめ「中身に合わせる」）',
-    JSON.stringify(tools0.map((g) => g.name)) === JSON.stringify(['列の幅', '左端の列', '行の高さ']) &&
-      JSON.stringify(heights0.buttons.map((b) => [b.text, b.on])) === JSON.stringify([['そろえる', false], ['中身に合わせる', true]]),
+    'パソコン：表のセルを書いているとき「表の形を整える」の窓に、列の幅（列の幅をそろえるに印）・項目の列（左端）・行の高さ（はじめは印なし）が出る',
+    tools0?.kind === 'panel' &&
+      JSON.stringify(tools0.widths.map((w) => [w.value, w.on])) === JSON.stringify([['equal', true], ['auto', false], ['custom', false]]) &&
+      tools0.label && !tools0.label.on && !tools0.label.disabled && tools0.heights && !tools0.heights.on,
     JSON.stringify(tools0),
-  )
-  check(
-    'パソコン：「行の高さ」の押すと切り替わるボタンに「行の高さ：中身に合わせる（押すと、そろえる）」と出る（左端の列は「左端の列：ほかの列とそろえる（押すと、中身に合わせる）」）',
-    heights0.buttons[0].title === '行の高さ：中身に合わせる（押すと、そろえる）' && seg(tools0, '左端の列').buttons[0].title === '左端の列：ほかの列とそろえる（押すと、中身に合わせる）',
-    JSON.stringify([heights0.buttons.map((b) => b.title), seg(tools0, '左端の列').buttons.map((b) => b.title)]),
   )
 
   // ---- 行の高さ：そろえる ----
-  await pressSeg('行の高さ', 'そろえる')
+  await setCheck(page, 'heights', true, { ready })
   await showTable(page, ready)
   const eq = await shapeOf(page)
   const eqModel = await modelOf(page)
   const pdfEq = await pdfShape(page)
   saveCrop('pc-table-equal-pdf', pdfEq)
-  const tools1 = await segs()
+  const tools1 = await shapeState(page)
   await shotPalette('pc-toggle-equal')
   const tallestBody = Math.max(...auto0.body)
   check(
@@ -340,11 +324,8 @@ export async function tableShapePc(browser, check) {
     pdfEq.rows.length === eq.first + 1 && spread(pdfBodyEq) <= 0.5 && Math.abs(pdfBodyEq[0] - eq.body[0]) <= 0.5 && Math.abs(pdfEq.rows[0] - eq.head) <= 0.5,
     JSON.stringify({ pdf: pdfEq.rows.map(r2), screen: [eq.head, ...eq.body].map(r2) }),
   )
-  check(
-    'パソコン：そろえたあとは「行の高さ」の「そろえる」が選ばれ、「中身に合わせる」に「行の高さ：そろえる（押すと、中身に合わせる）」と出る',
-    JSON.stringify(seg(tools1, '行の高さ').buttons.map((b) => [b.on, b.title])) === JSON.stringify([[true, '行の高さ：そろえる'], [false, '行の高さ：そろえる（押すと、中身に合わせる）']]),
-    JSON.stringify(seg(tools1, '行の高さ')),
-  )
+  check('パソコン：そろえたあとは、窓の「行の高さをそろえる」に印が付く（窓は開いたまま）', tools1?.heights?.on === true, JSON.stringify(tools1?.heights))
+  await closeShape(page)
 
   // ---- 元に戻す1回で「中身に合わせる」に戻り、やり直すとまた「そろえる」 ----
   await page.evaluate(() => window.__editor.undo())
@@ -362,13 +343,14 @@ export async function tableShapePc(browser, check) {
     JSON.stringify({ undone: brief(undone), redone: brief(redone) }),
   )
 
-  // ---- 「中身に合わせる」に戻すと、もとの高さ ----
+  // ---- 「行の高さをそろえる」の印を外すと、もとの高さ ----
   await clickCell(cellId(1, 1))
-  await pressSeg('行の高さ', '中身に合わせる')
+  await setCheck(page, 'heights', false, { ready })
+  await closeShape(page)
   await showTable(page, ready)
   const back = await shapeOf(page)
   check(
-    'パソコン：「中身に合わせる」に戻すと、もとの高さに戻る（行に高さを書かない）',
+    'パソコン：「行の高さをそろえる」の印を外すと、もとの高さに戻る（行に高さを書かない）',
     (await modelOf(page)).heights === 'auto' && JSON.stringify(brief(back)) === JSON.stringify(brief(auto0)) && back.styled === 0 && !back.cls.includes('heights-equal'),
     JSON.stringify(brief(back)),
   )
@@ -396,18 +378,19 @@ export async function tableShapePc(browser, check) {
   await page.evaluate(() => window.__editor.undo())
   await ready()
 
-  // ---- 左端の列：中身に合わせる（列の幅が「そろえる」のときだけ） ----
+  // ---- 項目の列（左端）は字に合わせる（列の幅をそろえるのときだけ） ----
   await clickCell(cellId(1, 1))
   await showTable(page, ready)
   const label0 = await shapeOf(page)
-  await pressSeg('左端の列', '中身に合わせる')
+  await setCheck(page, 'label', true, { ready })
+  await closeShape(page)
   await showTable(page, ready)
   const label1 = await shapeOf(page)
   const pdfLabel = await pdfShape(page)
   saveCrop('pc-table-label-pdf', pdfLabel)
   const labelModel = await modelOf(page)
   check(
-    'パソコン：「左端の列」を「中身に合わせる」にすると、左端の列が字の幅（ほかの列より狭い）になり、ほかの列は 0.5px 以内で同じ幅（表の幅は同じ）',
+    'パソコン：「項目の列（左端）は字に合わせる」に印を付けると、左端の列が字の幅（ほかの列より狭い）になり、ほかの列は 0.5px 以内で同じ幅（表の幅は同じ）',
     labelModel.labelColumn && label1.cols[0] < label1.cols[1] - 20 && spread(label1.cols.slice(1)) <= 0.5 && Math.abs(label1.cols.reduce((a, b) => a + b) - label0.cols.reduce((a, b) => a + b)) <= 1 && label1.colgroup,
     JSON.stringify({ before: label0.cols.map(r2), after: label1.cols.map(r2) }),
   )
@@ -418,28 +401,31 @@ export async function tableShapePc(browser, check) {
   )
   // 左端の列の字が折り返していない
   const labelLines = await linesOfText(page, `.page-viewport.front .data-table[data-table-id="${TABLE_ID}"] tr > :first-child [data-block-id]`)
-  check('パソコン：左端の列を中身に合わせると、左端の列の字は折り返さない', labelLines.every((l) => l.length <= 1), JSON.stringify(labelLines))
+  check('パソコン：項目の列を字に合わせると、左端の列の字は折り返さない', labelLines.every((l) => l.length <= 1), JSON.stringify(labelLines))
   await page.evaluate(() => window.__editor.undo())
   await ready()
   await showTable(page, ready)
   const labelUndone = await shapeOf(page)
-  check('パソコン：「左端の列」も、元に戻す1回で戻る（すべての列が同じ幅）', !(await modelOf(page)).labelColumn && spread(labelUndone.cols) <= 0.5, JSON.stringify(labelUndone.cols.map(r2)))
+  check('パソコン：「項目の列（左端）」も、元に戻す1回で戻る（すべての列が同じ幅）', !(await modelOf(page)).labelColumn && spread(labelUndone.cols) <= 0.5, JSON.stringify(labelUndone.cols.map(r2)))
   await page.evaluate(() => window.__editor.redo())
   await ready()
   await clickCell(cellId(1, 1))
-  await pressSeg('左端の列', 'ほかとそろえる')
+  await setCheck(page, 'label', false, { ready })
   await showTable(page, ready)
   const labelOff = await shapeOf(page)
-  check('パソコン：「左端の列」を「ほかとそろえる」に戻すと、すべての列が同じ幅（0.5px 以内）', !(await modelOf(page)).labelColumn && spread(labelOff.cols) <= 0.5 && !labelOff.colgroup, JSON.stringify(labelOff.cols.map(r2)))
-  // 列の幅を「中身に合わせる」にすると、「左端の列」は出ない
-  await pressSeg('列の幅', '中身に合わせる')
-  const toolsAuto = await segs()
+  check('パソコン：「項目の列（左端）」の印を外すと、すべての列が同じ幅（0.5px 以内）', !(await modelOf(page)).labelColumn && spread(labelOff.cols) <= 0.5 && !labelOff.colgroup, JSON.stringify(labelOff.cols.map(r2)))
+  // 列の幅を「字の多い列を広く」にすると、「項目の列（左端）」は、うすくなって押せない（「列の幅をそろえる」のときだけ）
+  await pickWidth(page, 'auto', { ready })
+  const toolsAuto = await shapeState(page)
+  await setCheck(page, 'label', true, { ready })
+  const labelBlocked = (await modelOf(page)).labelColumn
   check(
-    'パソコン：「列の幅」が「中身に合わせる」のときは、「左端の列」のボタンは出ない',
-    (await modelOf(page)).widths === 'auto' && JSON.stringify(toolsAuto.map((g) => g.name)) === JSON.stringify(['列の幅', '行の高さ']),
-    JSON.stringify(toolsAuto.map((g) => g.name)),
+    'パソコン：「列の幅」が「字の多い列を広く」のときは、「項目の列（左端）」はうすく出て押せない（「「列の幅をそろえる」のときだけ」）',
+    (await modelOf(page)).widths === 'auto' && toolsAuto.label.disabled && toolsAuto.label.text.includes('「列の幅をそろえる」のときだけ') && !labelBlocked,
+    JSON.stringify(toolsAuto.label),
   )
-  await pressSeg('列の幅', 'そろえる')
+  await pickWidth(page, 'equal', { ready })
+  await closeShape(page)
 
   // ---- 表のマスの中は Enter で改行。Esc・Tab で書き終える ----
   await clickCell(cellId(4, 1))
@@ -621,95 +607,53 @@ export async function tableShapePhone(browser, check) {
     await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 10000 }, id).catch(() => {})
     await wait(500)
   }
-  /** キーボードの上の道具の2段目（表の道具）：ボタンの名前・大きさ。横にずらして見せたときに画面に入るか（reach） */
+  /** キーボードの上の道具の2段目（表の道具）：ボタンの名前・大きさ。画面の中にあるか（reach。横にずらさずに） */
   const dbTools = () =>
-    page.evaluate(async () => {
+    page.evaluate(() => {
       const row = document.querySelector('.direct-bar .db-table')
       if (!row) return null
-      const out = []
-      for (const b of row.querySelectorAll('button')) {
-        b.scrollIntoView({ inline: 'nearest', block: 'nearest' })
-        await new Promise((r) => requestAnimationFrame(r))
+      const out = [...row.querySelectorAll('button')].map((b) => {
         const r = b.getBoundingClientRect()
-        out.push({ name: b.textContent.trim(), w: Math.round(r.width), h: Math.round(r.height), reach: r.left >= -0.5 && r.right <= innerWidth + 0.5 })
-      }
-      row.scrollLeft = 0
-      return { tools: out, scrolls: row.scrollWidth > row.clientWidth, overflow: getComputedStyle(row).overflowX, rowRight: row.getBoundingClientRect().right <= innerWidth + 0.5 }
+        return { name: b.textContent.trim(), w: Math.round(r.width), h: Math.round(r.height), reach: r.left >= -0.5 && r.right <= innerWidth + 0.5 }
+      })
+      return { tools: out, scrolls: row.scrollWidth > row.clientWidth + 0.5, rowRight: row.getBoundingClientRect().right <= innerWidth + 0.5 }
     })
-  const pressDb = async (label) => {
-    await page.evaluate((label) => {
-      const b = [...document.querySelectorAll('.direct-bar .db-table .db-width')].find((x) => x.querySelector('small').textContent === label)
-      b.scrollIntoView({ inline: 'nearest', block: 'nearest' })
-    }, label)
-    await wait(150)
-    const at = await page.evaluate((label) => {
-      const r = [...document.querySelectorAll('.direct-bar .db-table .db-width')].find((x) => x.querySelector('small').textContent === label).getBoundingClientRect()
-      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
-    }, label)
-    await page.touchscreen.tap(at.x, at.y)
-    await wait(400)
-    await ready()
-    await wait(300)
-  }
-  /** 「列の幅」：押すと小さな窓が開き、3つから選ぶ（mockups/v42 案B。tableCustom.mjs） */
-  const chooseWidth = async (name) => {
-    const tapAt = async (selector, text) => {
-      const at = await page.evaluate(
-        (selector, text) => {
-          const el = [...document.querySelectorAll(selector)].find((b) => !text || b.textContent.includes(text))
-          el.scrollIntoView({ inline: 'nearest', block: 'nearest' })
-          const r = el.getBoundingClientRect()
-          return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
-        },
-        selector,
-        text,
-      )
-      await wait(150)
-      await page.touchscreen.tap(at.x, at.y)
-      await wait(300)
-    }
-    await tapAt('.direct-bar .db-table .width-menu')
-    await tapAt('.width-pop [role="radio"]', name)
-    await ready()
-    await wait(300)
-  }
-
-  // ---- セルを押して紙面の上で書く：キーボードの上の道具の2段目に「列の幅」「左端の列」「行の高さ」（44px 以上・名前は1行） ----
+  const opts = { phone: true, ready }
+  // ---- セルを押して紙面の上で書く：キーボードの上の道具の2段目は、横にずらさない1段（行・列を足す・画像・行・列を消す・表の形・表を削除。44px 以上） ----
   await tapCell(cellId(1, 1))
   const db0 = await dbTools()
-  const dbLines = await linesOfText(page, '.direct-bar .db-table .db-width small, .direct-bar .db-table .db-width b')
+  const dbLines = await linesOfText(page, '.direct-bar .db-table button')
   await page.screenshot({ path: `${OUT}/phone-toolbar.png` })
   check(
-    'スマホ：表のセルを書いている間、キーボードの上の道具の2段目に「列の幅」「左端の列」「行の高さ」が出る（どれも 44px 以上。名前と形はそれぞれ1行）',
+    'スマホ：表のセルを書いている間、キーボードの上の道具の2段目は「行を足す・列を足す・画像・行を消す・列を消す・表の形・表を削除」の7つ（どれも 44px 以上。名前は1行）',
     !!db0 &&
-      ['列の幅そろえる', '左端の列ほかとそろえる', '行の高さ中身に合わせる'].every((n) => db0.tools.some((t) => t.name === n)) &&
+      JSON.stringify(db0.tools.map((t) => t.name)) === JSON.stringify(['行を足す', '列を足す', '画像', '行を消す', '列を消す', '表の形', '表を削除']) &&
       db0.tools.every((t) => t.w >= 44 && t.h >= 44) &&
       dbLines.every((l) => l.length === 1),
     JSON.stringify({ tools: db0?.tools, lines: dbLines }),
   )
-  check(
-    'スマホ：2段目の道具が画面の幅に入らないときは、2段目だけを横にずらして見られる（折り返さない。どの道具も、ずらすと画面に入る）',
-    !!db0 && db0.overflow === 'auto' && db0.rowRight && db0.tools.every((t) => t.reach),
-    JSON.stringify({ scrolls: db0?.scrolls, overflow: db0?.overflow, reach: db0?.tools.map((t) => t.reach) }),
-  )
+  check('スマホ：2段目の道具は、横にずらさなくても全部が画面に入る（ずらす所はない）', !!db0 && !db0.scrolls && db0.rowRight && db0.tools.every((t) => t.reach), JSON.stringify({ scrolls: db0?.scrolls, reach: db0?.tools.map((t) => t.reach) }))
 
-  // ---- 行の高さ：そろえる（押すたびに切り替わる）。紙面と PDF の絵で、見出しの行のほかの行が同じ高さ ----
-  await pressDb('行の高さ')
+  // ---- 行の高さ：そろえる（「表の形」の欄の「行の高さをそろえる」）。紙面と PDF の絵で、見出しの行のほかの行が同じ高さ ----
+  await setCheck(page, 'heights', true, opts)
+  const sheetEq = await shapeState(page)
+  await closeShape(page, true)
+  await wait(300)
   await showTable(page, ready)
   const eq = await shapeOf(page)
   const pdfEq = await pdfShape(page)
   saveCrop('phone-table-equal-pdf', pdfEq)
-  const db1 = await dbTools()
   const stillEditing = await page.evaluate(() => window.__editor.getSnapshot().editingId)
   check(
-    'スマホ：「行の高さ」を押すと「そろえる」になり、見出しの行のほかの行が、いちばん高い行と同じ高さになる（画面・PDF の絵とも 0.5px 以内。見出しの行はそのまま。書いていたマスを書き続ける）',
+    'スマホ：「表の形」の欄で「行の高さをそろえる」に印を付けると、見出しの行のほかの行が、いちばん高い行と同じ高さになる（画面・PDF の絵とも 0.5px 以内。見出しの行はそのまま。「できた」で、書いていたマスを書き続ける）',
     (await modelOf(page)).heights === 'equal' &&
       spread(eq.body) <= 0.5 &&
       asTallest(eq.body[0], Math.max(...auto0.body)) &&
       Math.abs(eq.head - auto0.head) <= 0.01 &&
       spread(pdfEq.rows.slice(1)) <= 0.5 &&
       Math.abs(pdfEq.rows[1] - eq.body[0]) <= 0.5 &&
-      db1.tools.some((t) => t.name === '行の高さそろえる') &&
+      sheetEq?.kind === 'sheet' &&
+      sheetEq.heights.on &&
       stillEditing === cellId(1, 1),
     JSON.stringify({ auto: brief(auto0), equal: brief(eq), pdf: pdfEq.rows.map(r2), editing: stillEditing }),
   )
@@ -721,27 +665,29 @@ export async function tableShapePhone(browser, check) {
   const undone = await shapeOf(page)
   check('スマホ：キーボードの上の「戻す」1回で「中身に合わせる」（前と同じ高さ）に戻る', (await modelOf(page)).heights === 'auto' && JSON.stringify(brief(undone)) === JSON.stringify(brief(auto0)), JSON.stringify(brief(undone)))
 
-  // ---- 左端の列：中身に合わせる ----
+  // ---- 項目の列（左端）は字に合わせる ----
   await tapCell(cellId(1, 1))
-  await pressDb('左端の列')
+  await setCheck(page, 'label', true, opts)
+  await closeShape(page, true)
   await showTable(page, ready)
   const label = await shapeOf(page)
   check(
-    'スマホ：「左端の列」を押すと「中身に合わせる」になり、左端の列が字の幅（ほかより狭い）、ほかの列は 0.5px 以内で同じ幅',
+    'スマホ：「項目の列（左端）は字に合わせる」に印を付けると、左端の列が字の幅（ほかより狭い）、ほかの列は 0.5px 以内で同じ幅',
     (await modelOf(page)).labelColumn && label.cols[0] < label.cols[1] - 20 && spread(label.cols.slice(1)) <= 0.5,
     JSON.stringify(label.cols.map(r2)),
   )
-  await pressDb('左端の列')
+  await setCheck(page, 'label', false, opts)
   await showTable(page, ready)
   const labelOff = await shapeOf(page)
-  await chooseWidth('中身に合わせる')
-  const dbAuto = await dbTools()
+  await pickWidth(page, 'auto', opts)
+  const sheetAuto = await shapeState(page)
   check(
-    'スマホ：もう一度押すと「ほかとそろえる」（すべての列が同じ幅）。「列の幅」を「中身に合わせる」にすると「左端の列」は出ない',
-    !(await modelOf(page)).labelColumn && spread(labelOff.cols) <= 0.5 && !dbAuto.tools.some((t) => t.name.startsWith('左端の列')) && dbAuto.tools.some((t) => t.name === '列の幅中身に合わせる'),
-    JSON.stringify({ cols: labelOff.cols.map(r2), tools: dbAuto.tools.map((t) => t.name) }),
+    'スマホ：印を外すと、すべての列が同じ幅。「列の幅」を「字の多い列を広く」にすると「項目の列（左端）」はうすくなって押せない（「「列の幅をそろえる」のときだけ」）',
+    !(await modelOf(page)).labelColumn && spread(labelOff.cols) <= 0.5 && (await modelOf(page)).widths === 'auto' && sheetAuto.label.disabled && sheetAuto.label.text.includes('「列の幅をそろえる」のときだけ'),
+    JSON.stringify({ cols: labelOff.cols.map(r2), label: sheetAuto.label }),
   )
-  await chooseWidth('そろえる')
+  await pickWidth(page, 'equal', opts)
+  await closeShape(page, true)
 
   // ---- マスの中の改行：Enter・キーの知らせのない改行の入力。「完了」で書き終える ----
   await tapCell(cellId(4, 1))
@@ -775,7 +721,7 @@ export async function tableShapePhone(browser, check) {
   const pdfLines = await pdfShape(page, TABLE_ID, cellId(4, 1))
   check('スマホ：改行したマスは、PDF の絵でも3行になる', pdfLines.textLines === 3, JSON.stringify({ lines: pdfLines.textLines }))
 
-  // ---- 表を選んだときの下の道具：切り替えは3つ。44px 以上。名前は1行。入らなければ横にずらして見る ----
+  // ---- 表を選んだときの下の道具：「表の形」のボタン1つ（押すと下から欄）。44px 以上。名前は1行。画面に入る ----
   await page.evaluate((id) => window.__editor.select({ kind: 'table', id }), TABLE_ID)
   await wait(500)
   const sel = await page.evaluate(async () => {
@@ -791,27 +737,19 @@ export async function tableShapePhone(browser, check) {
     const g = group.getBoundingClientRect()
     return { tools: out, inside: g.left >= 0 && g.right <= innerWidth }
   })
-  const selLines = await linesOfText(page, '.sel-bar .width-toggle span, .sel-bar .width-toggle b')
+  const selLines = await linesOfText(page, '.sel-bar .shape-btn span')
   await page.screenshot({ path: `${OUT}/phone-selbar.png` })
   check(
-    'スマホ：表を選んだときの下の道具に「列の幅」「左端の列」「行の高さ」（44px 以上。名前は1行、形は2行まで、1字だけの行はない。入らない道具は、横にずらすと画面に入る）',
-    ['列の幅そろえる', '左端の列ほかとそろえる', '行の高さ中身に合わせる'].every((n) => sel.tools.some((t) => t.name === n)) &&
-      sel.tools.every((t) => t.w >= 44 && t.h >= 44 && t.reach) &&
-      sel.inside &&
-      selLines.every((l, i) => (i % 2 === 0 ? l.length === 1 : l.length <= 2 && l.every((x) => x.length >= 2))),
+    'スマホ：表を選んだときの下の道具に「表の形」（44px 以上。名前は1行。どの道具も画面に入る）',
+    sel.tools.some((t) => t.name === '表の形') && sel.tools.every((t) => t.w >= 44 && t.h >= 44 && t.reach) && sel.inside && JSON.stringify(selLines) === '[["表の形"]]',
     JSON.stringify({ tools: sel.tools, lines: selLines }),
   )
-  check(
-    'スマホ：表を選んだときの「行の高さ」のボタンに「行の高さ：中身に合わせる（押すと、そろえる）」',
-    sel.tools.find((t) => t.name === '行の高さ中身に合わせる')?.title === '行の高さ：中身に合わせる（押すと、そろえる）',
-    JSON.stringify(sel.tools.map((t) => t.title)),
-  )
-  // 押すと切り替わる（行の高さ）
-  await page.evaluate(() => [...document.querySelectorAll('.sel-bar .width-toggle')].find((b) => b.querySelector('span').textContent === '行の高さ').click())
-  await ready()
-  await wait(300)
-  check('スマホ：表を選んだときの「行の高さ」を押すと「そろえる」になる', (await modelOf(page)).heights === 'equal' && (await page.evaluate(() => [...document.querySelectorAll('.sel-bar .width-toggle')].some((b) => b.textContent === '行の高さそろえる'))))
+  // 「表の形」の欄で、行の高さをそろえる
+  await setCheck(page, 'heights', true, opts)
+  const selSheet = await shapeState(page)
   await page.screenshot({ path: `${OUT}/phone-selbar-equal.png` })
+  await closeShape(page, true)
+  check('スマホ：表を選んだときの「表の形」の欄で「行の高さをそろえる」に印を付けると、そろう', (await modelOf(page)).heights === 'equal' && selSheet?.heights?.on === true, JSON.stringify(selSheet?.heights))
   await page.evaluate(() => window.__editor.select(null))
   await wait(300)
   // 画面の写真：表を両方の形で（紙面は縮小しているので、表のまわりを拡大して撮る）

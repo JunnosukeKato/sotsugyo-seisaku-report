@@ -203,10 +203,6 @@ body.resizing .page-viewport { pointer-events: none; }
 .lay-grid { display: grid; gap: 1px; width: 15px; height: 21px; padding: 0; background: #fff; box-shadow: 0 0 0 1px #c9c6c0; }
 .lay-grid i { background: #b7b4ae; }
 .lay.on .lay-grid i { background: var(--accent); }
-.ctx-label.sub { color: var(--muted); font-weight: 400; padding-top: 6px; }
-.seg { display: flex; flex-direction: column; gap: 3px; padding: 2px 4px 4px; }
-.seg button { border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 5px 0; font-size: 9.5px; letter-spacing: -0.03em; white-space: nowrap; color: var(--ink); }
-.seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 .ctx-note { font-size: 10px; line-height: 1.5; color: var(--muted); padding: 2px 4px 4px; text-align: center; }
 .menu-wrap { position: relative; }
 .side-menu { position: absolute; left: calc(100% + 10px); top: 0; z-index: 20; min-width: 150px; display: grid; padding: 6px; background: #fff; border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 8px 24px rgba(30, 25, 20, 0.16); }
@@ -398,10 +394,6 @@ body.resizing .page-viewport { pointer-events: none; }
 .sel-bar { position: fixed; z-index: 11; left: 8px; right: 8px; bottom: calc(62px + 60px); display: flex; justify-content: center; }
 .sel-bar .group.ctx { display: flex; flex-direction: row; align-items: center; gap: 2px; padding: 4px 8px; margin: 0; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: var(--float-shadow); }
 .sel-bar .ctx-label { padding: 0 6px 0 2px; }
-.sel-bar .ctx-label.sub { color: var(--muted); font-weight: 400; padding-top: 6px; }
-.seg { display: flex; flex-direction: column; gap: 3px; padding: 2px 4px 4px; }
-.seg button { border: 1px solid var(--line); background: #fff; border-radius: 7px; padding: 5px 0; font-size: 9.5px; letter-spacing: -0.03em; white-space: nowrap; color: var(--ink); }
-.seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 /* スマホの下の道具では、説明の小さな文字は出さない（PC の道具では出す） */
 .sel-bar .ctx-note { display: none; }
 .sel-bar .tb { width: auto; padding: 6px 10px; }
@@ -1062,12 +1054,13 @@ body.resizing .page-viewport { pointer-events: none; }
    キーボードを出しているときは、今までどおりキーボードのすぐ上（下のタブはキーボードに隠れる） */
 .app.phone .edit-sheet { bottom: max(var(--kb, 0px), 62px); padding-bottom: 0; }
 /* スマホ：指で押す物の大きさ（残り）。選んでいる図・表の道具（「削除」など）は、幅も高さも 44px 以上。
-   表の「列の幅」は、いまの幅を出すボタン1つ（押すたびに切り替える。app/Palette.tsx）。下から出る欄（追加・ページ一覧など）の「×」も 44px 四方 */
+   表の形は「表の形」のボタン1つ（押すと下から欄が出る。app/tableShape.tsx）。下から出る欄（追加・ページ一覧など）の「×」も 44px 四方 */
 .app.phone .sel-bar .tb { min-width: 44px; min-height: 44px; justify-content: center; }
-.app.phone .sel-bar .width-toggle { max-width: 64px; gap: 2px; padding: 4px 8px; line-height: 1.3; }
-.app.phone .sel-bar .width-toggle b { font-size: 11.5px; line-height: 1.25; color: var(--accent); word-break: keep-all; }
 /* 表の道具の名前は、前と同じく2字ずつで折り返す（「行を／足す」。幅が広がって「行を足／す」にならないように） */
-.app.phone .sel-bar .group.ctx:has(.width-toggle) .tb:not(.width-toggle) { max-width: 50px; }
+.app.phone .sel-bar .group.ctx:has(.shape-btn) .tb:not(.shape-btn) { max-width: 50px; }
+.app.phone .sel-bar .shape-btn { color: var(--accent); background: var(--accent-soft); font-weight: 700; }
+.app.phone .sel-bar .shape-btn span { white-space: nowrap; }
+.app.phone .sel-bar .shape-btn svg.pic { width: 30px; height: 19px; }
 .app.phone .sheet-close { width: 44px; height: 44px; }
 /* スマホ：本文の空の段落の「＋」の印は、段落の左の余白に出す（段落の始めに出すと、横向きの小さな紙面では上の見出しの文字に重なり、
    印の上の方を押すと見出しが開いていた）。印のまわり 44px 四方は、その段落の押せる範囲（editor/reportEditor.ts の markerAt） */
@@ -1541,11 +1534,14 @@ button.row { cursor: pointer; }
 .direct-bar .db-row button.on { background: var(--accent-soft); color: var(--accent); }
 .direct-bar .db-row button.danger { color: var(--error); }
 .direct-bar .db-row .db-done { margin-left: auto; flex-direction: row; padding: 0 18px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 700; border-radius: 10px; }
-/* 表の道具の段：狭い画面で入りきらないときは、道具ごと次の行へ（道具の名前は折り返さない） */
-.direct-bar .db-table { flex-wrap: wrap; margin-top: 2px; padding-top: 3px; border-top: 1px solid var(--line); }
-.direct-bar .db-table button { padding: 2px 4px; }
-.direct-bar .db-table .db-width small { font-size: 9.5px; color: var(--muted); }
-.direct-bar .db-table .db-width b { font-size: 10.5px; color: var(--accent); }
+/* 表の道具の段（mockups/v45 案A）：画面の幅に入る1段（横にずらさない）。行・列を足す・消す・画像・表の形・表を削除を、同じ幅に並べる（どれも 44px 以上）。
+   「画像を外す」だけは「画像を／外す」の2行（言葉の切れ目で折り返す） */
+.direct-bar .db-table { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 0; margin-top: 2px; padding-top: 3px; border-top: 1px solid var(--line); }
+.direct-bar .db-table button { min-width: 0; width: 100%; padding: 2px 0; }
+.direct-bar .db-table button > span { white-space: normal; text-align: center; }
+.direct-bar .db-table .ph { white-space: nowrap; }
+.direct-bar .db-table .shape-btn { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
+.direct-bar .db-table .shape-btn svg.pic, .es-tools .shape-btn svg.pic { width: 30px; height: 19px; }
 /* 空の段落を書き始めるとき：ひな形の「ここに何を書くか」（紙面では小さくて読めないため。下の書く欄と同じ） */
 .direct-bar .db-hint { margin: 2px 4px 3px; font-size: 12px; line-height: 1.55; color: var(--muted); text-wrap: pretty; }
 .direct-bar .db-hint b { color: var(--ink); }
@@ -1573,53 +1569,37 @@ button.row { cursor: pointer; }
    仮の表示（overlay-ghost・overlay-frozen）は白い地を style で付けているので、!important で替える */
 .overlay-editor[data-label], .overlay-ghost[data-label], .overlay-frozen > div[data-label] { background: linear-gradient(#fff, #fff) top / 100% calc(100% - 1.5px) no-repeat !important; }
 
-/* ---- 表の行の高さ・左端の列（列の幅・左端の列・行の高さの切り替え：app/tableSwitches.tsx） ---- */
-/* スマホの表の道具は、切り替えのボタンが3つ（左端の列は、列の幅が「そろえる」のときだけ）になり、画面の幅に入らないことがある。
-   そのときは、道具の段を横にずらして見る。続きがある側の端に、薄い影を出す（ずらすと、ずらした側にも出る）。
-   影は、白い地を道具と一緒に動かし（local）、影を枠に止めて（scroll）、端まで来たら影が白い地に隠れるようにして出す */
-.app.phone .sel-bar .group.ctx:has(.width-toggle),
-.direct-bar .db-table {
-  overflow-x: auto;
-  overscroll-behavior-x: contain;
-  scrollbar-width: none;
-  background:
-    linear-gradient(to right, #fff 30%, rgba(255, 255, 255, 0)) left center / 28px 100% no-repeat local,
-    linear-gradient(to left, #fff 30%, rgba(255, 255, 255, 0)) right center / 28px 100% no-repeat local,
-    radial-gradient(farthest-side at 0 50%, rgba(30, 25, 20, 0.24), rgba(30, 25, 20, 0)) left center / 12px 100% no-repeat scroll,
-    radial-gradient(farthest-side at 100% 50%, rgba(30, 25, 20, 0.24), rgba(30, 25, 20, 0)) right center / 12px 100% no-repeat scroll,
-    #fff;
-}
-.app.phone .sel-bar .group.ctx:has(.width-toggle)::-webkit-scrollbar,
-.direct-bar .db-table::-webkit-scrollbar { display: none; }
-/* 表を選んだときの下の道具：画面より広ければ、帯の幅を画面に合わせて中を横にずらす（前は真ん中にそろえていたため、入らないと両端が画面の外に出て押せなかった）。
-   道具は縮めない（「行を／足す」の2字ずつの折り返し・「中身に／合わせる」の2行は今までどおり）。
-   切り替えの名前（「列の幅」「左端の列」「行の高さ」）は1行のまま（「列の／幅」のように、1字だけの行ができないように） */
-.app.phone .sel-bar .group.ctx:has(.width-toggle) { max-width: 100%; }
-.app.phone .sel-bar .group.ctx:has(.width-toggle) > * { flex: none; }
-.app.phone .sel-bar .width-toggle span { white-space: nowrap; }
-/* 紙面に直接書くときの、キーボードの上の道具の2段目（表の道具）：折り返さずに1段のまま（前は折り返して2段になり、紙面を隠す所が増えた） */
-.direct-bar .db-table { flex-wrap: nowrap; }
-
 /* ---- 表の列の幅を自分で決める（mockups/v42：パソコンは縦の線をドラッグ、スマホは丸いつまみ。切り替えはスマホでは小さな窓） ---- */
 /* 紙面に重ねる層（#overlay-layer）の、画面だけの部品（editor/columnHandles.ts）。PDF・印刷には出ない */
 .col-handles { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
 .col-handles[hidden], .col-tip[hidden] { display: none; }
-/* パソコン：内側の縦の線（つかめる所は 11px。見える線は 2px のうすい藍）と、見出しの行の高さの細いつまみ。線にマウスで、濃く・左右の矢印 */
-.col-grip { position: absolute; width: 11px; margin-left: -5.5px; cursor: col-resize; pointer-events: auto; touch-action: none; }
-.col-grip::before { content: ''; position: absolute; left: 4.5px; top: 0; bottom: 0; width: 2px; background: rgba(47, 62, 117, 0.26); }
-.col-grip:hover::before, .col-grip.hot::before { background: var(--accent); }
-.col-knob { position: absolute; left: 1.5px; width: 8px; height: 22px; margin-top: -11px; border-radius: 4px; background: var(--accent); box-shadow: 0 0 0 1.5px #fff, 0 1px 3px rgba(0, 0, 0, 0.25); }
-.col-grip:hover .col-knob, .col-grip.hot .col-knob { left: 0.5px; width: 10px; height: 28px; margin-top: -14px; border-radius: 5px; }
+/* パソコン（mockups/v45 ②）：内側の縦の線（つかめる所は 13px。見える線は 2px のうすい藍）と、見出しの行の高さの細いつまみ（12×28。見出しの字にかかりにくい）。
+   線にマウスを乗せる・つかむと、線が濃くなり、つまみは左右の矢印の付いた大きいつまみ（34×24） */
+.col-grip { position: absolute; width: 13px; margin-left: -6.5px; cursor: col-resize; pointer-events: auto; touch-action: none; }
+.col-grip::before { content: ''; position: absolute; left: 5.5px; top: 0; bottom: 0; width: 2px; background: rgba(47, 62, 117, 0.32); }
+.col-grip:hover::before, .col-grip.hot::before { left: 5px; width: 3px; background: var(--accent); }
+.col-knob { position: absolute; left: 0.5px; display: grid; place-items: center; width: 12px; height: 28px; margin-top: -14px; border-radius: 6px; background: var(--accent); color: #fff; box-shadow: 0 0 0 2px #fff, 0 1px 4px rgba(0, 0, 0, 0.3); }
+.col-knob::before { content: ''; width: 3px; height: 12px; border-left: 1.5px solid rgba(255, 255, 255, 0.85); border-right: 1.5px solid rgba(255, 255, 255, 0.85); }
+.col-knob svg { display: none; width: 16px; height: 16px; }
+.col-grip:hover .col-knob, .col-grip.hot .col-knob { left: -10.5px; width: 34px; height: 24px; margin-top: -12px; border-radius: 12px; box-shadow: 0 0 0 2px #fff, 0 0 0 6px rgba(47, 62, 117, 0.22), 0 2px 6px rgba(0, 0, 0, 0.3); }
+.col-grip:hover .col-knob::before, .col-grip.hot .col-knob::before { display: none; }
+.col-grip:hover .col-knob svg, .col-grip.hot .col-knob svg { display: block; }
 .col-handles.dragging .col-grip:not(.hot) { opacity: 0.4; }
-/* 動かしている間：元の位置に点線、線の上に「20%｜30%」（線の左の列｜右の列） */
-.col-ghost { position: absolute; width: 0; margin-left: -0.75px; border-left: 1.5px dashed rgba(47, 62, 117, 0.5); }
-.col-drag { position: absolute; display: flex; align-items: center; height: 22px; border-radius: 7px; background: #23262b; color: #fff; font-size: 12.5px; font-weight: 700; line-height: 1; white-space: nowrap; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22); transform: translate(-50%, -100%); }
-.col-drag span { padding: 0 0 0 8px; }
-.col-drag span + i + span { padding: 0 8px 0 0; }
-.col-drag i { font-style: normal; font-weight: 400; color: rgba(255, 255, 255, 0.55); }
-.col-tip { position: absolute; z-index: 9; padding: 4px 9px; border-radius: 7px; background: #23262b; color: #fff; font-size: 12px; line-height: 1.4; white-space: nowrap; pointer-events: none; transform: translateY(-50%); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); }
+/* 動かしている間：元の位置に点線。となりの2列にうすい色（せまくなる列は灰、広くなる列は藍）と、札「◀ せまくなる」「広くなる ▶」（数は出さない）。
+   札はパソコンは表の下、スマホは表の上（表の下はキーボードの上の道具に隠れるため） */
+.col-ghost { position: absolute; width: 0; margin-left: -0.75px; border-left: 1.5px dashed rgba(47, 62, 117, 0.55); }
+.col-shade { position: absolute; pointer-events: none; }
+.col-shade.narrow { background: rgba(70, 70, 90, 0.08); }
+.col-shade.wide { background: rgba(47, 62, 117, 0.12); }
+.col-shade[hidden], .col-chip[hidden] { display: none; }
+.col-chip { position: absolute; z-index: 10; display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: #23262b; color: #fff; font-size: 12.5px; font-weight: 700; line-height: 1; white-space: nowrap; pointer-events: none; transform: translateX(-50%); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); }
+.col-chip.wide { background: var(--accent); }
+.col-chip.above { transform: translate(-50%, -100%); }
+/* 線にマウスを乗せたときの一言（2行。線の右・見出しの行のすぐ下） */
+.col-tip { position: absolute; z-index: 9; padding: 5px 10px; border-radius: 7px; background: #23262b; color: #fff; font-size: 12px; line-height: 1.5; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); }
+.col-tip span { display: block; }
 /* スマホ：書いているマスの列をうすく色付けし（紙面の字の上に重ねて、掛け合わせる）、その列の両側の内側の線に、丸いつまみ（30px。指で押せる所は 44px 四方） */
-.col-tint { position: absolute; background: #e3e7f4; mix-blend-mode: multiply; box-shadow: inset 0 0 0 2px var(--accent); }
+.col-tint { position: absolute; background: rgba(47, 62, 117, 0.08); box-shadow: inset 0 0 0 2px var(--accent); }
 .col-line { position: absolute; width: 0; margin-left: -1px; border-left: 2px solid var(--accent); }
 .col-pknob { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; display: grid; place-items: center; pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
 .col-pknob span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; box-shadow: 0 0 0 2px #fff, 0 2px 6px rgba(0, 0, 0, 0.3); }
@@ -1627,38 +1607,11 @@ button.row { cursor: pointer; }
 .col-pknob svg { width: 18px; height: 18px; }
 @media print { .col-handles, .col-tip { display: none !important; } }
 
-/* パソコンの左の道具：自分で決めるのときの一言（「縦の線を／ドラッグして／幅を変える」。1行ずつ折り返さない）と「幅をそろえ直す」 */
-.palette .custom-hint { margin: 1px 0 3px; font-size: 9.5px; line-height: 1.45; color: var(--accent); text-align: center; font-weight: 700; }
-.palette .custom-hint span { display: block; white-space: nowrap; }
-.palette .seg button.reset-widths { color: var(--accent); }
-
-/* スマホの「列の幅」：いまの形に小さな下向きの印。押すと、すぐ上に小さな窓（3つから選ぶ。いまの形に印。tableSwitches.tsx の WidthMenu） */
-.width-menu .chev { width: 12px; height: 12px; margin: 0 -3px 0 1px; vertical-align: -1px; }
-.width-menu.open { background: var(--accent-soft) !important; }
-.direct-bar .db-table .width-menu b { display: inline-flex; align-items: center; }
-.width-pop { position: fixed; z-index: 60; box-sizing: border-box; width: 254px; padding: 6px; border-radius: 14px; background: #fff; border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(30, 25, 20, 0.24); color: var(--ink); font-family: inherit; }
-.width-pop::after { content: ''; position: absolute; left: calc(var(--tail, 40px) - 6px); bottom: -7px; width: 12px; height: 12px; background: #fff; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(45deg); }
-.width-pop .wp-head { padding: 4px 10px; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
-.width-pop [role='radio'] { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 6px 10px; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; text-align: left; }
-.width-pop [role='radio'].on { background: var(--accent-soft); }
-.width-pop [role='radio'] i { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #b9bcc4; background: #fff; box-sizing: border-box; }
-.width-pop [role='radio'].on i { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 0 4.5px, #fff 5px); }
-.width-pop b { display: block; font-size: 15px; line-height: 1.35; white-space: nowrap; }
-.width-pop [role='radio'].on b { color: var(--accent); }
-.width-pop small { display: block; font-size: 12px; line-height: 1.4; color: var(--muted); white-space: nowrap; }
-@media print { .width-pop { display: none !important; } }
-/* 紙面に直接書くときの、キーボードの上の道具の3段目（自分で決めるの表）：一言・書いているマスの列の幅・「幅をそろえ直す」 */
+/* 紙面に直接書くときの、キーボードの上の道具の3段目（自分で決めるの表）：一言「丸を左右に動かす」と「同じ幅に戻す」（列の幅の数は出さない。mockups/v45） */
 .direct-bar .db-colw { margin-top: 2px; padding-top: 3px; border-top: 1px solid var(--line); }
 .direct-bar .db-colw .db-khint { flex: none; align-self: center; padding-left: 6px; margin-right: 8px; font-size: 12px; font-weight: 700; color: var(--accent); white-space: nowrap; }
-.direct-bar .db-colw .db-pct { flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 50px; min-height: 44px; line-height: 1.15; }
-.direct-bar .db-colw .db-pct small { font-size: 9.5px; color: var(--muted); }
-.direct-bar .db-colw .db-pct b { font-size: 16px; color: var(--accent); letter-spacing: 0.02em; }
 .direct-bar .db-colw .db-reset { margin-left: auto; }
 .es-tools button svg { flex: none; }
-/* キーボードの上の道具の中に置く窓・印：道具のボタンの形（縦に並べる・字の大きさ・印の大きさ）を受け継がない */
-.direct-bar .db-row .width-pop [role='radio'] { flex-direction: row; justify-content: flex-start; gap: 10px; min-width: 0; min-height: 52px; padding: 6px 10px; border-radius: 10px; font-size: 13px; line-height: normal; white-space: normal; text-align: left; }
-.direct-bar .db-row .width-pop [role='radio'].on { background: var(--accent-soft); color: inherit; }
-.direct-bar .db-row .width-menu .chev, .sel-bar .width-menu .chev { width: 12px; height: 12px; }
 
 /* ---- 待つ間の表示（依頼者の要望 2026-10-20「保存中に何も表示がなく待たされるので不安になる」。app/Busy.tsx） ----
    押したボタンは、すぐ回る小さな印と「保存しています…」などの言葉に替え、終わるまで押せなくする。2秒を過ぎたら「数秒かかることがあります」。
@@ -1816,3 +1769,99 @@ p.busy-line { display: flex; }
   word-break: auto-phrase;
   text-wrap: pretty;
 }
+
+/* ---- 左の道具の中を上下に動かすとき（とても低い画面。表の道具は「表の形を整える」1つにしたので、1280×720 などでは動かさずに全部見える） ---- */
+/* 道具が画面に入らないときは、道具の中を上下に動かす。そのときに出る棒（細い棒）は、中身を狭めずに、道具の幅を棒の分だけ広げて置く
+   （道具の幅は中身に合わせて決まる。中身の幅は今までどおり 72px）。前は棒の分だけ中身が狭くなり、
+   「クリックし／て」「画像を入れ／る」のように1字だけの行ができ、ボタンも大きく切れていた。動かさないときの形は今までどおり */
+.palette { width: auto; min-width: 86px; scrollbar-width: thin; }
+.palette > * { flex: none; width: 72px; }
+.palette > .group.undo-redo { width: 80px; }
+
+/* ---- 表のセルを書いている間も、セルの罫線を見せる（依頼者の指摘 2026-10-20「細い欄に文字入力する際、罫線が消えて見える」） ---- */
+/* 紙面に重ねる書く欄は白い地で、細い欄では右どなりのセルまで広がり（120px より狭くしなかった）、見出しの行などでは下の線にもかかって、罫線を白く隠していた。
+   セルの書く欄は、セルの枠線の内側に置き（editor/reportEditor.ts の overlayPlacement）、地を透かす（紙面のセルの字は、書いている間は隠してある）。
+   書いているセルは、セルの中だけうすく色付けして示す（reportEditor.ts の editingStyle）。書き終えた直後の写し（組み直した紙面が出るまで）も同じ。
+   予備の下の書く欄（in-sheet）は今までどおり */
+.overlay-editor[data-kind='cell']:not(.in-sheet), .overlay-frozen > div[data-kind='cell'] { background: transparent !important; }
+
+/* ---- 表の形を整える（mockups/v45 案A。app/tableShape.tsx）：列の幅・項目の列（左端）・行の高さを、1か所で、小さな表の絵を見て選ぶ ---- */
+/* 言葉の切れ目（.ph の間）でだけ折り返す（1字だけの行ができないように） */
+.shape-panel, .table-shape .sheet-body, .shape-btn { word-break: keep-all; overflow-wrap: anywhere; }
+.shape-panel .ph, .table-shape .ph, .shape-btn .ph { white-space: nowrap; }
+.shape-btn svg.pic, .shape-panel svg.pic, .table-shape svg.pic { display: block; flex: none; overflow: visible; }
+/* パソコン：左の道具のボタン（表の絵と「表の形を／整える」）。窓を開いている間は塗る */
+.palette .shape-btn { margin: 5px 0 4px; padding: 8px 0 7px; border: 1.5px solid var(--accent); border-radius: 10px; background: #fff; color: var(--accent); font-size: 11px; font-weight: 700; line-height: 1.3; letter-spacing: 0.02em; }
+.palette .shape-btn svg.pic { width: 40px; height: 25px; }
+.palette .shape-btn > span, .palette .shape-btn .ph { display: block; text-align: center; }
+.palette .group.ctx .shape-btn:hover:not(:disabled) { background: #fff; }
+.palette .shape-btn.open, .palette .group.ctx .shape-btn.open:hover { background: var(--accent); color: #fff; }
+/* パソコン：左の道具のとなりに開く窓（左の道具の左。矢印でボタンを指す。左に場所がなければ右に開く） */
+.shape-panel { position: fixed; z-index: 38; box-sizing: border-box; padding: 8px 8px 9px; background: #fff; border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 12px 32px rgba(30, 25, 20, 0.22); color: var(--ink); font-size: 13px; }
+.shape-panel * { box-sizing: border-box; }
+.shape-panel::after { content: ''; position: absolute; right: -7px; top: var(--tail, 60px); width: 12px; height: 12px; margin-top: -6px; background: #fff; border-right: 1px solid var(--line); border-top: 1px solid var(--line); transform: rotate(45deg); }
+.shape-panel.right::after { right: auto; left: -7px; border: 0; border-left: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+/* 画面に入らないとき（とても低い画面）：窓の中を上下に動かす（矢印は出さない） */
+.shape-panel.scroll { overflow-y: auto; }
+.shape-panel.scroll::after { display: none; }
+.shape-panel .sp-head { display: flex; align-items: center; justify-content: space-between; padding: 0 0 4px 4px; }
+.shape-panel .sp-head b { font-size: 14.5px; letter-spacing: 0.08em; }
+.shape-panel .sp-close { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--muted); }
+.shape-panel .sp-close:hover { background: var(--palette-hover); }
+.shape-panel .sp-close svg { width: 16px; height: 16px; }
+.shape-panel .so-sec { margin: 9px 0 4px 4px; font-size: 11px; font-weight: 700; color: var(--muted); letter-spacing: 0.08em; }
+.shape-panel .so-note { margin: 8px 2px 0; font-size: 10.5px; line-height: 1.5; color: var(--muted); text-align: center; }
+/* 選び（列の幅：丸・絵・名前。項目の列・行の高さ：四角・絵・名前） */
+.so-choice, .so-check { display: flex; align-items: center; width: 100%; border: 1.5px solid #e2e0dc; background: #fff; color: #7b7f88; font: inherit; text-align: left; cursor: pointer; }
+.so-choice.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+.so-choice .tx, .so-check .tx { min-width: 0; }
+.so-choice b, .so-check b { display: block; color: var(--ink); }
+.so-choice.on b { color: var(--accent); }
+.so-choice small, .so-check small { display: block; margin-top: 1px; color: var(--muted); }
+.so-check .box { flex: none; display: grid; place-items: center; border: 2px solid #b9bcc4; background: #fff; color: #fff; }
+.so-check.on { color: var(--accent); }
+.so-check.on .box { background: var(--accent); border-color: var(--accent); }
+.so-check.off { background: #f6f5f3; border-style: dashed; color: #b3b6bd; cursor: default; }
+.so-check.off b { color: #9a9da5; }
+.so-check.off .box { background: #f1f0ee; border-color: #d3d5da; }
+.so-choice:focus-visible, .so-check:focus-visible, .so-even:focus-visible, .sp-close:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.shape-panel .so-choice { gap: 7px; padding: 6px 6px 6px 7px; border-radius: 10px; }
+.shape-panel .so-choice + .so-choice { margin-top: 5px; }
+.shape-panel .so-choice .rd { flex: none; width: 15px; height: 15px; border-radius: 50%; border: 2px solid #b9bcc4; background: #fff; }
+.shape-panel .so-choice.on .rd { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 0 3.2px, #fff 3.7px); }
+.shape-panel svg.pic { width: 52px; height: 32.5px; }
+.shape-panel .so-choice b, .shape-panel .so-check b { font-size: 12.5px; line-height: 1.35; }
+.shape-panel .so-choice small, .shape-panel .so-check small { font-size: 10.5px; line-height: 1.4; }
+.shape-panel .so-check { gap: 6px; margin-top: 5px; padding: 6px 6px 6px 7px; border-radius: 10px; }
+.shape-panel .so-sec + .so-check { margin-top: 0; }
+.shape-panel .so-check .box { width: 16px; height: 16px; border-radius: 4px; }
+.shape-panel .so-check .box svg { width: 12px; height: 12px; stroke-width: 2.6; }
+/* 自分で決めるのとき：表の縦の線をドラッグすることと「同じ幅に戻す」 */
+.so-guide { display: flex; flex-direction: column; align-items: center; gap: 5px; margin: 4px 0 0 18px; padding: 7px 6px; border: 1.5px dashed rgba(47, 62, 117, 0.45); border-radius: 10px; color: var(--accent); text-align: center; }
+.so-guide p { margin: 0; font-size: 12px; font-weight: 700; line-height: 1.45; }
+.so-even { display: inline-flex; align-items: center; justify-content: center; gap: 4px; min-height: 28px; padding: 0 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; color: var(--accent); font: inherit; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.so-even:hover { background: var(--palette-hover); }
+.so-even svg { width: 16px; height: 16px; }
+@media print { .shape-panel { display: none !important; } }
+/* スマホ：下から出る欄（絵が上の選びを横に3つ・項目の列・行の高さ。押す所はどれも 44px 以上） */
+.table-shape .sheet-head { align-items: center; padding: 2px 14px 4px 18px; }
+.table-shape .sheet-head h2 { font-size: 17px; letter-spacing: 0.06em; }
+.table-shape .ts-done { margin-left: auto; min-width: 92px; min-height: 44px; padding: 0 18px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font: inherit; font-size: 15px; font-weight: 700; }
+.table-shape .sheet-body { padding: 0 14px 22px; }
+.table-shape .so-sec { margin: 10px 0 8px 2px; font-size: 13px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+.table-shape .so-sec:first-child { margin-top: 2px; }
+.table-shape .so-widths { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.table-shape .so-choice { flex-direction: column; justify-content: flex-start; gap: 5px; min-height: 96px; padding: 9px 4px 8px; border-radius: 12px; text-align: center; }
+.table-shape .so-choice.on { box-shadow: inset 0 0 0 1px var(--accent); }
+.table-shape .so-choice svg.pic { width: 64px; height: 40px; }
+.table-shape .so-choice b { font-size: 13.5px; line-height: 1.3; }
+.table-shape .so-choice small { font-size: 11px; line-height: 1.35; }
+.table-shape .so-check { gap: 10px; min-height: 52px; margin-top: 8px; padding: 6px 10px; border-radius: 12px; }
+.table-shape .so-sec + .so-check { margin-top: 0; }
+.table-shape .so-check .box { width: 22px; height: 22px; border-radius: 6px; }
+.table-shape .so-check .box svg { width: 16px; height: 16px; stroke-width: 2.6; }
+.table-shape .so-check svg.pic { width: 52px; height: 32px; }
+.table-shape .so-check b { font-size: 14px; line-height: 1.35; }
+.table-shape .so-check small { font-size: 12px; line-height: 1.4; }
+/* 予備の下の書く欄の道具の「表の形」 */
+.es-tools .shape-btn { color: var(--accent); font-weight: 700; }

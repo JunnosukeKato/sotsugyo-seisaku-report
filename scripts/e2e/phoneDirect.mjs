@@ -816,8 +816,8 @@ export async function phoneDirectPhone(browser, check) {
   )
   check('入れた表のタイトル：書いている間も、番号（表n.）が書く欄の前にあり、打った字はそのすぐ後ろ（1字分以内）', gapOk(tabGap) && tabGap.text === '試着の記録', gapDetail(tabGap))
   check(
-    '表のタイトル・セルを書いている間は、キーボードの上の道具の2段目に表の道具（行を足す・列を足す・行を消す・列を消す・列の幅・左端の列・行の高さ・表を削除。どれも 44px 以上）',
-    JSON.stringify(tab.tools.map((t) => t.name)) === JSON.stringify(['行を足す', '列を足す', '行を消す', '列を消す', '列の幅そろえる', '左端の列ほかとそろえる', '行の高さ中身に合わせる', '表を削除']) && tab.tools.every((t) => t.w >= 44 && t.h >= 44),
+    '表のタイトル・セルを書いている間は、キーボードの上の道具の2段目に表の道具（行を足す・列を足す・行を消す・列を消す・表の形・表を削除。どれも 44px 以上。mockups/v45 案A）',
+    JSON.stringify(tab.tools.map((t) => t.name)) === JSON.stringify(['行を足す', '列を足す', '行を消す', '列を消す', '表の形', '表を削除']) && tab.tools.every((t) => t.w >= 44 && t.h >= 44),
     JSON.stringify(tab.tools),
   )
 

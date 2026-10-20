@@ -149,6 +149,8 @@ function sameEnds(old: string, text: string): [number, number] {
 
 /** 要素の中の i 文字目（0 から）の画面上の四角（包んだ要素の中の文字も数える）。なければ undefined */
 function charRect(el: HTMLElement, i: number): DOMRect | undefined {
+  // 1字目より前（カーソルが先頭にあるときの「前の字」）はない
+  if (i < 0) return undefined
   const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
   let acc = 0
   while (walker.nextNode()) {
@@ -205,9 +207,12 @@ const COPIED_STYLES = ['fontFamily', 'fontSize', 'lineHeight', 'letterSpacing', 
 /**
  * キーボードで書く欄からここへ移っても、書き終わりにしない（道具の「図を入れる」などを、書いていた位置で使えるように）。
  * .table-size：スマホの書く欄の「表を入れる」で出る、表の大きさを選ぶ欄（app/TableSize.tsx。選んでいる間も、書いていた位置を覚えておく）。
- * .direct-bar：スマホで紙面に直接書くの、キーボードの上の道具（app/Phone.tsx）
+ * .direct-bar：スマホで紙面に直接書くの、キーボードの上の道具（app/Phone.tsx）。
+ * .shape-panel・.table-shape：「表の形を整える」の窓（パソコン）と、下から出る欄（スマホ。app/tableShape.tsx。選んでいる間も、書いていたセルを覚えておく）
  */
-const KEEP_OPEN = '.palette, .es-tools, .table-size, .direct-bar'
+const KEEP_OPEN = '.palette, .es-tools, .table-size, .direct-bar, .shape-panel, .table-shape'
+/** 書く欄を開き直すときも、フォーカスを動かさない所（「表の形を整える」の窓・欄。キーボードで選び続けられるように） */
+const STAY_FOCUS = '.shape-panel, .table-shape'
 
 /** 段落を分けた直後に、前の段落を仮に表示する要素（ghost）の見た目（入力欄と同じ書体・位置で、押せない） */
 const GHOST_STYLE: Partial<CSSStyleDeclaration> = {
@@ -523,8 +528,15 @@ export class OverlayEditor {
     this.setFrame(target)
     this.renderText(null, { full: true, page: target.page })
     this.moveTo(target)
-    this.element.focus({ preventScroll: true })
-    this.setCaret(target.caret)
+    // 「表の形を整える」の窓・欄の中をキーボードで使っている（表を変えると、組み直してからセルを開き直す）：そこから動かさない。
+    // 書く欄は開いたまま待たせ、窓を閉じて書く欄に戻ったら、このカーソルの位置から書ける（park。app/tableShape.tsx）
+    if (document.activeElement?.closest(STAY_FOCUS)) {
+      this.park()
+      this.parkedCaret = target.caret
+    } else {
+      this.element.focus({ preventScroll: true })
+      this.setCaret(target.caret)
+    }
     // スマホ：紙面がまだ書いた字になっていなければ（書き終えた直後に、組み直す前にまた開いたなど）、はじめから写しを見せる
     this.setLive(this.spacingBox === this.mirror && !pageShows(target.page, this.model))
   }
@@ -1317,6 +1329,8 @@ export class OverlayEditor {
       Object.assign(el.style, GHOST_STYLE)
       // 図表のタイトル：番号も一緒に写す（組み直した紙面が出るまで、番号が消えて見えないように）
       if (from.dataset.label) el.dataset.label = from.dataset.label
+      // 表のセル：地を透かすため（罫線を隠さない。index.css）、どの欄の写しかを付けておく
+      if (from.dataset.kind) el.dataset.kind = from.dataset.kind
       if (typeset) {
         el.dataset.typeset = ''
         el.append(...[...from.childNodes].map((n) => n.cloneNode(true)))

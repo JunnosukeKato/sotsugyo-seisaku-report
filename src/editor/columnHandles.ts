@@ -4,12 +4,13 @@ import { moveColumnBorder } from '../model/table'
  * 列の幅を「自分で決める」表の、列の境目を動かす部品（mockups/v42）。
  * 紙面に重ねる層（#overlay-layer）に置く、画面だけの部品。紙面の中には入れないので、PDF・印刷には出ず、ページの組み方も変えない。
  *
- * - パソコン（② の案）：表のセル・タイトルを書いている間と、表を選んでいる間だけ、内側の縦の線に、うすい線と細いつまみを出す。
- *   線にマウスを乗せると、左右の矢印のカーソルと「左右にドラッグ」。ドラッグすると線が 5% ずつ止まり、線の上に「20%｜30%」（線の左の列｜右の列）、
- *   元の位置に点線。動かせるのは、となりの2列の間だけ（ほかの列の幅は変わらない）。となりの列が 10% になると、それ以上は動かない。
+ * - パソコン（mockups/v45 ②）：表のセル・タイトルを書いている間と、表を選んでいる間だけ、内側の縦の線に、うすい線と、見出しの行の高さの細いつまみを出す。
+ *   線にマウスを乗せると、つまみが左右の矢印の付いた大きいつまみになり、「左右にドラッグして／列の幅を変える」。
+ *   ドラッグすると線が 5% ずつ止まり、元の位置に点線。となりの2列にうすい色と、表の下に「◀ せまくなる」「広くなる ▶」の札（数（%）は出さない）。
+ *   動かせるのは、となりの2列の間だけ（ほかの列の幅は変わらない）。となりの列が 10% になると、それ以上は動かない。
  *   離すと、原稿の列の幅を変えて組み直す（元に戻す1回で戻る：editor/reportEditor.ts の setTableColWidths）
  * - スマホ（案D）：セルを書いている間、その列をうすく色付けし、その列の両側の内側の線に、丸いつまみ（30px。指で押せる所は 44px 四方）。
- *   指1本で左右に動かすと、その線が動き、その側のとなりの列と幅をやりとりする（5% ずつ）。
+ *   指1本で左右に動かすと、その線が動き、その側のとなりの列と幅をやりとりする（5% ずつ）。動かしている間は、表の上に「せまくなる」「広くなる」の札（パソコンと同じ）。
  *   つまみを動かしている間は、紙面を動かさない（touch-action: none）・ページを送らない・2本の指の拡大を始めない（指の知らせを、紙面の台へ渡さない）
  */
 
@@ -34,8 +35,9 @@ function sameWidths(f: Fragment, widths: number[]): boolean {
   return ws.length === widths.length && sum > 0 && ws.every((w, i) => Math.abs((w / sum) * 100 - widths[i]) < 0.5)
 }
 
-/** 「20%｜30%」の数（小数は四捨五入） */
-const pct = (w: number) => `${Math.round(w)}%`
+/** 動かしている間の札の言葉（数（%）は出さない。mockups/v45 ②） */
+const NARROWER = '◀ せまくなる'
+const WIDER = '広くなる ▶'
 
 /** 左右の矢印（スマホのつまみの中） */
 const ARROWS =
@@ -63,8 +65,15 @@ interface Drag {
   line: HTMLElement
   knob: HTMLElement | null
   ghost: HTMLElement
-  label: HTMLElement
-  labelTop: number
+  /** となりの2列の、はじめの左端と右端（層の中の px） */
+  from: number
+  to: number
+  /** となりの2列のうすい色と、札（線の左の列・右の列） */
+  shades: [HTMLElement, HTMLElement]
+  chips: [HTMLElement, HTMLElement]
+  /** 札の高さの位置（層の中の px）。above：表の上に出す（スマホ。表の下はキーボードの上の道具に隠れるため） */
+  chipTop: number
+  above: boolean
 }
 
 export class ColumnHandles {
@@ -85,7 +94,7 @@ export class ColumnHandles {
     this.root.hidden = true
     this.tip = document.createElement('div')
     this.tip.className = 'col-tip'
-    this.tip.textContent = '左右にドラッグ'
+    this.tip.innerHTML = '<span>左右にドラッグして</span><span>列の幅を変える</span>'
     this.tip.hidden = true
     layer.append(this.root, this.tip)
   }
@@ -147,7 +156,7 @@ export class ColumnHandles {
     return e
   }
 
-  /** パソコン：内側の縦の線ごとに、うすい線（つかめる所は少し広い）と、見出しの行の高さの細いつまみ */
+  /** パソコン：内側の縦の線ごとに、うすい線（つかめる所は少し広い）と、見出しの行の高さの細いつまみ（マウスを乗せると、左右の矢印の付いた大きいつまみ） */
   private placePc(target: ColumnTarget, fragments: Fragment[], layer: DOMRect): void {
     for (const f of fragments) {
       for (let i = 0; i < f.cells.length - 1; i++) {
@@ -155,10 +164,12 @@ export class ColumnHandles {
         const grip = this.el('col-grip')
         Object.assign(grip.style, { left: `${x}px`, top: `${f.rect.top - layer.top}px`, height: `${f.rect.height}px` })
         const knob = this.el('col-knob', grip)
+        knob.innerHTML = ARROWS
         knob.style.top = `${f.head.top + f.head.height / 2 - f.rect.top}px`
         grip.addEventListener('pointerenter', () => {
           if (this.drag) return
-          Object.assign(this.tip.style, { left: `${x + 12}px`, top: `${f.head.top + f.head.height / 2 - layer.top}px` })
+          // 一言は、線の右・見出しの行のすぐ下（つまみと見出しの字に重ねない）
+          Object.assign(this.tip.style, { left: `${x + 14}px`, top: `${f.head.bottom - layer.top + 8}px` })
           this.tip.hidden = false
         })
         grip.addEventListener('pointerleave', () => (this.tip.hidden = true))
@@ -208,14 +219,37 @@ export class ColumnHandles {
       stop(e)
       handle.setPointerCapture(e.pointerId)
       const width = f.cells.reduce((sum, c) => sum + c.getBoundingClientRect().width, 0)
+      const top = f.rect.top - layer.top
       const ghost = this.el('col-ghost')
-      Object.assign(ghost.style, { left: `${x}px`, top: `${f.rect.top - layer.top}px`, height: `${f.rect.height}px` })
-      const label = this.el('col-drag')
-      const labelTop = f.rect.top - layer.top - 6
+      Object.assign(ghost.style, { left: `${x}px`, top: `${top}px`, height: `${f.rect.height}px` })
+      // となりの2列（線の左の列・右の列）のうすい色と札。動かすまでは出さない
+      const shades: [HTMLElement, HTMLElement] = [this.el('col-shade'), this.el('col-shade')]
+      for (const sh of shades) Object.assign(sh.style, { top: `${top}px`, height: `${f.rect.height}px` })
+      const chips: [HTMLElement, HTMLElement] = [this.el('col-chip'), this.el('col-chip')]
+      for (const c of [...shades, ...chips]) c.hidden = true
+      const phone = knob !== null
       this.tip.hidden = true
       this.root.classList.add('dragging')
       handle.classList.add('hot')
-      this.drag = { pointerId: e.pointerId, tableId: target.tableId, border, startX: e.clientX, width, start: target.widths, next: target.widths, baseX: x, line, knob, ghost, label, labelTop }
+      this.drag = {
+        pointerId: e.pointerId,
+        tableId: target.tableId,
+        border,
+        startX: e.clientX,
+        width,
+        start: target.widths,
+        next: target.widths,
+        baseX: x,
+        line,
+        knob,
+        ghost,
+        from: f.cells[border].getBoundingClientRect().left - layer.left,
+        to: f.cells[border + 1].getBoundingClientRect().right - layer.left,
+        shades,
+        chips,
+        chipTop: phone ? top - 8 : f.rect.bottom - layer.top + 8,
+        above: phone,
+      }
       this.show()
     })
     handle.addEventListener('pointermove', (e) => {
@@ -233,7 +267,7 @@ export class ColumnHandles {
       this.root.classList.remove('dragging')
       handle.classList.remove('hot')
       d.ghost.remove()
-      d.label.remove()
+      for (const c of [...d.shades, ...d.chips]) c.remove()
       const changed = d.next.some((w, i) => w !== d.start[i])
       if (commit && changed) {
         this.pending = { tableId: d.tableId, widths: d.next, until: performance.now() + 3000 }
@@ -248,14 +282,30 @@ export class ColumnHandles {
     handle.addEventListener('pointercancel', (e) => end(e, false))
   }
 
-  /** 動かしている線・つまみと、「20%｜30%」の札を、いまの幅の所に出す */
+  /** 動かしている線・つまみを、いまの幅の所に出す。動かしていれば、となりの2列にうすい色と「せまくなる」「広くなる」の札 */
   private show(): void {
     const d = this.drag
     if (!d) return
-    const x = d.baseX + ((d.next[d.border] - d.start[d.border]) / 100) * d.width
+    const delta = d.next[d.border] - d.start[d.border]
+    const x = d.baseX + (delta / 100) * d.width
     d.line.style.left = `${x}px`
     if (d.knob && d.knob !== d.line) d.knob.style.left = `${x}px`
-    d.label.innerHTML = `<span>${pct(d.next[d.border])}</span><i>｜</i><span>${pct(d.next[d.border + 1])}</span>`
-    Object.assign(d.label.style, { left: `${x}px`, top: `${d.labelTop}px` })
+    // 線を左へ動かした：左の列がせまく、右の列が広くなる（右へ動かしたときは、その逆）
+    const kinds = delta < 0 ? ['narrow', 'wide'] : ['wide', 'narrow']
+    const spans = [
+      [d.from, x],
+      [x, d.to],
+    ]
+    spans.forEach(([a, b], i) => {
+      const shade = d.shades[i]
+      const chip = d.chips[i]
+      shade.hidden = delta === 0
+      chip.hidden = delta === 0
+      shade.className = `col-shade ${kinds[i]}`
+      Object.assign(shade.style, { left: `${a}px`, width: `${Math.max(0, b - a)}px` })
+      chip.className = `col-chip ${kinds[i]}${d.above ? ' above' : ''}`
+      chip.textContent = kinds[i] === 'narrow' ? NARROWER : WIDER
+      Object.assign(chip.style, { left: `${(a + b) / 2}px`, top: `${d.chipTop}px` })
+    })
   }
 }

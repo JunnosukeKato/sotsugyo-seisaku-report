@@ -17,6 +17,9 @@ import { phoneLivePhone } from './phoneLive.mjs'
 import { phoneDirectPhone } from './phoneDirect.mjs'
 import { tableShapePhone } from './tableShape.mjs'
 import { tableCustomPhone } from './tableCustom.mjs'
+import { cellBorderPhone } from './cellBorder.mjs'
+import { tableSettingsPhone } from './tableSettings.mjs'
+import { closeShape, pickWidth } from './shapeUi.mjs'
 import { waitingPhone } from './waiting.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
@@ -701,6 +704,12 @@ await withEdge(async (browser) => {
 
   // 表の列の幅を「自分で決める」（mockups/v42 案B の窓・案D の丸いつまみ。scripts/e2e/tableCustom.mjs）
   await tableCustomPhone(browser, check)
+
+  // 表のセルを紙面の上で書いている間も、そのセルの罫線（上下左右）が見える（細い列・見出しの行・最後の行。scripts/e2e/cellBorder.mjs）
+  await cellBorderPhone(browser, check)
+
+  // 「表の形」の下から出る欄（mockups/v45 案A：道具の段は横にずらさない7つ・欄の選びと絵・44px 以上・自分で決めるは丸いつまみ。scripts/e2e/tableSettings.mjs）
+  await tableSettingsPhone(browser, check)
 
   // 待つ間の表示（押したボタンに回る印と言葉・2秒を過ぎたら「数秒かかることがあります」・終わったら知らせ。ボタンは 44px 以上。依頼者の要望 2026-10-20。scripts/e2e/waiting.mjs）
   await waitingPhone(browser, check)
@@ -1473,13 +1482,11 @@ async function firstTimeFixesPhone(browser) {
   await wait(400)
   const tableTools = await selTools()
   await page.screenshot({ path: `${OUT}/19d-table-tools-44.png` })
-  // 「列の幅」は、押すと小さな窓で3つから選ぶ（mockups/v42 案B）
-  await page.evaluate(() => document.querySelector('.sel-bar .width-menu').click())
-  await wait(200)
-  await page.evaluate(() => [...document.querySelectorAll('.width-pop [role="radio"]')].find((b) => b.textContent.includes('中身に合わせる')).click())
-  await ready()
-  await wait(300)
-  const toggled = { widths: await page.evaluate(() => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === 'tM').widths), tools: await selTools() }
+  // 「表の形」は、押すと下から欄が出て、絵を見て選ぶ（mockups/v45 案A。scripts/e2e/shapeUi.mjs）
+  await pickWidth(page, 'auto', { phone: true, ready })
+  const sheetButtons = await page.evaluate(() => [...document.querySelectorAll('.table-shape button')].map((b) => ({ name: b.textContent.trim().slice(0, 10), w: Math.round(b.getBoundingClientRect().width), h: Math.round(b.getBoundingClientRect().height), inside: true })))
+  await closeShape(page, true)
+  const toggled = { widths: await page.evaluate(() => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === 'tM').widths), tools: await selTools(), sheet: sheetButtons }
   await page.evaluate(() => window.__editor.select({ kind: 'figure', id: 'f1' }))
   await wait(400)
   const figureTools = await selTools()
@@ -1487,8 +1494,8 @@ async function firstTimeFixesPhone(browser) {
   await wait(200)
   const big = (list) => list.length > 0 && list.every((t) => t.w >= 44 && t.h >= 44 && t.inside)
   check(
-    'スマホ：表・図を選んだときの下の道具（「列の幅」・「削除」など）は幅も高さも 44px 以上で、画面の中に入る。「列の幅」は押すと小さな窓で選び、「中身に合わせる」にできる。「追加」「ページ一覧」の「×」は 44px 四方以上',
-    big(tableTools) && tableTools.some((t) => t.name === '列の幅そろえる') && toggled.widths === 'auto' && big(toggled.tools) && toggled.tools.some((t) => t.name === '列の幅中身に合わせる') && big(figureTools) && figureTools.some((t) => t.name === '削除') && addClose.w >= 44 && addClose.h >= 44 && pagesClose.w >= 44 && pagesClose.h >= 44,
+    'スマホ：表・図を選んだときの下の道具（「表の形」・「削除」など）は幅も高さも 44px 以上で、画面の中に入る。「表の形」は押すと下から欄が出て（押す所は 44px 以上）、「字の多い列を広く」にできる。「追加」「ページ一覧」の「×」は 44px 四方以上',
+    big(tableTools) && tableTools.some((t) => t.name === '表の形') && toggled.widths === 'auto' && big(toggled.tools) && big(toggled.sheet) && big(figureTools) && figureTools.some((t) => t.name === '削除') && addClose.w >= 44 && addClose.h >= 44 && pagesClose.w >= 44 && pagesClose.h >= 44,
     JSON.stringify({ tableTools, toggled, figureTools, addClose, pagesClose }),
   )
   await page.evaluate(() => window.__editor.update((r) => ({ ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 'tM' ? { ...b, widths: 'equal' } : b)) })) })))

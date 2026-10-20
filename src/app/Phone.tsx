@@ -7,9 +7,9 @@ import { BAND_SIDE_QUERY, forTouch, paragraphHint, photoToolsAtSide } from './ba
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
 import { TableSizeSheet } from './TableSize'
-import { SHORT_SWITCH_NAMES, TABLE_SWITCHES } from './tableSwitches'
-import { WidthMenu } from './WidthMenu'
-import { cellPosition, colWidthsOf, columnCount, equalColumnWidths } from '../model/table'
+import { ShapeFace, TableShapeSheet } from './tableShape'
+import { SHAPE_TEXTS } from './tableShapeTexts'
+import { cellPosition } from '../model/table'
 import { BackupLabel } from './dialogs'
 import { Spinner } from './Busy'
 import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, ExportNote, HelpButton, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
@@ -102,6 +102,8 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
   const table = tableBlock?.type === 'table' ? tableBlock : undefined
   // 「表を入れる」で出す、表の大きさを選ぶ欄（mockups/v35 ②）
   const [tableSheet, setTableSheet] = useState(false)
+  // 「表の形」で出す、表の形を整える欄（mockups/v45 案A）
+  const [shapeSheet, setShapeSheet] = useState(false)
   // 書く欄の「戻す」「やり直す」：戻した（やり直した）あとも、書いていた欄が残っていれば、書く欄を開いたままにする
   // （閉じると、続けて「やり直す」を押せないため。mockups/v35 ④）
   const undoRedo = (run: () => void) => {
@@ -165,20 +167,18 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
             <button onMouseDown={keepFocus} onClick={() => editor.removeTableColumn(tableId)}>
               {Icon.colRemove}列を消す
             </button>
-            {/* 列の幅：押すと小さな窓で3つから選ぶ（mockups/v42 案B）。自分で決めるのときは「幅をそろえ直す」も（列の幅は、紙面の丸いつまみで変える） */}
-            {table && <WidthMenu editor={editor} table={table} tableId={tableId} variant="sheet" />}
-            {table?.widths === 'custom' && (
-              <button onMouseDown={keepFocus} onClick={() => editor.resetTableColWidths(tableId)}>
-                {Icon.evenColumns}幅をそろえ直す
+            {/* 表の形（列の幅・項目の列・行の高さ）：押すと下から欄が出て、絵を見て選ぶ（mockups/v45 案A）。自分で決めるのときは「同じ幅に戻す」も（列の幅は、紙面の丸いつまみで変える） */}
+            {table && (
+              <button className={`shape-btn${shapeSheet ? ' on' : ''}`} aria-haspopup="dialog" aria-expanded={shapeSheet} onMouseDown={keepFocus} onClick={() => setShapeSheet(true)}>
+                <ShapeFace />
               </button>
             )}
-            {/* 左端の列（列の幅が「そろえる」のときだけ）・行の高さ：押すたびに切り替える（いまの形を出す。例「高さ：そろえる」） */}
-            {table &&
-              TABLE_SWITCHES.filter((sw) => sw.shown(table)).map((sw) => (
-                <button key={sw.key} title={sw.title(sw.on(table))} onMouseDown={keepFocus} onClick={() => sw.set(editor, tableId, !sw.on(table))}>
-                  {SHORT_SWITCH_NAMES[sw.key]}：{sw.value(sw.on(table))}
-                </button>
-              ))}
+            {table?.widths === 'custom' && (
+              <button onMouseDown={keepFocus} onClick={() => editor.resetTableColWidths(tableId)}>
+                {Icon.evenColumns}
+                {SHAPE_TEXTS.even}
+              </button>
+            )}
             {/* 表ごと消す（画面の下に「表を削除しました［戻す］」）。前は、閉じてから表のタイトル（ページ全体の表示では高さ 7px ほど）をタップするしかなかった */}
             <button className="danger" onMouseDown={keepFocus} onClick={() => editor.removeTable(tableId)}>
               {Icon.remove}この表を削除
@@ -208,6 +208,7 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
         </span>
       </div>
     </section>
+    {shapeSheet && table && tableId && <TableShapeSheet editor={editor} table={table} tableId={tableId} onClose={() => setShapeSheet(false)} />}
     {/* 表の大きさを選ぶ欄（書く欄の外に置く。書く欄より上に重ねるため） */}
     {tableSheet && snap.editingKind === 'paragraph' && (
       <TableSizeSheet
@@ -229,8 +230,8 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
 /**
  * スマホで紙面に直接書く（app/phoneDirect.ts）：紙面に重ねた書く欄で書いている間、キーボードのすぐ上に出す細い道具。
  * 「戻す」「やり直す」は、まず書く欄の中で打った字を戻す（キーボードは出たまま）。戻す字がなければ、原稿を戻す。
- * 本文の段落なら「図を入れる」「表を入れる」。表のタイトル・セルなら、2段目に表の道具（行・列を足す・消す、セルの画像、列の幅・左端の列・行の高さ、表を削除）。
- * 2段目が画面の幅に入らないときは、2段目だけを横にずらして見る（右端に、続きがあることを示す影）
+ * 本文の段落なら「図を入れる」「表を入れる」。表のタイトル・セルなら、2段目に表の道具（行・列を足す・消す、セルの画像、表の形、表を削除）。
+ * 2段目は、画面の幅に入る1段（横にずらさない。どれも 44px 以上。mockups/v45 案A）。表の形は、押すと下から出る欄で選ぶ（app/tableShape.tsx）
  * 「完了」は書き終えて、1ページ全体の表示に戻す
  */
 function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
@@ -244,9 +245,10 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
   const tableBlock = tableId ? snap.report.body.flatMap((c) => c.blocks).find((b) => b.id === tableId) : undefined
   const table = tableBlock?.type === 'table' ? tableBlock : undefined
   const cellImage = !!tableId && snap.editingKind === 'tableCell' && editor.currentCellHasImage(tableId)
-  // 書いているマスの列（列の幅が「自分で決める」の表で、その列の幅を出す）
+  // 書いているマスの列（列の幅が「自分で決める」の表で、丸いつまみを出す列）
   const column = table && id && snap.editingKind === 'tableCell' ? (cellPosition(table, id)?.column ?? null) : null
   const [tableSheet, setTableSheet] = useState(false)
+  const [shapeSheet, setShapeSheet] = useState(false)
   // 書く欄の中で戻せなければ、原稿を戻す（書く欄はいったん閉じ、欄が残っていれば、組み直してから開き直す。下の書く欄と同じ）
   const undoRedo = (typing: () => boolean, run: () => void) => {
     if (typing()) return
@@ -288,7 +290,7 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
             完了
           </button>
         </div>
-        {/* 表のセル・タイトルを書いているとき：表の道具（下の書く欄の道具と同じ。名前は1行に収まる長さ） */}
+        {/* 表のセル・タイトルを書いているとき：表の道具（画面の幅に入る1段。名前は「画像を／外す」のほかは1行） */}
         {tableId && (
           <div className="db-row db-table" aria-label="表の道具">
             <button onMouseDown={keepFocus} onClick={() => editor.addTableRow(tableId)}>
@@ -302,7 +304,17 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
             {snap.editingKind === 'tableCell' && (
               <button onMouseDown={keepFocus} onClick={() => (cellImage ? editor.removeCellImage(tableId) : void editor.setCellImage(tableId))}>
                 {Icon.image}
-                <span>{cellImage ? '画像を外す' : '画像'}</span>
+                <span>
+                  {cellImage ? (
+                    <>
+                      <span className="ph">画像を</span>
+                      <wbr />
+                      <span className="ph">外す</span>
+                    </>
+                  ) : (
+                    '画像'
+                  )}
+                </span>
               </button>
             )}
             <button onMouseDown={keepFocus} onClick={() => editor.removeTableRow(tableId)}>
@@ -313,39 +325,31 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
               {Icon.colRemove}
               <span>列を消す</span>
             </button>
-            {/* 列の幅：押すと小さな窓で3つから選ぶ（mockups/v42 案B）。左端の列（列の幅が「そろえる」のときだけ）・行の高さ：押すたびに切り替える（いまの形を出す）。
-                道具が画面の幅に入らなければ、この段だけ横にずらして見る（index.css の「表の行の高さ・左端の列」） */}
-            {table && <WidthMenu editor={editor} table={table} tableId={tableId} variant="direct" />}
-            {table &&
-              TABLE_SWITCHES.filter((sw) => sw.shown(table)).map((sw) => (
-                <button key={sw.key} className="db-width" title={sw.title(sw.on(table))} onMouseDown={keepFocus} onClick={() => sw.set(editor, tableId, !sw.on(table))}>
-                  <small>{sw.label}</small>
-                  <b>{sw.value(sw.on(table))}</b>
-                </button>
-              ))}
+            {/* 表の形（列の幅・項目の列・行の高さ）：押すと下から欄が出て、絵を見て選ぶ（mockups/v45 案A） */}
+            {table && (
+              <button className={`shape-btn${shapeSheet ? ' on' : ''}`} aria-haspopup="dialog" aria-expanded={shapeSheet} onMouseDown={keepFocus} onClick={() => setShapeSheet(true)}>
+                <ShapeFace />
+              </button>
+            )}
             <button className="danger" onMouseDown={keepFocus} onClick={() => editor.removeTable(tableId)}>
               {Icon.remove}
               <span>表を削除</span>
             </button>
           </div>
         )}
-        {/* 列の幅が「自分で決める」の表（mockups/v42 案D）：3段目に、一言・書いているマスの列の幅・「幅をそろえ直す」。幅は、紙面の丸いつまみで変える（editor/columnHandles.ts） */}
+        {/* 列の幅が「自分で決める」の表（mockups/v42 案D。依頼者の判断で、丸いつまみのまま）：3段目に、一言と「同じ幅に戻す」。
+            幅は、紙面の丸いつまみで変える（editor/columnHandles.ts）。前は書いているマスの列の幅（「この列 35%」）も出していたが、数は出さない（mockups/v45） */}
         {tableId && table?.widths === 'custom' && (
           <div className="db-row db-colw" aria-label="列の幅を変える">
-            <span className="db-khint">{column !== null ? '丸を左右に動かす' : 'マスを押して列を選ぶ'}</span>
-            {column !== null && (
-              <span className="db-pct">
-                <small>この列</small>
-                <b>{Math.round((colWidthsOf(table) ?? equalColumnWidths(columnCount(table)))[column] ?? 0)}%</b>
-              </span>
-            )}
+            <span className="db-khint">{column !== null ? SHAPE_TEXTS.knobGuide : SHAPE_TEXTS.pickColumn}</span>
             <button className="db-reset" onMouseDown={keepFocus} onClick={() => editor.resetTableColWidths(tableId)}>
               {Icon.evenColumns}
-              <span>幅をそろえ直す</span>
+              <span>{SHAPE_TEXTS.even}</span>
             </button>
           </div>
         )}
       </div>
+      {shapeSheet && table && tableId && <TableShapeSheet editor={editor} table={table} tableId={tableId} onClose={() => setShapeSheet(false)} />}
       {tableSheet && paragraph && (
         <TableSizeSheet
           onInsert={(size) => {

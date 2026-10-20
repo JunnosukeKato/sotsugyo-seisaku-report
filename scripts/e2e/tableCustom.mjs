@@ -1,14 +1,17 @@
 // 表の列の幅を「自分で決める」（mockups/v42 の依頼者の選んだ形。Edge を自動で操作する。パソコンとスマホ）。
 // - 列の幅は3つ（そろえる・中身に合わせる・自分で決める）。自分で決めるにすると、いま見えている幅から始まる（見た目を変えない）。ほかへ切り替えても、決めた幅は覚えておく
-// - パソコン：表のセル・タイトルを書いている間（表を選んでいる間）だけ、内側の縦の線に細い線とつまみ。マウスを乗せると col-resize と「左右にドラッグ」。
-//   ドラッグで、となりの2列だけが 5% ずつ変わり、線の上に「20%｜30%」。どの列も 10% より狭くならない。左の道具に「縦の線を／ドラッグして／幅を変える」と「幅をそろえ直す」
-// - スマホ：「列の幅」は押すと小さな窓で3つから選ぶ（案B）。自分で決めるでは、セルの列をうすく色付けし、両側の線に丸いつまみ（案D）。
-//   指1本で動かすと、その側のとなりの列と幅をやりとりする。紙面を動かさない・ページを送らない・2本指の拡大を始めない
+// - 列の幅を選ぶのは「表の形を整える」の窓（スマホは「表の形」の下から出る欄。mockups/v45 案A。scripts/e2e/shapeUi.mjs）
+// - パソコン：表のセル・タイトルを書いている間（表を選んでいる間）だけ、内側の縦の線に細い線とつまみ。マウスを乗せると col-resize・大きいつまみと「左右にドラッグして／列の幅を変える」。
+//   ドラッグで、となりの2列だけが 5% ずつ変わり、となりの2列に色と、表の下に「◀ せまくなる」「広くなる ▶」（数（%）は出さない。mockups/v45 ②）。どの列も 10% より狭くならない。
+//   窓に「表の縦の線を左右にドラッグ」と「同じ幅に戻す」
+// - スマホ：自分で決めるでは、セルの列をうすく色付けし、両側の線に丸いつまみ（v42 案D のまま。依頼者の判断）。キーボードの上の道具に「丸を左右に動かす」「同じ幅に戻す」。
+//   指1本で動かすと、その側のとなりの列と幅をやりとりする（札は「せまくなる」「広くなる」）。紙面を動かさない・ページを送らない・2本指の拡大を始めない
 // - 元に戻す1回で、ドラッグ1回・そろえ直す・切り替えが戻る。PDF の列の幅は紙面と同じ（1px 以内）。列を足す・消すときの決まり
 // smoke.mjs（tableCustomPc）・phone.mjs（tableCustomPhone）から呼ぶ。これだけを動かすときは node scripts/e2e/tableCustom.mjs [pc|phone]。画面の写真は poc-output/table-custom/
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { FEATURES, openSample, pdfShape, shapeOf, showTable } from './tableShape.mjs'
+import { closeShape, linesIn, loneOf, openShape, pickWidth, shapeState } from './shapeUi.mjs'
 
 const OUT = 'poc-output/table-custom'
 mkdirSync(OUT, { recursive: true })
@@ -68,8 +71,18 @@ const handlesOf = (page) =>
         return { left: r.left, right: r.right }
       }),
       tip: vis(document.querySelector('.col-tip')) ? document.querySelector('.col-tip').textContent : null,
-      label: document.querySelector('.col-handles .col-drag')?.textContent ?? null,
+      chips: [...document.querySelectorAll('.col-handles .col-chip')].filter((c) => !c.hidden).map((c) => c.textContent),
       ghost: !!document.querySelector('.col-handles .col-ghost'),
+      // つかんでいる線の位置（表の左からの %。パソコンはつかんだ線、スマホはつかんだつまみの線）
+      hot: (() => {
+        const h = document.querySelector('.col-handles .col-grip.hot, .col-handles .col-pknob.hot')
+        const t = document.querySelector('.page-viewport.front .data-table[data-table-id="t1"] table')?.getBoundingClientRect()
+        if (!h || !t) return null
+        const r = h.getBoundingClientRect()
+        return Math.round((((r.left + r.width / 2 - t.left) / t.width) * 100) * 10) / 10
+      })(),
+      // 数（%）が、紙面の部品・一言のどこかに出ているか
+      percent: /%/.test((root?.textContent ?? '') + (document.querySelector('.col-tip')?.textContent ?? '')),
     }
   })
 
@@ -137,10 +150,9 @@ export async function tableCustomPc(browser, check) {
     await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 10000 }, id).catch(() => {})
     await wait(300)
   }
-  const press = async (name, text) => {
-    await page.evaluate((name, text) => [...document.querySelectorAll(`.palette .seg[aria-label="${name}"] button`)].find((b) => b.textContent === text).click(), name, text)
-    await wait(300)
-    await ready()
+  /** 列の幅を選ぶ（「表の形を整える」の窓。選んだあとも窓は開いたまま） */
+  const press = async (value) => {
+    await pickWidth(page, value, { ready })
     await wait(300)
   }
   const shape = async () => {
@@ -148,22 +160,24 @@ export async function tableCustomPc(browser, check) {
     return shapeOf(page, ID)
   }
 
-  // ---- 列の幅：3つを縦に並べる。いまは「そろえる」。そろえるの表には、線・つまみは出ない ----
+  // ---- 列の幅：窓に3つ（列の幅をそろえる・字の多い列を広く・自分で決める）。いまは「列の幅をそろえる」。そろえるの表には、線・つまみは出ない ----
   await clickCell('m1:feat')
-  const seg0 = await page.evaluate(() => [...document.querySelectorAll('.palette .seg[aria-label="列の幅"] button')].map((b) => ({ text: b.textContent, on: b.classList.contains('on'), title: b.title })))
+  await openShape(page)
+  const seg0 = await shapeState(page)
   const idle0 = await handlesOf(page)
   check(
-    'パソコン：左の道具の「列の幅」は、そろえる・中身に合わせる・自分で決めるの3つ（押すと切り替わるボタンに「列の幅：そろえる（押すと、自分で決める）」）。そろえるの表には、縦の線のつまみは出ない',
-    JSON.stringify(seg0.map((b) => [b.text, b.on])) === JSON.stringify([['そろえる', true], ['中身に合わせる', false], ['自分で決める', false]]) && seg0[2].title === '列の幅：そろえる（押すと、自分で決める）' && !idle0.shown,
-    JSON.stringify({ seg0, idle0: idle0.shown }),
+    'パソコン：「表の形を整える」の窓の「列の幅」は、列の幅をそろえる・字の多い列を広く・自分で決めるの3つ（いまの形に印）。そろえるの表には、縦の線のつまみは出ない',
+    JSON.stringify(seg0.widths.map((b) => [b.value, b.on])) === JSON.stringify([['equal', true], ['auto', false], ['custom', false]]) &&
+      seg0.widths[0].text.includes('列の幅をそろえる') && seg0.widths[1].text.includes('字の多い列を広く') && seg0.widths[2].text.includes('自分で決める') &&
+      !idle0.shown,
+    JSON.stringify({ seg0: seg0.widths, idle0: idle0.shown }),
   )
 
-  // ---- 中身に合わせる → 自分で決める：いま見えている幅から始まる（見た目は変わらない） ----
-  await press('列の幅', '中身に合わせる')
+  // ---- 字の多い列を広く → 自分で決める：いま見えている幅から始まる（見た目は変わらない） ----
+  await press('auto')
   const autoShape = await shape()
   await page.screenshot({ path: `${OUT}/pc-0-auto.png` })
-  await clickCell('m1:feat')
-  await press('列の幅', '自分で決める')
+  await press('custom')
   const fromAuto = await shape()
   const m1 = await modelOf(page)
   check(
@@ -171,27 +185,28 @@ export async function tableCustomPc(browser, check) {
     m1.widths === 'custom' && m1.colWidths.length === 4 && Math.abs(m1.colWidths.reduce((a, b) => a + b, 0) - 100) < 1e-6 && same(fromAuto.cols, autoShape.cols, 1) && fromAuto.cls.includes('widths-custom'),
     JSON.stringify({ auto: r1(autoShape.cols), custom: r1(fromAuto.cols), colWidths: m1.colWidths }),
   )
-  // そろえ直す：どの列も同じ幅（自分で決めるのまま）。元に戻す1回で戻る
-  const hint = await linesOf(page, '.palette .custom-hint span')
-  const resetBtn = await page.evaluate(() => document.querySelector('.palette .reset-widths')?.textContent ?? null)
-  await page.evaluate(() => document.querySelector('.palette .reset-widths').click())
+  // 同じ幅に戻す：どの列も同じ幅（自分で決めるのまま）。元に戻す1回で戻る
+  const hint = await linesIn(page, '.shape-panel .so-guide p')
+  const resetBtn = await page.evaluate(() => document.querySelector('.shape-panel .so-even')?.textContent ?? null)
+  await page.click('.shape-panel .so-even')
   await wait(300)
   await ready()
   const evened = await modelOf(page)
   const evenShape = await shape()
   check(
-    'パソコン：自分で決めるのとき、左の道具に「縦の線を／ドラッグして／幅を変える」（3行。1字だけの行はない）と「幅をそろえ直す」。そろえ直すと、どの列も同じ幅（自分で決めるのまま）',
-    JSON.stringify(hint) === JSON.stringify([['縦の線を'], ['ドラッグして'], ['幅を変える']]) && resetBtn === '幅をそろえ直す' && evened.widths === 'custom' && JSON.stringify(evened.colWidths) === '[25,25,25,25]' && same(pctOf(evenShape.cols), [25, 25, 25, 25], 0.2),
+    'パソコン：自分で決めるのとき、窓に「表の縦の線を左右にドラッグ」（1字だけの行はない）と「同じ幅に戻す」。同じ幅に戻すと、どの列も同じ幅（自分で決めるのまま）',
+    hint.length === 1 && hint[0].join('') === '表の縦の線を左右にドラッグ' && loneOf(hint).length === 0 && resetBtn === '同じ幅に戻す' && evened.widths === 'custom' && JSON.stringify(evened.colWidths) === '[25,25,25,25]' && same(pctOf(evenShape.cols), [25, 25, 25, 25], 0.2),
     JSON.stringify({ hint, evened, cols: r1(evenShape.cols) }),
   )
+  await closeShape(page)
   await page.evaluate(() => window.__editor.undo())
   await ready()
   const unEven = await modelOf(page)
   await page.evaluate(() => window.__editor.redo())
   await ready()
-  check('パソコン：「幅をそろえ直す」は、元に戻す1回で前の幅に戻る', JSON.stringify(unEven.colWidths) === JSON.stringify(m1.colWidths) && JSON.stringify((await modelOf(page)).colWidths) === '[25,25,25,25]', JSON.stringify(unEven))
+  check('パソコン：「同じ幅に戻す」は、元に戻す1回で前の幅に戻る', JSON.stringify(unEven.colWidths) === JSON.stringify(m1.colWidths) && JSON.stringify((await modelOf(page)).colWidths) === '[25,25,25,25]', JSON.stringify(unEven))
 
-  // ---- 書いている間：内側の縦の線に、細い線とつまみ（3本）。マウスを乗せると col-resize と「左右にドラッグ」 ----
+  // ---- 書いている間：内側の縦の線に、細い線とつまみ（3本）。マウスを乗せると col-resize・大きいつまみと「左右にドラッグして／列の幅を変える」 ----
   await clickCell('m1:feat')
   await shape()
   await clickCell('m1:feat')
@@ -202,12 +217,18 @@ export async function tableCustomPc(browser, check) {
   const hover = await handlesOf(page)
   await shot(page, 'pc-2-hover')
   check(
-    'パソコン：自分で決めるの表のセルを書いている間、内側の縦の線（3本）に、表の高さの細い線とつまみが出る。線にマウスを乗せると、左右の矢印のカーソルと「左右にドラッグ」',
-    h0.shown && h0.grips.length === 3 && h0.grips.every((g) => g.cursor === 'col-resize' && g.knob.w >= 8 && g.knob.h >= 22) && hover.tip === '左右にドラッグ',
-    JSON.stringify({ grips: h0.grips.map((g) => [Math.round(g.x), g.cursor]), tip: hover.tip }),
+    'パソコン：自分で決めるの表のセルを書いている間、内側の縦の線（3本）に、表の高さの細い線と、見出しの行の細いつまみ（12×28）が出る。線にマウスを乗せると、左右の矢印のカーソル・左右の矢印の付いた大きいつまみ（34×24）と「左右にドラッグして／列の幅を変える」',
+    h0.shown &&
+      h0.grips.length === 3 &&
+      h0.grips.every((g) => g.cursor === 'col-resize' && Math.round(g.knob.w) === 12 && Math.round(g.knob.h) === 28) &&
+      Math.round(hover.grips[1].knob.w) === 34 &&
+      Math.round(hover.grips[1].knob.h) === 24 &&
+      hover.tip === '左右にドラッグして列の幅を変える' &&
+      !hover.percent,
+    JSON.stringify({ grips: h0.grips.map((g) => [Math.round(g.x), g.cursor, Math.round(g.knob.w), Math.round(g.knob.h)]), hover: hover.grips[1].knob, tip: hover.tip }),
   )
 
-  // ---- ドラッグ：5% ずつ止まり、となりの2列だけが変わる。動かしている間は「35%｜15%」 ----
+  // ---- ドラッグ：5% ずつ止まり、となりの2列だけが変わる。動かしている間は、となりの2列に色と「広くなる ▶」「◀ せまくなる」（数は出さない） ----
   const tableW = await page.evaluate((id) => document.querySelector(`.page-viewport.front .data-table[data-table-id="${id}"] table`).getBoundingClientRect().width, ID)
   const g1 = h0.grips[1]
   await page.mouse.down()
@@ -223,9 +244,9 @@ export async function tableCustomPc(browser, check) {
   const dragShape = await shape()
   const stillEditing = await page.evaluate(() => window.__editor.getSnapshot().editingId)
   check(
-    'パソコン：縦の線をドラッグすると、線は 5% ずつ止まり（6% 動かすと 5%、11% 動かすと 10%）、線の上に「線の左の列｜右の列」の札と、元の位置に点線',
-    mid.label === '30%｜20%' && during.label === '35%｜15%' && during.ghost,
-    JSON.stringify({ mid: mid.label, during: during.label, ghost: during.ghost }),
+    'パソコン：縦の線をドラッグすると、線は 5% ずつ止まり（6% 動かすと 5%、11% 動かすと 10%。線の位置は表の左から 55%・60%）、元の位置に点線。右へ動かすと、表の下に、左の列「広くなる ▶」・右の列「◀ せまくなる」の札（数（%）は出さない）',
+    Math.abs(mid.hot - 55) <= 0.6 && Math.abs(during.hot - 60) <= 0.6 && during.ghost && JSON.stringify(during.chips) === JSON.stringify(['広くなる ▶', '◀ せまくなる']) && !mid.percent && !during.percent,
+    JSON.stringify({ mid: [mid.hot, mid.chips], during: [during.hot, during.chips], ghost: during.ghost }),
   )
   check(
     'パソコン：離すと、となりの2列だけが変わる（25・25・25・25 → 25・35・15・25）。紙面の列の幅も同じ割合（0.2% 以内）。書いていたセルを書き続ける',
@@ -245,9 +266,9 @@ export async function tableCustomPc(browser, check) {
   await ready()
   const minModel = await modelOf(page)
   check(
-    'パソコン：となりの列が 10% になると、それ以上は動かない（30% 動かしても 35・15 → 40・10。ほかの列は変わらない）',
-    clamp.label === '40%｜10%' && JSON.stringify(minModel.colWidths) === '[25,40,10,25]',
-    JSON.stringify({ label: clamp.label, colWidths: minModel.colWidths }),
+    'パソコン：となりの列が 10% になると、それ以上は動かない（30% 動かしても 35・15 → 40・10。線は表の左から 65% で止まる。ほかの列は変わらない）',
+    Math.abs(clamp.hot - 65) <= 0.6 && JSON.stringify(minModel.colWidths) === '[25,40,10,25]',
+    JSON.stringify({ hot: clamp.hot, colWidths: minModel.colWidths }),
   )
 
   // ---- 元に戻す：ドラッグ1回ずつ戻る ----
@@ -288,14 +309,15 @@ export async function tableCustomPc(browser, check) {
 
   // ---- ほかに切り替えても、決めた幅を覚えておく ----
   await clickCell('m1:feat')
-  await press('列の幅', 'そろえる')
+  await press('equal')
   const back = await shape()
   await clickCell('m1:feat')
-  await press('列の幅', '自分で決める')
+  await press('custom')
+  await closeShape(page)
   const again = await modelOf(page)
   const againShape = await shape()
   check(
-    'パソコン：そろえるに切り替えるとどの列も同じ幅に戻り、また「自分で決める」にすると、前に決めた幅（25・40・10・25）に戻る',
+    'パソコン：「列の幅をそろえる」に切り替えるとどの列も同じ幅に戻り、また「自分で決める」にすると、前に決めた幅（25・40・10・25）に戻る',
     same(pctOf(back.cols), [25, 25, 25, 25], 0.2) && JSON.stringify(again.colWidths) === '[25,40,10,25]' && same(pctOf(againShape.cols), [25, 40, 10, 25], 0.2),
     JSON.stringify({ back: pctOf(back.cols), again: again.colWidths }),
   )
@@ -321,24 +343,26 @@ export async function tableCustomPc(browser, check) {
     JSON.stringify({ added: added.colWidths, removedFirst: removedFirst.colWidths, removedMid: removedMid.colWidths }),
   )
 
-  // ---- 1366×768 の画面でも、新しい言葉に1字だけの行はない（左の道具の3つのボタン・一言・「幅をそろえ直す」・「左右にドラッグ」） ----
+  // ---- 1366×768 の画面でも、新しい言葉に1字だけの行はない（窓の選び・一言・「同じ幅に戻す」・「左右にドラッグして／列の幅を変える」） ----
   await page.setViewport({ width: 1366, height: 768 })
   await wait(500)
   await ready()
   await showTable(page, ready, ID)
   // （列を消したので、残っている「使用箇所」の列のセル）
   await clickCell('m1:usage')
-  const small = await linesOf(page, '.palette .seg[aria-label="列の幅"] button, .palette .custom-hint span, .palette .reset-widths')
+  await openShape(page)
+  const small = await linesIn(page, '.shape-panel .sp-head b, .shape-panel .so-sec, .shape-panel .so-choice b, .shape-panel .so-choice small, .shape-panel .so-check b, .shape-panel .so-check small, .shape-panel .so-guide p, .shape-panel .so-even, .shape-panel .so-note, .palette .shape-btn')
   const hs = await handlesOf(page)
   await page.mouse.move(hs.grips[0].knob.x, hs.grips[0].knob.y)
   await wait(250)
-  const tipLines = await linesOf(page, '.col-tip')
+  const tipLines = await linesIn(page, '.col-tip')
   await page.screenshot({ path: `${OUT}/pc-6-1366x768.png` })
   check(
-    'パソコン（1366×768）：左の道具の「そろえる」「中身に合わせる」「自分で決める」・「縦の線を／ドラッグして／幅を変える」・「幅をそろえ直す」と「左右にドラッグ」は、どれも1行（1字だけの行はない）',
-    small.length === 7 && small.every((l) => l.length === 1) && JSON.stringify(tipLines) === '[["左右にドラッグ"]]',
-    JSON.stringify({ small, tipLines }),
+    'パソコン（1366×768）：窓の言葉（名前・選び・一言・「同じ幅に戻す」）と左の道具の「表の形を／整える」、線の一言「左右にドラッグして／列の幅を変える」に、1字だけの行はない',
+    small.length >= 14 && loneOf(small).length === 0 && JSON.stringify(tipLines) === '[["左右にドラッグして","列の幅を変える"]]',
+    JSON.stringify({ lone: loneOf(small), tipLines }),
   )
+  await closeShape(page)
   // 使い方の「図・表の入れ方」の補足（列の幅・行の高さ・マスの中の改行）も、1字だけの行がない
   await page.evaluate(() => window.__editor.finishEditing())
   await ready()
@@ -352,8 +376,11 @@ export async function tableCustomPc(browser, check) {
   const help = await linesOf(page, '.help-topic .help-item')
   await page.screenshot({ path: `${OUT}/pc-7-help-1366x768.png` })
   check(
-    'パソコン（1366×768）：使い方の「図・表の入れ方」に「表の列の幅」の1行（自分で決める・縦の線を左右に）。補足の文に1字だけの行はない',
-    help.length === 3 && help.flat().join('').includes('「自分で決める」にすると、縦の線（スマホは丸）を左右に動かして') && help.every((l) => l.every((x) => x.length >= 2)),
+    'パソコン（1366×768）：使い方の「図・表の入れ方」に「表の形を整える」と「列の幅を自分で決める」（縦の線を左右に）の1行ずつ。補足の文に1字だけの行はない',
+    help.length === 3 &&
+      help.flat().join('').includes('道具の「表の形を整える」（スマホは「表の形」）で、列の幅・項目の列（左端）・行の高さを、絵を見て選べます') &&
+      help.flat().join('').includes('「自分で決める」を選ぶと、表の縦の線（スマホは丸）を左右に動かして') &&
+      help.every((l) => l.every((x) => x.length >= 2)),
     JSON.stringify(help),
   )
   await context.close()
@@ -389,80 +416,72 @@ export async function tableCustomPhone(browser, check) {
     await page.touchscreen.tap(at.x, at.y)
     await wait(400)
   }
-  const pop = () =>
-    page.evaluate(() => {
-      const p = document.querySelector('.width-pop')
-      if (!p) return null
-      const r = p.getBoundingClientRect()
-      return {
-        head: p.querySelector('.wp-head')?.textContent,
-        rows: [...p.querySelectorAll('[role="radio"]')].map((b) => ({ name: b.querySelector('b').textContent, sub: b.querySelector('small').textContent, on: b.getAttribute('aria-checked') === 'true', h: Math.round(b.getBoundingClientRect().height) })),
-        inside: r.left >= 0 && r.right <= innerWidth && r.top >= 0,
-      }
-    })
   const state = () => page.evaluate(() => ({ editing: window.__editor.getSnapshot().editingId, page: window.__editor.getSnapshot().page, zoomed: window.__editor.getSnapshot().zoomed, scale: window.__editor.stage.scale, scrollTop: document.querySelector('.page-scroller').scrollTop, scrollLeft: document.querySelector('.page-scroller').scrollLeft }))
 
-  // ---- 案B：「列の幅」のボタンに下向きの印。押すと小さな窓で3つから選ぶ ----
+  // ---- 「表の形」を押すと、下から「表の形を整える」の欄（絵が上の選びを横に3つ・項目の列・行の高さ。押す所は 44px 以上。どの字も1字だけの行はない） ----
   await tapCell('m1:feat')
   const face = await page.evaluate(() => {
-    const b = document.querySelector('.direct-bar .db-table .width-menu')
-    return { text: b?.textContent, chev: !!b?.querySelector('svg.chev'), w: Math.round(b?.getBoundingClientRect().width ?? 0), h: Math.round(b?.getBoundingClientRect().height ?? 0) }
+    const b = document.querySelector('.direct-bar .db-table .shape-btn')
+    return { text: b?.textContent, pic: !!b?.querySelector('svg.pic'), w: Math.round(b?.getBoundingClientRect().width ?? 0), h: Math.round(b?.getBoundingClientRect().height ?? 0) }
   })
-  await tap('.direct-bar .db-table .width-menu')
-  const opened = await pop()
-  const popLines = await linesOf(page, '.width-pop b, .width-pop small, .width-pop .wp-head')
-  await page.screenshot({ path: `${OUT}/phone-1-popover.png` })
+  await openShape(page, true)
+  const opened = await shapeState(page)
+  const sheetSizes = await page.evaluate(() => [...document.querySelectorAll('.table-shape button')].map((b) => [b.textContent.slice(0, 8), Math.round(b.getBoundingClientRect().width), Math.round(b.getBoundingClientRect().height)]))
+  const sheetLines = await linesIn(page, '.table-shape h2, .table-shape .so-sec, .table-shape .so-choice b, .table-shape .so-choice small, .table-shape .so-check b, .table-shape .so-check small, .table-shape .ts-done')
+  await page.screenshot({ path: `${OUT}/phone-1-sheet.png` })
   check(
-    'スマホ：キーボードの上の道具の「列の幅」は、いまの形と小さな下向きの印（44px 以上）。押すと、すぐ上に「列の幅」の小さな窓が開き、3つ（そろえる・中身に合わせる・自分で決める）と一言の説明。いまの形に印。どの字も1行',
-    face.text === '列の幅そろえる' && face.chev && face.w >= 44 && face.h >= 44 &&
-      opened?.head === '列の幅' && opened.inside &&
-      JSON.stringify(opened.rows.map((r) => [r.name, r.sub, r.on])) === JSON.stringify([['そろえる', 'どの列も同じ幅', true], ['中身に合わせる', '字の多い列を広く', false], ['自分で決める', '列ごとに広く・狭く', false]]) &&
-      opened.rows.every((r) => r.h >= 44) && popLines.every((l) => l.length === 1),
-    JSON.stringify({ face, opened, popLines }),
+    'スマホ：キーボードの上の道具の「表の形」（絵つき・44px 以上）を押すと、下から「表の形を整える」の欄が出る。列の幅は絵が上の選びを横に3つ（列の幅をそろえるに印）・項目の列（左端）・行の高さ・「できた」。押す所はどれも 44px 以上。1字だけの行はない',
+    face.text === '表の形' && face.pic && face.w >= 44 && face.h >= 44 &&
+      opened?.kind === 'sheet' && opened.title === '表の形を整える' &&
+      JSON.stringify(opened.widths.map((w) => [w.value, w.on])) === JSON.stringify([['equal', true], ['auto', false], ['custom', false]]) &&
+      opened.widths[2].text.includes('丸を左右に動かす') &&
+      sheetSizes.every(([, w, h]) => w >= 44 && h >= 44) && loneOf(sheetLines).length === 0,
+    JSON.stringify({ face, opened, sheetSizes, lone: loneOf(sheetLines) }),
   )
-  // 窓の外を押す・Esc で閉じる（書いているマスは書いたまま。窓の外は、キーボードの上の道具の1段目の空いている所）
-  const empty = await page.evaluate(() => {
-    const r = document.querySelector('.direct-bar .db-row').getBoundingClientRect()
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  // 後ろを押す・「できた」・Esc で閉じる（書いているマスは書いたまま）
+  const scrim = await page.evaluate(() => {
+    const r = document.querySelector('.scrim').getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + 60 }
   })
-  await page.touchscreen.tap(empty.x, empty.y)
-  await wait(300)
-  const closedOutside = (await pop()) === null && (await state()).editing === 'm1:feat'
-  await tap('.direct-bar .db-table .width-menu')
+  await page.touchscreen.tap(scrim.x, scrim.y)
+  await wait(400)
+  const closedOutside = (await shapeState(page)) === null && (await state()).editing === 'm1:feat'
+  await openShape(page, true)
   await page.keyboard.press('Escape')
-  await wait(300)
-  const closedEsc = (await pop()) === null && (await state()).editing === 'm1:feat'
-  check('スマホ：窓の外を押す・Esc で窓が閉じる（Esc では、書いているマスは書いたまま）', closedOutside && closedEsc, JSON.stringify({ closedOutside, closedEsc }))
+  await wait(400)
+  const closedEsc = (await shapeState(page)) === null && (await state()).editing === 'm1:feat'
+  await openShape(page, true)
+  await closeShape(page, true)
+  const closedDone = (await shapeState(page)) === null && (await state()).editing === 'm1:feat'
+  check('スマホ：欄は、後ろを押す・Esc・「できた」で閉じる（書いているマスは書いたまま）', closedOutside && closedEsc && closedDone, JSON.stringify({ closedOutside, closedEsc, closedDone }))
 
-  // ---- 「自分で決める」を選ぶ：窓が閉じ、選んだ列に色・両側の線に丸いつまみ。3段目に「丸を左右に動かす」「この列 25%」「幅をそろえ直す」 ----
+  // ---- 「自分で決める」を選ぶ：欄が閉じ、選んだ列に色・両側の線に丸いつまみ。3段目に「丸を左右に動かす」「同じ幅に戻す」（列の幅の数は出さない） ----
   await tapCell('m1:feat')
-  await tap('.direct-bar .db-table .width-menu')
-  await tap('.width-pop [role="radio"]', '自分で決める')
-  await ready()
+  await pickWidth(page, 'custom', { phone: true, ready })
   await wait(500)
   const m0 = await modelOf(page)
-  const closed = (await pop()) === null
+  const closed = (await shapeState(page)) === null
   const h0 = await handlesOf(page)
   const row = await page.evaluate(() => {
     const r = document.querySelector('.direct-bar .db-colw')
-    return r ? { hint: r.querySelector('.db-khint')?.textContent, pct: r.querySelector('.db-pct')?.textContent, reset: r.querySelector('.db-reset')?.textContent, h: Math.round(r.querySelector('.db-reset').getBoundingClientRect().height), w: Math.round(r.querySelector('.db-reset').getBoundingClientRect().width) } : null
+    return r ? { text: r.textContent, hint: r.querySelector('.db-khint')?.textContent, reset: r.querySelector('.db-reset')?.textContent, h: Math.round(r.querySelector('.db-reset').getBoundingClientRect().height), w: Math.round(r.querySelector('.db-reset').getBoundingClientRect().width) } : null
   })
-  const rowLines = await linesOf(page, '.direct-bar .db-colw .db-khint, .direct-bar .db-colw .db-pct small, .direct-bar .db-colw .db-reset span')
+  const rowLines = await linesOf(page, '.direct-bar .db-colw .db-khint, .direct-bar .db-colw .db-reset span')
   await page.screenshot({ path: `${OUT}/phone-2-knobs.png` })
   const cellCol = await page.evaluate(() => {
     const r = document.querySelector('.page-viewport.front [data-cell-id="m1:feat"]').getBoundingClientRect()
     return { left: r.left, right: r.right }
   })
   check(
-    'スマホ：「自分で決める」を選ぶと窓が閉じ、列の幅は自分で決める（いまの 25% ずつから）。書いているマスの列がうすく色付き、その列の両側の線に丸いつまみ（30px。押せる所は 44px）',
+    'スマホ：欄で「自分で決める」を選ぶと欄が閉じ、列の幅は自分で決める（いまの 25% ずつから）。書いているマスの列がうすく色付き、その列の両側の線に丸いつまみ（30px。押せる所は 44px）',
     m0.widths === 'custom' && JSON.stringify(m0.colWidths) === '[25,25,25,25]' && closed &&
       h0.tints.length >= 1 && Math.abs(h0.tints[0].left - cellCol.left) <= 1.5 && Math.abs(h0.tints[0].right - cellCol.right) <= 1.5 &&
       JSON.stringify(h0.knobs.map((k) => k.border)) === '[1,2]' && h0.knobs.every((k) => k.size[0] >= 30 && k.size[1] >= 30 && k.hit[0] >= 44 && k.hit[1] >= 44),
     JSON.stringify({ m0, tints: h0.tints, knobs: h0.knobs, cellCol }),
   )
   check(
-    'スマホ：自分で決めるのとき、キーボードの上の道具の3段目に「丸を左右に動かす」「この列 25%」「幅をそろえ直す」（44px 以上。どの字も1行）',
-    row?.hint === '丸を左右に動かす' && row.pct === 'この列25%' && row.reset === '幅をそろえ直す' && row.h >= 44 && row.w >= 44 && rowLines.every((l) => l.length === 1),
+    'スマホ：自分で決めるのとき、キーボードの上の道具の3段目に「丸を左右に動かす」と「同じ幅に戻す」（44px 以上。どの字も1行）。列の幅の数（「この列 35%」）は出さない',
+    row?.hint === '丸を左右に動かす' && row.reset === '同じ幅に戻す' && !/%/.test(row.text) && row.h >= 44 && row.w >= 44 && rowLines.every((l) => l.length === 1),
     JSON.stringify({ row, rowLines }),
   )
 
@@ -485,12 +504,12 @@ export async function tableCustomPhone(browser, check) {
   await wait(400)
   const after = await state()
   const m1 = await modelOf(page)
-  const pctAfter = await page.evaluate(() => document.querySelector('.direct-bar .db-colw .db-pct')?.textContent)
+  const barAfter = await page.evaluate(() => document.querySelector('.direct-bar')?.textContent ?? '')
   await page.screenshot({ path: `${OUT}/phone-4-after.png` })
   check(
-    'スマホ：右の丸いつまみを指で右へ動かすと、線が 5% ずつ止まり（11% で 10%）、右どなりの列と幅をやりとりする（25・25・35・15）。「この列 35%」',
-    during.label === '35%｜15%' && JSON.stringify(m1.colWidths) === '[25,25,35,15]' && pctAfter === 'この列35%' && after.editing === 'm1:feat',
-    JSON.stringify({ label: during.label, colWidths: m1.colWidths, pctAfter, editing: after.editing }),
+    'スマホ：右の丸いつまみを指で右へ動かすと、線が 5% ずつ止まり（11% で 10%）、右どなりの列と幅をやりとりする（25・25・35・15）。動かしている間は、表の上に「広くなる ▶」「◀ せまくなる」（数（%）は出さない）',
+    JSON.stringify(during.chips) === JSON.stringify(['広くなる ▶', '◀ せまくなる']) && !during.percent && JSON.stringify(m1.colWidths) === '[25,25,35,15]' && !/%/.test(barAfter) && after.editing === 'm1:feat',
+    JSON.stringify({ chips: during.chips, colWidths: m1.colWidths, editing: after.editing }),
   )
   check(
     'スマホ：つまみを動かしている間、紙面は動かず、ページも送らず、拡大の大きさも変わらない',
@@ -526,23 +545,22 @@ export async function tableCustomPhone(browser, check) {
   const s1 = await state()
   check('スマホ：つまみのない所の2本の指の広げは、今までどおり紙面を広げる', s1.scale > s0.scale * 1.2, JSON.stringify({ before: s0.scale, after: s1.scale }))
 
-  // ---- 表を選んだときの下の道具の「列の幅」も、押すと窓で選ぶ ----
+  // ---- 表を選んだときの下の道具の「表の形」も、押すと下から同じ欄 ----
   await page.tap('.direct-bar .db-done')
   await wait(400)
   await ready()
   await page.evaluate((id) => window.__editor.select({ kind: 'table', id }), ID)
   await wait(500)
-  await tap('.sel-bar .width-menu')
-  const selPop = await pop()
-  // 表を選んだときの下の道具の「列の幅」：名前は1行、形は2行まで（「自分で／決める」。1字だけの行はない）
-  const selFace = await linesOf(page, '.sel-bar .width-menu span, .sel-bar .width-menu b')
-  await page.screenshot({ path: `${OUT}/phone-6-selbar-popover.png` })
-  await tap('.width-pop [role="radio"]', '中身に合わせる')
-  await ready()
+  const selFace = await linesOf(page, '.sel-bar .shape-btn span')
+  await openShape(page, true)
+  const selPop = await shapeState(page)
+  await page.screenshot({ path: `${OUT}/phone-6-selbar-sheet.png` })
+  await pickWidth(page, 'auto', { phone: true, ready })
+  await closeShape(page, true)
   check(
-    'スマホ：表を選んだときの下の道具の「列の幅」も、押すと窓で3つから選ぶ（自分で決めるに印）。中身に合わせるを選ぶと、そうなる（決めた幅は覚えておく）',
-    selPop?.rows.find((r) => r.on)?.name === '自分で決める' && JSON.stringify(selFace) === '[["列の幅"],["自分で","決める"]]' && (await modelOf(page)).widths === 'auto' && JSON.stringify((await modelOf(page)).colWidths) === '[25,25,25,25]',
-    JSON.stringify({ selPop, selFace, model: await modelOf(page) }),
+    'スマホ：表を選んだときの下の道具の「表の形」も、押すと同じ欄で選ぶ（自分で決めるに印）。字の多い列を広くを選ぶと、そうなる（決めた幅は覚えておく）',
+    selPop?.widths.find((r) => r.on)?.value === 'custom' && JSON.stringify(selFace) === '[["表の形"]]' && (await modelOf(page)).widths === 'auto' && JSON.stringify((await modelOf(page)).colWidths) === '[25,25,25,25]',
+    JSON.stringify({ selPop: selPop?.widths, selFace, model: await modelOf(page) }),
   )
   await page.evaluate(() => window.__editor.select(null))
   await wait(300)
@@ -557,7 +575,7 @@ export async function tableCustomPhone(browser, check) {
   const help = await linesOf(page, '.help-topic .help-item')
   await page.screenshot({ path: `${OUT}/phone-7-help.png` })
   check(
-    'スマホ（390px）：使い方の「図・表の入れ方」の補足（表の列の幅・行の高さと左端の列・マスの中の改行）に、1字だけの行はない',
+    'スマホ（390px）：使い方の「図・表の入れ方」の補足（表の形を整える・列の幅を自分で決める・マスの中の改行）に、1字だけの行はない',
     help.length === 3 && help.every((l) => l.every((x) => x.length >= 2)),
     JSON.stringify(help),
   )
@@ -574,10 +592,120 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     console.log(`${ok ? '✓' : '✗'} ${name}${detail ? `  (${detail})` : ''}`)
   }
   await withEdge(async (browser) => {
+    if (only === 'fit') return paletteFitPc(browser, check)
     if (only !== 'phone') await tableCustomPc(browser, check)
     if (only !== 'pc') await tableCustomPhone(browser, check)
+    if (only !== 'phone') await paletteFitPc(browser, check)
   })
   const failed = results.filter((ok) => !ok).length
   console.log(`\n${results.length - failed}/${results.length} 件 合格`)
   process.exitCode = failed ? 1 : 0
+}
+
+/**
+ * 画面の低いノートパソコン（1280×720・1366×768・1280×720 の画面のブラウザの中 1280×586）で、表のセル・タイトルを書いている・表を選んでいるとき（列の幅の3つの形のどれでも）、
+ * 左の道具は、中を上下に動かさずに全部見える（表の道具は「表の形を整える」1つにまとめた。mockups/v45 案A）。「表の形を整える」の窓も画面に入る。1字だけの行はない。
+ * もっと低い画面（1280×480）で道具の中を上下に動かすことになっても、棒で中身が狭まらない（中身の幅は 72px のまま。前は「クリックし／て」「画像を入れ／る」のように1字だけの行ができていた）
+ */
+export async function paletteFitPc(browser, check) {
+  const { context, page, ready } = await openSample(browser, false)
+  const OUT_FIT = 'poc-output/palette-fit'
+  mkdirSync(OUT_FIT, { recursive: true })
+  const measure = () =>
+    page.evaluate(() => {
+      const p = document.querySelector('.palette')
+      const linesOf = (el) => {
+        const out = []
+        let last = null
+        const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+        while (walker.nextNode()) {
+          const n = walker.currentNode
+          for (let i = 0; i < n.length; i++) {
+            if (/\s/.test(n.data[i])) continue
+            const r = document.createRange()
+            r.setStart(n, i)
+            r.setEnd(n, i + 1)
+            const q = [...r.getClientRects()].find((x) => x.height > 0)
+            if (!q) continue
+            if (last === null || q.top > last + q.height * 0.5) {
+              out.push('')
+              last = q.top
+            }
+            out[out.length - 1] += n.data[i]
+          }
+        }
+        return out
+      }
+      const labels = [...p.querySelectorAll('.p-head b, .p-head span, .tb span, .ctx-label'), ...document.querySelectorAll('.shape-panel :is(.sp-head b, .so-sec, .so-choice b, .so-choice small, .so-check b, .so-check small, .so-guide p, .so-even, .so-note)')]
+      const panel = document.querySelector('.shape-panel')?.getBoundingClientRect()
+      return {
+        tools: !!p.querySelector('.group.ctx .ctx-label') && !!p.querySelector('.group.ctx .shape-btn'),
+        scrolls: p.scrollHeight > p.clientHeight,
+        bottom: Math.round(p.getBoundingClientRect().bottom),
+        screen: innerHeight,
+        sizes: `${p.scrollHeight}/${p.clientHeight} w${p.offsetWidth}`,
+        lone: labels.map(linesOf).filter((l) => l.some((x) => x.length === 1) && l.join('').length > 1).map((l) => l.join('／')),
+        inner: Math.round(p.querySelector('.group.ctx')?.getBoundingClientRect().width ?? 0),
+        head: Math.round(p.querySelector('.p-head')?.getBoundingClientRect().width ?? 0),
+        panel: panel ? { top: Math.round(panel.top), bottom: Math.round(panel.bottom), fits: panel.top >= 0 && panel.bottom <= innerHeight, scroll: document.querySelector('.shape-panel').classList.contains('scroll') } : null,
+      }
+    })
+  for (const [w, h] of [
+    [1280, 720],
+    [1366, 768],
+    [1280, 586],
+  ]) {
+    await page.setViewport({ width: w, height: h })
+    await wait(600)
+    await ready()
+    const bad = []
+    const seen = []
+    for (const mode of ['equal', 'auto', 'custom']) {
+      await page.evaluate((mode) => window.__editor.update((r) => ({ ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 't1' ? { ...b, widths: mode, colWidths: mode === 'custom' ? [40, 30, 30] : b.colWidths } : b)) })) })), mode)
+      await ready()
+      await showTable(page, ready, ID)
+      for (const state of ['cell', 'title', 'selected']) {
+        await page.evaluate(() => window.__editor.finishEditing())
+        await ready()
+        if (state === 'selected') await page.evaluate((id) => window.__editor.select({ kind: 'table', id }), ID)
+        else {
+          const id = state === 'cell' ? 'm1:name' : ID
+          await page.evaluate((id) => window.__editor.openWhenReady(id, 0), id)
+          await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 10000 }, id).catch(() => {})
+        }
+        await wait(400)
+        const m = await measure()
+        // 「表の形を整える」の窓も開いて測る（自分で決めるの窓がいちばん長い）
+        await openShape(page)
+        const open = await measure()
+        if (state === 'cell') await page.screenshot({ path: `${OUT_FIT}/e2e-${w}x${h}-${mode}.png` })
+        await closeShape(page)
+        seen.push(`${mode}/${state}:${m.sizes} 下の端${m.bottom}/${m.screen} 窓${open.panel?.top}〜${open.panel?.bottom}`)
+        if (!m.tools || m.scrolls || m.bottom > m.screen || m.lone.length || m.inner !== 72 || m.head !== 72 || !open.panel?.fits || open.panel.scroll || open.lone.length) bad.push({ mode, state, m, open })
+      }
+    }
+    await page.evaluate(() => window.__editor.finishEditing())
+    check(
+      `パソコン（${w}×${h}）：表のセル・タイトルを書いている・表を選んでいるとき、列の幅のどの形でも、左の道具は中を上下に動かさずに全部見える（表の道具は「表の形を整える」1つ）。「表の形を整える」の窓も画面に入る。1字だけの行はない`,
+      bad.length === 0,
+      JSON.stringify(bad.length ? bad : seen),
+    )
+  }
+  // もっと低い画面：道具の中を上下に動かす棒が出ても、中身は狭まらない（72px のまま）。1字だけの行はない
+  await page.setViewport({ width: 1280, height: 480 })
+  await wait(600)
+  await ready()
+  await showTable(page, ready, ID)
+  await page.evaluate(() => window.__editor.openWhenReady('m1:name', 0))
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'm1:name', { timeout: 10000 }).catch(() => {})
+  await wait(400)
+  const low = await measure()
+  await page.screenshot({ path: `${OUT_FIT}/e2e-1280x480-scroll.png` })
+  await page.evaluate(() => window.__editor.finishEditing())
+  check(
+    'パソコン（1280×480 のとても低い画面）：左の道具の中を上下に動かす棒が出ても、中身は狭まらない（72px のまま）。1字だけの行はない',
+    low.scrolls && low.inner === 72 && low.head === 72 && low.lone.length === 0,
+    JSON.stringify(low),
+  )
+  await context.close()
 }

@@ -3,8 +3,9 @@ import { currentConfig } from '../config'
 import * as ops from '../editor/reportOps'
 import type { LayoutInfo } from '../layout/measure'
 import { demoReport } from '../model/demoReport'
+import { typedHeading } from '../model/headingText'
 import type { Report } from '../model/types'
-import { abstractCharCount, checkReport, checkReportDetailed } from './reportChecks'
+import { abstractCharCount, checkReport, checkReportDetailed, typedHeadingNumber } from './reportChecks'
 
 const layout = (over: Partial<LayoutInfo> = {}): LayoutInfo => ({
   kinds: [],
@@ -431,5 +432,58 @@ describe('作品写真が何ページかあるときの指摘（mockups/v38 案A
   it('1ページだけなら今までどおり（ページの番号を付けない）。どのページにも写真がなければ「作品写真を入れる」だけ', () => {
     expect(photoFindings([{ layout: 4, imageIds: ['a'] }])).toEqual([{ ruleId: 'photos-empty-slot', detail: '4枚の配置に1枚', photoPage: undefined }])
     expect(photoFindings([{ layout: 4, imageIds: [] }, { layout: 1, imageIds: [] }]).map((f) => f.ruleId)).toEqual(['photos-required'])
+  })
+})
+
+
+describe('本文の段落に、見出しの形で打っている途中（「Ⅲ．まとめ」。Enter・書き終えると見出しになる）', () => {
+  /**
+   * 段落 id を text にしたときの「機種依存文字を使わない」の字。
+   * typing：その段落を書いている途中（見出しになるときの名前は typedHeading。'declined' は「戻す」を押した後で、見出しにならない）。false は書き終えた後
+   */
+  const machine = (typed: string, typing: boolean | 'declined' = true, id = 'p5') => {
+    const r = ops.setText(cleanReport(), id, typed)
+    // 原稿の文字（書く欄の文字と同じ。reportEditor.ts の runChecks）
+    const text = ops.findEditable(r, id)?.text ?? ''
+    const t = typing ? { id, text, heading: typing === 'declined' ? null : typedHeading(text) } : null
+    return checkReportDetailed(r, currentConfig, layout(), t)
+      .findings.filter((f) => f.ruleId === 'machine-dependent' && f.blockId === id)
+      .map((f) => text.slice(f.start, f.end))
+  }
+
+  it('行の頭の番号（Ⅲ・ⅱ）には「機種依存文字を使わない」を出さない（見出しになると、番号は組版で付く）', () => {
+    expect(machine('Ⅲ．まとめ')).toEqual([])
+    expect(machine('ⅱ．袖の刺繍')).toEqual([])
+    expect(machine('　Ⅳ　制作を終えて')).toEqual([])
+    // 名前を打ち始める前（番号と区切りだけ）も、打っている途中なので出さない
+    expect(machine('Ⅲ')).toEqual([])
+    expect(machine('Ⅲ．')).toEqual([])
+    expect(machine('ⅱ')).toEqual([])
+  })
+
+  it('番号のほかの機種依存文字・見出しにならない文は、打っている途中でも指摘する', () => {
+    expect(machine('Ⅲ．①の工程')).toEqual(['①'])
+    // 見出しの名前に入る2つ目の番号（見出しになっても消えない）
+    expect(machine('Ⅲⅱ．まとめ')).toEqual(['ⅱ'])
+    expect(machine('Ⅲ．これは見出しではなく、文として書いたものである。')).toEqual(['Ⅲ'])
+    expect(machine('工程はⅢ段階に分けた。')).toEqual(['Ⅲ'])
+    // 見出しにしたのを「戻す」で段落に戻した文は、もう見出しにならない
+    expect(machine('Ⅲ．まとめ', 'declined')).toEqual(['Ⅲ'])
+  })
+
+  it('書き終えても段落のままなら・抄録の段落・提出前チェック（Word）は、今までどおり指摘する', () => {
+    expect(machine('Ⅲ．まとめ', false)).toEqual(['Ⅲ'])
+    expect(machine('Ⅲ．', false)).toEqual(['Ⅲ'])
+    expect(machine('Ⅲ．まとめ', true, 'a1')).toEqual(['Ⅲ'])
+    const r = ops.setText(cleanReport(), 'p5', 'Ⅲ．まとめ')
+    expect(checkReport(r, currentConfig, layout()).filter((f) => f.ruleId === 'machine-dependent').map((f) => f.blockId)).toEqual(['p5'])
+  })
+
+  it('見出しになると消える番号の終わりの位置（typedHeadingNumber）', () => {
+    expect(typedHeadingNumber('Ⅲ．まとめ', typedHeading('Ⅲ．まとめ'))).toBe(2)
+    expect(typedHeadingNumber('　Ⅳ　制作を終えて　', typedHeading('　Ⅳ　制作を終えて　'))).toBe(3)
+    expect(typedHeadingNumber('Ⅲ．', null)).toBe(2)
+    expect(typedHeadingNumber('Ⅲ．ま', null)).toBeNull()
+    expect(typedHeadingNumber('Ⅱⅱ', null)).toBeNull()
   })
 })
