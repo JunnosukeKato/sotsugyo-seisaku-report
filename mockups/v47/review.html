@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v47：低い画面の左の道具</title>
+<style>
+  body { margin: 0; padding: 26px 30px 34px; background: #f4f2ee; color: #2a2622; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; width: 1140px; box-sizing: border-box; }
+  h1 { margin: 0 0 6px; font-size: 24px; }
+  .lead { margin: 0 0 18px; font-size: 15px; color: #6b655d; line-height: 1.7; word-break: auto-phrase; }
+  .row { display: grid; grid-template-columns: 190px 1fr 1fr; gap: 16px; align-items: start; margin-bottom: 20px; padding: 14px 16px; border-radius: 14px; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08); }
+  .row.rec { box-shadow: 0 0 0 3px #2f3e75; }
+  .name { font-size: 18px; font-weight: 700; line-height: 1.45; word-break: auto-phrase; }
+  .name small { display: block; margin-top: 8px; font-size: 13.5px; font-weight: 400; line-height: 1.6; color: #6b655d; }
+  .tag { display: inline-block; margin-top: 10px; padding: 3px 10px; border-radius: 99px; background: #2f3e75; color: #fff; font-size: 13px; }
+  figure { margin: 0; font-size: 13px; color: #6b655d; text-align: center; }
+  figure img { display: block; width: 100%; border-radius: 8px; box-shadow: 0 0 0 1px #ddd8cf; }
+  figcaption { margin-top: 6px; word-break: auto-phrase; }
+  figcaption b { color: #c0392b; }
+  figcaption b.ok { color: #2e7d4f; }
+  .common { margin: 0 0 20px; padding: 14px 18px; border-radius: 14px; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08); font-size: 14.5px; line-height: 1.7; }
+  .common h2 { margin: 0 0 6px; font-size: 16px; }
+  .common ul { margin: 0; padding-left: 1.2em; }
+  .shift { display: grid; grid-template-columns: repeat(3, 150px); gap: 16px; margin-top: 10px; }
+</style>
+</head>
+<body>
+<h1>パソコンの低い画面（1280×586）：左の道具が窮屈</h1>
+<p class="lead">作品写真を選ぶと、道具が画面に入らず「元に戻す」などが隠れます。拡大のときは、左下の「‹」が道具に重なっていました。</p>
+
+<div class="row">
+  <div class="name">いま<small>写真を選ぶと4つのボタンが隠れる。拡大では「‹」が道具に重なる</small></div>
+  <figure><img src="shots/now-low-photo.png" alt=""><figcaption>作品写真：<b>4つ隠れる</b></figcaption></figure>
+  <figure><img src="shots/now-low-table.png" alt=""><figcaption>表（拡大）：<b>「‹」が重なる</b></figcaption></figure>
+</div>
+
+<div class="row">
+  <div class="name">案A<br>ひとことを隠す<small>低い画面では、道具の中の説明の文を出さない（ボタンに乗せると出る）</small></div>
+  <figure><img src="shots/a-low-photo.png" alt=""><figcaption>作品写真：<b>まだ2つ隠れる</b></figcaption></figure>
+  <figure><img src="shots/a-low-table.png" alt=""><figcaption>表（拡大）：<b class="ok">入る</b></figcaption></figure>
+</div>
+
+<div class="row">
+  <div class="name">案B<br>元に戻すを右下へ<small>「元に戻す」「やり直す」を、右下の「全体・見開き・拡大」の左へ</small></div>
+  <figure><img src="shots/b-low-photo.png" alt=""><figcaption>作品写真：<b>まだ2つ隠れる</b></figcaption></figure>
+  <figure><img src="shots/b-low-table.png" alt=""><figcaption>表（拡大）：<b class="ok">入る</b></figcaption></figure>
+</div>
+
+<div class="row rec">
+  <div class="name">案C<br>AとBの両方<small>どの道具も画面に入る</small><span class="tag">おすすめ</span></div>
+  <figure><img src="shots/c-low-photo.png" alt=""><figcaption>作品写真：<b class="ok">全部入る</b></figcaption></figure>
+  <figure><img src="shots/c-low-table.png" alt=""><figcaption>表（拡大）：<b class="ok">入る</b></figcaption></figure>
+</div>
+
+<div class="common">
+  <h2>どの案にも入れる直し</h2>
+  <ul>
+    <li>拡大・見開きのページ送り「‹ ›」は、右下にまとめる（道具に重ならない）</li>
+    <li>「この表」の「画像を入れる」は、いつも同じ所に出す（マスを書いていないときは薄く）。ボタンの位置がずれない</li>
+  </ul>
+  <div class="shift">
+    <figure><img src="shots/shift-cell.png" alt=""><figcaption>マスを書いている</figcaption></figure>
+    <figure><img src="shots/shift-caption-now.png" alt=""><figcaption>表を選ぶ（いま）：<b>下がずれる</b></figcaption></figure>
+    <figure><img src="shots/shift-caption-fixed.png" alt=""><figcaption>表を選ぶ（直す）：<b class="ok">ずれない</b></figcaption></figure>
+  </div>
+</div>
+</body>
+</html>

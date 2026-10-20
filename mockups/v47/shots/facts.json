@@ -1,0 +1,147 @@
+{
+  "low-table-now": {
+    "height": 547,
+    "shown": 549,
+    "room": 568,
+    "scrolls": false,
+    "overlap": true,
+    "hidden": []
+  },
+  "low-table-a": {
+    "height": 510,
+    "shown": 512,
+    "room": 568,
+    "scrolls": false,
+    "overlap": false,
+    "hidden": []
+  },
+  "low-table-b": {
+    "height": 487,
+    "shown": 489,
+    "room": 568,
+    "scrolls": false,
+    "overlap": false,
+    "hidden": []
+  },
+  "low-table-c": {
+    "height": 450,
+    "shown": 452,
+    "room": 568,
+    "scrolls": false,
+    "overlap": false,
+    "hidden": []
+  },
+  "low-photo-now": {
+    "height": 710,
+    "shown": 556,
+    "room": 568,
+    "scrolls": true,
+    "overlap": false,
+    "hidden": [
+      "写真の\nページを足す",
+      "この\nページを消す",
+      "元に戻す",
+      "やり直す"
+    ]
+  },
+  "low-photo-a": {
+    "height": 578,
+    "shown": 556,
+    "room": 568,
+    "scrolls": true,
+    "overlap": false,
+    "hidden": [
+      "元に戻す",
+      "やり直す"
+    ]
+  },
+  "low-photo-b": {
+    "height": 650,
+    "shown": 556,
+    "room": 568,
+    "scrolls": true,
+    "overlap": false,
+    "hidden": [
+      "写真の\nページを足す",
+      "この\nページを消す"
+    ]
+  },
+  "low-photo-c": {
+    "height": 518,
+    "shown": 520,
+    "room": 568,
+    "scrolls": false,
+    "overlap": false,
+    "hidden": []
+  },
+  "mid-table-now": {
+    "height": 547,
+    "shown": 549,
+    "room": 616,
+    "scrolls": false,
+    "overlap": true,
+    "hidden": []
+  },
+  "mid-table-a": {
+    "height": 510,
+    "shown": 512,
+    "room": 616,
+    "scrolls": false,
+    "overlap": false,
+    "hidden": []
+  },
+  "mid-table-b": {
+    "height": 487,
+    "shown": 489,
+    "room": 616,
+    "scrolls": false,
+    "overlap": false,
+    "hidden": []
+  },
+  "mid-table-c": {
+    "height": 450,
+    "shown": 452,
+    "room": 616,
+    "scrolls": false,
+    "overlap": false,
+    "hidden": []
+  },
+  "mid-photo-now": {
+    "height": 710,
+    "shown": 604,
+    "room": 616,
+    "scrolls": true,
+    "overlap": false,
+    "hidden": [
+      "この\nページを消す",
+      "元に戻す",
+      "やり直す"
+    ]
+  },
+  "mid-photo-a": {
+    "height": 578,
+    "shown": 580,
+    "room": 616,
+    "scrolls": false,
+    "overlap": false,
+    "hidden": []
+  },
+  "mid-photo-b": {
+    "height": 650,
+    "shown": 604,
+    "room": 616,
+    "scrolls": true,
+    "overlap": false,
+    "hidden": [
+      "この\nページを消す"
+    ]
+  },
+  "mid-photo-c": {
+    "height": 518,
+    "shown": 520,
+    "room": 616,
+    "scrolls": false,
+    "overlap": false,
+    "hidden": []
+  }
+}
