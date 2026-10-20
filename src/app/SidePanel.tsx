@@ -5,6 +5,8 @@ import type { ReportFinding } from '../checker/reportChecks'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import type { PageKind } from '../layout/measure'
 import { photoPageName } from '../model/photos'
+import { Spinner } from './Busy'
+import { useSlow } from './useBusy'
 import { Icon } from './icons'
 import { AREA_LABELS, AREA_ORDER, daysUntil, formatDeadline } from './labels'
 import { checkSummary, goToTarget } from './checkSummary'
@@ -504,6 +506,7 @@ export function Tally({ snap, config }: { snap: EditorSnapshot; config: YearConf
 }
 
 export function SidePanel({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onHelp, onWordImport, wordTodo }: Props) {
+  const exportSlow = useSlow(!!exporting)
   return (
     <aside className="side">
       <header className="side-head">
@@ -537,11 +540,12 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
       </section>
 
       <footer className="side-foot">
+        {/* 押したら、紙面を組み終えるまで（長い原稿では数秒）回る印と「確かめています…」。2秒を過ぎたら、下のひとことを「数秒かかることがあります」に */}
         <button className="export" disabled={(snap.rendering && !snap.layout) || exporting} onClick={onExport}>
-          {Icon.pdf}
+          {exporting ? <Spinner /> : Icon.pdf}
           {exporting ? '確かめています…' : 'PDFを書き出す'}
         </button>
-        <ExportNote snap={snap} config={config} />
+        {exportSlow ? <p className="export-note slow-note on">数秒かかることがあります</p> : <ExportNote snap={snap} config={config} />}
         <SourceNotice />
       </footer>
     </aside>

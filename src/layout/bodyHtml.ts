@@ -1,3 +1,4 @@
+import { colWidthsOf, equalColumnWidths } from '../model/table'
 import type { BodyBlock, Chapter, Figure, TableBlock, TableCell } from '../model/types'
 import { FONT_SIZE_PT, LETTER_SPACING_PT, reportCss } from './reportCss'
 import { equalRows, fitsLabel, ptText, type TableFits } from './tableFit'
@@ -129,7 +130,8 @@ function renderFigure(f: Figure, size: FigureSize, number: number, options: Body
  * 列の幅は「そろえる（同じ幅）」か「中身に合わせる」。
  * 行の高さを「そろえる」表は、見出しの行のほかの行に、組んだ紙面で測った高さを書く（tableFit.ts。測る前は中身に合わせた高さ）。
  * 左端の列を「中身に合わせる」表（列の幅が「そろえる」のときだけ）は、左端の列に、組んだ紙面で測った幅を書く（ほかの列は残りを同じ幅で分ける）。
- * どちらも、しない表の HTML は前と同じ（印の class も付けない）
+ * どちらも、しない表の HTML は前と同じ（印の class も付けない）。
+ * 列の幅を「自分で決める」表は、列ごとの幅（%）を colgroup に書く（table-layout: fixed。紙面・PDF・印刷とも同じ幅）
  */
 function renderTable(block: TableBlock, number: number, options: BodyRenderOptions): string {
   // 列の幅「中身に合わせる」：短い字のセルは折り返さない（.nw。reportCss.ts）
@@ -146,8 +148,14 @@ function renderTable(block: TableBlock, number: number, options: BodyRenderOptio
   const rows = equalRows(block)
   const label = fitsLabel(block)
   // 印の class（測る前の紙面も、「中身に合わせる」の紙面と別の文書になるように）
-  const classes = [`widths-${block.widths === 'auto' ? 'auto' : 'equal'}`, ...(rows ? ['heights-equal'] : []), ...(label ? ['label-column'] : [])].join(' ')
-  const colgroup = label && fit?.label ? `<colgroup><col style="width:${ptText(fit.label)}"></colgroup>` : ''
+  const widths = block.widths === 'auto' ? 'auto' : block.widths === 'custom' ? 'custom' : 'equal'
+  const classes = [`widths-${widths}`, ...(rows ? ['heights-equal'] : []), ...(label ? ['label-column'] : [])].join(' ')
+  const custom = widths === 'custom' ? (colWidthsOf(block) ?? equalColumnWidths(Math.max(1, ...block.rows.map((r) => r.cells.length)))) : null
+  const colgroup = custom
+    ? `<colgroup>${custom.map((w) => `<col style="width:${w}%">`).join('')}</colgroup>`
+    : label && fit?.label
+      ? `<colgroup><col style="width:${ptText(fit.label)}"></colgroup>`
+      : ''
   const tr = rows && fit?.row ? `<tr style="height:${ptText(fit.row)}">` : '<tr>'
   const thead = head ? `<thead><tr>${head.cells.map((c) => cellHtml(c, true)).join('')}</tr></thead>` : ''
   const tbody = `<tbody>${body.map((r) => `${tr}${r.cells.map((c) => cellHtml(c, false)).join('')}</tr>`).join('')}</tbody>`

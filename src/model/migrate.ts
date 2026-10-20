@@ -49,7 +49,9 @@ function migrateBlock(b: Raw): BodyBlock | null {
         type: 'table',
         id: idOf(b, 't'),
         caption: str(b.caption),
-        widths: b.widths === 'auto' ? 'auto' : 'equal',
+        widths: b.widths === 'auto' ? 'auto' : b.widths === 'custom' ? 'custom' : 'equal',
+        // 自分で決めた列の幅（数だけ。列の数と合うか・合計は、使うときに確かめる：model/table.ts の colWidthsOf）
+        ...(Array.isArray(b.colWidths) && b.colWidths.length > 0 && b.colWidths.every((v) => typeof v === 'number' && Number.isFinite(v) && v > 0) ? { colWidths: b.colWidths as number[] } : {}),
         // 行の高さ・左端の列：前の版の原稿にはないので、今までどおり（中身に合わせる・ほかの列とそろえる）
         heights: b.heights === 'equal' ? 'equal' : 'auto',
         ...(b.labelColumn === true ? { labelColumn: true } : {}),

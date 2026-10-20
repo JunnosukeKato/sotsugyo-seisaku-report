@@ -110,4 +110,15 @@ describe('表の行の高さ・左端の列（測って決める寸法）', () =
     const html = bodyContentHtml(chapters(table('t', { labelColumn: true })), { ...options, tableFits: { t: { label: 36.5 } } })
     expect(html).toContain('<table class="widths-equal label-column"><colgroup><col style="width:36.5pt"></colgroup><thead>')
   })
+
+  it('列の幅を「自分で決める」表：列ごとの幅（%）を colgroup に書く（決めた幅がない・数が合わないときは同じ幅）。左端の列・短い字の印は使わない', () => {
+    const html = bodyContentHtml(chapters(table('t', { widths: 'custom', colWidths: [70, 30], labelColumn: true })), { ...options, tableFits: { t: { label: 30 } } })
+    expect(html).toContain('<table class="widths-custom"><colgroup><col style="width:70%"><col style="width:30%"></colgroup><thead>')
+    expect(html).not.toContain('class="nw"')
+    expect(fitsLabel(table('t', { widths: 'custom', labelColumn: true }))).toBe(false)
+    const even = bodyContentHtml(chapters(table('t', { widths: 'custom', colWidths: [10, 20, 70] })), options)
+    expect(even).toContain('<colgroup><col style="width:50%"><col style="width:50%"></colgroup>')
+    // 自分で決めた幅を覚えていても、そろえる・中身に合わせるの表は、前と同じ HTML
+    expect(bodyContentHtml(chapters(table('t', { colWidths: [70, 30] })), options)).toContain('<table class="widths-equal"><thead>')
+  })
 })

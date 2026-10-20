@@ -542,6 +542,16 @@ export class DriveSync {
     this.timer = window.setTimeout(() => void this.flush(), delay)
   }
 
+  /**
+   * 「今すぐドライブに保存」：report（いまの原稿）を、待たずにドライブに送り、送り終えるまで待つ
+   * （送っている途中なら、それが終わってから。送るものがなければ、すぐ終わる）。
+   * 送れたかどうかは、終わったあとの保存のようす（getState().status）で分かる
+   */
+  async saveNow(report: Report): Promise<void> {
+    if (this.active && this.link && report.updatedAt !== this.link.syncedUpdatedAt) this.pending = report
+    await this.flush()
+  }
+
   /** 送っていない変更を、すぐドライブに送る */
   async flush(): Promise<void> {
     clearTimeout(this.timer)

@@ -195,14 +195,33 @@ describe('貼り付け', () => {
     expect(out.skippedChapters).toBe(true)
     expect(out.report.body.length).toBe(3)
   })
-  it('抄録には文だけを入れる（参照は、コピーしたときの番号の文字）', () => {
+  it('抄録には文だけを入れる（図表は入れないので、括弧で添えた参照「（図1）」は除く）', () => {
     const r = sample()
     const clip = copyRange(r, range(r, pt('p2', 0), pt('s3', 2)))
     const out = pasteClip(r, 'a3', 0, clip)
     expect(out.droppedForAbstract).toBe(true)
+    expect(out.removedRefs).toEqual(['（図1）'])
+    expect(out.keptRefs).toEqual([])
     const a = out.report.abstract.paragraphs
     expect(a.map((p) => p.content.every((n) => n.type === 'text'))).toEqual(a.map(() => true))
-    expect(a.some((p) => ops.contentToText(p.content, ops.numbering(out.report)).includes('（図1）'))).toBe(true)
+    const texts = a.map((p) => ops.contentToText(p.content, ops.numbering(out.report)))
+    expect(texts.some((t) => t.includes('図1'))).toBe(false)
+    expect(texts.some((t) => t.includes('デザインを考えた。キーワードは'))).toBe(true)
+  })
+  it('抄録：文の中の参照（「表1に」）は、番号の文字にして残し、書き直してもらう（keptRefs）', () => {
+    const r = sample()
+    const clip = copyRange(r, range(r, pt('p3', 0), pt('p3', 8)))
+    const out = pasteClip(r, 'a3', 0, clip)
+    expect(out.keptRefs).toEqual(['表1'])
+    expect(out.removedRefs).toEqual([])
+    expect(ops.contentToText(out.report.abstract.paragraphs.find((p) => p.id === 'a3')!.content, ops.numbering(out.report)).startsWith('表1に使用した')).toBe(true)
+  })
+  it('本文に貼り付けるときは、参照をそのまま入れる（除かない）', () => {
+    const r = sample()
+    const clip = copyRange(r, range(r, pt('p2', 30), pt('p2', 45)))
+    const out = pasteClip(r, 'p1', 0, clip)
+    expect(out.removedRefs).toEqual([])
+    expect(text(out.report, 'p1')).toContain('（図1）')
   })
   it('クリップボードの文字は、改行の違い・最後の改行を見ない', () => {
     expect(sameClipText('あ\r\nい\r\n', 'あ\nい')).toBe(true)

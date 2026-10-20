@@ -8,7 +8,10 @@ import { Icon } from './icons'
 import { SelectionTools } from './Palette'
 import { TableSizeSheet } from './TableSize'
 import { SHORT_SWITCH_NAMES, TABLE_SWITCHES } from './tableSwitches'
+import { WidthMenu } from './WidthMenu'
+import { cellPosition, colWidthsOf, columnCount, equalColumnWidths } from '../model/table'
 import { BackupLabel } from './dialogs'
+import { Spinner } from './Busy'
 import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, ExportNote, HelpButton, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
 import { checkSummary } from './checkSummary'
 import { keepFocus, PAGE_CONTEXT, pageName, useBandSide } from './uiShared'
@@ -162,7 +165,14 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
             <button onMouseDown={keepFocus} onClick={() => editor.removeTableColumn(tableId)}>
               {Icon.colRemove}列を消す
             </button>
-            {/* 列の幅・左端の列（列の幅が「そろえる」のときだけ）・行の高さ：押すたびに切り替える（いまの形を出す。例「幅：そろえる」） */}
+            {/* 列の幅：押すと小さな窓で3つから選ぶ（mockups/v42 案B）。自分で決めるのときは「幅をそろえ直す」も（列の幅は、紙面の丸いつまみで変える） */}
+            {table && <WidthMenu editor={editor} table={table} tableId={tableId} variant="sheet" />}
+            {table?.widths === 'custom' && (
+              <button onMouseDown={keepFocus} onClick={() => editor.resetTableColWidths(tableId)}>
+                {Icon.evenColumns}幅をそろえ直す
+              </button>
+            )}
+            {/* 左端の列（列の幅が「そろえる」のときだけ）・行の高さ：押すたびに切り替える（いまの形を出す。例「高さ：そろえる」） */}
             {table &&
               TABLE_SWITCHES.filter((sw) => sw.shown(table)).map((sw) => (
                 <button key={sw.key} title={sw.title(sw.on(table))} onMouseDown={keepFocus} onClick={() => sw.set(editor, tableId, !sw.on(table))}>
@@ -234,6 +244,8 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
   const tableBlock = tableId ? snap.report.body.flatMap((c) => c.blocks).find((b) => b.id === tableId) : undefined
   const table = tableBlock?.type === 'table' ? tableBlock : undefined
   const cellImage = !!tableId && snap.editingKind === 'tableCell' && editor.currentCellHasImage(tableId)
+  // 書いているマスの列（列の幅が「自分で決める」の表で、その列の幅を出す）
+  const column = table && id && snap.editingKind === 'tableCell' ? (cellPosition(table, id)?.column ?? null) : null
   const [tableSheet, setTableSheet] = useState(false)
   // 書く欄の中で戻せなければ、原稿を戻す（書く欄はいったん閉じ、欄が残っていれば、組み直してから開き直す。下の書く欄と同じ）
   const undoRedo = (typing: () => boolean, run: () => void) => {
@@ -301,8 +313,9 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
               {Icon.colRemove}
               <span>列を消す</span>
             </button>
-            {/* 列の幅・左端の列（列の幅が「そろえる」のときだけ）・行の高さ：押すたびに切り替える（いまの形を出す）。
+            {/* 列の幅：押すと小さな窓で3つから選ぶ（mockups/v42 案B）。左端の列（列の幅が「そろえる」のときだけ）・行の高さ：押すたびに切り替える（いまの形を出す）。
                 道具が画面の幅に入らなければ、この段だけ横にずらして見る（index.css の「表の行の高さ・左端の列」） */}
+            {table && <WidthMenu editor={editor} table={table} tableId={tableId} variant="direct" />}
             {table &&
               TABLE_SWITCHES.filter((sw) => sw.shown(table)).map((sw) => (
                 <button key={sw.key} className="db-width" title={sw.title(sw.on(table))} onMouseDown={keepFocus} onClick={() => sw.set(editor, tableId, !sw.on(table))}>
@@ -313,6 +326,22 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
             <button className="danger" onMouseDown={keepFocus} onClick={() => editor.removeTable(tableId)}>
               {Icon.remove}
               <span>表を削除</span>
+            </button>
+          </div>
+        )}
+        {/* 列の幅が「自分で決める」の表（mockups/v42 案D）：3段目に、一言・書いているマスの列の幅・「幅をそろえ直す」。幅は、紙面の丸いつまみで変える（editor/columnHandles.ts） */}
+        {tableId && table?.widths === 'custom' && (
+          <div className="db-row db-colw" aria-label="列の幅を変える">
+            <span className="db-khint">{column !== null ? '丸を左右に動かす' : 'マスを押して列を選ぶ'}</span>
+            {column !== null && (
+              <span className="db-pct">
+                <small>この列</small>
+                <b>{Math.round((colWidthsOf(table) ?? equalColumnWidths(columnCount(table)))[column] ?? 0)}%</b>
+              </span>
+            )}
+            <button className="db-reset" onMouseDown={keepFocus} onClick={() => editor.resetTableColWidths(tableId)}>
+              {Icon.evenColumns}
+              <span>幅をそろえ直す</span>
             </button>
           </div>
         )}
@@ -518,7 +547,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
           {PhoneIcon.check}チェック{errors > 0 && !snap.pageChecksPending && <i className="badge">{errors}</i>}
         </button>
         <button className="nav-pdf" onClick={onExport} disabled={exporting}>
-          {Icon.pdf}
+          {exporting ? <Spinner /> : Icon.pdf}
           {exporting ? '確認中…' : 'PDF'}
         </button>
       </nav>

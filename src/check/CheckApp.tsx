@@ -1,5 +1,7 @@
 import { Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import type { PDFDocumentProxy } from 'pdfjs-dist'
+import { BusyLabel, Spinner } from '../app/Busy'
+import { useSlow } from '../app/useBusy'
 import { Modal } from '../app/dialogs'
 import { useDialogFocus } from '../app/useDialogFocus'
 import { currentConfig, type YearConfig } from '../config'
@@ -840,12 +842,12 @@ export function CheckApp() {
     const pageKey = `${it.part}:${it.k}`
     const pin = pins.get(pageKey)
     const src = e.photos ? e.pageImages?.[it.k - 1] : e.thumbs[it.k - 1]
-    // 絵を作っている途中（まだ作っていない）か、作れなかった（白い紙のまま）
+    // 絵を作っている途中（まだ作っていない）か、作れなかった（白い紙のまま）。次に作るページ（now）には、回る小さな印を出す
     const tried = e.thumbs.length >= it.k
     const label = `${p.name}${pagesOf(e) > 1 ? ` ${it.k}ページ目` : ''}（全体の${it.no}ページ目）${pin ? `：指摘${pin.count}件` : ''}`
     const inner = (
       <>
-        {src ? <img src={src} alt="" /> : <i className={tried ? 'pg-blank' : 'pg-wait'} />}
+        {src ? <img src={src} alt="" /> : <i className={tried ? 'pg-blank' : `pg-wait${it.k === e.thumbs.length + 1 ? ' now' : ''}`} />}
         {pin && <i className={`pin${pin.error ? '' : ' w'}`}>{pin.count}</i>}
       </>
     )
@@ -1107,8 +1109,22 @@ export function CheckApp() {
 
 // ---- ファイルを入れる所 ----
 
+/**
+ * ファイルを入れる所。読んでいる間は、ボタンに回る印と「読んでいます…」を出し（押せない）、何個目かを出す。
+ * 2秒を過ぎたら「数秒かかることがあります」を足す（ページの多い PDF・写真は、スマホで数秒かかる。依頼者の要望 2026-10-20）
+ */
 function DropArea({ big, dragging, reading, onPick }: { big: boolean; dragging: boolean; reading: { done: number; total: number } | null; onPick: () => void }) {
-  const status = reading ? `読んでいます…（${reading.done} / ${reading.total}）` : null
+  const slow = useSlow(!!reading)
+  const status = reading ? (
+    <span className="d-busy">
+      ファイルを読んでいます（{Math.min(reading.done + 1, reading.total)} / {reading.total}）{slow && <span className="nb">数秒かかることがあります</span>}
+    </span>
+  ) : null
+  const button = (
+    <BusyLabel busy={!!reading} text="読んでいます…">
+      ファイルを選ぶ
+    </BusyLabel>
+  )
   if (big)
     return (
       <div className={`drop big${dragging ? ' over' : ''}`}>
@@ -1117,9 +1133,11 @@ function DropArea({ big, dragging, reading, onPick }: { big: boolean; dragging: 
           <span className="pc-only">ここにファイルを入れる</span>
           <span className="ph-only">ファイルを入れる</span>
         </b>
-        <p className="d-s">{status ?? 'Word・PDF・作品写真を、まとめて入れられます。名前はそのままで大丈夫です'}</p>
+        <p className="d-s" role="status">
+          {status ?? 'Word・PDF・作品写真を、まとめて入れられます。名前はそのままで大丈夫です'}
+        </p>
         <button type="button" className="btn primary" onClick={onPick} disabled={!!reading}>
-          ファイルを選ぶ
+          {button}
         </button>
       </div>
     )
@@ -1128,10 +1146,10 @@ function DropArea({ big, dragging, reading, onPick }: { big: boolean; dragging: 
       {I.up}
       <div className="d-x">
         <b>ファイルを足す・入れ替える</b>
-        <small>{status ?? '同じ場所に入れると、新しいものに替わります'}</small>
+        <small role="status">{status ?? '同じ場所に入れると、新しいものに替わります'}</small>
       </div>
       <button type="button" className="btn quiet" onClick={onPick} disabled={!!reading}>
-        ファイルを選ぶ
+        {button}
       </button>
     </div>
   )
@@ -1342,7 +1360,10 @@ function CheckPanel({ check, checking, empty, anyPdf, pdfCount, noWord, slots, e
           </>
         ) : check.findings.length === 0 ? (
           checking ? (
-            <p className="checking">確かめています…</p>
+            <p className="checking">
+              <Spinner />
+              確かめています…
+            </p>
           ) : readErrors.length > 0 ? null : (
             <p className="empty-ok">
               <Ok />
@@ -1365,7 +1386,12 @@ function CheckPanel({ check, checking, empty, anyPdf, pdfCount, noWord, slots, e
                 <span className="nb">（ページが分かるとき）</span>
               </p>
             )}
-            {checking && <p className="checking">確かめ直しています…</p>}
+            {checking && (
+              <p className="checking">
+                <Spinner />
+                確かめ直しています…
+              </p>
+            )}
             {list}
           </>
         )}
@@ -1405,6 +1431,7 @@ interface MergeBarProps {
 }
 
 function MergeBar({ fileName, placeholder, ready, empty, anyPdf, totalPages, missing, errors, hasWord, merging, failure, ask, manual, onManual, onMerge }: MergeBarProps) {
+  const mergeSlow = useSlow(merging)
   let small: ReactNode = `${totalPages}ページ${missing.length ? `（${missing.join('・')}はまだ）` : ''}`
   let note: ReactNode = null
   if (empty) {
@@ -1421,6 +1448,8 @@ function MergeBar({ fileName, placeholder, ready, empty, anyPdf, totalPages, mis
       </p>
     )
   else if (!hasWord) note = <p className="m-note warn">チェックなしで、まとめます</p>
+  // まとめている間：ボタンに回る印と「まとめています…」。2秒を過ぎたら、ボタンの横のひとことを「数秒かかることがあります」に
+  if (mergeSlow) note = <p className="m-note slow-note on">数秒かかることがあります</p>
   const asking = ask && (ask.studentId || ask.name)
   return (
     <footer className={`merge${anyPdf ? '' : ' wait'}`}>
@@ -1454,7 +1483,7 @@ function MergeBar({ fileName, placeholder, ready, empty, anyPdf, totalPages, mis
         <span className="spacer" />
         {note}
         <button type="button" className="btn primary big" disabled={!ready} onClick={onMerge}>
-          {I.pdf}
+          {merging ? <Spinner /> : I.pdf}
           {merging ? 'まとめています…' : '1つの PDF にまとめる'}
         </button>
       </div>

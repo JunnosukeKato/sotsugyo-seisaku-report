@@ -5,22 +5,44 @@ import { formatReference, halfDigits, yearDigits } from '../layout/document'
 import { referenceFilled, referencesChanged } from '../model/references'
 import type { Snapshot } from '../model/storage'
 import type { Reference, Report } from '../model/types'
+import { BusyLabel, SlowNote, Spinner } from './Busy'
+import { useBusy, useDoneNote } from './useBusy'
 import { Icon } from './icons'
 import { useDialogFocus } from './useDialogFocus'
 
 /**
  * 画面の上に出す窓。keepOpen：窓の外を押しても Esc でも閉じない（書きかけの内容が消えないように。閉じるのは「×」とボタンだけ）。
- * className：窓の幅などを、窓ごとに変えるとき。heading：見出しに印（✓ など）を付けるとき（title は読み上げの名前）
+ * className：窓の幅などを、窓ごとに変えるとき。heading：見出しに印（✓ など）を付けるとき（title は読み上げの名前）。
+ * busy：窓の中で押したボタンの働きを待っている間（「×」も押せず、窓の外を押しても Esc でも閉じない。途中で閉じて、どうなったか分からなくならないように）
  */
-export function Modal({ title, heading, onClose, children, wide, keepOpen, className }: { title: string; heading?: ReactNode; onClose: () => void; children: ReactNode; wide?: boolean; keepOpen?: boolean; className?: string }) {
+export function Modal({
+  title,
+  heading,
+  onClose,
+  children,
+  wide,
+  keepOpen,
+  className,
+  busy = false,
+}: {
+  title: string
+  heading?: ReactNode
+  onClose: () => void
+  children: ReactNode
+  wide?: boolean
+  keepOpen?: boolean
+  className?: string
+  busy?: boolean
+}) {
   const ref = useRef<HTMLDivElement>(null)
-  useDialogFocus(ref, keepOpen ? undefined : onClose)
+  const stay = keepOpen || busy
+  useDialogFocus(ref, stay ? undefined : onClose)
   return (
-    <div className="modal-backdrop" onMouseDown={(e) => !keepOpen && e.target === e.currentTarget && onClose()}>
-      <div className={`modal${wide ? ' wide' : ''}${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-label={title} ref={ref}>
+    <div className="modal-backdrop" onMouseDown={(e) => !stay && e.target === e.currentTarget && onClose()}>
+      <div className={`modal${wide ? ' wide' : ''}${className ? ` ${className}` : ''}`} role="dialog" aria-modal="true" aria-label={title} aria-busy={busy || undefined} ref={ref}>
         <header>
           <h2>{heading ?? title}</h2>
-          <button className="close" onClick={onClose} aria-label="閉じる">
+          <button className="close" onClick={onClose} disabled={busy} aria-label="閉じる">
             ×
           </button>
         </header>
@@ -74,21 +96,27 @@ export function CourseMenu({ config, rect, current, onSelect, onClose }: { confi
 // 書いた本文が消える「下書きを入れ替える」は目立たせず、本文を残す「コース名だけ変える」を濃いボタンにして、開いたときもそこに移す
 // （Enter でうっかり入れ替えないように）。入れ替えたあとは、画面の下に「下書きを入れ替えました［戻す］」が出る
 
-export function CourseChangeDialog({ courseName, onReplace, onNameOnly, onClose }: { courseName: string; onReplace: () => void; onNameOnly: () => void; onClose: () => void }) {
+export function CourseChangeDialog({ courseName, onReplace, onNameOnly, onClose }: { courseName: string; onReplace: () => Promise<void> | void; onNameOnly: () => void; onClose: () => void }) {
+  // 「下書きを入れ替える」：いまの本文を控えに残してから入れ替える（控えを残す間は、ボタンに「入れ替えています…」）
+  const [busy, run] = useBusy<'replace'>()
   return (
-    <Modal title="コースを変えますか？" onClose={onClose}>
+    <Modal title="コースを変えますか？" onClose={onClose} busy={!!busy}>
       <p className="lead">
         「{courseName}」コースに変えます。「コース名だけ変える」なら、いま書いている本文はそのまま残ります。
         「下書きを入れ替える」は、本文を、そのコースのひな形（章立てと、書くことの説明）に入れ替えます（いまの本文は「自動の控え」に残すので、あとで「バックアップ・作り直す」から戻せます）。
       </p>
       <p className="muted">表紙の学籍番号・氏名・サブタイトル、抄録、引用・参考文献、作品写真は、どちらでもそのまま残ります。</p>
       <div className="row-buttons">
-        <button onClick={onClose}>やめる</button>
-        <span className="spacer" />
-        <button className="course-replace" onClick={onReplace}>
-          下書きを入れ替える
+        <button onClick={onClose} disabled={!!busy}>
+          やめる
         </button>
-        <button className="primary course-keep" data-autofocus onClick={onNameOnly}>
+        <span className="spacer" />
+        <button className="course-replace" disabled={!!busy} onClick={() => void run('replace', onReplace)}>
+          <BusyLabel busy={busy === 'replace'} text="入れ替えています…">
+            下書きを入れ替える
+          </BusyLabel>
+        </button>
+        <button className="primary course-keep" data-autofocus disabled={!!busy} onClick={onNameOnly}>
           コース名だけ変える
         </button>
       </div>
@@ -149,8 +177,10 @@ function Field({
  * 前は、4冊書いたあと「×」を押すと、確かめずに閉じて、書いた内容がすべて消えていた。
  * 並べ方は、本文を書き始めてからコースを変えるときの窓（CourseChangeDialog）と同じ：戻る方を左、消える方は目立たせず、残す方を濃いボタンに
  */
-export function ReferencesDialog({ report, onSave, onClose }: { report: Report; onSave: (refs: Reference[]) => void; onClose: () => void }) {
+export function ReferencesDialog({ report, onSave, onClose }: { report: Report; onSave: (refs: Reference[]) => Promise<void> | void; onClose: () => void }) {
   const [refs, setRefs] = useState<Reference[]>(report.references)
+  // 「反映する」：紙面を組み直し終えるまで、窓に「反映しています…」を出してから閉じる（前は、閉じてから紙面が変わるまで何も出なかった）
+  const [busy, run] = useBusy<'save'>()
   // 閉じる前に聞いているところ（書いた内容を反映せずに閉じるか）
   const [asking, setAsking] = useState(false)
   const keepRef = useRef<HTMLButtonElement>(null)
@@ -164,16 +194,17 @@ export function ReferencesDialog({ report, onSave, onClose }: { report: Report; 
     askedOnce.current ||= asking
   }, [asking])
   const update = (id: string, patch: Partial<Reference>) => setRefs(refs.map((r) => (r.id === id ? ({ ...r, ...patch } as Reference) : r)))
-  const save = () => {
-    // 出版年は、変換の途中で押されても半角の数字にそろえる
-    onSave(refs.map((r) => (r.type === 'book' ? { ...r, year: yearDigits(r.year) } : r)))
-    onClose()
-  }
+  const save = () =>
+    void run('save', async () => {
+      // 出版年は、変換の途中で押されても半角の数字にそろえる
+      await onSave(refs.map((r) => (r.type === 'book' ? { ...r, year: yearDigits(r.year) } : r)))
+      onClose()
+    })
   // 「×」「やめる」：書いた内容が反映してある内容と違えば、閉じる前に聞く（何も変えていなければ、すぐ閉じる）
   const tryClose = () => (referencesChanged(report.references, refs) ? setAsking(true) : onClose())
   return (
     // 書きかけの内容が消えないよう、窓の外を押しても Esc でも閉じない（「×」と「やめる」「反映する」だけ。「×」「やめる」は、書いた内容があれば聞いてから閉じる）
-    <Modal title="引用・参考文献" onClose={tryClose} wide keepOpen>
+    <Modal title="引用・参考文献" onClose={tryClose} wide keepOpen busy={!!busy}>
       <p className="lead">
         項目を埋めると、手順書の書き方（著者名、『書名』、出版社、出版年）に自動で整えます。なくても構いません。本文の後に改ページして載ります。
       </p>
@@ -224,29 +255,40 @@ export function ReferencesDialog({ report, onSave, onClose }: { report: Report; 
             書いた内容を反映せずに閉じますか？
           </p>
           <div className="row-buttons">
-            <button onClick={() => setAsking(false)}>戻る</button>
+            <button onClick={() => setAsking(false)} disabled={!!busy}>
+              戻る
+            </button>
             <span className="spacer" />
-            <button className="ref-discard" onClick={onClose}>
+            <button className="ref-discard" onClick={onClose} disabled={!!busy}>
               反映せずに閉じる
             </button>
-            <button className="primary ref-keep" ref={keepRef} onClick={save}>
-              反映して閉じる
+            <button className="primary ref-keep" ref={keepRef} onClick={save} disabled={!!busy}>
+              <BusyLabel busy={!!busy} text="反映しています…">
+                反映して閉じる
+              </BusyLabel>
             </button>
           </div>
         </div>
       ) : (
         <div className="row-buttons">
-          <button onClick={() => setRefs([...refs, emptyReference('book')])}>＋ 書籍を追加</button>
-          <button onClick={() => setRefs([...refs, emptyReference('web')])}>＋ Webサイトを追加</button>
+          <button onClick={() => setRefs([...refs, emptyReference('book')])} disabled={!!busy}>
+            ＋ 書籍を追加
+          </button>
+          <button onClick={() => setRefs([...refs, emptyReference('web')])} disabled={!!busy}>
+            ＋ Webサイトを追加
+          </button>
           <span className="spacer" />
-          <button ref={cancelRef} onClick={tryClose}>
+          <button ref={cancelRef} onClick={tryClose} disabled={!!busy}>
             やめる
           </button>
-          <button className="primary" onClick={save}>
-            反映する
+          <button className="primary" onClick={save} disabled={!!busy}>
+            <BusyLabel busy={!!busy} text="反映しています…">
+              反映する
+            </BusyLabel>
           </button>
         </div>
       )}
+      <SlowNote busy={!!busy} className="row-note" />
     </Modal>
   )
 }
@@ -271,6 +313,12 @@ export function BackupLabel() {
   )
 }
 
+/**
+ * 押したボタンの働き（時間がかかるもの）。終わるまで、そのボタンに回る印と言葉を出し、ほかのボタンと「閉じる」は押せなくする
+ * （依頼者の要望 2026-10-20。写真の多い原稿では、バックアップファイルを作る・読むのに数秒かかり、前は何も出なかった）
+ */
+type BackupBusy = 'save' | 'file' | 'startOver' | `snap:${string}`
+
 export function BackupDialog({
   snapshots,
   driveStopped = false,
@@ -280,31 +328,57 @@ export function BackupDialog({
   onStartOver,
   onClose,
 }: {
-  snapshots: Snapshot[]
+  /** 自動の控え（読み込んでいる間は null。窓はすぐ開き、一覧の所に「控えを読み込んでいます…」） */
+  snapshots: Snapshot[] | null
   /** 管理ページでドライブ保存を止めている（説明の文を、この端末にだけ保存される、に変える） */
   driveStopped?: boolean
-  onSaveBackup: () => void
-  onRestoreFile: (file: File) => void
-  onRestoreSnapshot: (s: Snapshot) => void
-  onStartOver: () => void
+  /** バックアップファイルを作って保存する（保存の画面に渡したら終わる） */
+  onSaveBackup: () => Promise<void> | void
+  /** 選んだバックアップファイルで置き換える（読んで、確かめて、置き換え終えたら終わる。やめたときも終わる） */
+  onRestoreFile: (file: File) => Promise<void> | void
+  onRestoreSnapshot: (s: Snapshot) => Promise<void> | void
+  onStartOver: () => Promise<void> | void
   onClose: () => void
 }) {
   const fileRef = useRef<HTMLInputElement>(null)
   const startOverId = useId()
+  const [busy, run] = useBusy<BackupBusy>()
+  // バックアップファイルを保存したあとの「✓ 保存しました」（少しの間だけ）
+  const [done, showDone] = useDoneNote()
+  const off = !!busy
   return (
-    <Modal title={BACKUP_TITLE} onClose={onClose} className="backup-modal">
+    <Modal title={BACKUP_TITLE} onClose={onClose} className="backup-modal" busy={off}>
       <p className="lead">
         {driveStopped
           ? '原稿は、書くたびに（書くのをやめて約1秒後に）このブラウザの中へ自動で保存されます。いまはドライブへの保存を止めているため（学科の判断）、原稿はこの端末にだけ保存されます。バックアップファイルは、念のための控えとして、ときどき保存しておくと安心です。'
           : '原稿は、書くたびに（書くのをやめて約1秒後に）このブラウザの中へ自動で保存され、大学のアカウントでログインしているあいだは Google ドライブにも保存されます（別の端末では、ログインすると続きが開きます）。バックアップファイルは、念のための控えとして、ときどき保存しておくと安心です。'}
       </p>
       <div className="backup-actions">
-        <button className="primary" onClick={onSaveBackup}>
-          バックアップファイルを保存
+        <button
+          className="primary backup-save"
+          disabled={off}
+          onClick={() =>
+            void run('save', async () => {
+              showDone(null)
+              try {
+                await onSaveBackup()
+                showDone('保存しました（「ダウンロード」のフォルダ）')
+              } catch (e) {
+                // 作れなかったわけを出す（前は、何も出ずに終わっていた）
+                alert(`バックアップファイルを保存できませんでした。\n${e instanceof Error ? e.message : String(e)}`)
+              }
+            })
+          }
+        >
+          <BusyLabel busy={busy === 'save'} text="保存しています…">
+            バックアップファイルを保存
+          </BusyLabel>
         </button>
         {/* キーボードでも選べるよう、ふつうのボタンからファイルを選ぶ画面を開く */}
-        <button className="file-button" onClick={() => fileRef.current?.click()}>
-          バックアップファイルから復元
+        <button className="file-button" disabled={off} onClick={() => fileRef.current?.click()}>
+          <BusyLabel busy={busy === 'file'} text="読み込んでいます…">
+            バックアップファイルから復元
+          </BusyLabel>
         </button>
         <input
           ref={fileRef}
@@ -315,12 +389,36 @@ export function BackupDialog({
             const file = e.target.files?.[0]
             // 選んだファイルを空に戻す（確かめる画面で「キャンセル」したあと、同じファイルを選び直せるように）
             e.target.value = ''
-            if (file) onRestoreFile(file)
+            if (file) {
+              showDone(null)
+              void run('file', () => onRestoreFile(file))
+            }
           }}
         />
       </div>
+      {done && (
+        <p className="done-note" role="status">
+          <span className="done-ok" aria-hidden="true">
+            {Icon.check}
+          </span>
+          {/* 狭い画面では「（」の前で折り返す（1字だけ次の行に残らないように） */}
+          <span>
+            {done.split(/(?=（)/).map((part) => (
+              <span key={part} className="nb">
+                {part}
+              </span>
+            ))}
+          </span>
+        </p>
+      )}
+      <SlowNote busy={busy === 'save' || busy === 'file'} />
       <h3>自動の控え（誤って消したときに戻せる版。10分ごとに残します）</h3>
-      {snapshots.length === 0 ? (
+      {snapshots === null ? (
+        <p className="muted busy-line" role="status">
+          <Spinner />
+          控えを読み込んでいます…
+        </p>
+      ) : snapshots.length === 0 ? (
         <p className="muted">まだ控えはありません。</p>
       ) : (
         <ul className="snapshots">
@@ -331,23 +429,38 @@ export function BackupDialog({
                 {new Date(s.savedAt).toLocaleString('ja-JP')}
                 {s.label && `（${s.label}）`}
               </span>
-              <button onClick={() => onRestoreSnapshot(s)}>この時点に戻す</button>
+              <button disabled={off} onClick={() => void run(`snap:${s.savedAt}`, () => onRestoreSnapshot(s), { paintFirst: false })}>
+                <BusyLabel busy={busy === `snap:${s.savedAt}`} text="戻しています…">
+                  この時点に戻す
+                </BusyLabel>
+              </button>
             </li>
           ))}
         </ul>
       )}
+      <SlowNote busy={!!busy?.startsWith('snap:')} />
       <section className="start-over" aria-labelledby={startOverId}>
         <h3 id={startOverId}>最初から作り直す（新しく始める）</h3>
         <div className="start-over-row">
           <p>いまの原稿は自動の控えに残ります</p>
-          <button className="danger" onClick={onStartOver}>
-            {Icon.restart}最初から作り直す
+          <button className="danger" disabled={off} onClick={() => void run('startOver', onStartOver, { paintFirst: false })}>
+            {busy === 'startOver' ? (
+              <>
+                <Spinner />
+                作り直しています…
+              </>
+            ) : (
+              <>{Icon.restart}最初から作り直す</>
+            )}
           </button>
         </div>
+        <SlowNote busy={busy === 'startOver'} />
       </section>
       <div className="row-buttons close-row">
         <span className="spacer" />
-        <button onClick={onClose}>閉じる</button>
+        <button onClick={onClose} disabled={off}>
+          閉じる
+        </button>
       </div>
     </Modal>
   )

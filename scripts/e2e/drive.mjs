@@ -4,6 +4,7 @@
 import { readFileSync } from 'node:fs'
 import { withEdge } from '../poc/edge.mjs'
 import { fakeDrive, routeGoogle } from './fakeGoogle.mjs'
+import { waitingDrive } from './waiting.mjs'
 
 const results = []
 const check = (name, ok, detail = '') => {
@@ -592,6 +593,9 @@ await withEdge(async (browser) => {
 
   await phone.context.close()
   await pc.context.close()
+
+  // ---- 待つ間の表示（ログイン・今すぐドライブに保存・読み込み直す。別のアカウントの偽物のドライブで。依頼者の要望 2026-10-20。scripts/e2e/waiting.mjs） ----
+  await waitingDrive(browser, check)
 })
 
 const failed = results.filter((r) => !r.ok)

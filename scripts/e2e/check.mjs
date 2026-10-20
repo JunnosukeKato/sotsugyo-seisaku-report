@@ -8,6 +8,7 @@ import { resolve } from 'node:path'
 import { PDFDocument } from 'pdf-lib'
 import { getDocument, OPS } from 'pdfjs-dist/legacy/build/pdf.mjs'
 import { withEdge } from '../poc/edge.mjs'
+import { busyResult, clickBusy, setSlow, slowDown, startBusy, throttle, watchBusy } from './busyWatch.mjs'
 import { stubConfig } from './configStub.mjs'
 import { png } from './fixtures/docx.mjs'
 
@@ -15,6 +16,9 @@ const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const FIX = 'scripts/e2e/fixtures'
 const OUT = 'poc-output/check'
 mkdirSync(OUT, { recursive: true })
+/** 待つ間の表示の画面の写真（scripts/e2e/waiting.mjs と同じ置き場所） */
+const WAITING = 'poc-output/waiting'
+mkdirSync(WAITING, { recursive: true })
 /** まとめた PDF の置き場所（毎回空にする） */
 const DOWNLOADS = `${OUT}/downloads`
 const FILE_NAME = '00ZZ0123_文化花子.pdf'
@@ -145,6 +149,9 @@ async function open(browser, viewport, label) {
   const page = await context.newPage()
   await noHotReload(page)
   await stubConfig(page)
+  // 待つ間の画面を撮るため、ファイルを読む処理を遅くできるようにする（ふだんは遅くしない。busyWatch.mjs）
+  await slowDown(page)
+  await throttle(page)
   const done = watch(page, label)
   await (await page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'allow', downloadPath: resolve(DOWNLOADS), browserContextId: context.id })
   await page.setViewport(viewport)
@@ -200,8 +207,19 @@ await withEdge(async (browser) => {
     check('PDF だけのとき：「Word を入れていないので、チェックしていません」と出し、PDF から分かることは確かめる', pdfOnly.unchecked === 'Word を入れていないので、チェックしていません' && pdfOnly.oks.some((t) => t.includes('抄録のページの数')) && pdfOnly.oks.some((t) => t.includes('どのページも A4')) && pdfOnly.issues.some((t) => t.startsWith('本文はA4で5ページ以上にする')), JSON.stringify(pdfOnly))
     check('名前で分からない PDF（scan_0001.pdf）は、1ページ目の「目次」で目次に入る。ページの絵が6枚できる', pdfOnly.toc.some((t) => t.includes('scan_0001.pdf')) && pdfOnly.thumbs === 6, JSON.stringify(pdfOnly.toc))
 
-    // ---- Word を入れる ----
-    await put(page, WORDS)
+    // ---- Word を入れる（読んでいる間は、ボタンに回る印と「読んでいます…」。何個目か。2秒を過ぎたら「数秒かかることがあります」。依頼者の要望 2026-10-20） ----
+    await watchBusy(page, '.drop .btn')
+    await setSlow(page, 900)
+    await startBusy(page)
+    await drop(page, WORDS)
+    await wait(2300)
+    const reading = await page.evaluate(() => document.querySelector('.drop .d-busy')?.textContent ?? '')
+    await page.screenshot({ path: `${WAITING}/check-reading-pc.png` })
+    await setSlow(page, 0)
+    await page.waitForFunction((names) => names.every((n) => [...document.querySelectorAll('.pf .fname')].some((x) => x.textContent === n)), { timeout: 120000, polling: 100 }, WORDS.map((f) => f.name))
+    await settled(page)
+    const readBusy = await busyResult(page)
+    check('ファイルを入れると、すぐ（100ms 以内）「ファイルを選ぶ」に回る印と「読んでいます…」が出て押せない。何個目か（◯ / 4）を出し、2秒を過ぎたら「数秒かかることがあります」', readBusy.delay !== null && readBusy.delay <= 100 && readBusy.disabled === true && readBusy.label === '読んでいます…' && /^ファイルを読んでいます（\d \/ 4）数秒かかることがあります$/.test(reading), JSON.stringify({ ...readBusy, reading }))
     const loaded = await page.evaluate(() => ({
       abstract: [...document.querySelectorAll('[aria-label="抄録"] .pf')].map((x) => x.textContent),
       groups: [...document.querySelectorAll('.igroup .ig-h')].map((x) => x.firstChild.textContent),
@@ -355,8 +373,17 @@ await withEdge(async (browser) => {
     await page.click('.merge .btn.big')
     await page.waitForSelector('.modal.confirm')
     const sub2 = await page.evaluate(() => document.querySelector('.modal.confirm .cf-sub')?.textContent ?? null)
-    await page.evaluate(() => document.querySelector('.modal.confirm .go-merge').click())
+    // まとめている間は、ボタンに回る印と「まとめています…」。2秒を過ぎたら「数秒かかることがあります」（依頼者の要望 2026-10-20。待つ間の画面を撮るため、PDF を読むのを遅くする）
+    await watchBusy(page, '.merge .btn.big')
+    await setSlow(page, 1200)
+    await clickBusy(page, '.modal.confirm .go-merge')
+    await wait(2300)
+    const merging = await page.evaluate(() => document.querySelector('.merge .m-note.slow-note')?.textContent ?? '')
+    await page.screenshot({ path: `${WAITING}/check-merge-pc.png` })
+    await setSlow(page, 0)
     await page.waitForSelector('.c-saved', { timeout: 60000 })
+    const mergeBusy = await busyResult(page)
+    check('「このまままとめる」を押すと、すぐ（100ms 以内）「1つの PDF にまとめる」に回る印と「まとめています…」が出て押せない。2秒を過ぎたら、ボタンの横に「数秒かかることがあります」', mergeBusy.delay !== null && mergeBusy.delay <= 100 && mergeBusy.disabled === true && mergeBusy.label === 'まとめています…' && merging === '数秒かかることがあります', JSON.stringify({ ...mergeBusy, merging }))
     const saved = await savedPdf(FILE_NAME)
     await settled(page)
     const result = await page.evaluate(() => ({ title: document.querySelector('.c-saved .r-title')?.textContent, file: document.querySelector('.c-saved .pdf-file b')?.textContent, small: document.querySelector('.c-saved .pdf-file small')?.textContent, bar: !!document.querySelector('.merge'), focus: document.activeElement?.classList.contains('c-saved') }))
@@ -466,8 +493,16 @@ await withEdge(async (browser) => {
     await page.click('.merge .btn.big')
     await page.waitForSelector('.modal.confirm')
     await page.screenshot({ path: `${OUT}/c2-confirm-ph.png` })
-    await page.evaluate(() => document.querySelector('.modal.confirm .go-merge').click())
+    await watchBusy(page, '.merge .btn.big')
+    await setSlow(page, 1200)
+    await clickBusy(page, '.modal.confirm .go-merge')
+    await wait(2300)
+    const phoneMerging = await page.evaluate(() => ({ slow: document.querySelector('.merge .m-note.slow-note')?.textContent ?? '', h: Math.round(document.querySelector('.merge .btn.big').getBoundingClientRect().height), hscroll: document.documentElement.scrollWidth > innerWidth }))
+    await page.screenshot({ path: `${WAITING}/check-merge-phone.png` })
+    await setSlow(page, 0)
     await page.waitForSelector('.c-saved, .c2-saved', { timeout: 60000 })
+    const phoneMerge = await busyResult(page)
+    check('スマホ：「このまままとめる」を押すと、すぐ「1つの PDF にまとめる」に回る印と「まとめています…」（ボタンは高さ 44px 以上）。2秒を過ぎたら「数秒かかることがあります」', phoneMerge.delay !== null && phoneMerge.delay <= 100 && phoneMerge.disabled === true && phoneMerge.label === 'まとめています…' && phoneMerging.slow === '数秒かかることがあります' && phoneMerging.h >= 44 && !phoneMerging.hscroll, JSON.stringify({ ...phoneMerge, ...phoneMerging }))
     const saved = await savedPdf(FILE_NAME)
     await settled(page)
     await page.screenshot({ path: `${OUT}/c2-done-ph.png`, fullPage: true })

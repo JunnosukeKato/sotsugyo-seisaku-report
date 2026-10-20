@@ -4,7 +4,8 @@ import { PHOTO_ARRANGEMENTS, photoGrid, photoPageName } from '../model/photos'
 import { SELECTION_TEXTS } from '../editor/selectionBar'
 import { Icon } from './icons'
 import { TableSizeMenu } from './TableSize'
-import { TABLE_SWITCHES, twoLines } from './tableSwitches'
+import { TABLE_SWITCHES, twoLines, WIDTH_CHOICES, widthTitle } from './tableSwitches'
+import { WidthMenu } from './WidthMenu'
 import { keepFocus, PAGE_CONTEXT, TOC_PALETTE_NOTE } from './uiShared'
 
 /** マウスの指の絵（目次の行を押せること。mockups/v41 案C） */
@@ -333,8 +334,10 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
         {phone ? (
           // スマホの下の道具：「そろえる」「中身に合わせる」を2つ並べると、指で押すには小さすぎた（高さ 21px）。
           // 書く欄の道具と同じく、いまの幅を出すボタン1つにして、押すたびに切り替える（高さ 44px 以上。index.css）。
-          // 「左端の列」（列の幅が「そろえる」のときだけ）・「行の高さ」も同じ形。道具が画面の幅に入らなければ、横にずらして見る（index.css の「表の行の高さ・左端の列」）
+          // 「左端の列」（列の幅が「そろえる」のときだけ）・「行の高さ」も同じ形。道具が画面の幅に入らなければ、横にずらして見る（index.css の「表の行の高さ・左端の列」）。
+          // 「列の幅」は、押すと小さな窓で3つから選ぶ（mockups/v42 案B。tableSwitches.tsx の WidthMenu）
           <>
+            <WidthMenu editor={editor} table={table} tableId={tableId} variant="sel" />
             {TABLE_SWITCHES.filter((sw) => sw.shown(table)).map((sw) => {
               const on = sw.on(table)
               return (
@@ -348,7 +351,38 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
           </>
         ) : (
           <>
-            {/* 列の幅・左端の列（列の幅が「そろえる」のときだけ）・行の高さ：2つのボタンから選ぶ。押すと切り替わるほうのボタンに、いまの形と、押すとどうなるかを出す */}
+            {/* 列の幅：3つを縦に並べる（mockups/v42）。押すと切り替わるボタンに、いまの形と、押すとどうなるかを出す */}
+            <div className="ctx-label sub">列の幅</div>
+            <div className="seg" role="group" aria-label="列の幅">
+              {WIDTH_CHOICES.map((c) => (
+                <button
+                  key={c.value}
+                  className={table.widths === c.value ? 'on' : ''}
+                  aria-pressed={table.widths === c.value}
+                  title={widthTitle(table, c.value)}
+                  onMouseDown={keepFocus}
+                  onClick={() => editor.setTableWidths(tableId, c.value)}
+                >
+                  {c.name}
+                </button>
+              ))}
+            </div>
+            {/* 自分で決める：表の縦の線をドラッグして幅を変える（editor/columnHandles.ts）。「幅をそろえ直す」で同じ幅に（自分で決めるのまま） */}
+            {table.widths === 'custom' && (
+              <>
+                <p className="ctx-hint custom-hint">
+                  <span>縦の線を</span>
+                  <span>ドラッグして</span>
+                  <span>幅を変える</span>
+                </p>
+                <div className="seg">
+                  <button className="reset-widths" title="どの列も同じ幅にする（自分で決めるのまま）" onMouseDown={keepFocus} onClick={() => editor.resetTableColWidths(tableId)}>
+                    幅をそろえ直す
+                  </button>
+                </div>
+              </>
+            )}
+            {/* 左端の列（列の幅が「そろえる」のときだけ）・行の高さ：2つのボタンから選ぶ。押すと切り替わるほうのボタンに、いまの形と、押すとどうなるかを出す */}
             {TABLE_SWITCHES.filter((sw) => sw.shown(table)).map((sw) => {
               const now = sw.on(table)
               return (

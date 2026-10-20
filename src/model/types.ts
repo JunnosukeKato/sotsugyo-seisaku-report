@@ -114,8 +114,13 @@ export interface TableBlock {
   id: string
   /** 名称のみ（例: 使用素材表）。「表1.」は自動で付く */
   caption: string
-  /** 列の幅：equal＝そろえる（同じ幅）、auto＝中身に合わせる */
-  widths: 'equal' | 'auto'
+  /** 列の幅：equal＝そろえる（同じ幅）、auto＝中身に合わせる、custom＝自分で決める（colWidths。mockups/v42） */
+  widths: 'equal' | 'auto' | 'custom'
+  /**
+   * 自分で決めた列の幅（%。列ごと、合計 100。どの列も 10% 以上：model/table.ts）。ほかの形に切り替えても覚えておき、戻すとこの幅になる。
+   * 列の数と合わないとき・ないときは、自分で決めるでも同じ幅（colWidthsOf）
+   */
+  colWidths?: number[]
   /**
    * 行の高さ：equal＝そろえる（見出しの行のほかの行を、その中でいちばん高い行と同じ高さにする。見出しの行は中身に合わせたまま）、
    * auto＝中身に合わせる。前の版の原稿（この項目がない）は auto

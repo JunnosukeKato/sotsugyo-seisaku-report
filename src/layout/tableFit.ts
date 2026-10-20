@@ -51,9 +51,9 @@ export function equalRows(table: TableBlock): boolean {
   return table.heights === 'equal'
 }
 
-/** 左端の列を中身に合わせる表か（列の幅が「そろえる」のときだけ効く） */
+/** 左端の列を中身に合わせる表か（列の幅が「そろえる」のときだけ効く。「中身に合わせる」「自分で決める」では効かない） */
 export function fitsLabel(table: TableBlock): boolean {
-  return table.widths !== 'auto' && table.labelColumn === true
+  return table.widths === 'equal' && table.labelColumn === true
 }
 
 /** 寸法を測る表（行の高さをそろえる・左端の列を中身に合わせる） */

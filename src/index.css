@@ -1597,3 +1597,127 @@ button.row { cursor: pointer; }
 .app.phone .sel-bar .width-toggle span { white-space: nowrap; }
 /* 紙面に直接書くときの、キーボードの上の道具の2段目（表の道具）：折り返さずに1段のまま（前は折り返して2段になり、紙面を隠す所が増えた） */
 .direct-bar .db-table { flex-wrap: nowrap; }
+
+/* ---- 表の列の幅を自分で決める（mockups/v42：パソコンは縦の線をドラッグ、スマホは丸いつまみ。切り替えはスマホでは小さな窓） ---- */
+/* 紙面に重ねる層（#overlay-layer）の、画面だけの部品（editor/columnHandles.ts）。PDF・印刷には出ない */
+.col-handles { position: absolute; inset: 0; z-index: 8; pointer-events: none; }
+.col-handles[hidden], .col-tip[hidden] { display: none; }
+/* パソコン：内側の縦の線（つかめる所は 11px。見える線は 2px のうすい藍）と、見出しの行の高さの細いつまみ。線にマウスで、濃く・左右の矢印 */
+.col-grip { position: absolute; width: 11px; margin-left: -5.5px; cursor: col-resize; pointer-events: auto; touch-action: none; }
+.col-grip::before { content: ''; position: absolute; left: 4.5px; top: 0; bottom: 0; width: 2px; background: rgba(47, 62, 117, 0.26); }
+.col-grip:hover::before, .col-grip.hot::before { background: var(--accent); }
+.col-knob { position: absolute; left: 1.5px; width: 8px; height: 22px; margin-top: -11px; border-radius: 4px; background: var(--accent); box-shadow: 0 0 0 1.5px #fff, 0 1px 3px rgba(0, 0, 0, 0.25); }
+.col-grip:hover .col-knob, .col-grip.hot .col-knob { left: 0.5px; width: 10px; height: 28px; margin-top: -14px; border-radius: 5px; }
+.col-handles.dragging .col-grip:not(.hot) { opacity: 0.4; }
+/* 動かしている間：元の位置に点線、線の上に「20%｜30%」（線の左の列｜右の列） */
+.col-ghost { position: absolute; width: 0; margin-left: -0.75px; border-left: 1.5px dashed rgba(47, 62, 117, 0.5); }
+.col-drag { position: absolute; display: flex; align-items: center; height: 22px; border-radius: 7px; background: #23262b; color: #fff; font-size: 12.5px; font-weight: 700; line-height: 1; white-space: nowrap; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.22); transform: translate(-50%, -100%); }
+.col-drag span { padding: 0 0 0 8px; }
+.col-drag span + i + span { padding: 0 8px 0 0; }
+.col-drag i { font-style: normal; font-weight: 400; color: rgba(255, 255, 255, 0.55); }
+.col-tip { position: absolute; z-index: 9; padding: 4px 9px; border-radius: 7px; background: #23262b; color: #fff; font-size: 12px; line-height: 1.4; white-space: nowrap; pointer-events: none; transform: translateY(-50%); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); }
+/* スマホ：書いているマスの列をうすく色付けし（紙面の字の上に重ねて、掛け合わせる）、その列の両側の内側の線に、丸いつまみ（30px。指で押せる所は 44px 四方） */
+.col-tint { position: absolute; background: #e3e7f4; mix-blend-mode: multiply; box-shadow: inset 0 0 0 2px var(--accent); }
+.col-line { position: absolute; width: 0; margin-left: -1px; border-left: 2px solid var(--accent); }
+.col-pknob { position: absolute; width: 44px; height: 44px; margin: -22px 0 0 -22px; display: grid; place-items: center; pointer-events: auto; touch-action: none; -webkit-user-select: none; user-select: none; }
+.col-pknob span { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; background: var(--accent); color: #fff; box-shadow: 0 0 0 2px #fff, 0 2px 6px rgba(0, 0, 0, 0.3); }
+.col-pknob.hot span { box-shadow: 0 0 0 2px #fff, 0 0 0 6px rgba(47, 62, 117, 0.3), 0 2px 6px rgba(0, 0, 0, 0.3); }
+.col-pknob svg { width: 18px; height: 18px; }
+@media print { .col-handles, .col-tip { display: none !important; } }
+
+/* パソコンの左の道具：自分で決めるのときの一言（「縦の線を／ドラッグして／幅を変える」。1行ずつ折り返さない）と「幅をそろえ直す」 */
+.palette .custom-hint { margin: 1px 0 3px; font-size: 9.5px; line-height: 1.45; color: var(--accent); text-align: center; font-weight: 700; }
+.palette .custom-hint span { display: block; white-space: nowrap; }
+.palette .seg button.reset-widths { color: var(--accent); }
+
+/* スマホの「列の幅」：いまの形に小さな下向きの印。押すと、すぐ上に小さな窓（3つから選ぶ。いまの形に印。tableSwitches.tsx の WidthMenu） */
+.width-menu .chev { width: 12px; height: 12px; margin: 0 -3px 0 1px; vertical-align: -1px; }
+.width-menu.open { background: var(--accent-soft) !important; }
+.direct-bar .db-table .width-menu b { display: inline-flex; align-items: center; }
+.width-pop { position: fixed; z-index: 60; box-sizing: border-box; width: 254px; padding: 6px; border-radius: 14px; background: #fff; border: 1px solid var(--line); box-shadow: 0 12px 32px rgba(30, 25, 20, 0.24); color: var(--ink); font-family: inherit; }
+.width-pop::after { content: ''; position: absolute; left: calc(var(--tail, 40px) - 6px); bottom: -7px; width: 12px; height: 12px; background: #fff; border-right: 1px solid var(--line); border-bottom: 1px solid var(--line); transform: rotate(45deg); }
+.width-pop .wp-head { padding: 4px 10px; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+.width-pop [role='radio'] { display: flex; align-items: center; gap: 10px; width: 100%; min-height: 52px; padding: 6px 10px; border: 0; border-radius: 10px; background: none; color: inherit; font: inherit; text-align: left; }
+.width-pop [role='radio'].on { background: var(--accent-soft); }
+.width-pop [role='radio'] i { flex: none; width: 20px; height: 20px; border-radius: 50%; border: 2px solid #b9bcc4; background: #fff; box-sizing: border-box; }
+.width-pop [role='radio'].on i { border-color: var(--accent); background: radial-gradient(circle, var(--accent) 0 4.5px, #fff 5px); }
+.width-pop b { display: block; font-size: 15px; line-height: 1.35; white-space: nowrap; }
+.width-pop [role='radio'].on b { color: var(--accent); }
+.width-pop small { display: block; font-size: 12px; line-height: 1.4; color: var(--muted); white-space: nowrap; }
+@media print { .width-pop { display: none !important; } }
+/* 紙面に直接書くときの、キーボードの上の道具の3段目（自分で決めるの表）：一言・書いているマスの列の幅・「幅をそろえ直す」 */
+.direct-bar .db-colw { margin-top: 2px; padding-top: 3px; border-top: 1px solid var(--line); }
+.direct-bar .db-colw .db-khint { flex: none; align-self: center; padding-left: 6px; margin-right: 8px; font-size: 12px; font-weight: 700; color: var(--accent); white-space: nowrap; }
+.direct-bar .db-colw .db-pct { flex: none; display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 50px; min-height: 44px; line-height: 1.15; }
+.direct-bar .db-colw .db-pct small { font-size: 9.5px; color: var(--muted); }
+.direct-bar .db-colw .db-pct b { font-size: 16px; color: var(--accent); letter-spacing: 0.02em; }
+.direct-bar .db-colw .db-reset { margin-left: auto; }
+.es-tools button svg { flex: none; }
+/* キーボードの上の道具の中に置く窓・印：道具のボタンの形（縦に並べる・字の大きさ・印の大きさ）を受け継がない */
+.direct-bar .db-row .width-pop [role='radio'] { flex-direction: row; justify-content: flex-start; gap: 10px; min-width: 0; min-height: 52px; padding: 6px 10px; border-radius: 10px; font-size: 13px; line-height: normal; white-space: normal; text-align: left; }
+.direct-bar .db-row .width-pop [role='radio'].on { background: var(--accent-soft); color: inherit; }
+.direct-bar .db-row .width-menu .chev, .sel-bar .width-menu .chev { width: 12px; height: 12px; }
+
+/* ---- 待つ間の表示（依頼者の要望 2026-10-20「保存中に何も表示がなく待たされるので不安になる」。app/Busy.tsx） ----
+   押したボタンは、すぐ回る小さな印と「保存しています…」などの言葉に替え、終わるまで押せなくする。2秒を過ぎたら「数秒かかることがあります」。
+   回る印は、PDF の窓の「保存の画面を開いています…」（.pdf-wait）と同じ形。「動きを減らす」設定では回さない */
+.busy-spin { display: inline-block; box-sizing: border-box; flex: none; width: 1.1em; height: 1.1em; margin-right: 0.45em; border-radius: 50%; border: 2px solid var(--accent-soft); border-top-color: var(--accent); vertical-align: -0.18em; animation: login-spin 0.8s linear infinite; }
+/* 並べ方に隙間（gap）のあるボタンの中では、右の余白は付けない */
+.export .busy-spin, .login-btn .busy-spin, .p-nav .busy-spin, .busy-line .busy-spin, .loading-line .busy-spin, .wait-toast .busy-spin, .drive-done .busy-spin, .modal .start-over-row .busy-spin { margin-right: 0; }
+/* 藍の地のボタン・暗い知らせの中では、白で回す */
+.primary .busy-spin, .export .busy-spin, .wait-toast .busy-spin { border-color: rgba(255, 255, 255, 0.35); border-top-color: #fff; }
+/* 押したボタンは、押せない間も薄くしない（回る印と言葉が読めるように。ほかのボタンは、今までどおり薄くする） */
+button:disabled:has(.busy-spin) { opacity: 1; }
+.modal button.primary:disabled:has(.busy-spin) { opacity: 0.88; }
+.busy-line { display: inline-flex; align-items: center; gap: 0.5em; }
+p.busy-line { display: flex; }
+/* 2秒を過ぎたら出すひとこと。出していない間は高さを取らない（読み上げ用の枠だけ置いておく） */
+.slow-note:not(.on) { margin: 0 !important; padding: 0 !important; border: 0 !important; }
+.slow-note.on { display: block; }
+:where(.slow-note.on) { margin: 8px 0 0; font-size: 12.5px; line-height: 1.6; color: var(--muted); }
+.slow-note.row-note.on { margin-top: 8px; text-align: right; }
+.side-foot p.export-note.slow-note.on { color: var(--muted); }
+/* 紙面を準備しています…（開いたとき・原稿を入れ替えたとき） */
+.loading-line { display: inline-flex; align-items: center; gap: 10px; padding: 0 16px; line-height: 1.6; }
+.loading-line .busy-spin { width: 16px; height: 16px; border-width: 2.5px; }
+.loading-line .nb { display: inline-block; }
+/* ドライブの操作：「今すぐドライブに保存」のあとの「✓ ドライブに保存しました（13:44）」と、2秒を過ぎたときのひとこと */
+.drive-pop .drive-done { display: flex; align-items: center; gap: 6px; margin: 2px 0 4px; padding: 6px 10px; border-radius: 7px; background: #eef5f0; color: var(--ok); font-size: 12.5px; font-weight: 700; line-height: 1.5; }
+.drive-pop .drive-done .drive-ic { width: 17px; height: 17px; }
+.drive-pop .slow-note.drive-note.on { margin: 0; padding: 2px 10px 4px !important; font-size: 11.5px; }
+.drive-pop button:disabled:not(:has(.busy-spin)) { background: none; }
+/* バックアップ・作り直すの窓：「✓ 保存しました」・控えを読み込んでいる間 */
+.modal .done-note .nb { display: inline-block; }
+.modal .done-note { display: flex; align-items: center; gap: 7px; margin: 10px 0 0; color: var(--ok); font-size: 13px; font-weight: 700; line-height: 1.6; }
+.done-ok { width: 18px; height: 18px; flex: none; display: inline-grid; place-items: center; border-radius: 50%; background: var(--ok); color: #fff; }
+.done-ok svg { width: 12px; height: 12px; stroke-width: 2.6; }
+.modal p.busy-line { margin: 4px 0; }
+/* Word の読み込み：回る印は押したボタンに出すので、下の行（写真が多いと…）には出さない */
+.word-status .busy.plain { color: var(--muted); }
+.word-status .busy.plain::before { content: none; }
+/* 紙面の上の真ん中に出す小さな知らせ（写真を取り込んでいる間など）。紙面は押せるまま（知らせは押せない） */
+.wait-toast { display: flex; align-items: center; gap: 10px; padding: 9px 18px 9px 14px; border-radius: 999px; background: #2b2e36; color: #fff; font-size: 13.5px; line-height: 1.5; box-shadow: 0 10px 28px rgba(20, 20, 30, 0.3); pointer-events: none; animation: sheet-up 0.2s ease; }
+.wait-toast.on-stage { position: absolute; z-index: 25; top: 14px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 32px); box-sizing: border-box; }
+.wait-toast .busy-spin { width: 17px; height: 17px; border-width: 2.5px; }
+.wait-toast .wt-text { display: block; white-space: nowrap; }
+.wait-toast small { display: block; font-size: 12px; color: rgba(255, 255, 255, 0.78); white-space: nowrap; }
+.app.phone .wait-toast.on-stage { top: 10px; }
+/* スマホ：メニューの中のドライブの操作も、指で押しやすい高さ（44px）にする */
+.app.phone .drive-pop button { min-height: 44px; font-size: 14px; }
+.app.phone .p-nav .busy-spin { width: 20px; height: 20px; border-width: 2.5px; }
+@media (prefers-reduced-motion: reduce) {
+  .busy-spin { animation: none; border-right-color: var(--accent); }
+  .primary .busy-spin, .export .busy-spin, .wait-toast .busy-spin { border-right-color: #fff; }
+  .wait-toast { animation: none; }
+}
+@media print { .wait-toast { display: none !important; } }
+
+/* ---- 行末にぶら下げた「。」も選んだ色が付く（PC の紙面・書く欄。画面だけ。依頼者の指摘 2026-10-20。印は editor/rangeSelection.ts の markHangingSelection） ---- */
+/* ぶら下げた「。」「、」（組版エンジンの viv-hang-end）は字の進む幅が 0 なので、選んでもブラウザが色を塗らず、白い字になって見えなくなっていた。
+   選んだ範囲に入っているもの（.sel-hang）だけ、字の後ろに選んだ色を塗る（行の組み方は変えない。ページの一覧の小さなページ（紙面の複製）には塗らない）。色を合わせるため、紙面・書く欄の選んだ色を決めておく（Windows の Edge・Chrome と同じ色） */
+@media screen {
+  .app:not(.phone) :is(.page-scroller, #overlay-layer) ::selection { background-color: #3367d1; color: #fff; }
+  .app:not(.phone) :is(.page-scroller, #overlay-layer) viv-ts-close.sel-hang > viv-ts-inner { position: relative; z-index: 0; }
+  .app:not(.phone) :is(.page-scroller, #overlay-layer) viv-ts-close.sel-hang > viv-ts-inner::before { content: ''; position: absolute; z-index: -1; left: 0; top: 50%; width: 1em; height: 1lh; transform: translateY(-50%); background: #3367d1; pointer-events: none; }
+  .app:not(.phone) :is(.page-scroller, #overlay-layer) viv-ts-close.sel-hang.viv-hang-hw > viv-ts-inner::before { width: 0.5em; }
+}

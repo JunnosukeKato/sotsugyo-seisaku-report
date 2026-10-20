@@ -422,3 +422,31 @@ button.pg { cursor: pointer; }
 .photo-menu li.pm-page { display: flex; justify-content: space-between; align-items: baseline; padding: 7px 6px 3px; border-radius: 0; font-size: 12px; font-weight: 700; color: var(--accent); letter-spacing: 0.04em; }
 .photo-menu li.pm-page:not(:first-child) { margin-top: 4px; border-top: 1px solid var(--line); }
 .photo-menu li.pm-page span { font-weight: 400; font-size: 11.5px; color: var(--muted); letter-spacing: 0; }
+
+/* ---- 待つ間の表示（依頼者の要望 2026-10-20「何も表示がなく待たされるので不安になる」。app/Busy.tsx。学生用ツールの index.css の「待つ間の表示」と同じ形） ----
+   ファイルを読んでいる間・1つの PDF にまとめている間は、押したボタンに回る小さな印と言葉を出し、2秒を過ぎたら「数秒かかることがあります」。
+   ページの小さな絵は、次に作るページに回る印。「動きを減らす」設定では回さない */
+@keyframes busy-spin { to { transform: rotate(360deg); } }
+.busy-spin { display: inline-block; box-sizing: border-box; flex: none; width: 1.1em; height: 1.1em; border-radius: 50%; border: 2px solid var(--accent-soft); border-top-color: var(--accent); animation: busy-spin 0.8s linear infinite; }
+.btn.primary .busy-spin { border-color: rgba(255, 255, 255, 0.35); border-top-color: #fff; }
+.btn.big .busy-spin { width: 19px; height: 19px; border-width: 2.5px; }
+/* 押したボタンは、押せない間も灰色にしない（回る印と言葉が読めるように） */
+.btn.primary:disabled:has(.busy-spin) { background: var(--accent); border-color: var(--accent); color: #fff; opacity: 0.88; }
+.btn.quiet:disabled:has(.busy-spin) { background: #fff; border-color: #c9cfe6; color: var(--accent); }
+/* ファイルを読んでいる間の「ファイルを読んでいます（1 / 3）」 */
+.drop .d-busy { color: var(--accent); }
+.drop .d-busy .nb { margin-left: 0.6em; color: var(--muted); }
+/* 確かめています… */
+.checking { display: flex; align-items: center; gap: 8px; }
+/* まとめるのが2秒を過ぎたとき */
+.m-note.slow-note { color: var(--muted); }
+/* ページの小さな絵：次に作るページの真ん中に、回る小さな印 */
+.pg .pg-wait.now { position: relative; }
+.pg .pg-wait.now::after { content: ''; position: absolute; left: 50%; top: 50%; width: 18px; height: 18px; margin: -9px 0 0 -9px; box-sizing: border-box; border-radius: 50%; border: 2.5px solid var(--accent-soft); border-top-color: var(--accent); animation: busy-spin 0.8s linear infinite; }
+@media (max-width: 760px) {
+  .drop .d-busy .nb { display: block; margin: 2px 0 0; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .busy-spin, .pg .pg-wait.now::after { animation: none; border-right-color: var(--accent); }
+  .btn.primary .busy-spin { border-right-color: #fff; }
+}

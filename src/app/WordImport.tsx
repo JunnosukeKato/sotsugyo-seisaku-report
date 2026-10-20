@@ -6,6 +6,8 @@ import type { OutlineItem, WordImportResult } from '../import/types'
 import type { LostChapter } from '../import/wordImport'
 import { chapterLabel, subheadingLabel } from '../layout/bodyHtml'
 import type { Report } from '../model/types'
+import { BusyLabel, SlowNote } from './Busy'
+import { useBusy, useSlow } from './useBusy'
 import { Modal } from './dialogs'
 import { Icon } from './icons'
 import type { WordTodo } from './useWordTodo'
@@ -253,6 +255,8 @@ export function WordImportDialog({ config, report, onImport, onClose }: DialogPr
   const [error, setError] = useState<string | null>(null)
   /** 読み取りの途中で「やめる」（Esc・×）を押したら、その読み取りの結果は使わない */
   const run = useRef(0)
+  /** 読み取るのが2秒を過ぎた（写真の多い Word では十数秒かかることがある、と出す） */
+  const readingSlow = useSlow(busy === 'reading')
 
   const pick = (slot: Slot, file: File) => {
     const problem = fileProblem(file)
@@ -323,7 +327,7 @@ export function WordImportDialog({ config, report, onImport, onClose }: DialogPr
     const shown = choice === 'word' && reads.word ? reads.word : reads.keep
     const result = shown.result
     return (
-      <Modal key="confirm" title="Word の中身を確かめてください" className="word-modal" keepOpen={busy === 'importing'} onClose={close}>
+      <Modal key="confirm" title="Word の中身を確かめてください" className="word-modal" busy={busy === 'importing'} onClose={close}>
         <WordConfirm
           config={config}
           courseId={choice === 'word' && wordCourse ? wordCourse : courseId}
@@ -384,9 +388,10 @@ export function WordImportDialog({ config, report, onImport, onClose }: DialogPr
         <CloudHint />
         <p>Google ドキュメントに変えたものではなく、Word（.docx）のファイルを選びます。ファイルは、この端末のブラウザの中だけで読み取ります（どこにも送りません）。</p>
       </div>
-      {/* 読み取っている間と、読み取れなかったときの知らせ（読み上げにも伝わるよう、いつも置いておく枠の中に出す） */}
+      {/* 読み取っている間と、読み取れなかったときの知らせ（読み上げにも伝わるよう、いつも置いておく枠の中に出す）。
+          回る印は、押した「中身を確かめる」のボタンに出す。2秒を過ぎたら、写真の多い Word では十数秒かかることを足す */}
       <div className="word-status" role="status">
-        {busy === 'reading' && <p className="busy">読み取っています…（写真が多いと、少し時間がかかります）</p>}
+        {busy === 'reading' && <p className="busy plain">{readingSlow ? '写真が多いと、十数秒かかることがあります' : '写真が多いと、少し時間がかかります'}</p>}
       </div>
       {error && (
         <p className="word-error" role="alert">
@@ -396,8 +401,10 @@ export function WordImportDialog({ config, report, onImport, onClose }: DialogPr
       <div className="row-buttons">
         <span className="spacer" />
         <button onClick={close}>やめる</button>
-        <button className="primary" disabled={!files.body || !!busy} onClick={() => void read()}>
-          {busy === 'reading' ? '読み取っています…' : '中身を確かめる'}
+        <button className="primary word-read" disabled={!files.body || !!busy} onClick={() => void read()}>
+          <BusyLabel busy={busy === 'reading'} text="読み取っています…">
+            中身を確かめる
+          </BusyLabel>
         </button>
       </div>
     </Modal>
@@ -528,6 +535,7 @@ function WordConfirm({
   onCancel: () => void
   onImport: () => void
 }) {
+  const rereadSlow = useSlow(rereading)
   // 図の小さな画像（窓を閉じたら捨てる）
   const urls = useMemo(() => new Map(result.images.map((img) => [img.id, URL.createObjectURL(img.blob)])), [result])
   useEffect(() => () => urls.forEach((url) => URL.revokeObjectURL(url)), [urls])
@@ -703,7 +711,7 @@ function WordConfirm({
         </p>
       )}
       <div className="word-status" role="status">
-        {rereading && <p className="busy">Word のコースで読み取り直しています…</p>}
+        {rereading && <p className="busy">Word のコースで読み取り直しています…{rereadSlow ? '（数秒かかることがあります）' : ''}</p>}
         {unchosen && !nothing && <p className="word-choose">表紙の Word のコースか、いまのコースかを選ぶと、「読み込む」を押せます。</p>}
       </div>
       <div className="row-buttons">
@@ -711,10 +719,14 @@ function WordConfirm({
         <button disabled={busy} onClick={onCancel}>
           やめる
         </button>
-        <button className="primary" disabled={busy || nothing || unchosen || rereading} onClick={onImport}>
-          {busy ? '読み込んでいます…' : '読み込む'}
+        <button className="primary word-import" disabled={busy || nothing || unchosen || rereading} onClick={onImport}>
+          <BusyLabel busy={busy} text="読み込んでいます…">
+            読み込む
+          </BusyLabel>
         </button>
       </div>
+      {/* 読み込む（図の画像をこの端末に保存して、紙面を組み直す）のが2秒を過ぎたら。図が多いと十数秒かかることがある */}
+      <SlowNote busy={busy} text={result.images.length > 3 ? '図が多いと、十数秒かかることがあります' : '数秒かかることがあります'} className="row-note" />
     </>
   )
 }
@@ -727,8 +739,8 @@ interface TodoProps {
   todo: WordTodo
   onUpdate: (todo: WordTodo) => void
   onClose: () => void
-  /** 「読み込む前の原稿に戻す」 */
-  onRestore: () => void
+  /** 「読み込む前の原稿に戻す」（控えを探して、確かめて、戻し終えるまで。その間、ボタンに「戻しています…」） */
+  onRestore: () => Promise<void> | void
   /** 紙面へ移る前に呼ぶ（スマホ：チェックの欄を閉じる） */
   onPick?: () => void
 }
@@ -745,6 +757,7 @@ export function WordTodoCard({ editor, snap, todo, onUpdate, onClose, onRestore,
   const steps = [errors === 0, ...(figures.length > 0 ? [figuresDone] : []), todo.coverChecked]
   const allDone = steps.every(Boolean)
   const when = new Date(todo.at).toLocaleString('ja-JP', { month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const [restoring, restore] = useBusy<'restore'>()
 
   const goFigure = async () => {
     const figure = figures[seen]
@@ -845,8 +858,10 @@ export function WordTodoCard({ editor, snap, todo, onUpdate, onClose, onRestore,
           )}
         </li>
       </ul>
-      <button className="undo" onClick={onRestore}>
-        {Icon.undo}読み込む前の原稿に戻す
+      <button className="undo" disabled={!!restoring} onClick={() => void restore('restore', onRestore, { paintFirst: false })}>
+        <BusyLabel busy={!!restoring} text="戻しています…">
+          {Icon.undo}読み込む前の原稿に戻す
+        </BusyLabel>
       </button>
     </section>
   )

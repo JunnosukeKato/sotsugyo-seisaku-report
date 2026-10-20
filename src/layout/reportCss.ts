@@ -168,6 +168,17 @@ figcaption,
   table-layout: auto;
 }
 
+/* 列の幅：自分で決める（列ごとの幅は、表の colgroup に % で書く：bodyHtml.ts の renderTable）。
+   狭くした列でも、最後の行が1字だけにならないように組む（中身に合わせると同じ。使えないブラウザでは今までどおり） */
+.data-table table.widths-custom {
+  table-layout: fixed;
+}
+
+.data-table table.widths-custom th,
+.data-table table.widths-custom td {
+  text-wrap-style: pretty;
+}
+
 .data-table th,
 .data-table td {
   border: 0.75pt solid #000;

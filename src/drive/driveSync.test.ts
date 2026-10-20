@@ -244,6 +244,39 @@ describe('ドライブに送るとき（原稿を消さない・混ぜない）'
     expect(photoFiles.map((f) => f.appProperties?.imageId)).toEqual(['ph1'])
   })
 
+  it('「今すぐドライブに保存」（saveNow）は、待たずに送り、送り終えるまで待つ（送るものがなければ、すぐ終わる）', async () => {
+    const drive = await loggedIn()
+    const first = written('花子')
+    await drive.resolve(first)
+    drive.activate(first)
+    await drive.flush()
+    expect(drive.getState().status.kind).toBe('saved')
+    // 書き足した原稿：5秒待たずに送り、終わったときには保存済み
+    const next = later(first, 3)
+    drive.schedule(next)
+    saved.length = 0
+    await drive.saveNow(next)
+    expect(saved.map((x) => x.name)).toEqual(['原稿.json'])
+    expect(remote!.report.updatedAt).toBe(next.updatedAt)
+    expect(drive.getState().status.kind).toBe('saved')
+    expect(drive.unsent).toBe(false)
+    // もう送ってある原稿なら、何も送らずに終わる
+    saved.length = 0
+    await drive.saveNow(next)
+    expect(saved).toEqual([])
+    expect(drive.getState().status.kind).toBe('saved')
+  })
+
+  it('「今すぐドライブに保存」で送れなかったときは、終わったあとの保存のようすで分かる（電波なし）', async () => {
+    const drive = await loggedIn()
+    const first = written('花子')
+    await drive.resolve(first)
+    drive.activate()
+    loseNextResponse = true
+    await drive.saveNow(later(first, 4))
+    expect(drive.getState().status.kind).toBe('offline')
+  })
+
   it('同じ中身かは、項目の並び順によらずに比べる', () => {
     const a = written('花子')
     // 項目の並び順を逆にし、更新時刻だけ変えた原稿

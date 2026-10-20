@@ -39,7 +39,7 @@ const SHAPE_TABLE = {
 const cellId = (r, c) => `${TABLE_ID}c${r}${c}`
 
 /** 見本の原稿を開き、確かめに使う表を足す（はじめての案内は閉じる） */
-async function openSample(browser, phone) {
+export async function openSample(browser, phone) {
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
   page.on('pageerror', (e) => console.log(`pageerror(tableShape${phone ? '-phone' : ''}):`, e.message))
@@ -79,7 +79,7 @@ async function openSample(browser, phone) {
 }
 
 /** 表を見せる（表のあるページへ。PC は表が画面に入るよう動かす） */
-async function showTable(page, ready, id = TABLE_ID) {
+export async function showTable(page, ready, id = TABLE_ID) {
   await page.evaluate((id) => {
     const ed = window.__editor
     const cell = ed.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === id).rows[0].cells[0].id
@@ -93,7 +93,7 @@ async function showTable(page, ready, id = TABLE_ID) {
  * 紙面の表の形（ページの原寸の px）：見出しの行・ほかの行の高さ（ページをまたぐ表は、どのページの行も）、列の幅、class、行に書いた高さ。
  * first：最初のページにある、見出しの行のほかの行の数（PDF の絵と比べるとき）
  */
-const shapeOf = (page, id = TABLE_ID) =>
+export const shapeOf = (page, id = TABLE_ID) =>
   page.evaluate((id) => {
     const viewport = document.querySelector('.page-viewport.front')
     const measuring = viewport.classList.contains('measuring')
@@ -125,7 +125,7 @@ const brief = (s) => (s ? { cls: s.cls, head: r2(s.head), body: s.body.map(r2), 
  * 行：表の左端のすぐ内側を上から下へ見て、横の線（黒い点の並び）の間。列：見出しの行の真ん中を左から右へ見て、縦の線の間。
  * lines：セル（cellId）の中の、字のある横の帯の数（字の行の数）。crop：表のまわりを切り抜いた絵（PNG の data URL）
  */
-const pdfShape = (page, id = TABLE_ID, cell = null) =>
+export const pdfShape = (page, id = TABLE_ID, cell = null) =>
   page.evaluate(
     async (id, cell) => {
       const { pagesToPdf } = await import('/src/pdf/pagesToPdf.ts')
@@ -553,7 +553,7 @@ export async function tableShapePc(browser, check) {
 }
 
 /** 見本の素材表に足す「特徴」の列（mockups/v42 と同じ字） */
-const FEATURES = {
+export const FEATURES = {
   head: '特徴',
   rows: ['やわらかい光沢があり、照明が当たると表面が光る', '薄く透ける。腕を動かすと、風に揺れて見える', '張りがあって丈夫。しゃがんでも形がくずれにくい'],
 }
@@ -651,6 +651,28 @@ export async function tableShapePhone(browser, check) {
     await ready()
     await wait(300)
   }
+  /** 「列の幅」：押すと小さな窓が開き、3つから選ぶ（mockups/v42 案B。tableCustom.mjs） */
+  const chooseWidth = async (name) => {
+    const tapAt = async (selector, text) => {
+      const at = await page.evaluate(
+        (selector, text) => {
+          const el = [...document.querySelectorAll(selector)].find((b) => !text || b.textContent.includes(text))
+          el.scrollIntoView({ inline: 'nearest', block: 'nearest' })
+          const r = el.getBoundingClientRect()
+          return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+        },
+        selector,
+        text,
+      )
+      await wait(150)
+      await page.touchscreen.tap(at.x, at.y)
+      await wait(300)
+    }
+    await tapAt('.direct-bar .db-table .width-menu')
+    await tapAt('.width-pop [role="radio"]', name)
+    await ready()
+    await wait(300)
+  }
 
   // ---- セルを押して紙面の上で書く：キーボードの上の道具の2段目に「列の幅」「左端の列」「行の高さ」（44px 以上・名前は1行） ----
   await tapCell(cellId(1, 1))
@@ -712,14 +734,14 @@ export async function tableShapePhone(browser, check) {
   await pressDb('左端の列')
   await showTable(page, ready)
   const labelOff = await shapeOf(page)
-  await pressDb('列の幅')
+  await chooseWidth('中身に合わせる')
   const dbAuto = await dbTools()
   check(
     'スマホ：もう一度押すと「ほかとそろえる」（すべての列が同じ幅）。「列の幅」を「中身に合わせる」にすると「左端の列」は出ない',
     !(await modelOf(page)).labelColumn && spread(labelOff.cols) <= 0.5 && !dbAuto.tools.some((t) => t.name.startsWith('左端の列')) && dbAuto.tools.some((t) => t.name === '列の幅中身に合わせる'),
     JSON.stringify({ cols: labelOff.cols.map(r2), tools: dbAuto.tools.map((t) => t.name) }),
   )
-  await pressDb('列の幅')
+  await chooseWidth('そろえる')
 
   // ---- マスの中の改行：Enter・キーの知らせのない改行の入力。「完了」で書き終える ----
   await tapCell(cellId(4, 1))

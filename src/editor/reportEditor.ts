@@ -8,8 +8,10 @@ import { putImage, type StoredImage } from '../model/storage'
 import { skippedPages } from '../pdf/exportPages'
 import { applyCourseTemplate, bodyWritten } from '../model/template'
 import { addPhotoPage, canAddPhotoPage, changeArrangement, clampPercent, movePhoto, pageOfPhotoPage, pagePhotoCount, photoPageAt, photoSlots, placePhotos, putPhoto, removePhotoPage, updatePhotoPage, wholePhoto, type PhotoSlot } from '../model/photos'
-import { addColumn, addRow, blankTable, cellPosition, materialTable, removeColumn, removeRow, setCellImage } from '../model/table'
+import { addColumn, addRow, blankTable, cellPosition, colWidthsOf, columnCount, equalColumnWidths, materialTable, normalizeColumnWidths, removeColumn, removeRow, setCellImage } from '../model/table'
 import type { BodyBlock, Chapter, PhotoPosition, Report, TableBlock, WorkPhotoLayout } from '../model/types'
+import { abstractPasteNotice, stripFigureRefs } from './abstractRefs'
+import { ColumnHandles, type ColumnTarget } from './columnHandles'
 import { ContinueRow, endsPageWithRoom, type ContinueTarget } from './continueRow'
 import { EditHistory } from './history'
 import { OverlayEditor, offsetInCopy, type OverlayKind, type OverlayPlacement, type OverlayTarget } from './overlayEditor'
@@ -20,7 +22,7 @@ import * as ops from './reportOps'
 import { ReportRenderer, type FirstShow, type PageEffect } from './reportRenderer'
 import { PLACEHOLDER_ATTR } from './pageView'
 import { copyRange, deleteRange, pasteClip, rangePieces, resolveRange, sameClipText, type Clip, type ModelPoint, type ModelRange } from './rangeOps'
-import { domPoint, paperPoint } from './rangeSelection'
+import { caretAt, caretBefore, domPoint, includeClosing, markHangingSelection, paperPoint, type Caret } from './rangeSelection'
 import { SelectionBar, type Bounds } from './selectionBar'
 import { changedPlace, headingNotice, type ChangedPlace, type NoticeBody, type RemovedWhat, type UndoNotice } from './undoNotice'
 import { submissionTitle } from '../model/fileName'
@@ -139,6 +141,11 @@ export interface EditorCallbacks {
   pickImage(purpose: 'figure' | 'swatch' | 'photo'): Promise<File | null>
   /** 写真を何枚かまとめて選ぶ画面を開いてほしい（作品写真の空いている枠を押したとき。やめたら空） */
   pickImages?(purpose: 'photo'): Promise<File[]>
+  /**
+   * 選んだ写真を縮めて、この端末に保存している間（画面に「写真を取り込んでいます…」を出す。依頼者の要望 2026-10-20）。
+   * done・total：何枚目か（まとめて選んだとき）。終わったら null
+   */
+  onImageWork?(work: { done: number; total: number } | null): void
 }
 
 interface ImageEntry {
@@ -262,6 +269,8 @@ export class ReportEditor {
   private continuing: { id: string; anchor: string | null; ghosts?: string[] } | null = null
   /** 図・表のすぐ下の「＋ ここに続きを書く」（mockups/v32 ① 案A） */
   private readonly continueRow: ContinueRow
+  /** 列の幅を「自分で決める」表の、境目を動かす線・つまみ（columnHandles.ts） */
+  private readonly columnHandles: ColumnHandles
   private currentId: string | null = null
   private selection: Selection = null
   private page = 0
@@ -296,6 +305,7 @@ export class ReportEditor {
     this.marker.textContent = 'ここに入ります'
     layer.append(this.marker)
     this.continueRow = new ContinueRow(layer, (id) => this.continueAfter(id))
+    this.columnHandles = new ColumnHandles(layer, { onCommit: (id, widths) => this.setTableColWidths(id, widths) })
     // 紙面で選んだ文のすぐ上の帯「コピー・切り取り・削除」と、書く欄の近くの「貼り付け」（mockups/v36 案A。selectionBar.ts）
     this.selectionBar = new SelectionBar(layer, {
       copy: () => this.copySelection(),
@@ -422,6 +432,14 @@ export class ReportEditor {
         matches: (pasted) => !!this.clip && sameClipText(pasted, this.clip.text),
         paste: (id, text, start, end) => this.pasteClipAt(id, text, start, end),
       },
+      // ふつうの文字の貼り付け（ほかのアプリ・書く欄からコピーした文字。スマホも）：抄録には、図表の参照の括弧を除いて入れる（abstractRefs.ts）
+      pasteText: (id, pasted) => {
+        if (!this.report.abstract.paragraphs.some((p) => p.id === id)) return pasted
+        const r = stripFigureRefs(pasted)
+        const note = abstractPasteNotice(false, r.removed, r.kept)
+        if (note) this.showNotice(note)
+        return r.text
+      },
       // 段落の最後の行で Shift+↓（最初の行で Shift+↑）：選ぶ範囲を、紙面の次（前）の欄へ広げる
       onExtend: (id, text, anchor, direction) => this.extendFromEditor(id, text, anchor, direction),
       onResize: () => {
@@ -458,7 +476,8 @@ export class ReportEditor {
     })
     // スマホ：2本の指で紙面を広げる・縮める（紙面の倍率だけを変える。上の帯・道具・タブは大きくしない）
     this.pinchZoom = new PinchZoom(stage, {
-      enabled: () => this.phone && !!this.layout,
+      // 表の列の丸いつまみを動かしている間は、2本の指の拡大を始めない（columnHandles.ts）
+      enabled: () => this.phone && !!this.layout && !this.columnHandles.dragging,
       start: (mid) => this.pinchStart(mid),
       move: (k, mid) => this.pinchMove(k, mid),
       end: () => this.pinchEnd(),
@@ -485,6 +504,8 @@ export class ReportEditor {
     document.addEventListener('selectionchange', () => {
       if (!this.mouseSelecting) this.barSuppressed = false
       this.scheduleSelectionUi()
+      // 行末にぶら下げた「。」にも、選んだ色を付ける（PC。rangeSelection.ts）
+      markHangingSelection(this.phone ? [] : [scroller, layer])
     })
     scroller.addEventListener('mousedown', (e) => {
       // スマホで紙面に直接書く：書いている間に紙面のほかの所を押しても、押した瞬間には書く欄からフォーカスを外さない
@@ -493,8 +514,11 @@ export class ReportEditor {
       if (e.button !== 0 || this.phone) return
       this.mouseSelecting = true
       this.selectionBar.hideBar()
+      this.startMouseSelect(e)
     })
-    window.addEventListener('mouseup', () => {
+    window.addEventListener('mousemove', (e) => this.moveMouseSelect(e))
+    window.addEventListener('mouseup', (e) => {
+      this.endMouseSelect(e)
       if (!this.mouseSelecting) return
       this.mouseSelecting = false
       this.barSuppressed = false
@@ -507,6 +531,8 @@ export class ReportEditor {
     // 段落をまたいで選ぶ：書いている欄から Shift+クリックで選ぶ・紙面で選んだ範囲をコピーする（PC）
     scroller.addEventListener('mousedown', (e) => this.onPaperMouseDown(e), true)
     document.addEventListener('copy', (e) => this.onCopy(e))
+    // 抄録のページで、書く欄を開かずに貼り付けた：何も入らない理由を知らせる
+    document.addEventListener('paste', (e) => this.onPaperPaste(e))
     scroller.addEventListener('keydown', (e) => this.onPaperKey(e))
     // Tab で紙面に入ったときに止まる欄：最後にいた欄（はじめは、ページのいちばん上の欄）
     scroller.addEventListener('focusin', (e) => rememberTabStop(e.target))
@@ -602,7 +628,13 @@ export class ReportEditor {
   private async importImage(purpose: 'figure' | 'swatch' | 'photo'): Promise<string | null> {
     const file = await this.callbacks.pickImage(purpose)
     if (!file) return null
-    return this.storeImage(file, purpose)
+    // 縮めて保存する間（大きな写真は、スマホで1〜数秒かかる）は、画面に「写真を取り込んでいます…」を出す
+    this.callbacks.onImageWork?.({ done: 0, total: 1 })
+    try {
+      return await this.storeImage(file, purpose)
+    } finally {
+      this.callbacks.onImageWork?.(null)
+    }
   }
 
   /** 選んだ写真を縮めて、この端末に保存する（読めない・保存できないときは、わけを出して null） */
@@ -2428,6 +2460,8 @@ export class ReportEditor {
     this.continueFrame = requestAnimationFrame(() => {
       this.continueFrame = 0
       this.continueRow.show(this.continueTarget())
+      // 列の幅を「自分で決める」表の、境目を動かす線・つまみも、同じときに出し直す
+      this.columnHandles.sync(this.columnTarget(), this.viewport, this.phone)
     })
   }
 
@@ -3421,9 +3455,59 @@ export class ReportEditor {
     this.changeTable(tableId, (t) => removeColumn(t, at.column))
   }
 
-  /** 列の幅：そろえる（同じ幅）／中身に合わせる */
+  /**
+   * 列の幅：そろえる（同じ幅）／中身に合わせる／自分で決める（mockups/v42）。
+   * 自分で決めるにするときは、前に決めた幅があればその幅、なければ、いま紙面に見えている幅から始める（見た目を変えない）
+   */
   setTableWidths(tableId: string, widths: TableBlock['widths']): void {
-    this.changeTable(tableId, (t) => ({ ...t, widths }))
+    const table = ops.findTable(this.report, tableId)
+    if (!table || table.widths === widths) return
+    const colWidths = widths === 'custom' ? (colWidthsOf(table) ?? this.shownColumnWidths(table) ?? equalColumnWidths(columnCount(table))) : null
+    this.changeTable(tableId, (t) => ({ ...t, widths, ...(colWidths ? { colWidths } : {}) }))
+  }
+
+  /** 自分で決めた列の幅を変える（パソコンは縦の線のドラッグ、スマホは丸いつまみ：columnHandles.ts）。元に戻す1回で戻る */
+  setTableColWidths(tableId: string, colWidths: number[]): void {
+    const table = ops.findTable(this.report, tableId)
+    const next = table ? normalizeColumnWidths(colWidths, columnCount(table)) : null
+    if (!table || !next || JSON.stringify(next) === JSON.stringify(colWidthsOf(table))) return
+    this.changeTable(tableId, (t) => ({ ...t, colWidths: next }))
+  }
+
+  /** 幅をそろえ直す（どの列も同じ幅。自分で決めるのまま） */
+  resetTableColWidths(tableId: string): void {
+    const table = ops.findTable(this.report, tableId)
+    if (table) this.setTableColWidths(tableId, equalColumnWidths(columnCount(table)))
+  }
+
+  /** 紙面に見えている表の列の幅（%）。見出しの行のセルの幅から求める（表が紙面になければ null） */
+  private shownColumnWidths(table: TableBlock): number[] | null {
+    const viewport = this.viewport
+    const measuring = viewport.classList.contains('measuring')
+    // 表のあるページが表に出ていなくても測れるよう、測る間だけ、どのページも出す（同じ処理の中で戻すので、画面には出ない）
+    if (!measuring) viewport.classList.add('measuring')
+    try {
+      const row = viewport.querySelector(`.data-table[data-table-id="${CSS.escape(table.id)}"] table tr`)
+      const ws = row ? [...row.children].map((c) => c.getBoundingClientRect().width) : []
+      return ws.length === columnCount(table) ? normalizeColumnWidths(ws, ws.length) : null
+    } finally {
+      if (!measuring) viewport.classList.remove('measuring')
+    }
+  }
+
+  /**
+   * 列の幅を「自分で決める」表の、境目を動かす線・つまみを出す表（columnHandles.ts）。
+   * パソコン：表のセル・タイトルを書いている間と、表を選んでいる間。スマホ：表のセルを書いている間（その列を選ぶ）
+   */
+  private columnTarget(): ColumnTarget | null {
+    if (this.turning || this.removed.size > 0 || !this.layout) return null
+    const id = this.overlay.blockId
+    const tableId = id ? this.tableIdOf(id) : this.selection?.kind === 'table' ? this.selection.id : null
+    const table = tableId ? ops.findTable(this.report, tableId) : null
+    if (!table || table.widths !== 'custom') return null
+    const cell = id && ops.findEditable(this.report, id)?.kind === 'tableCell' ? id : null
+    if (this.phone && !cell) return null
+    return { tableId: table.id, widths: colWidthsOf(table) ?? equalColumnWidths(columnCount(table)), cellId: this.phone ? cell : null }
   }
 
   /** 行の高さ：そろえる（見出しの行のほかを、いちばん高い行に合わせる）／中身に合わせる。列の幅と同じく、元に戻す1回で戻る */
@@ -3629,6 +3713,19 @@ export class ReportEditor {
   }
 
   /**
+   * 書く欄を開かずに貼り付けた（Ctrl+V・⌘+V）：抄録のページなら、何も入らない理由を知らせる
+   * （まだ書き始めていない：「先生の許可が出た」を押してから。書き始めている：段落を押して、書く欄を開いてから）
+   */
+  private onPaperPaste(e: ClipboardEvent): void {
+    if (e.defaultPrevented || this.overlay.blockId || !this.layout) return
+    if (e.target instanceof Element && e.target.closest('input, textarea, select, [contenteditable]:not([contenteditable="false"])')) return
+    const first = this.stage.spread ? this.page - (this.page % 2) : this.page
+    const shown = this.stage.spread ? [first, first + 1] : [first]
+    if (!shown.some((i) => this.layout?.kinds[i] === 'abstract')) return
+    this.showNotice(this.report.abstract.started === false ? '抄録は「先生の許可が出た」を押してから書きます' : '抄録の段落を押して、書く欄を開いてから貼り付けます')
+  }
+
+  /**
    * 紙面で選んだ範囲を、いまの原稿の範囲にする（紙面を組み直す前に書き換えていたら、選んだ欄の文字が紙面と同じときだけ）。
    * 組み直すのを待っているときは、知らせて null
    */
@@ -3694,8 +3791,10 @@ export class ReportEditor {
     // このまとまりでは、書く欄の近くの「貼り付け」を、もう出さない
     this.clipPasted = clip
     this.autoPeriod = null
-    if (result.skippedChapters) this.showNotice('大見出し（Ⅰ．など）は貼り付けていません（大見出しは「大見出し」で足します）')
-    else if (result.droppedForAbstract) this.showNotice('抄録には、文だけを貼り付けました（見出し・図・表は貼り付けません）')
+    // 抄録：見出し・図・表と、図表の参照の括弧は入れない。文の中の参照（「図1に示すように」）は、書き直してもらう（abstractRefs.ts）
+    const abstractNote = typed.abstract.paragraphs.some((p) => p.id === id) ? abstractPasteNotice(result.droppedForAbstract || result.skippedChapters, result.removedRefs, result.keptRefs) : null
+    if (abstractNote) this.showNotice(abstractNote)
+    else if (result.skippedChapters) this.showNotice('大見出し（Ⅰ．など）は貼り付けていません（大見出しは「大見出し」で足します）')
     if (result.caret) {
       this.reopenAfterRender(result.caret.id, result.caret.offset, { id, place: 'after' })
       return
@@ -3735,11 +3834,83 @@ export class ReportEditor {
     const shown = this.shownReport ? ops.findEditable(this.shownReport, id)?.text : undefined
     if (shown !== this.overlay.text) return
     const anchor = domPoint(this.viewport, id, this.overlay.caret)
-    const focus = document.caretPositionFromPoint?.(e.clientX, e.clientY)
-    if (!anchor || !focus || !this.viewport.contains(focus.offsetNode)) return
+    let focus = caretAt(this.viewport, e.clientX, e.clientY)
+    if (!anchor || !focus) return
     e.preventDefault()
     this.commitAsParagraph()
-    getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, focus.offsetNode, focus.offset)
+    // 句読点の上を押したら、句読点も選ぶ（後ろへ広げるとき）
+    if (caretBefore(anchor, focus)) focus = includeClosing(focus, e.clientX, e.clientY)
+    getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset)
+  }
+
+  /**
+   * 紙面をマウスでなぞって選ぶ・Shift+クリックで広げる：選ぶ範囲の境目を、このツールで決め直す（PC）。
+   * ブラウザに任せると、句読点（組版エンジンが包んだ「。」など）のまわりで、次のようになっていた（依頼者の指摘。2026-10-20）：
+   * - 「。」の点の上で離すと、字の真ん中より左なので「。」の前で終わる（文と一緒に選べたり選べなかったりした）
+   * - 段落の終わりの「。」から前へなぞると、「。」しか選べない・何も選べない
+   * - 行末にぶら下げた「。」は、どこで離しても選べない
+   * 押した所・いまの所の文字の境目（caretAt）から選び、句読点の上なら字ごと入れる（includeClosing）。
+   * 2回・3回続けて押した（語・行を選ぶ）ときと、紙面の文字の外は、ブラウザのまま
+   */
+  private mouseSelect: { x: number; y: number; anchor: Caret; moved: boolean; extend: boolean } | null = null
+  private mouseSelectFrame = 0
+
+  private startMouseSelect(e: MouseEvent): void {
+    this.mouseSelect = null
+    if (e.detail > 1 || !(e.target instanceof Element) || this.overlay.element.contains(e.target)) return
+    // 写真・ボタンなど（なぞっても文を選ばない所）は、ブラウザに任せる（紙面の欄は、キーボードで押せるよう role="button" なので、role では見ない）
+    if (e.target.closest('[data-photo-slot], .range-bar, .range-chip, button, a[href], input, select, textarea') || getComputedStyle(e.target).userSelect === 'none') return
+    const sel = getSelection()
+    // Shift+クリック：前に選んでいた所から広げる（書く欄を開いていたときは onPaperMouseDown）
+    if (e.shiftKey) {
+      if (!this.overlay.blockId && sel?.anchorNode && this.hasPaperSelection()) this.mouseSelect = { x: e.clientX, y: e.clientY, anchor: { node: sel.anchorNode, offset: sel.anchorOffset }, moved: true, extend: true }
+      return
+    }
+    const anchor = caretAt(this.viewport, e.clientX, e.clientY)
+    if (anchor) this.mouseSelect = { x: e.clientX, y: e.clientY, anchor, moved: false, extend: false }
+  }
+
+  private moveMouseSelect(e: MouseEvent): void {
+    const m = this.mouseSelect
+    if (!m || !(e.buttons & 1)) return
+    if (!m.moved && Math.hypot(e.clientX - m.x, e.clientY - m.y) < 4) return
+    m.moved = true
+    const { clientX: x, clientY: y } = e
+    // ブラウザが選ぶ範囲を変えたあと（同じ描画の前）に、決め直す
+    cancelAnimationFrame(this.mouseSelectFrame)
+    this.mouseSelectFrame = requestAnimationFrame(() => this.applyMouseSelect(x, y))
+  }
+
+  private endMouseSelect(e: MouseEvent): void {
+    const m = this.mouseSelect
+    if (!m) return
+    if (!m.moved) {
+      this.mouseSelect = null
+      return
+    }
+    const { clientX: x, clientY: y } = e
+    cancelAnimationFrame(this.mouseSelectFrame)
+    // マウスを離したあとのブラウザの処理のあとで、決め直す（このあとのクリックでは、選んだ所があるので書く欄を開かない）
+    this.applyMouseSelect(x, y)
+    this.mouseSelectFrame = requestAnimationFrame(() => {
+      this.applyMouseSelect(x, y)
+      this.mouseSelect = null
+    })
+  }
+
+  /** なぞり始めた所から (x, y) までを選ぶ（句読点の上なら字ごと） */
+  private applyMouseSelect(x: number, y: number): void {
+    const m = this.mouseSelect
+    if (!m || !m.anchor.node.isConnected) return
+    let focus = caretAt(this.viewport, x, y)
+    if (!focus) return
+    let anchor = m.anchor
+    if (caretBefore(anchor, focus)) focus = includeClosing(focus, x, y)
+    else if (!m.extend) anchor = includeClosing(anchor, m.x, m.y)
+    const sel = getSelection()
+    if (!sel) return
+    if (sel.anchorNode === anchor.node && sel.anchorOffset === anchor.offset && sel.focusNode === focus.node && sel.focusOffset === focus.offset) return
+    sel.setBaseAndExtent(anchor.node, anchor.offset, focus.node, focus.offset)
   }
 
   // ---- 作品写真（何ページかにできる。ページごとに並べ方を選ぶ。page は何ページ目の作品写真か（0 から）。mockups/v38 案A） ----
@@ -3816,11 +3987,18 @@ export class ReportEditor {
     const slots = photoSlots(this.report.workPhotos, page, index, files.length, max)
     const stored: (PhotoSlot & { imageId: string })[] = []
     let tried = 0
-    for (const file of files) {
-      if (stored.length >= slots.length) break
-      tried++
-      const imageId = await this.storeImage(file, 'photo')
-      if (imageId) stored.push({ ...slots[stored.length], imageId })
+    // 縮めて保存する間は、画面に「写真を取り込んでいます…（2 / 5枚）」を出す
+    const total = Math.min(files.length, slots.length)
+    try {
+      for (const file of files) {
+        if (stored.length >= slots.length) break
+        this.callbacks.onImageWork?.({ done: tried, total })
+        tried++
+        const imageId = await this.storeImage(file, 'photo')
+        if (imageId) stored.push({ ...slots[stored.length], imageId })
+      }
+    } finally {
+      this.callbacks.onImageWork?.(null)
     }
     if (stored.length > 0) this.update((r) => ({ ...r, workPhotos: placePhotos(r.workPhotos, stored) }))
     const added = this.report.workPhotos.length - before

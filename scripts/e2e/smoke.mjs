@@ -17,6 +17,8 @@ import { tocLinksPc } from './tocLinks.mjs'
 import { autoHeadingPc } from './autoHeading.mjs'
 import { captionGapPc } from './captionGap.mjs'
 import { tableShapePc } from './tableShape.mjs'
+import { tableCustomPc } from './tableCustom.mjs'
+import { waitingPc } from './waiting.mjs'
 import { setupWriting } from './sampleReport.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
@@ -2379,6 +2381,12 @@ await withEdge(async (browser) => {
 
   // ---- 表の行の高さ「そろえる」・左端の列「中身に合わせる」・列の幅「中身に合わせる」で1字だけの行を作らない・マスの中の Enter は改行（scripts/e2e/tableShape.mjs） ----
   await tableShapePc(browser, check)
+
+  // ---- 表の列の幅を「自分で決める」（mockups/v42：縦の線をドラッグ・5% ずつ・10% 以上・そろえ直す・元に戻す・PDF。scripts/e2e/tableCustom.mjs） ----
+  await tableCustomPc(browser, check)
+
+  // ---- 待つ間の表示（押したボタンに回る印と言葉・2秒を過ぎたら「数秒かかることがあります」・終わったら知らせ。依頼者の要望 2026-10-20。scripts/e2e/waiting.mjs） ----
+  await waitingPc(browser, check)
 })
 
 /**

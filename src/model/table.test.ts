@@ -1,7 +1,26 @@
 import { describe, expect, it } from 'vitest'
 import { demoReport } from './demoReport'
 import { migrateReport } from './migrate'
-import { addColumn, addRow, blankTable, cellPosition, clampTableSize, fromMaterialTable, materialTable, removeColumn, removeRow, setCellImage, swatchColumn, TABLE_SIZE } from './table'
+import {
+  addColumn,
+  addColumnWidth,
+  addRow,
+  blankTable,
+  cellPosition,
+  clampTableSize,
+  colWidthsOf,
+  equalColumnWidths,
+  fromMaterialTable,
+  materialTable,
+  moveColumnBorder,
+  normalizeColumnWidths,
+  removeColumn,
+  removeColumnWidth,
+  removeRow,
+  setCellImage,
+  swatchColumn,
+  TABLE_SIZE,
+} from './table'
 import type { TableBlock } from './types'
 
 let n = 0
@@ -104,5 +123,84 @@ describe('表', () => {
       ['上着', null],
       ['', 'sw1'],
     ])
+  })
+})
+
+describe('列の幅を自分で決める（mockups/v42）', () => {
+  const tableOf = (n: number, colWidths?: number[]) => {
+    const t = blankTable('t', newId, '', n, 2)
+    return { ...t, widths: 'custom' as const, ...(colWidths ? { colWidths } : {}) }
+  }
+
+  it('同じ幅（合計はちょうど 100。端数は 0.1% の刻み）', () => {
+    expect(equalColumnWidths(4)).toEqual([25, 25, 25, 25])
+    const three = equalColumnWidths(3)
+    expect(three.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 10)
+    expect(three.every((w) => Math.abs(w - 33.3) <= 0.11)).toBe(true)
+  })
+
+  it('決めた幅は、列の数と合うときだけ使う。合計 100 にし、どの列も 10% 以上にする', () => {
+    expect(colWidthsOf(tableOf(3, [50, 30, 20]))).toEqual([50, 30, 20])
+    expect(colWidthsOf(tableOf(3, [50, 50]))).toBeNull()
+    expect(colWidthsOf(tableOf(3))).toBeNull()
+    expect(normalizeColumnWidths([2, 1, 1], 3)).toEqual([50, 25, 25])
+    const narrow = normalizeColumnWidths([5, 45, 50], 3)!
+    expect(narrow[0]).toBe(10)
+    expect(narrow.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 10)
+    expect(normalizeColumnWidths([1, Number.NaN, 1], 3)).toBeNull()
+  })
+
+  it('境目を動かすと、となりの2列だけが 5% ずつ変わる。どちらも 10% より狭くならない', () => {
+    expect(moveColumnBorder([25, 25, 25, 25], 1, 11)).toEqual([25, 35, 15, 25])
+    expect(moveColumnBorder([25, 25, 25, 25], 1, 6)).toEqual([25, 30, 20, 25])
+    expect(moveColumnBorder([25, 25, 25, 25], 1, 2)).toEqual([25, 25, 25, 25])
+    expect(moveColumnBorder([25, 35, 15, 25], 1, 30)).toEqual([25, 40, 10, 25])
+    expect(moveColumnBorder([25, 35, 15, 25], 0, -40)).toEqual([10, 50, 15, 25])
+    // 端数のある幅から：5% ずつ動き、10% で止まる
+    expect(moveColumnBorder([23.1, 15.2, 39.7, 22], 0, -10)).toEqual([13.1, 25.2, 39.7, 22])
+    expect(moveColumnBorder([23.1, 15.2, 39.7, 22], 0, 10)).toEqual([28.3, 10, 39.7, 22])
+  })
+
+  it('列を足すと、足した列はとなり（左）の列の幅を半分もらう。狭すぎるときは、ほかの列から少しずつ', () => {
+    const t = addColumn(tableOf(4, [25, 40, 10, 25]), 1, newId)
+    expect(t.colWidths).toEqual([25, 20, 20, 10, 25])
+    const thin = addColumn(tableOf(3, [15, 60, 25]), 0, newId).colWidths!
+    expect(thin.every((w) => w >= 10)).toBe(true)
+    expect(thin.reduce((a, b) => a + b, 0)).toBeCloseTo(100, 10)
+    // 決めた幅がない表は、今までどおり（幅を書かない）
+    expect(addColumn(blankTable('t', newId, '', 2, 2), 0, newId).colWidths).toBeUndefined()
+  })
+
+  it('列を消すと、その幅は左どなりへ（いちばん左の列なら右どなりへ）', () => {
+    expect(removeColumn(tableOf(4, [25, 20, 30, 25]), 2).colWidths).toEqual([25, 50, 25])
+    expect(removeColumn(tableOf(4, [25, 20, 30, 25]), 0).colWidths).toEqual([45, 30, 25])
+    expect(removeColumnWidth([60, 40], 1)).toEqual([100])
+    expect(addColumnWidth([100], 0)).toEqual([50, 50])
+  })
+
+  it('保存データ：自分で決める・決めた幅を読む（幅の値が使えないものは捨てる）。前の版の表は変わらない', () => {
+    const rows = [{ id: 'r', cells: [{ id: 'c', text: 'a', imageId: null }, { id: 'd', text: 'b', imageId: null }] }]
+    const r = migrateReport({
+      formatVersion: 1,
+      body: [
+        {
+          id: 'c1',
+          title: '章',
+          blocks: [
+            { type: 'table', id: 'a', caption: '', widths: 'custom', colWidths: [70, 30], rows },
+            { type: 'table', id: 'b', caption: '', widths: 'auto', colWidths: [70, 30], rows },
+            { type: 'table', id: 'x', caption: '', widths: 'custom', colWidths: ['70', 30], rows },
+            { type: 'table', id: 'o', caption: '', widths: 'equal', rows },
+          ],
+        },
+      ],
+    })
+    const [a, b, x, o] = r.body[0].blocks as TableBlock[]
+    expect(a).toMatchObject({ widths: 'custom', colWidths: [70, 30] })
+    expect(b).toMatchObject({ widths: 'auto', colWidths: [70, 30] })
+    expect(x.widths).toBe('custom')
+    expect('colWidths' in x).toBe(false)
+    expect('colWidths' in o).toBe(false)
+    expect(o.widths).toBe('equal')
   })
 })

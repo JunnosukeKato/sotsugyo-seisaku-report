@@ -94,3 +94,105 @@ export function domPoint(viewport: HTMLElement, id: string, offset: number): { n
   }
   return last ? { node: last, offset: last.length } : { node: frs[0], offset: 0 }
 }
+
+// ---- マウスで選ぶ境目（句読点を字ごと選ぶ） ----
+
+/**
+ * 文の終わりの句読点・終わり括弧（「。」「、」「」」「）」など）。
+ * 「。」「、」は字の箱の左下に点があり、点の上でマウスを離す（押す）と、ブラウザは字の真ん中より左なので字の前を境目にする。
+ * そのため、文の終わりの「。」が、文と一緒に選べたり選べなかったりしていた（依頼者の指摘。2026-10-20）。
+ * 行末にぶら下げた「。」（組版エンジンの viv-hang-end。字の幅が 0）は、どこで離しても選べなかった
+ */
+const CLOSING = /[、。，．､｡’”〞〟）］｝｠〉》」』】〕〗〙〛!?！？)\]]/u
+
+/** 紙面の上の文字の境目（テキストノードと、その中の位置） */
+export interface Caret {
+  node: Node
+  offset: number
+}
+
+/** 画面の点 (x, y) の、紙面の文字の境目（紙面の外なら null） */
+export function caretAt(viewport: HTMLElement, x: number, y: number): Caret | null {
+  const pos = document.caretPositionFromPoint?.(x, y)
+  if (!pos || !viewport.contains(pos.offsetNode)) return null
+  return { node: pos.offsetNode, offset: pos.offset }
+}
+
+/** 境目 c のすぐ後ろの文字（同じ欄（data-block-id）の中だけ。なければ null） */
+function charAfter(c: Caret): { node: Text; offset: number } | null {
+  if (c.node.nodeType === Node.TEXT_NODE && c.offset < (c.node as Text).length) return { node: c.node as Text, offset: c.offset }
+  const block = (c.node instanceof Element ? c.node : c.node.parentElement)?.closest('[data-block-id]')
+  if (!block) return null
+  const point = document.createRange()
+  point.setStart(c.node, c.offset)
+  for (const text of textNodes(block)) {
+    if (text.length > 0 && text !== c.node && point.comparePoint(text, 0) >= 0) return { node: text, offset: 0 }
+  }
+  return null
+}
+
+/** 文字の箱（画面座標）。行末にぶら下げた字（幅が 0）は、字の大きさの幅にする */
+function glyphBox(node: Text, offset: number): { left: number; right: number; top: number; bottom: number } | null {
+  const range = document.createRange()
+  range.setStart(node, offset)
+  range.setEnd(node, offset + 1)
+  const r = [...range.getClientRects()].find((x) => x.height > 0)
+  if (!r) return null
+  // 字の高さ（画面の px）を、字の大きさの目安にする
+  const width = r.width < r.height * 0.4 ? r.height * 0.9 : r.width
+  return { left: r.left, right: r.left + width, top: r.top, bottom: r.bottom }
+}
+
+/**
+ * 点 (x, y) が、境目 c のすぐ後ろの句読点・終わり括弧の上（字の箱の中。行末なら、その右の余白も）にあれば、その字の後ろの境目を返す（なければ c のまま）。
+ * 選ぶ範囲の「後ろの端」（前へなぞったときは、なぞり始めた所）に使う：句読点の上で離せば（押せば）、句読点も選ぶ
+ */
+export function includeClosing(c: Caret, x: number, y: number): Caret {
+  const next = charAfter(c)
+  if (!next || !CLOSING.test(next.node.data[next.offset])) return c
+  const box = glyphBox(next.node, next.offset)
+  if (!box || y < box.top - 2 || y > box.bottom + 2 || x < box.left - 1) return c
+  // 行末でなければ、字の右の端まで（その先は、次の字の上）
+  const after = charAfter({ node: next.node, offset: next.offset + 1 })
+  const afterBox = after ? glyphBox(after.node, after.offset) : null
+  const sameLine = afterBox && Math.abs(afterBox.top - box.top) < (box.bottom - box.top) / 2
+  if (sameLine && x > box.right + 1) return c
+  return { node: next.node, offset: next.offset + 1 }
+}
+
+/** 境目 a が b より前か（同じなら false） */
+export function caretBefore(a: Caret, b: Caret): boolean {
+  const range = document.createRange()
+  range.setStart(a.node, a.offset)
+  return range.comparePoint(b.node, b.offset) > 0
+}
+
+// ---- 行末にぶら下げた句読点の、選んだ色 ----
+
+/** 選んだ範囲に入っている、行末にぶら下げた句読点に付ける印（index.css で、選んだ色を字の後ろに塗る） */
+const HANG_MARK = 'sel-hang'
+let hangMarked = new Set<Element>()
+
+/**
+ * 行末にぶら下げた「。」「、」（組版エンジンの viv-hang-end）は、字の進む幅が 0 なので、選んでもブラウザが色を塗らない
+ * （白い字になって、紙の上で見えなくなっていた）。選んだ範囲に入っているものに印を付け、index.css で色を塗る。
+ * roots：紙面・書く欄を入れる要素。選び直すたびに呼ぶ（selectionchange）
+ */
+export function markHangingSelection(roots: readonly HTMLElement[]): void {
+  if (roots.length === 0 && hangMarked.size === 0) return
+  const sel = document.getSelection()
+  const range = sel && sel.rangeCount > 0 && !sel.isCollapsed ? sel.getRangeAt(0) : null
+  const next = new Set<Element>()
+  if (range) {
+    for (const root of roots) {
+      if (!range.intersectsNode(root)) continue
+      for (const el of root.querySelectorAll('viv-ts-close.viv-hang-end')) {
+        const text = el.firstElementChild?.firstChild
+        if (text instanceof Text && text.length > 0 && range.isPointInRange(text, 0) && range.isPointInRange(text, text.length)) next.add(el)
+      }
+    }
+  }
+  for (const el of hangMarked) if (!next.has(el)) el.classList.remove(HANG_MARK)
+  for (const el of next) el.classList.add(HANG_MARK)
+  hangMarked = next
+}

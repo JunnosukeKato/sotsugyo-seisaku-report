@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { summarize, type DriveState, type RemoteCopy } from '../drive/driveSync'
 import { maskEmail, UNIVERSITY_DOMAIN } from '../model/account'
 import type { Report } from '../model/types'
+import { BusyLabel, SlowNote, Spinner } from './Busy'
+import { useBusy, useDoneNote } from './useBusy'
 import type { SaveState } from './useAutosave'
 import { useDialogFocus } from './useDialogFocus'
 
@@ -97,11 +99,13 @@ export function LoginGate({
       @{DOMAIN} のアカウントを選んでください。このツールが見られるのは、このツールで作ったファイルだけです。学科や先生が、あなたのドライブを見ることはありません。
     </p>
   )
-  const busy = !online || gate.kind === 'signing'
+  const signing = gate.kind === 'signing'
+  const busy = !online || signing
+  // ログインしている間は、押したボタンに回る印と「ログインしています…」（Google の窓が開くまで・閉じたあと、少し待つことがある）
   const button = (label: string) => (
     <button className="login-btn" disabled={busy} onClick={onLogin}>
-      {googleMark}
-      {gate.kind === 'signing' ? 'ログインしています…' : label}
+      {signing ? <Spinner /> : googleMark}
+      {signing ? 'ログインしています…' : label}
     </button>
   )
   const masked = previousEmail ? maskEmail(previousEmail) : ''
@@ -111,11 +115,15 @@ export function LoginGate({
         {googleMark}
         <span className="who">
           <b>{masked}</b>
-          <small>{gate.kind === 'signing' ? 'ログインしています…' : 'このアカウントで続ける'}</small>
+          <small>{signing ? 'ログインしています…' : 'このアカウントで続ける'}</small>
         </span>
-        <span className="go" aria-hidden="true">
-          ›
-        </span>
+        {signing ? (
+          <Spinner className="go" />
+        ) : (
+          <span className="go" aria-hidden="true">
+            ›
+          </span>
+        )}
       </button>
       <button className="login-other" disabled={busy} onClick={onLoginOther}>
         別のアカウントでログイン
@@ -130,6 +138,8 @@ export function LoginGate({
         {gate.kind === 'loading' ? (
           <>
             <div className="login-spin">ドライブの原稿を確かめています…</div>
+            {/* 2秒を過ぎたら：はじめてのログイン（フォルダを作る）・電波の弱いときは、十数秒かかることがある */}
+            {!gate.total && <SlowNote busy text="十数秒かかることがあります" className="login-small" />}
             {!!gate.total && (
               <>
                 <div className="login-progress">
@@ -156,6 +166,7 @@ export function LoginGate({
               <p className="login-lead">大学の Google アカウントでログインしてください。原稿は、あなたの Google ドライブ（「卒業制作報告書」フォルダ）に自動で保存されます。</p>
             )}
             {previous || button(gate.kind === 'error' ? 'もう一度ログインする' : '大学のアカウントでログイン')}
+            <SlowNote busy={signing} className="login-small" />
             {previous ? null : online ? note : <p className="login-small">原稿はドライブに保存するため、ログインしてから書きます。</p>}
           </>
         )}
@@ -173,7 +184,8 @@ export interface DriveControls {
   lastSaved: Date | null
   /** 教職員のアカウント（学籍番号の形でないアドレス）で試している */
   staff: boolean
-  onSaveNow: () => void
+  /** 「今すぐドライブに保存」：送り終える（送れなかったときも）まで待つ */
+  onSaveNow: () => Promise<void> | void
   onReload: () => void
   onWipe: () => void
   onRelogin: () => void
@@ -265,6 +277,18 @@ export function DriveChip({ drive, compact, onClick }: { drive: DriveControls; c
 export function DriveMenu({ drive, inline, onDone }: { drive: DriveControls; inline?: boolean; onDone?: () => void }) {
   const { status, email } = drive.state
   const lastSaved = status.kind === 'saved' ? status.at : drive.lastSaved
+  // 「今すぐドライブに保存」：送り終えるまで、この操作の欄を開いたまま、ボタンに「ドライブに保存しています…」を出し、
+  // 送れたら「✓ ドライブに保存しました（13:44）」を出す（前は押すと欄が閉じ、保存のようすの小さな字が変わるだけだった。依頼者の要望 2026-10-20）。
+  // 送れなかったわけ（電波なし・エラー）は、上の「最後にドライブに保存」の下に出る
+  const [busy, run] = useBusy<'save'>()
+  const [done, showDone] = useDoneNote(8000)
+  const saveNow = () =>
+    void run('save', async () => {
+      showDone(null)
+      await drive.onSaveNow()
+      showDone('saved')
+    })
+  const savedAt = done && status.kind === 'saved' ? formatTime(status.at) : null
   const act = (fn: () => void) => () => {
     onDone?.()
     fn()
@@ -286,9 +310,27 @@ export function DriveMenu({ drive, inline, onDone }: { drive: DriveControls; inl
         {status.kind === 'offline' && <em>電波がないため、ドライブには送れていません。つながったら自動で送ります。</em>}
         {status.kind === 'error' && <em>{status.message}</em>}
       </div>
-      {status.kind === 'expired' ? <button onClick={act(drive.onRelogin)}>ログインし直す</button> : <button onClick={act(drive.onSaveNow)}>今すぐドライブに保存</button>}
-      <button onClick={act(drive.onReload)}>ドライブの原稿を読み込み直す</button>
-      <button onClick={act(drive.onWipe)}>この端末から原稿を消す（共用のパソコンで）</button>
+      {status.kind === 'expired' ? (
+        <button onClick={act(drive.onRelogin)}>ログインし直す</button>
+      ) : (
+        <button className="drive-save-now" disabled={!!busy} onClick={saveNow}>
+          <BusyLabel busy={!!busy} text="ドライブに保存しています…">
+            今すぐドライブに保存
+          </BusyLabel>
+        </button>
+      )}
+      <SlowNote busy={!!busy} className="drive-note" />
+      {savedAt && (
+        <p className="drive-done" role="status">
+          {cloud(true)}ドライブに保存しました（{savedAt}）
+        </p>
+      )}
+      <button disabled={!!busy} onClick={act(drive.onReload)}>
+        ドライブの原稿を読み込み直す
+      </button>
+      <button disabled={!!busy} onClick={act(drive.onWipe)}>
+        この端末から原稿を消す（共用のパソコンで）
+      </button>
     </div>
   )
 }
@@ -341,7 +383,8 @@ export function ConflictDialog({
   remote: RemoteCopy
   /** ログインした直後（この端末の原稿を、ドライブとつなぐ前に書いていた） */
   atLogin: boolean
-  busy: boolean
+  /** 選んだほうを開いている・保存している途中（押したボタンに回る印と言葉を出し、どちらも押せなくする） */
+  busy: 'remote' | 'local' | null
   onChooseRemote: () => void
   onChooseLocal: () => void
 }) {
@@ -376,13 +419,18 @@ export function ConflictDialog({
         </div>
         <div className="row-buttons">
           <span className="spacer" />
-          <button className={remoteNewer ? '' : 'primary'} disabled={busy} onClick={onChooseLocal}>
-            この端末の原稿で続ける
+          <button className={remoteNewer ? '' : 'primary'} disabled={!!busy} onClick={onChooseLocal}>
+            <BusyLabel busy={busy === 'local'} text="ドライブに保存しています…">
+              この端末の原稿で続ける
+            </BusyLabel>
           </button>
-          <button className={remoteNewer ? 'primary' : ''} disabled={busy} onClick={onChooseRemote}>
-            ドライブの原稿を開く
+          <button className={remoteNewer ? 'primary' : ''} disabled={!!busy} onClick={onChooseRemote}>
+            <BusyLabel busy={busy === 'remote'} text="開いています…">
+              ドライブの原稿を開く
+            </BusyLabel>
           </button>
         </div>
+        <SlowNote busy={!!busy} className="row-note" />
       </div>
     </div>
   )
@@ -413,9 +461,12 @@ export function WipeDialog({ lastSaved, busy, onConfirm, onClose }: { lastSaved:
             やめる
           </button>
           <button className="primary" onClick={onConfirm} disabled={busy}>
-            {busy ? 'ドライブに保存しています…' : 'この端末から消す（ドライブの原稿は残ります）'}
+            <BusyLabel busy={busy} text="ドライブに保存しています…">
+              この端末から消す（ドライブの原稿は残ります）
+            </BusyLabel>
           </button>
         </div>
+        <SlowNote busy={busy} className="row-note" />
       </div>
     </div>
   )
@@ -440,18 +491,23 @@ export function ReloginDialog({ busy, error, onLogin, onLater }: { busy: boolean
             あとで
           </button>
           <button className="primary" disabled={busy} onClick={onLogin}>
-            {busy ? 'ログインしています…' : 'ログインし直す'}
+            <BusyLabel busy={busy} text="ログインしています…">
+              ログインし直す
+            </BusyLabel>
           </button>
         </div>
+        <SlowNote busy={busy} className="row-note" />
       </div>
     </div>
   )
 }
 
 /** この端末に、別のアカウントの原稿が残っているとき（共用のパソコンなど） */
-export function OtherAccountDialog({ previousEmail, unsynced, onRelogin, onDiscard }: { previousEmail: string; unsynced: boolean; onRelogin: () => void; onDiscard: () => void }) {
+export function OtherAccountDialog({ previousEmail, unsynced, onRelogin, onDiscard }: { previousEmail: string; unsynced: boolean; onRelogin: () => void; onDiscard: () => Promise<void> | void }) {
   const ref = useRef<HTMLDivElement>(null)
   useDialogFocus(ref)
+  // 「前の原稿を消して続ける」：この端末から消して、読み込み直すまで（消している間は「消しています…」）
+  const [busy, run] = useBusy<'discard'>()
   return (
     <div className="modal-backdrop over-gate">
       <div className="modal" role="dialog" aria-modal="true" aria-label="別のアカウントの原稿があります" ref={ref}>
@@ -469,9 +525,13 @@ export function OtherAccountDialog({ previousEmail, unsynced, onRelogin, onDisca
         </p>
         <div className="row-buttons">
           <span className="spacer" />
-          <button onClick={onRelogin}>前のアカウントでログインし直す</button>
-          <button className={unsynced ? 'danger' : 'primary'} onClick={onDiscard}>
-            前の原稿を消して続ける
+          <button onClick={onRelogin} disabled={!!busy}>
+            前のアカウントでログインし直す
+          </button>
+          <button className={unsynced ? 'danger' : 'primary'} disabled={!!busy} onClick={() => void run('discard', onDiscard)}>
+            <BusyLabel busy={!!busy} text="消しています…">
+              前の原稿を消して続ける
+            </BusyLabel>
           </button>
         </div>
       </div>
@@ -495,6 +555,7 @@ export function IdMismatchDialog({
   coverId: string
   accountEmail: string
   accountId: string
+  /** 「自分の原稿ではない」を選んで、自分の原稿を確かめている途中（そのボタンに回る印と「準備しています…」） */
   busy: boolean
   onFix: () => void
   onNotMine: () => void
@@ -522,12 +583,21 @@ export function IdMismatchDialog({
             学籍番号を {accountId} に直す<small>自分の原稿で、学籍番号を打ち間違えていたとき</small>
           </button>
           <button disabled={busy} onClick={onNotMine}>
-            自分の原稿ではない<small>この端末の原稿は使わずに（この端末の控えに残します）、自分の原稿で続けるとき</small>
+            {busy ? (
+              <span className="busy-line">
+                <Spinner />
+                準備しています…
+              </span>
+            ) : (
+              '自分の原稿ではない'
+            )}
+            <small>この端末の原稿は使わずに（この端末の控えに残します）、自分の原稿で続けるとき</small>
           </button>
           <button disabled={busy} onClick={onKeep}>
             このまま続ける<small>学籍番号が合っているとき</small>
           </button>
         </div>
+        <SlowNote busy={busy} className="row-note" />
       </div>
     </div>
   )

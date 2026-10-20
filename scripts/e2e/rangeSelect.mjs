@@ -2,7 +2,7 @@
 // 依頼者の指摘「複数の段落をまたいでコピーを取って場所を移動させたいときに、段落をまたぐようにして選択することが出来ません」（2026-10-19）。
 // 範囲の決まりは src/editor/rangeOps.ts、紙面の位置との対応は src/editor/rangeSelection.ts。画面の写真は poc-output/range-select/ に置く。
 // smoke.mjs（パソコン：rangeSelectPc）と phone.mjs（スマホ：rangeSelectPhone）から呼ぶ。これだけを動かすときは node scripts/e2e/rangeSelect.mjs
-import { mkdirSync } from 'node:fs'
+import { mkdirSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { stubConfig } from './configStub.mjs'
 import { setupWriting } from './sampleReport.mjs'
@@ -277,7 +277,8 @@ export async function rangeSelectPc(browser, check) {
   await page.evaluate(() => window.__editor.setView('spread'))
   await showBlock(page, ready, 'p14')
   const sp = await page.evaluate(() => ({ spread: window.__editor.getSnapshot().spread, page: window.__editor.getSnapshot().page, p13: window.__editor.pageOfBlock('p13'), p14: window.__editor.pageOfBlock('p14') }))
-  await drag(page, await charPoint(page, 'p13', 3), await charPoint(page, 'p14', 5))
+  // 「本制作では、」の「は」まで（5字目の「、」の上で離すと、「、」まで選ぶため。periodSelectPc）
+  await drag(page, await charPoint(page, 'p13', 3), await charPoint(page, 'p14', 4))
   st = await state(page)
   await page.screenshot({ path: `${OUT}/6-spread-chapter.png` })
   check(
@@ -288,13 +289,13 @@ export async function rangeSelectPc(browser, check) {
   await ctrl(page, 'c')
   await wait(150)
   const chapterCopy = await page.evaluate(() => window.__copied.at(-1) ?? '')
-  check('段落を選ぶ：大見出しをまたいでコピーすると、ふつうの文字には大見出しの行（「Ⅲ．まとめ」）も入る', chapterCopy === [textOf('p13').slice(3), 'Ⅲ．まとめ', textOf('p14').slice(0, 5)].join('\n'), JSON.stringify(chapterCopy.slice(0, 40)))
+  check('段落を選ぶ：大見出しをまたいでコピーすると、ふつうの文字には大見出しの行（「Ⅲ．まとめ」）も入る', chapterCopy === [textOf('p13').slice(3), 'Ⅲ．まとめ', textOf('p14').slice(0, 4)].join('\n'), JSON.stringify(chapterCopy.slice(0, 40)))
   await ctrl(page, 'x')
   await wait(300)
   st = await state(page)
   check(
     '段落を選ぶ：大見出しをまたいで切り取ると、大見出しは残り（「大見出しは残しました」）、前の章と後ろの章の文はつながない',
-    st.chapters.length === 3 && st.chapters[2].title === 'まとめ' && blockIn(st, 'p13')?.text === textOf('p13').slice(0, 3) && blockIn(st, 'p14')?.text === textOf('p14').slice(5) && st.notice.includes('大見出しは残しました'),
+    st.chapters.length === 3 && st.chapters[2].title === 'まとめ' && blockIn(st, 'p13')?.text === textOf('p13').slice(0, 3) && blockIn(st, 'p14')?.text === textOf('p14').slice(4) && st.notice.includes('大見出しは残しました'),
     JSON.stringify({ titles: st.chapters.map((c) => c.title), notice: st.notice }),
   )
   await ready()
@@ -355,6 +356,389 @@ export async function rangeSelectPc(browser, check) {
   check('選んだ文のボタン：書く欄から Shift+↓ で選び広げたときも、選んだ所の上に帯が出る', keyBar)
   await context.close()
   await selectionButtonsPc(browser, check)
+  await periodSelectPc(browser, check)
+  await abstractPastePc(browser, check)
+}
+
+/**
+ * 紙面の欄 id の、見えているページの n 番目の字 ch（prev があれば、そのすぐ後ろの ch だけを数える）。
+ * charPoint と同じ数え方の位置 offset・字の箱・点のある所（左下）・真ん中。
+ * hang：行末にぶら下げた字（字の幅が 0 なので、箱の幅は字の高さから決める）
+ */
+const glyphOf = (page, id, ch, n = 0, prev = null) =>
+  page.evaluate(
+    (id, ch, n, prev) => {
+      let before = ''
+      let k = 0
+      let offset = 0
+      for (const el of document.querySelectorAll(`.page-viewport.front [data-block-id="${id}"]`)) {
+        const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+        while (w.nextNode()) {
+          const t = w.currentNode
+          for (let i = 0; i < t.length; i++, offset++) {
+            const last = before
+            before = t.data[i]
+            if (t.data[i] !== ch || (prev && last !== prev)) continue
+            const r = document.createRange()
+            r.setStart(t, i)
+            r.setEnd(t, i + 1)
+            // 見えていないページの字は数えない
+            const g = [...r.getClientRects()].find((x) => x.height > 0)
+            if (!g || k++ < n) continue
+            const width = g.width > 2 ? g.width : g.height * 0.9
+            const box = { left: g.left, top: g.top, width, height: g.height }
+            return { offset, hang: !!t.parentElement?.closest('viv-ts-close.viv-hang-end'), box, ink: { x: g.left + width * 0.25, y: g.top + g.height * 0.75 }, center: { x: g.left + width / 2, y: g.top + g.height / 2 }, right: el.getBoundingClientRect().right }
+          }
+        }
+      }
+      return null
+    },
+    id,
+    ch,
+    n,
+    prev,
+  )
+
+/** 画面の箱の中で、選んだ色（青）の点の割合（0〜1。選んだ色が字に付いているか） */
+async function blueShare(page, box) {
+  const clip = { x: Math.round(box.left + 1), y: Math.round(box.top + 1), width: Math.max(1, Math.floor(box.width - 2)), height: Math.max(1, Math.floor(box.height - 2)) }
+  // captureBeyondViewport: false：写すときに画面の大きさを変えない（変えると、書く欄が組み直されて選んだ所が外れる）
+  const png = await page.screenshot({ clip, encoding: 'base64', captureBeyondViewport: false })
+  return page.evaluate(async (png) => {
+    const img = new Image()
+    img.src = `data:image/png;base64,${png}`
+    await img.decode()
+    const c = document.createElement('canvas')
+    c.width = img.width
+    c.height = img.height
+    const g = c.getContext('2d')
+    g.drawImage(img, 0, 0)
+    const d = g.getImageData(0, 0, c.width, c.height).data
+    let blue = 0
+    for (let i = 0; i < d.length; i += 4) if (d[i + 2] > 150 && d[i + 2] - d[i] > 80) blue++
+    return blue / (d.length / 4)
+  }, png)
+}
+
+/**
+ * 文の終わりの「。」「、」・終わり括弧も、文と一緒に選べる（依頼者の指摘「文末の「。」は文章と一緒に選択ができません」「「。」側からドラッグしてその前の文章を全て選択しようとしたら、「。」しか選択できませんでした」2026-10-20）。
+ * 「。」の点の上で離す・「。」から前へなぞる・行末にぶら下げた「。」・Shift+クリック・Shift+→・書き直したあと・見開き・拡大・次のページへ続く段落。画面の写真は poc-output/select-period/
+ */
+export async function periodSelectPc(browser, check) {
+  const SHOTS = 'poc-output/select-period'
+  mkdirSync(SHOTS, { recursive: true })
+  const { context, page, ready } = await openSample(browser, { viewport: { width: 1366, height: 768 } })
+  const original = await state(page)
+  const textOf = (id) => blockIn(original, id)?.text ?? ''
+  const copy = async () => {
+    await ctrl(page, 'c')
+    await wait(150)
+    return page.evaluate(() => window.__copied.at(-1) ?? '')
+  }
+  const clear = async () => {
+    await page.evaluate(() => getSelection().removeAllRanges())
+    await wait(200)
+  }
+  /** 字の近くの写真（拡大） */
+  const shot = async (name, box) => {
+    const clip = { x: Math.max(0, Math.round(box.left - 170)), y: Math.max(0, Math.round(box.top - 40)), width: 230, height: 90 }
+    const png = await page.screenshot({ clip, encoding: 'base64', captureBeyondViewport: false })
+    // 3倍に拡大して保存する（画面の大きさは変えない）
+    const big = await page.evaluate(async (png) => {
+      const img = new Image()
+      img.src = `data:image/png;base64,${png}`
+      await img.decode()
+      const c = document.createElement('canvas')
+      c.width = img.width * 3
+      c.height = img.height * 3
+      const g = c.getContext('2d')
+      g.imageSmoothingEnabled = false
+      g.drawImage(img, 0, 0, c.width, c.height)
+      return c.toDataURL('image/png').split(',')[1]
+    }, png)
+    writeFileSync(`${SHOTS}/${name}.png`, Buffer.from(big, 'base64'))
+  }
+
+  // ---- 行の途中の「。」：点の上で離しても、「。」まで選ぶ（今までは、点の上で離すと「。」の前まで）。選んだ色も付く ----
+  await showBlock(page, ready, 'p4')
+  let g = await glyphOf(page, 'p4', '。')
+  await clear()
+  await drag(page, await charPoint(page, 'p4', g.offset - 8), g.ink)
+  let copied = await copy()
+  let share = await blueShare(page, g.box)
+  await shot('after-1-release-on-dot', g.box)
+  check('文の終わりの「。」：「。」の点の上でマウスを離すと、「。」まで選ぶ（コピーした文が「。」で終わる。「。」に選んだ色が付く）', copied.endsWith('。') && copied.length === 9 && share > 0.4, JSON.stringify({ copied, share }))
+
+  // 「、」・終わり括弧（「（図3）」の「）」）・「）」の後ろの「。」
+  g = await glyphOf(page, 'p4', '、')
+  await clear()
+  await drag(page, await charPoint(page, 'p4', g.offset - 6), g.ink)
+  copied = await copy()
+  check('文の終わりの「。」：「、」の点の上で離しても、「、」まで選ぶ', copied.endsWith('、') && copied.length === 7, JSON.stringify(copied))
+  await showBlock(page, ready, 'p8')
+  g = await glyphOf(page, 'p8', '）')
+  await clear()
+  await drag(page, await charPoint(page, 'p8', g.offset - 6), g.ink)
+  const paren = await copy()
+  g = await glyphOf(page, 'p8', '。', 0, '）')
+  await clear()
+  await drag(page, await charPoint(page, 'p8', g.offset - 6), g.ink)
+  const parenPeriod = await copy()
+  check('文の終わりの「。」：「（図3）」の「）」の上で離すと「）」まで、そのあとの「。」の上なら「）。」まで選ぶ', paren.endsWith('図3）') && parenPeriod.endsWith('）。'), JSON.stringify({ paren, parenPeriod }))
+
+  // ---- 依頼者の操作：段落の最後の「。」から前へなぞって、段落を全部選ぶ（今までは「。」しか選べなかった） ----
+  await showBlock(page, ready, 'p11')
+  const last = (textOf('p11').match(/。/g) ?? []).length - 1
+  g = await glyphOf(page, 'p11', '。', last)
+  const start = await charPoint(page, 'p11', 0)
+  await clear()
+  await drag(page, g.center, start)
+  const backCenter = await copy()
+  share = await blueShare(page, g.box)
+  await shot('after-3-backward-from-period', g.box)
+  await clear()
+  await drag(page, g.ink, start)
+  const backInk = await copy()
+  check('文の終わりの「。」：段落の最後の「。」から前へなぞると、段落の始めから「。」まで全部選ぶ（「。」の真ん中・点のどちらから始めても）', backCenter === textOf('p11') && backInk === textOf('p11') && share > 0.4, JSON.stringify({ backCenter: backCenter.slice(-12), backInk: backInk.slice(-12), len: [backCenter.length, backInk.length, textOf('p11').length], share }))
+  // 行の途中の「。」から、前の行へなぞる
+  g = await glyphOf(page, 'p11', '。', 0)
+  await clear()
+  await drag(page, g.ink, { x: g.center.x - 30, y: g.center.y - g.box.height * 2.2 })
+  copied = await copy()
+  check('文の終わりの「。」：行の途中の「。」の点から前の行へなぞっても、「。」まで選ぶ', copied.endsWith('。') && copied.length > 5, JSON.stringify(copied.slice(-12)))
+
+  // ---- 切り取り・削除にも「。」が入る ----
+  await showBlock(page, ready, 'p4')
+  g = await glyphOf(page, 'p4', '。')
+  await clear()
+  await drag(page, await charPoint(page, 'p4', g.offset - 8), g.ink)
+  await ctrl(page, 'x')
+  await wait(300)
+  await ready()
+  const cut = await page.evaluate(() => window.__copied.at(-1) ?? '')
+  let st = await state(page)
+  const before = textOf('p4')
+  const at = before.indexOf(cut)
+  check('文の終わりの「。」：「。」の点で離して切り取ると、「。」も一緒に切り取る（段落に「。」が残らない）', cut.endsWith('。') && at >= 0 && blockIn(st, 'p4')?.text === before.slice(0, at) + before.slice(at + cut.length), JSON.stringify({ cut, after: blockIn(st, 'p4')?.text.slice(Math.max(0, at - 3), at + 6) }))
+  await ctrl(page, 'z')
+  await wait(300)
+  await ready()
+  await showBlock(page, ready, 'p4')
+  g = await glyphOf(page, 'p4', '。')
+  await clear()
+  await drag(page, await charPoint(page, 'p4', g.offset - 8), g.ink)
+  await page.keyboard.press('Delete')
+  await wait(300)
+  await ready()
+  st = await state(page)
+  const afterDel = blockIn(st, 'p4')?.text ?? ''
+  let p = 0
+  while (p < afterDel.length && afterDel[p] === before[p]) p++
+  const removed = before.slice(p, p + before.length - afterDel.length)
+  check('文の終わりの「。」：「。」の点で離して Delete で消すと、「。」も一緒に消える', removed.endsWith('。') && removed.length === 9, JSON.stringify(removed))
+  await ctrl(page, 'z')
+  await wait(300)
+  await ready()
+  check('文の終わりの「。」：切り取り・削除は、元に戻すで元の原稿に戻る', (await state(page)).body === original.body)
+
+  // ---- Shift+クリック（選んだあと・書く欄から）でも、「。」の点の上なら「。」まで ----
+  await showBlock(page, ready, 'p4')
+  g = await glyphOf(page, 'p4', '。')
+  await clear()
+  await drag(page, await charPoint(page, 'p4', g.offset - 12), await charPoint(page, 'p4', g.offset - 9))
+  await page.keyboard.down('Shift')
+  await page.mouse.click(g.ink.x, g.ink.y)
+  await page.keyboard.up('Shift')
+  await wait(250)
+  const shiftClick = await copy()
+  await clear()
+  await showBlock(page, ready, 'p3')
+  await page.evaluate(() => window.__editor.openEditor('p3', 3))
+  await wait(300)
+  g = await glyphOf(page, 'p4', '。')
+  await page.keyboard.down('Shift')
+  await page.mouse.click(g.ink.x, g.ink.y)
+  await page.keyboard.up('Shift')
+  await wait(250)
+  st = await state(page)
+  const fromBox = await copy()
+  check(
+    '文の終わりの「。」：Shift+クリックで「。」の点の上を押しても、「。」まで選ぶ（選んだあと・書く欄から）',
+    shiftClick.endsWith('。') && shiftClick.length === 13 && !st.editing && fromBox.startsWith(textOf('p3').slice(3)) && fromBox.endsWith(`\n${textOf('p4').slice(0, g.offset + 1)}`),
+    JSON.stringify({ shiftClick, fromBox: fromBox.slice(-12), editing: st.editing }),
+  )
+
+  // ---- 行末にぶら下げた「。」（字の幅が 0）：なぞる・前へなぞる・余白で離す・Shift+→。選んだ色も付く ----
+  await page.evaluate(() => window.__editor.finishEditing())
+  await clear()
+  await showBlock(page, ready, 'a2')
+  const hang = await page.evaluate(() => {
+    const el = document.querySelector('.page-viewport.front viv-ts-close.viv-hang-end')
+    if (!el) return null
+    const id = el.closest('[data-block-id]').dataset.blockId
+    return { id, ch: el.textContent }
+  })
+  if (hang) {
+    // 何番目の「。」か
+    const nth = await page.evaluate((id) => {
+      const target = document.querySelector(`.page-viewport.front [data-block-id="${id}"] viv-ts-close.viv-hang-end`).firstElementChild.firstChild
+      let n = 0
+      for (const el of document.querySelectorAll(`.page-viewport.front [data-block-id="${id}"]`)) {
+        const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+        while (w.nextNode()) {
+          const t = w.currentNode
+          if (t === target) return n
+          n += [...t.data].filter((c) => c === target.data).length
+        }
+      }
+      return -1
+    }, hang.id)
+    g = await glyphOf(page, hang.id, hang.ch, nth)
+    const from = await charPoint(page, hang.id, g.offset - 8)
+    await clear()
+    await drag(page, from, g.center)
+    const fwd = await copy()
+    const marked = await page.evaluate(() => document.querySelectorAll('.sel-hang').length)
+    share = await blueShare(page, g.box)
+    await shot('after-2-hanging-period', g.box)
+    // 選んだ文の帯の「コピー」も同じ
+    await page.evaluate(() => [...document.querySelectorAll('.range-bar button')].find((b) => b.textContent === 'コピー')?.click())
+    await wait(150)
+    const byBar = await page.evaluate(() => window.__copied.at(-1) ?? '')
+    await clear()
+    await drag(page, from, { x: g.right + 25, y: g.center.y })
+    const margin = await copy()
+    await clear()
+    await drag(page, g.center, from)
+    const back = await copy()
+    // Shift+→：「。」の前まで選んでから
+    await page.evaluate((id, offset) => {
+      const els = [...document.querySelectorAll(`.page-viewport.front [data-block-id="${id}"]`)]
+      const at = (o) => {
+        let acc = 0
+        for (const el of els) {
+          const w = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+          while (w.nextNode()) {
+            const t = w.currentNode
+            if (o < acc + t.length) return [t, o - acc]
+            acc += t.length
+          }
+        }
+      }
+      getSelection().setBaseAndExtent(...at(offset - 5), ...at(offset))
+    }, hang.id, g.offset)
+    await wait(100)
+    await page.keyboard.down('Shift')
+    await page.keyboard.press('ArrowRight')
+    await page.keyboard.up('Shift')
+    await wait(200)
+    const key = await copy()
+    const keyShare = await blueShare(page, g.box)
+    const hangOk = fwd.endsWith('。') && fwd.length === 9 && marked === 1 && share > 0.4 && byBar === fwd && margin === fwd && back === fwd && key.length === 6 && key.endsWith('。') && keyShare > 0.4
+    check(
+      '文の終わりの「。」：行末にぶら下げた「。」も、なぞる・前へなぞる・右の余白で離す・Shift+→ で選べて、選んだ色が付く（帯の「コピー」も同じ）',
+      hangOk,
+      JSON.stringify({ fwd, marked, share, byBar, margin, back, key, keyShare }),
+    )
+    // 書く欄（紙面と同じ所で折り返す）でも、ぶら下げた「。」に選んだ色が付く
+    await clear()
+    await page.evaluate((id) => window.__editor.openEditor(id, 0), hang.id)
+    await wait(400)
+    const inBox = await page.evaluate(() => {
+      const el = document.querySelector('.overlay-editor viv-ts-close.viv-hang-end')
+      if (!el) return null
+      const t = el.firstElementChild.firstChild
+      const w = document.createTreeWalker(document.querySelector('.overlay-editor'), NodeFilter.SHOW_TEXT)
+      const nodes = []
+      while (w.nextNode()) nodes.push(w.currentNode)
+      // 「。」の5字前から「。」まで
+      let k = nodes.indexOf(t) - 1
+      let back = 5
+      while (k > 0 && nodes[k].length < back) back -= nodes[k--].length
+      getSelection().setBaseAndExtent(nodes[k], Math.max(0, nodes[k].length - back), t, 1)
+      const r = document.createRange()
+      r.setStart(t, 0)
+      r.setEnd(t, 1)
+      const g = r.getClientRects()[0]
+      return { left: g.left, top: g.top, width: g.height * 0.9, height: g.height }
+    })
+    await wait(200)
+    const boxShare = inBox ? await blueShare(page, inBox) : 0
+    if (inBox) await shot('after-4-hanging-period-writing-box', inBox)
+    check('文の終わりの「。」：書く欄でも、行末にぶら下げた「。」を選ぶと色が付く', !!inBox && boxShare > 0.4, JSON.stringify({ inBox: !!inBox, boxShare }))
+    await page.evaluate(() => window.__editor.finishEditing())
+    await wait(300)
+    await ready()
+  } else check('文の終わりの「。」：見本に行末にぶら下げた「。」がある', false, 'a2 のページに viv-hang-end がない')
+  await clear()
+  // 紙面の印は外れる。ページの一覧の小さなページ（紙面の複製）に印が写っていても、色は塗らない
+  const left = await page.evaluate(() => ({
+    paper: document.querySelectorAll(':is(.page-scroller, #overlay-layer) .sel-hang').length,
+    painted: [...document.querySelectorAll('.sel-hang > viv-ts-inner')].filter((e) => getComputedStyle(e, '::before').content !== 'none').length,
+  }))
+  check('文の終わりの「。」：選ぶのをやめると、ぶら下げた「。」の色も消える（ページの一覧の小さなページにも塗らない）', left.paper === 0 && left.painted === 0, JSON.stringify(left))
+
+  // ---- 書き直したあと（組み直した紙面）でも ----
+  await page.evaluate(() => window.__editor.openEditor('p4', 0))
+  await wait(300)
+  await page.keyboard.press('End')
+  await page.keyboard.down('Control')
+  await page.keyboard.press('End')
+  await page.keyboard.up('Control')
+  await page.keyboard.type('あいうえお。')
+  await page.evaluate(() => window.__editor.finishEditing())
+  await wait(300)
+  await ready()
+  await showBlock(page, ready, 'p4')
+  const count = ((await state(page)).chapters.flatMap((c) => c.blocks).find((b) => b.id === 'p4')?.text.match(/。/g) ?? []).length
+  g = await glyphOf(page, 'p4', '。', count - 1)
+  await clear()
+  await drag(page, await charPoint(page, 'p4', g.offset - 3), g.ink)
+  copied = await copy()
+  check('文の終わりの「。」：書き直したあとの紙面でも、「。」の点で離すと「。」まで選ぶ', copied === 'うえお。', JSON.stringify(copied))
+  await ctrl(page, 'z')
+  await wait(300)
+  await ready()
+
+  // ---- 見開き・拡大でも ----
+  await page.evaluate(() => window.__editor.setView('spread'))
+  await showBlock(page, ready, 'p11')
+  g = await glyphOf(page, 'p11', '。')
+  await clear()
+  await drag(page, await charPoint(page, 'p11', g.offset - 6), g.ink)
+  const spread = await copy()
+  await page.evaluate(() => window.__editor.setView('zoom'))
+  await showBlock(page, ready, 'p11')
+  await page.evaluate(() => document.querySelector('.page-viewport.front [data-block-id="p11"]').scrollIntoView({ block: 'center' }))
+  await wait(200)
+  g = await glyphOf(page, 'p11', '。')
+  await clear()
+  await drag(page, g.center, await charPoint(page, 'p11', g.offset - 6))
+  const zoom = await copy()
+  await page.evaluate(() => window.__editor.setView('fit'))
+  await ready()
+  check('文の終わりの「。」：見開き（点で離す）・拡大（「。」から前へなぞる）でも、「。」まで選ぶ', spread.endsWith('。') && spread.length === 7 && zoom.endsWith('。') && zoom.length === 7, JSON.stringify({ spread, zoom }))
+
+  // ---- 次のページへ続く段落の、続きの部分でも ----
+  await page.evaluate(() =>
+    window.__editor.update((r) => ({
+      ...r,
+      body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 'p5' ? { ...b, content: [...b.content, { type: 'text', text: '試作では、袖の形を三つ比べた。布の厚さによって、揺れ方が変わった。'.repeat(8) }] } : b)) })),
+    })),
+  )
+  await wait(300)
+  await ready()
+  const p5 = (await state(page)).chapters.flatMap((c) => c.blocks).find((b) => b.id === 'p5').text
+  const pages = await page.evaluate((len) => [window.__editor.pageOfBlock('p5'), window.__editor.renderer.pageView.pageOfOffset('p5', len)], p5.length)
+  await page.evaluate((n) => window.__editor.goToPage(n, 'none'), pages[1])
+  await ready()
+  await wait(150)
+  g = await glyphOf(page, 'p5', '。')
+  await clear()
+  await drag(page, await charPoint(page, 'p5', Math.max(0, g.offset - 6)), g.ink)
+  copied = await copy()
+  check('文の終わりの「。」：次のページへ続く段落の、続きの部分でも、「。」の点で離すと「。」まで選ぶ', pages[1] > pages[0] && copied.endsWith('。') && p5.includes(copied) && copied.length >= 2, JSON.stringify({ pages, copied }))
+  await context.close()
 }
 
 /** 選んだ文のボタン（mockups/v36：案B 左の道具の「選んだ文」・案A 選んだ所の上の帯と、書く欄の近くの「貼り付け」）。画面の写真は poc-output/v36-impl/ */
@@ -621,9 +1005,255 @@ export async function rangeSelectPhone(browser, check) {
   const st = await page.evaluate(() => ({ editing: window.__editor.getSnapshot().editingId, sheet: window.__editor.getSnapshot().sheet, paper: window.__editor.hasPaperSelection(), bar: !document.querySelector('.range-bar')?.hidden, chip: !document.querySelector('.range-chip')?.hidden }))
   check('段落を選ぶ（スマホ）：指で押すと、今までどおり書く欄が開く（紙面で選ぶ仕組みは使わない。選んだ文の帯・「貼り付け」も出さない）', st.editing === 'p3' && st.sheet && !st.paper && !st.bar && !st.chip, JSON.stringify(st))
   await context.close()
+  await abstractPastePhone(browser, check)
 }
 
-// これだけを動かす：node scripts/e2e/rangeSelect.mjs
+// ---- 本文から抄録への貼り付け（依頼者の指摘「本文をコピーして抄録に貼り付けると、うまくいかない」・決まり「抄録には図表を入れない」2026-10-20）。画面の写真は poc-output/abstract-paste/ ----
+
+const PASTE_SHOTS = 'poc-output/abstract-paste'
+
+/** 抄録の段落（ID と文字）・書いている欄・画面の下の知らせ（行ごとの字の数も。1字だけの行がないか見る） */
+const abstractState = (page) =>
+  page.evaluate(async () => {
+    const ops = await import('/src/editor/reportOps.ts')
+    const s = window.__editor.getSnapshot()
+    const num = ops.numbering(s.report)
+    const info = document.querySelector('.undo-toast .undo-info')
+    const lines = new Map()
+    if (info) {
+      const w = document.createTreeWalker(info, NodeFilter.SHOW_TEXT)
+      while (w.nextNode()) {
+        const t = w.currentNode
+        for (let i = 0; i < t.length; i++) {
+          const r = document.createRange()
+          r.setStart(t, i)
+          r.setEnd(t, i + 1)
+          const b = r.getClientRects()[0]
+          if (b) lines.set(Math.round(b.top), (lines.get(Math.round(b.top)) ?? 0) + 1)
+        }
+      }
+    }
+    return {
+      started: s.report.abstract.started !== false,
+      paragraphs: s.report.abstract.paragraphs.map((p) => ({ id: p.id, text: ops.contentToText(p.content, num) })),
+      editing: s.editingId,
+      caret: s.caret,
+      notice: info?.textContent ?? document.querySelector('.undo-toast')?.textContent ?? '',
+      noticeLines: [...lines.values()],
+      findings: s.findings.filter((f) => f.ruleId === 'abstract-figure-ref').map((f) => f.detail),
+    }
+  })
+
+/** 知らせの行に、1字だけの行がない */
+const noWidow = (st) => st.noticeLines.length > 0 && st.noticeLines.every((n) => n >= 2)
+
+export async function abstractPastePc(browser, check) {
+  mkdirSync(PASTE_SHOTS, { recursive: true })
+  const { context, page, ready } = await openSample(browser, { viewport: { width: 1366, height: 768 } })
+  const original = await state(page)
+  const textOf = (id) => blockIn(original, id)?.text ?? ''
+  const before = await abstractState(page)
+  const abstractOf = (st, id) => st.paragraphs.find((p) => p.id === id)?.text
+  const a2 = abstractOf(before, 'a2')
+
+  // ---- 本文の段落の途中から、図1を通って次の段落の途中までを選んで Ctrl+C。抄録の段落の途中を押して Ctrl+V ----
+  await showBlock(page, ready, 'p3')
+  await drag(page, await charPoint(page, 'p3', 5), await charPoint(page, 'p4', 10))
+  await ctrl(page, 'c')
+  await wait(150)
+  await showBlock(page, ready, 'a2')
+  const at = await charPoint(page, 'a2', 10)
+  await page.mouse.click(at.x, at.y)
+  await wait(400)
+  await ctrl(page, 'v')
+  await wait(500)
+  await ready()
+  await wait(300)
+  let st = await abstractState(page)
+  await page.screenshot({ path: `${PASTE_SHOTS}/1-pc-paste-clip.png` })
+  const pasted = textOf('p3').slice(5).replace('（図1）', '')
+  const ids = st.paragraphs.map((p) => p.id)
+  const added = st.paragraphs[ids.indexOf('a2') + 1]
+  check(
+    '抄録に貼り付け：本文を選んで Ctrl+C、抄録の段落の途中で Ctrl+V。押した所で段落を分けて文が入り、図は入らず、「（図1）」は除く（「。」は残り、空白は入らない）',
+    abstractOf(st, 'a2') === a2.slice(0, 10) + pasted && added?.text === textOf('p4').slice(0, 10) + a2.slice(10) && !st.paragraphs.some((p) => /[図表][0-9０-９]|[ 　]/.test(p.text)) && st.paragraphs.length === before.paragraphs.length + 1,
+    JSON.stringify({ a2: abstractOf(st, 'a2')?.slice(0, 60), added: added?.text.slice(0, 30), count: st.paragraphs.length }),
+  )
+  check('抄録に貼り付け：貼り付けたあと、書く欄は貼り付けた文の終わりで開いたまま', st.editing === added?.id && st.caret === 10, JSON.stringify({ editing: st.editing, caret: st.caret }))
+  check(
+    '抄録に貼り付け：画面の下に「抄録には文だけを貼り付けました（見出し・図・表と「（図1）」は除きました）」と出る（1字だけの行はない）',
+    st.notice === '抄録には文だけを貼り付けました（見出し・図・表と「（図1）」は除きました）' && noWidow(st),
+    JSON.stringify({ notice: st.notice, lines: st.noticeLines }),
+  )
+  await page.keyboard.press('Escape')
+  await ready()
+  await ctrl(page, 'z')
+  await wait(400)
+  await ready()
+  st = await abstractState(page)
+  check('抄録に貼り付け：元に戻すで、貼り付ける前の抄録に戻る', JSON.stringify(st.paragraphs) === JSON.stringify(before.paragraphs), JSON.stringify(st.paragraphs.map((p) => p.id)))
+  await page.evaluate(() => window.__editor.finishEditing())
+  await wait(300)
+  await ready()
+
+  // ---- 文の中の参照（「表1に使用した素材をまとめる。」）は残して、書き直してもらう（知らせ・セルフチェックの要確認） ----
+  await showBlock(page, ready, 'p5')
+  const p5 = textOf('p5')
+  await drag(page, await charPoint(page, 'p5', 0), await charPoint(page, 'p5', p5.length - 1))
+  await page.keyboard.down('Shift')
+  await page.keyboard.press('ArrowRight')
+  await page.keyboard.up('Shift')
+  await ctrl(page, 'c')
+  await wait(150)
+  await showBlock(page, ready, 'a4')
+  await page.evaluate(() => window.__editor.openEditor('a4', 0))
+  await wait(400)
+  await ctrl(page, 'v')
+  await wait(500)
+  await ready()
+  await wait(300)
+  st = await abstractState(page)
+  await page.screenshot({ path: `${PASTE_SHOTS}/2-pc-in-sentence-ref.png` })
+  check(
+    '抄録に貼り付け：文の中の「表1」は残し、「抄録には図表を入れません。「表1」の入った文を書き直してください」と知らせる（セルフチェックにも要確認で出る）',
+    st.paragraphs.some((p) => p.text.startsWith(p5)) &&
+      st.notice === '抄録には図表を入れません。「表1」の入った文を書き直してください' &&
+      noWidow(st) &&
+      st.findings.includes('抄録には図表を入れません。「表1」の入った文を書き直してください'),
+    JSON.stringify({ notice: st.notice, lines: st.noticeLines, findings: st.findings }),
+  )
+  await page.keyboard.press('Escape')
+  await ready()
+  await ctrl(page, 'z')
+  await wait(400)
+  await ready()
+  check('抄録に貼り付け：元に戻すで、貼り付ける前の抄録に戻る（2回目）', JSON.stringify((await abstractState(page)).paragraphs) === JSON.stringify(before.paragraphs))
+
+  // ---- ほかのアプリなどからコピーした、ふつうの文字（1行・何行か）：「（図1）」「(図2)」を除く ----
+  await page.evaluate(() => navigator.clipboard.writeText('袖を作った（図1）。帯も作った(図2)。'))
+  const a4 = abstractOf(before, 'a4')
+  await page.evaluate((n) => window.__editor.openEditor('a4', n), a4.length)
+  await wait(400)
+  await ctrl(page, 'v')
+  await wait(300)
+  await page.evaluate(() => window.__editor.finishEditing())
+  await wait(400)
+  await ready()
+  st = await abstractState(page)
+  const oneLine = abstractOf(st, 'a4')
+  const oneNotice = st.notice
+  const oneLines = st.noticeLines
+  await page.evaluate(() => navigator.clipboard.writeText('袖を作った（図１・図２）。\r\n帯は表1の布で作った（表1）。'))
+  await page.evaluate((n) => window.__editor.openEditor('a4', n), oneLine.length)
+  await wait(400)
+  await ctrl(page, 'v')
+  await wait(500)
+  await ready()
+  await page.evaluate(() => window.__editor.finishEditing())
+  await wait(400)
+  await ready()
+  st = await abstractState(page)
+  const i4 = st.paragraphs.findIndex((p) => p.id === 'a4')
+  const lastTwo = st.paragraphs.slice(i4, i4 + 2).map((p) => p.text)
+  check(
+    '抄録に貼り付け：ふつうの文字の「（図1）」「(図2)」「（図１・図２）」「（表1）」も除く（1行・何行か）。文の中の「表1」は残して知らせる',
+    oneLine === `${a4}袖を作った。帯も作った。` &&
+      oneNotice === '抄録には図表を入れないので、「（図1）」を除いて貼り付けました' &&
+      oneLines.every((n) => n >= 2) &&
+      lastTwo[0] === `${oneLine}袖を作った。` &&
+      lastTwo[1] === '帯は表1の布で作った。' &&
+      st.notice === '抄録には図表を入れません。「表1」の入った文を書き直してください',
+    JSON.stringify({ oneLine: oneLine.slice(-16), oneNotice, lastTwo: lastTwo.map((t) => t.slice(-14)), notice: st.notice }),
+  )
+  await page.screenshot({ path: `${PASTE_SHOTS}/3-pc-plain-text.png` })
+
+  // ---- 抄録を書き始める前（「先生の許可が出た」の前）：Ctrl+V では何も入らないので、わけを知らせる。押したあとの空の段落には入る ----
+  await page.evaluate(async () => {
+    const { emptyParagraph } = await import('/src/model/template.ts')
+    window.__editor.replace({ ...window.__editor.getSnapshot().report, abstract: { started: false, paragraphs: [emptyParagraph('抄録の書き出しの例')] } })
+  })
+  await wait(300)
+  await ready()
+  await showBlock(page, ready, 'p3')
+  await drag(page, await charPoint(page, 'p3', 5), await charPoint(page, 'p4', 10))
+  await ctrl(page, 'c')
+  await wait(150)
+  await page.evaluate(() => window.__editor.goToPage(1, 'none'))
+  await ready()
+  await wait(200)
+  await ctrl(page, 'v')
+  await wait(300)
+  const locked = await abstractState(page)
+  await page.screenshot({ path: `${PASTE_SHOTS}/4-pc-not-started.png` })
+  const button = await page.evaluate(() => {
+    const b = document.querySelector('.page-viewport.front [data-abstract-start]').getBoundingClientRect()
+    return { x: b.left + b.width / 2, y: b.top + b.height / 2 }
+  })
+  await page.mouse.click(button.x, button.y)
+  await wait(300)
+  await ready()
+  await wait(200)
+  const empty = (await abstractState(page)).paragraphs[0]
+  const box = await page.evaluate((id) => {
+    const b = document.querySelector(`.page-viewport.front [data-block-id="${id}"]`).getBoundingClientRect()
+    return { x: b.left + 30, y: b.top + b.height / 2 }
+  }, empty.id)
+  await page.mouse.click(box.x, box.y)
+  await wait(400)
+  await ctrl(page, 'v')
+  await wait(500)
+  await ready()
+  await wait(300)
+  st = await abstractState(page)
+  await page.screenshot({ path: `${PASTE_SHOTS}/5-pc-empty-abstract.png` })
+  check(
+    '抄録に貼り付け：書き始める前に Ctrl+V を押すと「抄録は「先生の許可が出た」を押してから書きます」と出る。押したあとの空の段落には、文だけが入る（「（図1）」なし）',
+    !locked.started &&
+      locked.notice === '抄録は「先生の許可が出た」を押してから書きます' &&
+      noWidow(locked) &&
+      st.started &&
+      st.paragraphs.map((p) => p.text).join('|') === `${textOf('p3').slice(5).replace('（図1）', '')}|${textOf('p4').slice(0, 10)}`,
+    JSON.stringify({ locked: locked.notice, lines: locked.noticeLines, paragraphs: st.paragraphs.map((p) => p.text.slice(0, 20)) }),
+  )
+  await context.close()
+}
+
+/** スマホ：書く欄の文をコピーして（ふつうのコピー）、抄録の段落に貼り付けると、「（図1）」を除いて入る */
+async function abstractPastePhone(browser, check) {
+  mkdirSync(PASTE_SHOTS, { recursive: true })
+  const { context, page, ready } = await openSample(browser, { phone: true })
+  const original = await state(page)
+  const p3 = blockIn(original, 'p3')?.text ?? ''
+  await page.evaluate(() => window.__editor.openEditor('p3', 0))
+  await wait(600)
+  await page.evaluate(() => getSelection().selectAllChildren(document.querySelector('.overlay-editor')))
+  await ctrl(page, 'c')
+  await wait(150)
+  const copied = await page.evaluate(() => navigator.clipboard.readText())
+  await page.evaluate(() => window.__editor.finishEditing())
+  await wait(400)
+  await ready()
+  const a2 = (await abstractState(page)).paragraphs.find((p) => p.id === 'a2').text
+  await page.evaluate(() => window.__editor.openEditor('a2', 10))
+  await wait(600)
+  await ctrl(page, 'v')
+  await wait(400)
+  const shown = await abstractState(page)
+  const notice = shown.notice
+  await page.screenshot({ path: `${PASTE_SHOTS}/6-phone-paste.png` })
+  await page.evaluate(() => window.__editor.finishEditing())
+  await wait(400)
+  await ready()
+  const st = await abstractState(page)
+  check(
+    '抄録に貼り付け（スマホ）：書く欄でコピーした文を抄録の段落に貼り付けると、「（図1）」を除いて入り、知らせが出る',
+    copied.includes('（図1）') && st.paragraphs.find((p) => p.id === 'a2')?.text === a2.slice(0, 10) + p3.replace('（図1）', '') + a2.slice(10) && notice === '抄録には図表を入れないので、「（図1）」を除いて貼り付けました' && noWidow(shown),
+    JSON.stringify({ copied: copied.slice(0, 20), a2: st.paragraphs.find((p) => p.id === 'a2')?.text.slice(0, 50), notice, lines: shown.noticeLines }),
+  )
+  await context.close()
+}
+
+// これだけを動かす：node scripts/e2e/rangeSelect.mjs（文の終わりの「。」だけ：… period。抄録への貼り付けだけ：… abstract）
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const { withEdge } = await import('../poc/edge.mjs')
   const results = []
@@ -632,6 +1262,13 @@ if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
     console.log(`${ok ? '✓' : '✗'} ${name}${detail ? `  (${detail})` : ''}`)
   }
   await withEdge(async (browser) => {
+    // node scripts/e2e/rangeSelect.mjs period：文の終わりの「。」を選ぶところだけ
+    if (process.argv[2] === 'period') return periodSelectPc(browser, check)
+    // node scripts/e2e/rangeSelect.mjs abstract：本文から抄録への貼り付けだけ
+    if (process.argv[2] === 'abstract') {
+      await abstractPastePc(browser, check)
+      return abstractPastePhone(browser, check)
+    }
     await rangeSelectPc(browser, check)
     await rangeSelectPhone(browser, check)
   })

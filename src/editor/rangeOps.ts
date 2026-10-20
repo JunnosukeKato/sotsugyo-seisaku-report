@@ -1,5 +1,6 @@
 import { chapterLabel, figureCaption, subheadingLabel } from '../layout/bodyHtml'
 import type { BodyBlock, Figure, FigureRowBlock, InlineNode, ParagraphBlock, Report, TableBlock } from '../model/types'
+import { stripFigureRefs } from './abstractRefs'
 import { contentToText, mergeTexts, newId, numbering, withoutRefsTo, type Numbering } from './reportOps'
 
 /**
@@ -441,6 +442,10 @@ export interface PasteResult {
   skippedChapters: boolean
   /** 抄録に貼り付けたので、文のほか（見出し・図・表など）を入れなかった */
   droppedForAbstract: boolean
+  /** 抄録に貼り付けたので除いた、図表の参照の括弧（「（図1）」など。abstractRefs.ts） */
+  removedRefs: string[]
+  /** 抄録に貼り付けた文の中に残った図表の参照（「図1に示すように」の「図1」。書き直してもらう） */
+  keptRefs: string[]
 }
 
 /**
@@ -449,13 +454,14 @@ export interface PasteResult {
  * - まとまり（blocks）：段落をカーソルの位置で分けて、間に入れる。途中から選んだ段落はカーソルの前の文と、途中まで選んだ段落はカーソルの後ろの文とつなぐ
  * - 図・表・段落などは新しい ID にする（同じ ID のものが原稿になければ、そのままの ID。切り取って貼り付けたとき）。番号は自動で振り直される。
  *   貼り付けた文の中の参照は、一緒に貼り付けた図表を指す。一緒でない図表への参照は、その図表がまだあればそれを指し、なければ「図?」の文字にする
- * - 大見出しは入れない。抄録には文だけを入れる（図表への参照は、コピーしたときの番号の文字にする）
+ * - 大見出しは入れない。抄録には文だけを入れる。図表は入れないので、括弧で添えた参照（「（図1）」）は除き、文の中の参照（「図1に示すように」）は、
+ *   コピーしたときの番号の文字にして残す（呼び出し側が、書き直すよう知らせる。abstractRefs.ts）
  */
 export function pasteClip(report: Report, paragraphId: string, offset: number, clip: Clip): PasteResult {
   const num = numbering(report)
   const inAbstract = report.abstract.paragraphs.some((p) => p.id === paragraphId)
   const target = inAbstract ? report.abstract.paragraphs.find((p) => p.id === paragraphId) : report.body.flatMap((c) => c.blocks).find((b) => b.id === paragraphId)
-  const none: PasteResult = { report, caret: null, skippedChapters: false, droppedForAbstract: false }
+  const none: PasteResult = { report, caret: null, skippedChapters: false, droppedForAbstract: false, removedRefs: [], keptRefs: [] }
   if (target?.type !== 'paragraph') return none
   const [left, right] = splitContent(target.content, offset, num)
   const skippedChapters = clip.chapters > 0
@@ -500,14 +506,24 @@ export function pasteClip(report: Report, paragraphId: string, offset: number, c
         return { type: 'text', text: n.withParens ? `（${kind}?）` : `${kind}?` }
       }),
     )
+  // 抄録：図表の参照の括弧を除く（文の中の参照は残す）。抄録の段落の文字は、参照を文字にしてあるので1つの文字にまとめて見る
+  const removedRefs: string[] = []
+  const keptRefs: string[] = []
+  const forAbstract = (content: InlineNode[]): InlineNode[] => {
+    if (!inAbstract) return content
+    const r = stripFigureRefs(content.map((n) => (n.type === 'text' ? n.text : '')).join(''))
+    removedRefs.push(...r.removed)
+    keptRefs.push(...r.kept.filter((k) => !keptRefs.includes(k)))
+    return [{ type: 'text', text: r.text }]
+  }
 
   if (clip.kind === 'inline') {
-    const inline = relink(clip.inline)
+    const inline = forAbstract(relink(clip.inline))
     const content = mergeTexts([...left, ...inline, ...right])
     const updated: ParagraphBlock = { ...target, content }
     const next = replaceParagraph(report, paragraphId, [updated], inAbstract)
     // カーソルは、入れた文字の後ろ（参照の長さは、貼り付けたあとの番号で数える）
-    return { report: next, caret: { id: paragraphId, offset: contentToText([...left, ...inline], numbering(next)).length }, skippedChapters, droppedForAbstract: false }
+    return { report: next, caret: { id: paragraphId, offset: contentToText([...left, ...inline], numbering(next)).length }, skippedChapters, droppedForAbstract: false, removedRefs, keptRefs }
   }
 
   // まとまり：大見出しは入っていない（copyRange で除いてある）。抄録には段落だけ
@@ -522,7 +538,7 @@ export function pasteClip(report: Report, paragraphId: string, offset: number, c
   const copied: BodyBlock[] = blocks.map((b): BodyBlock => {
     switch (b.type) {
       case 'paragraph':
-        return { type: 'paragraph', id: fresh(b.id, 'p'), content: relink(b.content) }
+        return { type: 'paragraph', id: fresh(b.id, 'p'), content: forAbstract(relink(b.content)) }
       case 'subheading':
         return { ...b, id: fresh(b.id, 's') }
       case 'pageBreak':
@@ -533,7 +549,7 @@ export function pasteClip(report: Report, paragraphId: string, offset: number, c
         return { ...b, id: fresh(b.id, 't'), rows: b.rows.map((r) => ({ ...r, id: fresh(r.id, 'row'), cells: r.cells.map((c) => ({ ...c, id: fresh(c.id, 'cell') })) })) }
     }
   })
-  if (copied.length === 0) return { ...none, skippedChapters, droppedForAbstract }
+  if (copied.length === 0) return { ...none, skippedChapters, droppedForAbstract, removedRefs, keptRefs }
 
   const out: BodyBlock[] = []
   // カーソルの前の文：最初の段落につなぐか、そのまま残す（空なら残さない）
@@ -572,7 +588,7 @@ export function pasteClip(report: Report, paragraphId: string, offset: number, c
   const next = replaceParagraph(report, paragraphId, out, inAbstract)
   const n2 = numbering(next)
   const caret = caretAt ? { id: caretAt.id, offset: contentToText(caretAt.before, n2).length } : caretTitle
-  return { report: next, caret, skippedChapters, droppedForAbstract }
+  return { report: next, caret, skippedChapters, droppedForAbstract, removedRefs, keptRefs }
 }
 
 /** 段落 id を、blocks に置き換える（抄録の段落なら、段落だけ） */

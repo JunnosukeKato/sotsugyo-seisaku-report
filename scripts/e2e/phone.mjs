@@ -16,6 +16,8 @@ import { undoHeaderPhone } from './undoHeader.mjs'
 import { phoneLivePhone } from './phoneLive.mjs'
 import { phoneDirectPhone } from './phoneDirect.mjs'
 import { tableShapePhone } from './tableShape.mjs'
+import { tableCustomPhone } from './tableCustom.mjs'
+import { waitingPhone } from './waiting.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -696,6 +698,12 @@ await withEdge(async (browser) => {
 
   // 表の行の高さ・左端の列の切り替え（キーボードの上の道具・表を選んだときの下の道具）・マスの中の Enter は改行（scripts/e2e/tableShape.mjs）
   await tableShapePhone(browser, check)
+
+  // 表の列の幅を「自分で決める」（mockups/v42 案B の窓・案D の丸いつまみ。scripts/e2e/tableCustom.mjs）
+  await tableCustomPhone(browser, check)
+
+  // 待つ間の表示（押したボタンに回る印と言葉・2秒を過ぎたら「数秒かかることがあります」・終わったら知らせ。ボタンは 44px 以上。依頼者の要望 2026-10-20。scripts/e2e/waiting.mjs）
+  await waitingPhone(browser, check)
 })
 
 /**
@@ -1465,7 +1473,10 @@ async function firstTimeFixesPhone(browser) {
   await wait(400)
   const tableTools = await selTools()
   await page.screenshot({ path: `${OUT}/19d-table-tools-44.png` })
-  await page.evaluate(() => document.querySelector('.sel-bar .width-toggle').click())
+  // 「列の幅」は、押すと小さな窓で3つから選ぶ（mockups/v42 案B）
+  await page.evaluate(() => document.querySelector('.sel-bar .width-menu').click())
+  await wait(200)
+  await page.evaluate(() => [...document.querySelectorAll('.width-pop [role="radio"]')].find((b) => b.textContent.includes('中身に合わせる')).click())
   await ready()
   await wait(300)
   const toggled = { widths: await page.evaluate(() => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === 'tM').widths), tools: await selTools() }
@@ -1476,7 +1487,7 @@ async function firstTimeFixesPhone(browser) {
   await wait(200)
   const big = (list) => list.length > 0 && list.every((t) => t.w >= 44 && t.h >= 44 && t.inside)
   check(
-    'スマホ：表・図を選んだときの下の道具（「列の幅」・「削除」など）は幅も高さも 44px 以上で、画面の中に入る。「列の幅」は押すたびに「そろえる」「中身に合わせる」が切り替わる。「追加」「ページ一覧」の「×」は 44px 四方以上',
+    'スマホ：表・図を選んだときの下の道具（「列の幅」・「削除」など）は幅も高さも 44px 以上で、画面の中に入る。「列の幅」は押すと小さな窓で選び、「中身に合わせる」にできる。「追加」「ページ一覧」の「×」は 44px 四方以上',
     big(tableTools) && tableTools.some((t) => t.name === '列の幅そろえる') && toggled.widths === 'auto' && big(toggled.tools) && toggled.tools.some((t) => t.name === '列の幅中身に合わせる') && big(figureTools) && figureTools.some((t) => t.name === '削除') && addClose.w >= 44 && addClose.h >= 44 && pagesClose.w >= 44 && pagesClose.h >= 44,
     JSON.stringify({ tableTools, toggled, figureTools, addClose, pagesClose }),
   )

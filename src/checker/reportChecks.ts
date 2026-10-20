@@ -196,6 +196,26 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     }
   }
 
+  // 抄録には図表を入れない（依頼者の決まり。2026-10-20）：抄録の文に「図1」「（表2）」などがあれば、書き直してもらう（要確認。抄録だけ）。
+  // 本文から貼り付けたときは「（図1）」を除くが、文の中の「図1に示すように」は残るため
+  for (const e of list.filter((x) => x.kind === 'abstractParagraph')) {
+    for (const m of e.text.matchAll(/[（(][ \t　]*([図表])[ \t　]*([0-9０-９]+)[^（()）\n]*[）)]|(?<![㐀-鿿々])([図表])[ \t　]*([0-9０-９]+)/g)) {
+      const label = `${m[1] ?? m[3]}${(m[2] ?? m[4]).replace(/[０-９]/g, (d) => String.fromCharCode(d.charCodeAt(0) - 0xfee0))}`
+      findings.push({
+        ruleId: 'abstract-figure-ref',
+        severity: 'warning',
+        source: 'supplementary',
+        title: '抄録に図表の番号がある',
+        detail: `抄録には図表を入れません。「${label}」の入った文を書き直してください`,
+        area: 'abstract',
+        blockId: e.id,
+        start: m.index,
+        end: m.index + m[0].length,
+        key: `abstract-figure-ref|${e.id}|${m[0]}`,
+      })
+    }
+  }
+
   // ---- 表紙・基本情報 ----
   const { basicInfo } = report
   const required: [string, string, string][] = [

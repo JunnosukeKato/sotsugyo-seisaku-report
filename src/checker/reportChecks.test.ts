@@ -120,6 +120,19 @@ describe('checkReport', () => {
     expect(ids(r, layout({ abstractPages: 2 }))).toContain('abstract-one-page')
   })
 
+  it('抄録に図表の番号（「図1」「（表２）」）があれば、書き直してもらう（要確認。本文は見ない。書き始める前は見ない）', () => {
+    const r = cleanReport()
+    expect(ids(r, layout())).not.toContain('abstract-figure-ref')
+    const text = '図1に示すように袖を膨らませた。素材は表にまとめた（表２）。地図1枚を参考にした。'
+    const withRefs = { ...r, abstract: { paragraphs: [{ type: 'paragraph' as const, id: 'a1', content: [{ type: 'text' as const, text }] }] } }
+    const found = checkReport(withRefs, currentConfig, layout()).filter((f) => f.ruleId === 'abstract-figure-ref')
+    expect(found.map((f) => [text.slice(f.start, f.end), f.severity, f.area, f.detail])).toEqual([
+      ['図1', 'warning', 'abstract', '抄録には図表を入れません。「図1」の入った文を書き直してください'],
+      ['（表２）', 'warning', 'abstract', '抄録には図表を入れません。「表2」の入った文を書き直してください'],
+    ])
+    expect(ids({ ...withRefs, abstract: { ...withRefs.abstract, started: false } }, layout())).not.toContain('abstract-figure-ref')
+  })
+
   it('本文が5ページ未満ならエラー。組版の結果がなければページ数は判定しない', () => {
     expect(ids(cleanReport(), layout({ bodyPages: 4 }))).toContain('body-pages')
     expect(ids(cleanReport())).not.toContain('body-pages')

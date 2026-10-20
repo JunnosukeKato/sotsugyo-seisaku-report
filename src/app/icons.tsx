@@ -122,6 +122,19 @@ export const Icon = {
   ),
   minus: svg(<path d="M6 12h12" />),
   plus: svg(<path d="M12 5v14M5 12h14" />),
+  /** 幅をそろえ直す（同じ幅の列。表の列の幅を自分で決めるとき：mockups/v42） */
+  evenColumns: svg(
+    <>
+      <rect x="3.5" y="6" width="17" height="12" rx="1.2" />
+      <path d="M9.2 6v12M14.8 6v12" />
+    </>,
+  ),
+  /** 小さな下向きの山（押すと選べる。スマホの「列の幅」） */
+  chevronDown: (
+    <svg className="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.2} strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+      <path d="M7 10l5 5 5-5" />
+    </svg>
+  ),
   // 紙面で選んだ文の道具（mockups/v36。editor/selectionBar.ts の帯も同じ線）
   copy: svg(
     <>

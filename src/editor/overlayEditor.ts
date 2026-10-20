@@ -63,6 +63,8 @@ export interface OverlayCallbacks {
    * paste：段落 blockId（書いている文字 text の start から end までを置き換える）に、まとまりのまま入れる
    */
   onPasteClip?: { matches(pasted: string): boolean; paste(blockId: string, text: string, start: number, end: number): void }
+  /** 段落に貼り付ける、ふつうの文字を変える（抄録：図表の参照の括弧を除く。変えたら、呼び出し側が知らせる）。返した文字を入れる */
+  pasteText?(blockId: string, pasted: string): string
   /**
    * 貼り付けたものを、そのままの形では入れなかった（画面の下に短く知らせる）。
    * firstLine：1行の欄（表紙の項目・見出しなど）に複数行を貼り付けたので、1行目だけを入れた／table：表を貼り付けたので、文にした
@@ -1721,7 +1723,7 @@ export class OverlayEditor {
   }
 
   private onPaste(e: ClipboardEvent): void {
-    const pasted = e.clipboardData?.getData('text/plain') ?? ''
+    let pasted = e.clipboardData?.getData('text/plain') ?? ''
     if (!this.target) return
     // 1行の欄（表紙の項目・見出し・図表のタイトル）に、複数行を貼り付けた：1行目（空でない最初の行）だけを入れる。
     // 前は、氏名の欄に「文化 花子」と「学籍番号 00ZZ0123」の2行を貼り付けると、1行につながって入り、表紙の枠からはみ出していた
@@ -1747,13 +1749,19 @@ export class OverlayEditor {
     // Word などの表を貼り付けた：表は「表を入れる」で作るので、文になったことを知らせる（文は、そのまま入れる）
     const table = this.target.kind === 'paragraph' && /<table[\s>]/i.test(e.clipboardData?.getData('text/html') ?? '')
     if (table) queueMicrotask(() => this.callbacks.onPasteNote?.('table'))
+    // 段落：入れる文字を、呼び出し側が変える（抄録には、図表の参照の括弧を入れない）
+    const raw = pasted
+    if (this.target.kind === 'paragraph' && this.callbacks.pasteText) pasted = this.callbacks.pasteText(blockId, pasted)
     if (this.target.kind !== 'paragraph' || !/\n/.test(pasted)) {
-      // 1行の文字：紙面と同じ組み方で書いているときは、ここで入れる（ほかは、ブラウザがそのまま入れる）
+      // 1行の文字：紙面と同じ組み方で書いているとき・文字を変えたときは、ここで入れる（ほかは、ブラウザがそのまま入れる）
       if (this.typeset) {
         e.preventDefault()
         this.lastEdit = null
         this.edit(start, end, pasted.replace(/[\r\n]/g, ''), 'insert')
         this.lastEdit = null
+      } else if (pasted !== raw) {
+        e.preventDefault()
+        document.execCommand('insertText', false, pasted.replace(/[\r\n]/g, ''))
       }
       return
     }

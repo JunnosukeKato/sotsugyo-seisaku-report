@@ -2,7 +2,7 @@ import type { TableBlock, TableCell, TableRow } from './types'
 
 /**
  * 表（mockups/v16 案A）。1行目は見出しの行。行と列は自由に足せ、セルには文字と画像（生地見本など）を入れられる。
- * 列の幅は「そろえる（同じ幅）」と「中身に合わせる」から、行の高さも「そろえる」と「中身に合わせる」から選ぶ。素材表は、この表のひな形の1つ。
+ * 列の幅は「そろえる（同じ幅）」「中身に合わせる」「自分で決める（列ごとの %）」から、行の高さは「そろえる」と「中身に合わせる」から選ぶ。素材表は、この表のひな形の1つ。
  */
 
 type NewId = (prefix: string) => string
@@ -46,6 +46,9 @@ export function cellPosition(table: TableBlock, cellId: string): { row: number; 
 
 const columns = (table: TableBlock) => Math.max(1, ...table.rows.map((r) => r.cells.length))
 
+/** 表の列の数（いちばん多い行のセルの数） */
+export const columnCount = columns
+
 /** 行を足す（at 行目の下。見出しの行の上には足さない） */
 export function addRow(table: TableBlock, at: number, newId: NewId): { table: TableBlock; firstCellId: string } {
   const added = row(newId, Array.from({ length: columns(table) }, () => ''))
@@ -60,15 +63,103 @@ export function removeRow(table: TableBlock, at: number): TableBlock {
   return { ...table, rows: table.rows.filter((_, i) => i !== at) }
 }
 
-/** 列を足す（at 列目の右） */
+/** 列を足す（at 列目の右）。自分で決めた列の幅があれば、足した列は、左どなり（at 列目）の幅を半分もらう */
 export function addColumn(table: TableBlock, at: number, newId: NewId): TableBlock {
-  return { ...table, rows: table.rows.map((r) => ({ ...r, cells: [...r.cells.slice(0, at + 1), cell(newId), ...r.cells.slice(at + 1)] })) }
+  const ws = colWidthsOf(table)
+  const rows = table.rows.map((r) => ({ ...r, cells: [...r.cells.slice(0, at + 1), cell(newId), ...r.cells.slice(at + 1)] }))
+  return { ...table, rows, ...(ws ? { colWidths: addColumnWidth(ws, at) } : {}) }
 }
 
-/** 列を消す（最後の1列は残す） */
+/** 列を消す（最後の1列は残す）。自分で決めた列の幅があれば、消した列の幅は左どなりへ（いちばん左の列なら右どなりへ） */
 export function removeColumn(table: TableBlock, at: number): TableBlock {
   if (columns(table) <= 1) return table
-  return { ...table, rows: table.rows.map((r) => ({ ...r, cells: r.cells.filter((_, i) => i !== at) })) }
+  const ws = colWidthsOf(table)
+  const rows = table.rows.map((r) => ({ ...r, cells: r.cells.filter((_, i) => i !== at) }))
+  return { ...table, rows, ...(ws ? { colWidths: removeColumnWidth(ws, at) } : {}) }
+}
+
+// ---- 列の幅を自分で決める（mockups/v42：パソコンは縦の線をドラッグ、スマホは丸いつまみ。5% ずつ。どの列も 10% 以上。合計は本文の幅いっぱい） ----
+
+/** どの列もこれより狭くしない（%。本文の幅 150mm で3字ほど）。列が多くて入らないときは、同じ幅に分けた幅 */
+export const MIN_COLUMN_PCT = 10
+/** 幅を変える刻み（%） */
+export const COLUMN_STEP_PCT = 5
+
+const minColumnPct = (n: number) => Math.min(MIN_COLUMN_PCT, 100 / n)
+
+/** 0.1% の刻みにそろえ、合計をちょうど 100 にする（丸めの端数は、いちばん広い列で合わせる） */
+function tidyWidths(ws: number[]): number[] {
+  const tenths = ws.map((w) => Math.round(w * 10))
+  const diff = 1000 - tenths.reduce((a, b) => a + b, 0)
+  if (diff !== 0) tenths[tenths.indexOf(Math.max(...tenths))] += diff
+  return tenths.map((t) => t / 10)
+}
+
+/** どの列も下限より狭くしない（足りない分は、ほかの列から、幅に比べて少しずつもらう） */
+function withMinimum(ws: number[]): number[] {
+  const min = minColumnPct(ws.length)
+  const out = [...ws]
+  const fixed = new Set<number>()
+  for (let k = 0; k < ws.length; k++) {
+    const low = out.flatMap((w, i) => (!fixed.has(i) && w < min - 1e-9 ? [i] : []))
+    if (low.length === 0) break
+    for (const i of low) {
+      fixed.add(i)
+      out[i] = min
+    }
+    const free = out.flatMap((_, i) => (fixed.has(i) ? [] : [i]))
+    const room = 100 - fixed.size * min
+    const sum = free.reduce((a, i) => a + out[i], 0)
+    for (const i of free) out[i] = sum > 0 ? (out[i] * room) / sum : room / free.length
+  }
+  return out
+}
+
+/** 同じ幅（「幅をそろえ直す」。自分で決めるのまま） */
+export function equalColumnWidths(n: number): number[] {
+  return tidyWidths(Array.from({ length: Math.max(1, n) }, () => 100 / Math.max(1, n)))
+}
+
+/** 幅を、列の数 n の、合計 100・どの列も下限以上の形にする（数が合わない・使えない値なら null） */
+export function normalizeColumnWidths(raw: unknown, n: number): number[] | null {
+  if (!Array.isArray(raw) || raw.length !== n || n < 1 || !raw.every((v) => typeof v === 'number' && Number.isFinite(v) && v > 0)) return null
+  const sum = (raw as number[]).reduce((a, b) => a + b, 0)
+  return tidyWidths(withMinimum((raw as number[]).map((w) => (w * 100) / sum)))
+}
+
+/** 表の、自分で決めた列の幅（列の数と合わなければ null） */
+export function colWidthsOf(table: TableBlock): number[] | null {
+  return normalizeColumnWidths(table.colWidths, columns(table))
+}
+
+/**
+ * 列の境目（border 番目の列と、その右の列の間）を delta（%）動かす。5% の刻みに丸め、となりの2列のどちらも下限（10%）より狭くならない所で止める。
+ * ほかの列の幅は変わらない
+ */
+export function moveColumnBorder(ws: number[], border: number, delta: number): number[] {
+  if (border < 0 || border >= ws.length - 1) return ws
+  const min = minColumnPct(ws.length)
+  const step = Math.round(delta / COLUMN_STEP_PCT) * COLUMN_STEP_PCT
+  const d = Math.max(-(ws[border] - min), Math.min(ws[border + 1] - min, step))
+  const next = [...ws]
+  next[border] = Math.round((ws[border] + d) * 10) / 10
+  next[border + 1] = Math.round((ws[border + 1] - d) * 10) / 10
+  return next
+}
+
+/** 列を足した（at 列目の右）：足した列は、at 列目の幅を半分もらう（狭くなりすぎたら、ほかの列から少しずつもらう） */
+export function addColumnWidth(ws: number[], at: number): number[] {
+  const i = Math.max(0, Math.min(ws.length - 1, at))
+  const half = Math.round(ws[i] * 5) / 10
+  return tidyWidths(withMinimum([...ws.slice(0, i), ws[i] - half, half, ...ws.slice(i + 1)]))
+}
+
+/** 列を消した（at 列目）：その幅は左どなりへ（いちばん左の列なら右どなりへ） */
+export function removeColumnWidth(ws: number[], at: number): number[] {
+  if (ws.length <= 1 || at < 0 || at >= ws.length) return ws
+  const to = at > 0 ? at - 1 : 1
+  const next = ws.map((w, i) => (i === to ? w + ws[at] : w))
+  return tidyWidths(next.filter((_, i) => i !== at))
 }
 
 export function setCellImage(table: TableBlock, cellId: string, imageId: string | null): TableBlock {

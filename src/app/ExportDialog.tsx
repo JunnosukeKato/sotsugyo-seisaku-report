@@ -6,6 +6,7 @@ import { deviceName } from '../drive/device'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { buildPdf, downloadPdf, saveMode, sharePdf, sizeText, thumbnail, type BuiltPdf } from '../pdf/exportPdf'
 import { skippedPages } from '../pdf/exportPages'
+import { Spinner } from './Busy'
 import { checkSummary, goToTarget } from './checkSummary'
 import { Modal } from './dialogs'
 import { Icon } from './icons'
@@ -448,7 +449,7 @@ export function ExportDialog({ editor, snap, config, onClose, onStart, onBuilt, 
         title={title}
         heading={
           <>
-            {waiting ? <span className="pdf-wait" aria-hidden="true" /> : <span className="pdf-ok">{Icon.check}</span>}
+            {waiting ? <Spinner className="pdf-wait" /> : <span className="pdf-ok">{Icon.check}</span>}
             {title}
           </>
         }

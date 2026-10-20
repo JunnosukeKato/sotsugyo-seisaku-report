@@ -7,8 +7,9 @@ export function fakeDrive(email = '00zz901@bunka-wu.ac.jp') {
   let seq = 0
   let clock = Date.now()
   // 学生のアカウント（@ より前は学籍番号の小文字）。pdfCopies：学科の Apps Script（配信の窓口）に届いた PDF の控え（PDF の中身は先頭と大きさだけ）。
-  // uploadDelay：ファイルを送るのに、わざと時間をかける（ミリ秒。「置いています…」の表示を見るため）
-  const drive = { files, email, failNext: null, logins: 0, pdfCopies: [], uploadDelay: 0 }
+  // uploadDelay：ファイルを送るのに、わざと時間をかける（ミリ秒。「置いています…」の表示を見るため）。
+  // delay：どの呼び出しにも、わざと時間をかける（ミリ秒。ログイン・読み込み直すときの「待つ間の表示」を見るため。waiting.mjs）
+  const drive = { files, email, failNext: null, logins: 0, pdfCopies: [], uploadDelay: 0, delay: 0 }
   const now = () => new Date((clock += 1000)).toISOString()
   const meta = (f) => ({ id: f.id, name: f.name, size: String(f.content?.length ?? 0), modifiedTime: f.modifiedTime, appProperties: f.appProperties })
   const unquote = (s) => s.replace(/\\'/g, "'").replace(/\\\\/g, '\\')
@@ -36,6 +37,7 @@ export function fakeDrive(email = '00zz901@bunka-wu.ac.jp') {
   /** ドライブの API の1回の呼び出しに答える（[状態, 返す中身, 中身の種類]） */
   drive.answer = async (method, url, headers, body) => {
     const u = new URL(url)
+    if (drive.delay) await new Promise((resolve) => setTimeout(resolve, drive.delay))
     if (drive.failNext) {
       const status = drive.failNext
       drive.failNext = null

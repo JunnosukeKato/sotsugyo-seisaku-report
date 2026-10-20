@@ -10,6 +10,10 @@ import { createReport } from './model/newReport'
 import { allImages, clearAll, listSnapshots, loadReport, keepSnapshot, putImage, saveSnapshot, usedImageIds, type Snapshot } from './model/storage'
 import type { Report } from './model/types'
 import type { WordImportResult } from './import/types'
+import { Spinner, WaitToast } from './app/Busy'
+import { ImageWorkToast } from './app/ImageWork'
+import { ImageWork } from './app/imageWorkStore'
+import { nextPaint, useSlow } from './app/useBusy'
 import { BackupDialog, CourseChangeDialog, CourseMenu, ReferencesDialog } from './app/dialogs'
 import { ExportDialog } from './app/ExportDialog'
 import { ConflictDialog, IdMismatchDialog, LoginGate, OtherAccountDialog, ReloginDialog, WipeDialog, type DriveControls, type GateState } from './app/DriveUi'
@@ -50,7 +54,8 @@ const nullSnapshot = () => null
 type Dialog =
   | { kind: 'export' }
   | { kind: 'references' }
-  | { kind: 'backup'; snapshots: Snapshot[] }
+  /** snapshots：自動の控え（読み込んでいる間は null。窓はすぐ開く） */
+  | { kind: 'backup'; snapshots: Snapshot[] | null }
   | { kind: 'course'; rect: DOMRect }
   | { kind: 'courseChange'; courseId: string }
   /** 今年度だけ：Word から読み込む（mockups/v24） */
@@ -209,6 +214,13 @@ export default function App() {
   const [gate, setGate] = useState<GateState | null>(() => (drive ? (drive.restoreToken() ? { kind: 'loading' } : { kind: 'login' }) : null))
   const [driveDialog, setDriveDialog] = useState<DriveDialog>(null)
   const [driveBusy, setDriveBusy] = useState(false)
+  /** どちらの原稿で続けるかの窓で、選んだほうを開いている・保存している途中（押したボタンに「開いています…」など） */
+  const [conflictBusy, setConflictBusy] = useState<'remote' | 'local' | null>(null)
+  /**
+   * 選んだ写真を縮めて保存している間（紙面の上に「写真を取り込んでいます…」。依頼者の要望 2026-10-20。app/ImageWork.tsx）。
+   * 画面全体を描き直さないよう、知らせの部品だけが見張る
+   */
+  const [imageWork] = useState(() => new ImageWork())
   const [reloginError, setReloginError] = useState<string | null>(null)
   /** 「もう一度ログイン」の窓を「あとで」にした（しばらく出さない） */
   const [reloginLater, setReloginLater] = useState(false)
@@ -372,6 +384,8 @@ export default function App() {
             // ドライブの原稿の年度に切り替えたあとの設定で決める
             startGuide(configRef.current, ed.getSnapshot().report, false)
           }
+          // 「ドライブの原稿を読み込み直す」で、ドライブの原稿に入れ替えた：画面の下に知らせる
+          else ed.showNotice('ドライブの原稿を読み込みました')
           return
         case 'conflict':
           setGate(null)
@@ -492,6 +506,7 @@ export default function App() {
           onTocClick: (point) => setTocPoint(point),
           pickImage: pickImageFile,
           pickImages: pickImageFiles,
+          onImageWork: (work) => imageWork.set(work),
         })
         ed.addImages(await allImages())
         markOpen('images')
@@ -528,7 +543,7 @@ export default function App() {
         setLoadError(String(e))
       }
     })()
-  }, [autosave, drive, enter, startGuide, refreshConfig])
+  }, [autosave, drive, enter, startGuide, refreshConfig, imageWork])
 
   // ほかのアプリやタブに切り替えたら、送っていない変更をすぐドライブに送る
   useEffect(() => {
@@ -542,10 +557,14 @@ export default function App() {
 
   /** 「PDFを書き出す」：紙面を組み直し終えてから窓を開く（長い原稿では数秒かかるので、その間は「確かめています…」と出す） */
   const [exporting, setExporting] = useState(false)
+  // スマホ：下のタブの「PDF」は小さいので、確かめるのが2秒を過ぎたら、紙面の上にも「数秒かかることがあります」を出す（PC は右の欄のボタンの下）
+  const exportSlowPhone = useSlow(exporting && narrow)
   const startExport = async () => {
     if (!editor || exporting) return
     setExporting(true)
     try {
+      // ボタンの「確かめています…」を先に見せてから、紙面を組み直す（遅いスマホでは、組み直しの始めの重い処理の間、ボタンが変わらなかった）
+      await nextPaint()
       editor.commitEditing()
       await editor.render()
       // 開いた直後で、先に見せたページのほかをまだ組んでいるときは、組み終えるまで待つ（全部のページがそろってから PDF にする）
@@ -627,11 +646,12 @@ export default function App() {
           local: autosave.state,
           lastSaved: drive.lastSaved,
           staff: !!driveState.email && !studentIdFromEmail(driveState.email, config.studentIdPattern),
-          onSaveNow: () => {
+          // 「今すぐドライブに保存」：送り終えるまで待つ（その間、ボタンに「ドライブに保存しています…」。DriveUi.tsx の DriveMenu）
+          onSaveNow: async () => {
             const ed = editorRef.current
             if (!ed) return
             ed.commitEditing()
-            drive.schedule(ed.getSnapshot().report, 0)
+            await drive.saveNow(ed.getSnapshot().report)
           },
           onReload: () => void reloadFromDrive(),
           onWipe: () => setDriveDialog({ kind: 'wipe' }),
@@ -699,6 +719,18 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey)
   }, [editor, dialog, guide, gate, driveDialog, tabLock.locked, tourOn])
 
+  /**
+   * 「バックアップ・作り直す」の窓を開く。窓はすぐ開き、自動の控えの一覧は読み込んでから出す
+   * （控えが多いと、読み込むのに少しかかる。前は、読み込み終えるまで窓が開かず、押しても何も起きないように見えた）
+   */
+  const openBackup = useCallback(() => {
+    setDialog({ kind: 'backup', snapshots: null })
+    void listSnapshots().then(
+      (snapshots) => setDialog((d) => (d?.kind === 'backup' && d.snapshots === null ? { kind: 'backup', snapshots } : d)),
+      () => setDialog((d) => (d?.kind === 'backup' && d.snapshots === null ? { kind: 'backup', snapshots: [] } : d)),
+    )
+  }, [])
+
   const saveBackup = useCallback(async () => {
     if (!snap) return
     const used = new Set(usedImageIds(snap.report))
@@ -718,6 +750,7 @@ export default function App() {
         editor.replace(report)
         await matchYear(editor, report)
         setDialog(null)
+        editor.showNotice('バックアップファイルから戻しました')
       } catch (e) {
         alert(e instanceof Error ? e.message : String(e))
       }
@@ -789,6 +822,7 @@ export default function App() {
     editor.replace(kept.report)
     await matchYear(editor, kept.report)
     setWordTodo(null)
+    editor.showNotice('Word から読み込む前の原稿に戻しました')
   }, [editor, wordTodo, setWordTodo, matchYear])
 
   /** 使い方の「指差し確認をもう一度見る」：使い方を閉じて、指差し確認を出す */
@@ -850,7 +884,7 @@ export default function App() {
   const openWord = wordOffered && !wordTodo ? () => setDialog({ kind: 'word' }) : undefined
   const todoCard = (onPick?: () => void) =>
     editor && snap && wordTodo ? (
-      <WordTodoCard editor={editor} snap={snap} todo={wordTodo} onUpdate={setWordTodo} onClose={() => setWordTodo(null)} onRestore={() => void restoreBeforeWord()} onPick={onPick} />
+      <WordTodoCard editor={editor} snap={snap} todo={wordTodo} onUpdate={setWordTodo} onClose={() => setWordTodo(null)} onRestore={restoreBeforeWord} onPick={onPick} />
     ) : null
 
   return (
@@ -906,10 +940,20 @@ export default function App() {
         )}
         {/* 紙面の準備中：残りのページの見込みも出す（スマホで十数秒かかるとき、進んでいるのが分かるように）。原稿を丸ごと入れ替えたときも、前の原稿の紙面を見せない */}
         {(!snap || (snap.rendering && !snap.layout) || snap.replacing) && !loadError && (
-          <div className="loading">
-            紙面を準備しています…{firstOpen ? '（初回は数秒かかります）' : snap?.pagesLeft ? `（あと${snap.pagesLeft}ページほど）` : ''}
+          <div className="loading" role="status">
+            <span className="loading-line">
+              <Spinner />
+              {/* 狭い画面では「（」の前で折り返す（1字だけ次の行に残らないように） */}
+              <span>
+                <span className="nb">紙面を準備しています…</span>
+                <span className="nb">{firstOpen ? '（初回は数秒かかります）' : snap?.pagesLeft ? `（あと${snap.pagesLeft}ページほど）` : ''}</span>
+              </span>
+            </span>
           </div>
         )}
+        {/* 選んだ写真を縮めて保存し、紙面に出るまで（紙面の上の真ん中に小さく。依頼者の要望 2026-10-20） */}
+        {ready && snap.layout && <ImageWorkToast work={imageWork} editor={editor} />}
+        {exportSlowPhone && <WaitToast className="on-stage" text="PDF の前に、紙面を確かめています…" slowMs={0} />}
         {loadError && <div className="loading ng">読み込みに失敗しました：{loadError}</div>}
       </main>
 
@@ -923,7 +967,7 @@ export default function App() {
           driveStopped={driveStopped}
           sheetHostRef={sheetHostRef}
           onHelp={() => setHelp(true)}
-          onBackup={async () => setDialog({ kind: 'backup', snapshots: await listSnapshots() })}
+          onBackup={openBackup}
           exporting={exporting}
           onExport={startExport}
           onWordImport={openWord}
@@ -943,7 +987,7 @@ export default function App() {
           saveState={autosave.state}
           drive={driveStopped ? undefined : driveControls}
           driveStopped={driveStopped}
-          onBackup={async () => setDialog({ kind: 'backup', snapshots: await listSnapshots() })}
+          onBackup={openBackup}
           exporting={exporting}
           onExport={startExport}
           onWordImport={openWord}
@@ -1011,9 +1055,10 @@ export default function App() {
       {dialog?.kind === 'references' && snap && editor && (
         <ReferencesDialog
           report={snap.report}
-          onSave={(references) => {
+          // 紙面を組み直し、そのページへ移って知らせるまで、窓に「反映しています…」を出しておく（終わったら窓が閉じる）
+          onSave={async (references) => {
             editor.update((r) => ({ ...r, references }))
-            void showReferences(editor)
+            await showReferences(editor)
           }}
           onClose={() => setDialog(null)}
         />
@@ -1039,14 +1084,15 @@ export default function App() {
         <BackupDialog
           driveStopped={driveStopped}
           snapshots={dialog.snapshots}
-          onSaveBackup={() => void saveBackup()}
-          onRestoreFile={(file) => void restoreFile(file)}
+          onSaveBackup={saveBackup}
+          onRestoreFile={restoreFile}
           onRestoreSnapshot={async (s) => {
             if (!confirm(`${new Date(s.savedAt).toLocaleString('ja-JP')}${s.label ? `（${s.label}）` : ''} の控えに戻しますか？${courseChangeNote(configRef.current, snap.report, s.report)}`)) return
             await keepSnapshot(snap.report)
             editor.replace(s.report)
             await matchYear(editor, s.report)
             setDialog(null)
+            editor.showNotice(`${new Date(s.savedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} の控えに戻しました`)
           }}
           onStartOver={async () => {
             if (!confirm('今の原稿を消して、最初から作り直しますか？\n（今の原稿は自動の控えに残します）')) return
@@ -1085,11 +1131,11 @@ export default function App() {
           local={snap.report}
           remote={driveDialog.remote}
           atLogin={driveDialog.atLogin}
-          busy={driveBusy}
+          busy={conflictBusy}
           onChooseRemote={async () => {
             // 窓を開いたまま許可が切れていたら、先にログインし直す（Google の窓は、押した直後にしか開けない）
             const login = drive.tokenValid ? null : drive.login()
-            setDriveBusy(true)
+            setConflictBusy('remote')
             try {
               if (login) await login
               await openRemote(editor, driveDialog.remote)
@@ -1099,16 +1145,17 @@ export default function App() {
                 prefillStudentId(editor)
                 startGuide(configRef.current, editor.getSnapshot().report, false)
               }
+              editor.showNotice('ドライブの原稿を開きました')
             } catch (e) {
               alert(errorText(e))
             } finally {
               setGate(null)
-              setDriveBusy(false)
+              setConflictBusy(null)
             }
           }}
           onChooseLocal={async () => {
             const login = drive.tokenValid ? null : drive.login()
-            setDriveBusy(true)
+            setConflictBusy('local')
             try {
               if (login) await login
               // ドライブの原稿は、写真ごとこの端末の控えに残す（あとで戻せるように）
@@ -1122,10 +1169,11 @@ export default function App() {
                 prefillStudentId(editor)
                 startGuide(configRef.current, editor.getSnapshot().report, false)
               }
+              if (drive.getState().status.kind === 'saved') editor.showNotice('この端末の原稿をドライブに保存しました')
             } catch (e) {
               alert(errorText(e))
             } finally {
-              setDriveBusy(false)
+              setConflictBusy(null)
             }
           }}
         />
