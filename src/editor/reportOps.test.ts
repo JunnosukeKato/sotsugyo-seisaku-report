@@ -211,7 +211,7 @@ describe('表を入れる・Enter で段落を分ける（段落の下の図・�
       },
     ],
   })
-  const table = (id: string) => ({ type: 'table' as const, id, caption: '', widths: 'equal' as const, rows: [] })
+  const table = (id: string) => ({ type: 'table' as const, id, caption: '', widths: 'equal' as const, heights: 'auto' as const, rows: [] })
   const types = (r: Report) => r.body[0].blocks.map((b) => b.type)
 
   it('表は、段落のすぐ下（すでにある図の後ろ）に入り、本文に（表n）が入る', () => {

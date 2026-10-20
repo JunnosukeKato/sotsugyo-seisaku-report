@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { PHOTO_ARRANGEMENTS, photoGrid, photoPageName } from '../model/photos'
 import { SELECTION_TEXTS } from '../editor/selectionBar'
 import { Icon } from './icons'
 import { TableSizeMenu } from './TableSize'
+import { TABLE_SWITCHES, twoLines } from './tableSwitches'
 import { keepFocus, PAGE_CONTEXT, TOC_PALETTE_NOTE } from './uiShared'
 
 /** マウスの指の絵（目次の行を押せること。mockups/v41 案C） */
@@ -331,37 +332,45 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
         <Tool label="列を消す" icon={Icon.colRemove} title="書いているセルの列を消す" onClick={() => editor.removeTableColumn(tableId)} />
         {phone ? (
           // スマホの下の道具：「そろえる」「中身に合わせる」を2つ並べると、指で押すには小さすぎた（高さ 21px）。
-          // 書く欄の道具と同じく、いまの幅を出すボタン1つにして、押すたびに切り替える（高さ 44px 以上。index.css）
-          <button
-            className="tb width-toggle"
-            title={table.widths === 'equal' ? '列の幅：そろえる（押すと、中身に合わせる）' : '列の幅：中身に合わせる（押すと、そろえる）'}
-            onMouseDown={keepFocus}
-            onClick={() => editor.setTableWidths(tableId, table.widths === 'equal' ? 'auto' : 'equal')}
-          >
-            <span>列の幅</span>
-            {/* 「中身に合わせる」は、道具が画面の幅に入るよう、「中身に／合わせる」の2行にする */}
-            <b>
-              {table.widths === 'equal' ? (
-                'そろえる'
-              ) : (
-                <>
-                  中身に
-                  <wbr />
-                  合わせる
-                </>
-              )}
-            </b>
-          </button>
+          // 書く欄の道具と同じく、いまの幅を出すボタン1つにして、押すたびに切り替える（高さ 44px 以上。index.css）。
+          // 「左端の列」（列の幅が「そろえる」のときだけ）・「行の高さ」も同じ形。道具が画面の幅に入らなければ、横にずらして見る（index.css の「表の行の高さ・左端の列」）
+          <>
+            {TABLE_SWITCHES.filter((sw) => sw.shown(table)).map((sw) => {
+              const on = sw.on(table)
+              return (
+                <button key={sw.key} className="tb width-toggle" title={sw.title(on)} onMouseDown={keepFocus} onClick={() => sw.set(editor, tableId, !on)}>
+                  <span>{sw.label}</span>
+                  {/* 「中身に合わせる」などは、道具が画面の幅に入るよう、「中身に／合わせる」の2行にする（1字だけの行はできない） */}
+                  <b>{twoLines(sw.value(on))}</b>
+                </button>
+              )
+            })}
+          </>
         ) : (
           <>
-            <div className="ctx-label sub">列の幅</div>
-            <div className="seg">
-              {(['equal', 'auto'] as const).map((w) => (
-                <button key={w} className={table?.widths === w ? 'on' : ''} aria-pressed={table?.widths === w} onMouseDown={keepFocus} onClick={() => editor.setTableWidths(tableId, w)}>
-                  {w === 'equal' ? 'そろえる' : '中身に合わせる'}
-                </button>
-              ))}
-            </div>
+            {/* 列の幅・左端の列（列の幅が「そろえる」のときだけ）・行の高さ：2つのボタンから選ぶ。押すと切り替わるほうのボタンに、いまの形と、押すとどうなるかを出す */}
+            {TABLE_SWITCHES.filter((sw) => sw.shown(table)).map((sw) => {
+              const now = sw.on(table)
+              return (
+                <Fragment key={sw.key}>
+                  <div className="ctx-label sub">{sw.label}</div>
+                  <div className="seg" role="group" aria-label={sw.label}>
+                    {[true, false].map((on) => (
+                      <button
+                        key={String(on)}
+                        className={now === on ? 'on' : ''}
+                        aria-pressed={now === on}
+                        title={now === on ? `${sw.label}：${sw.value(on)}` : sw.title(now)}
+                        onMouseDown={keepFocus}
+                        onClick={() => sw.set(editor, tableId, on)}
+                      >
+                        {sw.value(on)}
+                      </button>
+                    ))}
+                  </div>
+                </Fragment>
+              )
+            })}
           </>
         )}
         <Tool

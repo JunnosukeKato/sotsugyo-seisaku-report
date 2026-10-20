@@ -164,6 +164,9 @@ describe('ひな形と同じつくりの Word', () => {
       ['サテン', '帯', ''],
     ])
     expect(t.rows[1].cells[2].imageId).toBeTruthy()
+    // 列の幅・行の高さ・左端の列は、今までどおり（そろえる・中身に合わせる・ほかとそろえる）
+    expect(t).toMatchObject({ widths: 'equal', heights: 'auto' })
+    expect(t.labelColumn).toBeUndefined()
     expect(result.images).toHaveLength(3)
     // 確認の窓に出すもの
     expect(result.counts).toEqual({ chapters: 1, subheadings: 3, paragraphs: 3, figures: 2, tables: 1 })

@@ -876,7 +876,7 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
             id: newId('tr'),
             cells: r.map((c) => ({ id: newId('tc'), text: c.text, imageId: (c.image && imageIds.get(c.image)) || null })),
           }))
-          const table: TableBlock = { type: 'table', id, caption: b.table.caption?.name ?? '', widths: 'equal', rows }
+          const table: TableBlock = { type: 'table', id, caption: b.table.caption?.name ?? '', widths: 'equal', heights: 'auto', rows }
           tableMetas.push({
             id,
             wordNumber: b.table.caption?.number ?? null,

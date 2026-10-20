@@ -7,6 +7,7 @@ import { BAND_SIDE_QUERY, forTouch, paragraphHint, photoToolsAtSide } from './ba
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
 import { TableSizeSheet } from './TableSize'
+import { SHORT_SWITCH_NAMES, TABLE_SWITCHES } from './tableSwitches'
 import { BackupLabel } from './dialogs'
 import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, ExportNote, HelpButton, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
 import { checkSummary } from './checkSummary'
@@ -95,7 +96,7 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
   // 表のセル・タイトルを書いているときの表
   const tableId = id && (snap.editingKind === 'tableCell' || snap.editingKind === 'tableCaption') ? editor.tableIdOf(id) : null
   const tableBlock = tableId ? snap.report.body.flatMap((c) => c.blocks).find((b) => b.id === tableId) : undefined
-  const tableWidths = tableBlock?.type === 'table' ? tableBlock.widths : 'equal'
+  const table = tableBlock?.type === 'table' ? tableBlock : undefined
   // 「表を入れる」で出す、表の大きさを選ぶ欄（mockups/v35 ②）
   const [tableSheet, setTableSheet] = useState(false)
   // 書く欄の「戻す」「やり直す」：戻した（やり直した）あとも、書いていた欄が残っていれば、書く欄を開いたままにする
@@ -161,9 +162,13 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
             <button onMouseDown={keepFocus} onClick={() => editor.removeTableColumn(tableId)}>
               {Icon.colRemove}列を消す
             </button>
-            <button onMouseDown={keepFocus} onClick={() => editor.setTableWidths(tableId, tableWidths === 'equal' ? 'auto' : 'equal')}>
-              {tableWidths === 'equal' ? '幅：そろえる' : '幅：中身に合わせる'}
-            </button>
+            {/* 列の幅・左端の列（列の幅が「そろえる」のときだけ）・行の高さ：押すたびに切り替える（いまの形を出す。例「幅：そろえる」） */}
+            {table &&
+              TABLE_SWITCHES.filter((sw) => sw.shown(table)).map((sw) => (
+                <button key={sw.key} title={sw.title(sw.on(table))} onMouseDown={keepFocus} onClick={() => sw.set(editor, tableId, !sw.on(table))}>
+                  {SHORT_SWITCH_NAMES[sw.key]}：{sw.value(sw.on(table))}
+                </button>
+              ))}
             {/* 表ごと消す（画面の下に「表を削除しました［戻す］」）。前は、閉じてから表のタイトル（ページ全体の表示では高さ 7px ほど）をタップするしかなかった */}
             <button className="danger" onMouseDown={keepFocus} onClick={() => editor.removeTable(tableId)}>
               {Icon.remove}この表を削除
@@ -214,7 +219,8 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
 /**
  * スマホで紙面に直接書く（app/phoneDirect.ts）：紙面に重ねた書く欄で書いている間、キーボードのすぐ上に出す細い道具。
  * 「戻す」「やり直す」は、まず書く欄の中で打った字を戻す（キーボードは出たまま）。戻す字がなければ、原稿を戻す。
- * 本文の段落なら「図を入れる」「表を入れる」。表のタイトル・セルなら、2段目に表の道具（行・列を足す・消す、セルの画像、列の幅、表を削除）。
+ * 本文の段落なら「図を入れる」「表を入れる」。表のタイトル・セルなら、2段目に表の道具（行・列を足す・消す、セルの画像、列の幅・左端の列・行の高さ、表を削除）。
+ * 2段目が画面の幅に入らないときは、2段目だけを横にずらして見る（右端に、続きがあることを示す影）
  * 「完了」は書き終えて、1ページ全体の表示に戻す
  */
 function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
@@ -226,7 +232,7 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
   // 表のセル・タイトルを書いているときの表
   const tableId = id && (snap.editingKind === 'tableCell' || snap.editingKind === 'tableCaption') ? editor.tableIdOf(id) : null
   const tableBlock = tableId ? snap.report.body.flatMap((c) => c.blocks).find((b) => b.id === tableId) : undefined
-  const tableWidths = tableBlock?.type === 'table' ? tableBlock.widths : 'equal'
+  const table = tableBlock?.type === 'table' ? tableBlock : undefined
   const cellImage = !!tableId && snap.editingKind === 'tableCell' && editor.currentCellHasImage(tableId)
   const [tableSheet, setTableSheet] = useState(false)
   // 書く欄の中で戻せなければ、原稿を戻す（書く欄はいったん閉じ、欄が残っていれば、組み直してから開き直す。下の書く欄と同じ）
@@ -295,11 +301,15 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
               {Icon.colRemove}
               <span>列を消す</span>
             </button>
-            {/* 列の幅：押すたびに「そろえる」「中身に合わせる」を切り替える（いまの幅を出す） */}
-            <button className="db-width" onMouseDown={keepFocus} onClick={() => editor.setTableWidths(tableId, tableWidths === 'equal' ? 'auto' : 'equal')}>
-              <small>列の幅</small>
-              <b>{tableWidths === 'equal' ? 'そろえる' : '中身に合わせる'}</b>
-            </button>
+            {/* 列の幅・左端の列（列の幅が「そろえる」のときだけ）・行の高さ：押すたびに切り替える（いまの形を出す）。
+                道具が画面の幅に入らなければ、この段だけ横にずらして見る（index.css の「表の行の高さ・左端の列」） */}
+            {table &&
+              TABLE_SWITCHES.filter((sw) => sw.shown(table)).map((sw) => (
+                <button key={sw.key} className="db-width" title={sw.title(sw.on(table))} onMouseDown={keepFocus} onClick={() => sw.set(editor, tableId, !sw.on(table))}>
+                  <small>{sw.label}</small>
+                  <b>{sw.value(sw.on(table))}</b>
+                </button>
+              ))}
             <button className="danger" onMouseDown={keepFocus} onClick={() => editor.removeTable(tableId)}>
               {Icon.remove}
               <span>表を削除</span>

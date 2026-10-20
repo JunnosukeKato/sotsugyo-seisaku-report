@@ -1561,3 +1561,39 @@ button.row { cursor: pointer; }
    押して選んだ写真だけ、指で動かすと見える所が変わる（editor/reportEditor.ts の onPhotoPointerDown）。PC は今までどおり */
 .app.phone .page-viewport [data-photo-slot] img { touch-action: auto; }
 .app.phone .page-viewport [data-photo-slot].is-selected:not(.whole) img { touch-action: none; }
+
+/* ---- 図表のタイトルを書いている間：番号（「図4.」「表2.」）を書く欄の前に出す ---- */
+/* 紙面では番号とタイトルを一緒に真ん中にそろえる。書く欄も番号から始めて同じようにそろえる（番号は書けない字。書いた字には入らない：editor/overlayEditor.ts の setLabel）。
+   前は、書く欄が番号の後ろの空いた所から始まり、その中で真ん中にそろえていたため、「図4.」と「新しい図」が離れて見えた。画面だけで、PDF・印刷は変えない */
+.overlay-editor[data-label]::before, .overlay-ghost[data-label]::before, .overlay-frozen > div[data-label]::before { content: attr(data-label); }
+/* 書く欄は紙面の番号の上まで広がるので、白い地で紙面の字を隠す。ただし行の下の端 1.5px は塗らない：
+   表のタイトルのすぐ下の、表の上の線（線の太さの半分が、タイトルの行にかかる）が、書いている間に消えて見えないように。
+   仮の表示（overlay-ghost・overlay-frozen）は白い地を style で付けているので、!important で替える */
+.overlay-editor[data-label], .overlay-ghost[data-label], .overlay-frozen > div[data-label] { background: linear-gradient(#fff, #fff) top / 100% calc(100% - 1.5px) no-repeat !important; }
+
+/* ---- 表の行の高さ・左端の列（列の幅・左端の列・行の高さの切り替え：app/tableSwitches.tsx） ---- */
+/* スマホの表の道具は、切り替えのボタンが3つ（左端の列は、列の幅が「そろえる」のときだけ）になり、画面の幅に入らないことがある。
+   そのときは、道具の段を横にずらして見る。続きがある側の端に、薄い影を出す（ずらすと、ずらした側にも出る）。
+   影は、白い地を道具と一緒に動かし（local）、影を枠に止めて（scroll）、端まで来たら影が白い地に隠れるようにして出す */
+.app.phone .sel-bar .group.ctx:has(.width-toggle),
+.direct-bar .db-table {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  background:
+    linear-gradient(to right, #fff 30%, rgba(255, 255, 255, 0)) left center / 28px 100% no-repeat local,
+    linear-gradient(to left, #fff 30%, rgba(255, 255, 255, 0)) right center / 28px 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, rgba(30, 25, 20, 0.24), rgba(30, 25, 20, 0)) left center / 12px 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, rgba(30, 25, 20, 0.24), rgba(30, 25, 20, 0)) right center / 12px 100% no-repeat scroll,
+    #fff;
+}
+.app.phone .sel-bar .group.ctx:has(.width-toggle)::-webkit-scrollbar,
+.direct-bar .db-table::-webkit-scrollbar { display: none; }
+/* 表を選んだときの下の道具：画面より広ければ、帯の幅を画面に合わせて中を横にずらす（前は真ん中にそろえていたため、入らないと両端が画面の外に出て押せなかった）。
+   道具は縮めない（「行を／足す」の2字ずつの折り返し・「中身に／合わせる」の2行は今までどおり）。
+   切り替えの名前（「列の幅」「左端の列」「行の高さ」）は1行のまま（「列の／幅」のように、1字だけの行ができないように） */
+.app.phone .sel-bar .group.ctx:has(.width-toggle) { max-width: 100%; }
+.app.phone .sel-bar .group.ctx:has(.width-toggle) > * { flex: none; }
+.app.phone .sel-bar .width-toggle span { white-space: nowrap; }
+/* 紙面に直接書くときの、キーボードの上の道具の2段目（表の道具）：折り返さずに1段のまま（前は折り返して2段になり、紙面を隠す所が増えた） */
+.direct-bar .db-table { flex-wrap: nowrap; }

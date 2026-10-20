@@ -2,7 +2,7 @@ import type { TableBlock, TableCell, TableRow } from './types'
 
 /**
  * 表（mockups/v16 案A）。1行目は見出しの行。行と列は自由に足せ、セルには文字と画像（生地見本など）を入れられる。
- * 列の幅は「そろえる（同じ幅）」と「中身に合わせる」から選ぶ。素材表は、この表のひな形の1つ。
+ * 列の幅は「そろえる（同じ幅）」と「中身に合わせる」から、行の高さも「そろえる」と「中身に合わせる」から選ぶ。素材表は、この表のひな形の1つ。
  */
 
 type NewId = (prefix: string) => string
@@ -23,7 +23,7 @@ export function clampTableSize(columns: number, rows: number): { columns: number
 export function blankTable(id: string, newId: NewId, caption = '', columns: number = TABLE_SIZE.columns, rows: number = TABLE_SIZE.rows): TableBlock {
   const size = clampTableSize(columns, rows)
   const blank = () => Array.from({ length: size.columns }, () => '')
-  return { type: 'table', id, caption, widths: 'equal', rows: Array.from({ length: size.rows }, () => row(newId, blank())) }
+  return { type: 'table', id, caption, widths: 'equal', heights: 'auto', rows: Array.from({ length: size.rows }, () => row(newId, blank())) }
 }
 
 /** 素材表のひな形の見出し（生地見本の列には写真を入れる） */
@@ -32,7 +32,7 @@ export const SWATCH_HEADER = '生地見本'
 
 /** 素材表のひな形（名称・使用箇所・生地見本） */
 export function materialTable(id: string, newId: NewId, caption = '使用素材表'): TableBlock {
-  return { type: 'table', id, caption, widths: 'equal', rows: [row(newId, MATERIAL_HEADERS), row(newId, ['', '', ''])] }
+  return { type: 'table', id, caption, widths: 'equal', heights: 'auto', rows: [row(newId, MATERIAL_HEADERS), row(newId, ['', '', ''])] }
 }
 
 /** セルの位置（行・列）。見つからなければ null */
@@ -95,5 +95,5 @@ export function fromMaterialTable(raw: { id: string; caption?: string; rows?: { 
       { id: `${r.id}:swatch`, text: '', imageId: r.swatchImageId ?? null },
     ],
   }))
-  return { type: 'table', id: raw.id, caption: raw.caption ?? '', widths: 'equal', rows: [header, ...rows] }
+  return { type: 'table', id: raw.id, caption: raw.caption ?? '', widths: 'equal', heights: 'auto', rows: [header, ...rows] }
 }

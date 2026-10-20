@@ -1732,7 +1732,7 @@ export class ReportEditor {
     // スマホで紙面に直接書く：書き終えて、ほかの欄を開かなかったら、キーボードを閉じる（書く欄は隠れても、フォーカスが残ることがあるため）。
     // 図・表なども選ばず、続けて開く欄もなければ（紙面の外を押した・iPhone のキーボードの「完了」など）、「完了」と同じく1ページ全体の表示に戻す
     // （拡大したまま残り、「ページ全体に戻す」を押すのが分かりにくかったため。依頼者の判断）。
-    // ただし表のセルで Enter を押して書き終えたときは、拡大したまま（続けて隣のセルを押して書けるように）
+    // ただし表のセルをキーで書き終えたとき（Esc・最後のセルの Tab。セルの Enter は改行で、書き終えない）は、拡大したまま（続けて隣のセルを押して書けるように）
     if (this.direct) {
       const cellByKey = byKey && ops.findEditable(this.report, id)?.kind === 'tableCell'
       queueMicrotask(() => {
@@ -1924,6 +1924,18 @@ export class ReportEditor {
     const box = (fragment.closest('td, h1, h2, figcaption, p, .el') as HTMLElement | null) ?? fragment
     const own = fragment.getBoundingClientRect()
     const boxRect = box.getBoundingClientRect()
+    // 図表のタイトル：番号（「図4.」）も書く欄の前に出し（OverlayPlacement の label）、紙面と同じ幅の中で、番号とタイトルを一緒に真ん中にそろえる。
+    // 図は、1枚だけの段なら段の幅（本文の幅）、2枚並べた段なら、その図の幅。表は、表のタイトルの行の幅。
+    // 下の欄で書くとき（予備の ?direct=0 の端末）は今までどおり（番号は紙面のものを見せ、紙面の上の写しは番号の後ろから）
+    if ((editable.kind === 'figureCaption' || editable.kind === 'tableCaption') && !this.overlay.inSheet) {
+      const num = fragment.previousElementSibling
+      const label = num?.classList.contains('num') ? (num.textContent ?? '') : ''
+      const figure = fragment.closest('figure')
+      const row = figure?.closest('.figure-row')
+      const area = (row && row.querySelectorAll('figure').length === 1 ? row : figure) ?? box
+      const a = area.getBoundingClientRect()
+      return { rect: { left: a.left, top: boxRect.top, right: a.right }, clip, scale, alignOffset: 0, label }
+    }
     const left = kind === 'cell' ? boxRect.left + 2 * scale : own.left
     const right = Math.max(boxRect.right - (kind === 'cell' ? 2 * scale : 0), own.left + 120 * scale)
     return { rect: { left, top: kind === 'cell' ? own.top : boxRect.top, right }, clip, scale, alignOffset: 0 }
@@ -2153,11 +2165,14 @@ export class ReportEditor {
     const same = [...this.viewport.querySelectorAll<HTMLElement>('[data-block-id]')].filter((el) => el.dataset.blockId !== id && kinds.get(el.dataset.blockId!) === editable.kind)
     const styleSource = same.find((el) => view.pageIndexOf(el) === this.page) ?? same[0] ?? box ?? page
     const left = p.left + TEXT_LEFT * scale
+    // 入れたばかりの図・表のタイトル：番号（「図4.」）も書く欄の前に出す（紙面に出たら、紙面の番号に合わせる）
+    const number = editable.kind === 'figureCaption' || editable.kind === 'tableCaption' ? ops.numbering(this.report).numbers.get(id) : undefined
     return {
       rect: { left, top: Math.max(top, contentTop), right: left + TEXT_W * scale },
       clip: { left: p.left, top: p.top, right: p.right, bottom: p.bottom },
       scale,
       alignOffset: 0,
+      label: number === undefined ? undefined : `${editable.kind === 'figureCaption' ? '図' : '表'}${number}.`,
       blockId: id,
       kind: this.overlayKind(editable.kind),
       text: editable.text,
@@ -3409,6 +3424,18 @@ export class ReportEditor {
   /** 列の幅：そろえる（同じ幅）／中身に合わせる */
   setTableWidths(tableId: string, widths: TableBlock['widths']): void {
     this.changeTable(tableId, (t) => ({ ...t, widths }))
+  }
+
+  /** 行の高さ：そろえる（見出しの行のほかを、いちばん高い行に合わせる）／中身に合わせる。列の幅と同じく、元に戻す1回で戻る */
+  setTableHeights(tableId: string, heights: TableBlock['heights']): void {
+    if (ops.findTable(this.report, tableId)?.heights === heights) return
+    this.changeTable(tableId, (t) => ({ ...t, heights }))
+  }
+
+  /** 左端の列：中身に合わせる（on）／ほかの列とそろえる。列の幅が「そろえる」のときだけ効く */
+  setTableLabelColumn(tableId: string, on: boolean): void {
+    if ((ops.findTable(this.report, tableId)?.labelColumn === true) === on) return
+    this.changeTable(tableId, (t) => ({ ...t, labelColumn: on }))
   }
 
   /** 書いているセルに画像（生地見本など）を入れる・外す */

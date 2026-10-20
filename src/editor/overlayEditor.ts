@@ -7,7 +7,7 @@
  *
  * - paragraph：段落。Enter で分ける、先頭の Backspace で前とつなげる、複数行の貼り付けは段落に分ける
  * - line：見出し・図のタイトル・表紙の項目。Enter で確定
- * - cell：表のセル。Enter で確定、Shift+Enter で改行
+ * - cell：表のセル。Enter（Shift+Enter も）で改行。書き終えるのは Esc・Tab（隣のセルへ）・ほかの所を押す・スマホの「完了」
  *
  * PC の段落は、紙面と同じ所で行を折り返すよう、紙面と同じ組み方で書く（組み方：textSpacing.ts。図表の参照「（図1）」は途中で折り返さない）。
  * このときは、書く欄の文字を自分で持ち（model）、打った・消した・貼り付けた・元に戻したなどの入力をすべて受け取って、
@@ -92,6 +92,12 @@ export interface OverlayPlacement {
   scale: number
   /** 段落がページをまたぐとき、見えているページより前にある文字数（その文字が rect の上端に来るようにずらす） */
   alignOffset: number
+  /**
+   * 図表のタイトルの番号（「図4.」「表2.」）。書く欄の前に、書けない字（::before）として出す。
+   * 紙面では番号とタイトルを一緒に真ん中にそろえているので、書く欄も番号から始め、rect を真ん中にそろえる幅にする
+   * （前は、書く欄が番号の後ろの空いた所から始まり、その中で真ん中にそろえていたため、「図4.」と「新しい図」が離れて見えた）
+   */
+  label?: string
 }
 
 export interface OverlayTarget extends OverlayPlacement {
@@ -416,6 +422,15 @@ export class OverlayEditor {
   /** スマホで紙面に直接書く：スマホで紙面に直接書いている（紙面に重ねた書く欄。枠は紙面の表示枠の中） */
   private direct = false
 
+  /**
+   * 図表のタイトルの番号を、書く欄の前に出す・やめる（書く欄の data-label。見た目は index.css の ::before。書けない字なので、書いた字には入らない）。
+   * 下の欄で書くとき（予備の ?direct=0 の端末）は出さない（今までどおり）
+   */
+  private setLabel(label: string | undefined): void {
+    if (label && !this.sheetHost) this.element.dataset.label = label
+    else delete this.element.dataset.label
+  }
+
   get inSheet(): boolean {
     return this.sheetHost !== null
   }
@@ -488,6 +503,7 @@ export class OverlayEditor {
     if (this.target?.blockId !== target.blockId) this.setLive(false)
     this.target = target
     this.element.dataset.kind = target.kind
+    this.setLabel(target.label)
     this.setTypeset(!this.sheetHost && target.kind === 'paragraph')
     this.model = target.text
     this.resetHistory()
@@ -1063,6 +1079,9 @@ export class OverlayEditor {
   continueIn(next: { blockId: string; kind: OverlayKind; text: string; caret: number; styleSource?: HTMLElement; refs?: OverlayTarget['refs']; page?: HTMLElement[] }, ghost?: string): void {
     if (!this.target) return
     this.unpark()
+    // 図表のタイトルで Enter：続きの段落には番号を出さない（前のタイトルの仮の表示には、番号を付ける）
+    const label = this.element.dataset.label
+    this.setLabel(undefined)
     // 前の段落の仮の表示を、それまでの仮の表示の下（書いていた欄の位置）に足す。それまでの仮の表示は残す（組み直した紙面が出るまで）
     if (ghost !== undefined && this.placed) {
       const g = document.createElement('div')
@@ -1071,6 +1090,8 @@ export class OverlayEditor {
       g.style.cssText = this.box.style.cssText
       Object.assign(g.style, GHOST_STYLE)
       g.textContent = ghost
+      // 図表のタイトルで Enter を押した：前のタイトルの仮の表示にも番号を付ける
+      if (label) g.dataset.label = label
       this.clip.insertBefore(g, this.element.parentElement === this.clip ? this.element : this.mirror)
       // 段落の仮の表示も、紙面と同じ組み方にする（組み直した紙面と、行の折り返しが変わらないように）
       if (this.target.kind === 'paragraph') {
@@ -1212,6 +1233,8 @@ export class OverlayEditor {
    */
   moveTo(placement: OverlayPlacement): void {
     const { rect, clip, scale, alignOffset } = placement
+    // 図表のタイトル：組み直して番号が変わっていれば、書く欄の前の番号も替える
+    if (placement.label !== undefined) this.setLabel(placement.label)
     this.setFrame(placement)
     this.box.style.transform = `scale(${scale})`
     this.setWidth(this.widthOf(placement))
@@ -1290,6 +1313,8 @@ export class OverlayEditor {
       const el = document.createElement('div')
       el.style.cssText = from.style.cssText
       Object.assign(el.style, GHOST_STYLE)
+      // 図表のタイトル：番号も一緒に写す（組み直した紙面が出るまで、番号が消えて見えないように）
+      if (from.dataset.label) el.dataset.label = from.dataset.label
       if (typeset) {
         el.dataset.typeset = ''
         el.append(...[...from.childNodes].map((n) => n.cloneNode(true)))
@@ -1307,6 +1332,7 @@ export class OverlayEditor {
   private close(): void {
     // スマホ：紙面の上の写しはやめる（紙面の段落を隠すのもやめる。書いた字は、呼び出し側が仮の表示にする）
     this.setLive(false)
+    this.setLabel(undefined)
     this.target = null
     this.unpark()
     this.clearGhosts()
@@ -1439,6 +1465,11 @@ export class OverlayEditor {
    * 変える範囲は、ブラウザが変えようとした範囲（getTargetRanges。図表の参照の途中なども、ブラウザと同じ）
    */
   private onBeforeInput(e: InputEvent): void {
+    // 表のセル：改行の入力（Enter・Shift+Enter のキーと、Android の文字入力の、キーの知らせのない改行）は、セルの中の改行にする（書き終えない）
+    if (this.target?.kind === 'cell' && !this.composingNow && !e.isComposing && (e.inputType === 'insertParagraph' || e.inputType === 'insertLineBreak')) {
+      e.preventDefault()
+      return this.insertCellBreak()
+    }
     // スマホで紙面に直接書く：Enter のキーの知らせがなく、改行の入力だけが来た（Android の文字入力など）。キーの Enter と同じことをする
     if (this.direct && this.target && !this.composingNow && !e.isComposing && (e.inputType === 'insertParagraph' || e.inputType === 'insertLineBreak')) {
       e.preventDefault()
@@ -1596,8 +1627,8 @@ export class OverlayEditor {
       e.preventDefault()
       this.closingByKey = true
       this.element.blur()
-    } else if (e.key === 'Enter' && kind === 'cell' && e.shiftKey) {
-      // 表のセルの中の改行は、そのまま入れる
+    } else if (e.key === 'Enter' && kind === 'cell') {
+      // 表のセル：Enter・Shift+Enter は改行（続いて来る改行の入力で入れる：onBeforeInput の insertCellBreak）
     } else if (e.key === 'Enter' && (kind === 'paragraph' || this.target.enterCreatesParagraph)) {
       e.preventDefault()
       // 文字を選んでいるときは、選んだ文字を消して分ける（ふつうの書く欄と同じ）
@@ -1641,6 +1672,14 @@ export class OverlayEditor {
       this.closingByKey = true
       this.element.blur()
     }
+  }
+
+  /**
+   * 表のセルの中に改行を入れる（選んでいる字は置き換える）。ブラウザの文字の入れ方で入れるので、書く欄の中の Ctrl+Z でも戻せ、入力の知らせ（input）も出る。
+   * セルは紙面と同じ組み方では書かない（typeset ではない）ので、書く欄の中身から字を読む（get text）
+   */
+  private insertCellBreak(): void {
+    document.execCommand('insertText', false, '\n')
   }
 
   /** スマホのキーボードの上の道具の「戻す」：書く欄の中で書いた文字を戻す（紙面と同じ組み方で書いている段落だけ。戻すものがなければ false） */

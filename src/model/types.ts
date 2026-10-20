@@ -116,6 +116,13 @@ export interface TableBlock {
   caption: string
   /** 列の幅：equal＝そろえる（同じ幅）、auto＝中身に合わせる */
   widths: 'equal' | 'auto'
+  /**
+   * 行の高さ：equal＝そろえる（見出しの行のほかの行を、その中でいちばん高い行と同じ高さにする。見出しの行は中身に合わせたまま）、
+   * auto＝中身に合わせる。前の版の原稿（この項目がない）は auto
+   */
+  heights: 'equal' | 'auto'
+  /** 左端の列を中身に合わせる（列の幅が「そろえる」のときだけ効く。ほかの列は、残りを同じ幅で分ける）。ない・false は、ほかの列とそろえる */
+  labelColumn?: boolean
   rows: TableRow[]
 }
 

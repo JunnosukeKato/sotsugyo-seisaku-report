@@ -1,5 +1,6 @@
 import type { BodyBlock, Chapter, Figure, TableBlock, TableCell } from '../model/types'
-import { reportCss } from './reportCss'
+import { FONT_SIZE_PT, LETTER_SPACING_PT, reportCss } from './reportCss'
+import { equalRows, fitsLabel, ptText, type TableFits } from './tableFit'
 
 const CHAPTER_NUMERALS = ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ']
 const SUBHEADING_NUMERALS = ['ⅰ', 'ⅱ', 'ⅲ', 'ⅳ', 'ⅴ', 'ⅵ', 'ⅶ', 'ⅷ', 'ⅸ', 'ⅹ']
@@ -31,6 +32,8 @@ export interface BodyRenderOptions {
   figureSize: (figure: Figure) => FigureSize
   /** 次のページの上へ送る図のまとまり（figureRow の ID）。選び方は figureFloat.ts */
   deferredGroups?: ReadonlySet<string>
+  /** 表の行の高さ・左端の列の幅（行の高さを「そろえる」・左端の列を「中身に合わせる」表だけ。組んだ紙面で測ったもの：tableFit.ts） */
+  tableFits?: TableFits
 }
 
 /** 図・表の番号を本文の出現順に振る。参照（図n）の解決にも使う */
@@ -123,19 +126,60 @@ function renderFigure(f: Figure, size: FigureSize, number: number, options: Body
 
 /**
  * 表：タイトルは表の上。1行目は見出しの行。セルの画像は文字の上に、セルの幅に合わせて縮めて置く。
- * 列の幅は「そろえる（同じ幅）」か「中身に合わせる」
+ * 列の幅は「そろえる（同じ幅）」か「中身に合わせる」。
+ * 行の高さを「そろえる」表は、見出しの行のほかの行に、組んだ紙面で測った高さを書く（tableFit.ts。測る前は中身に合わせた高さ）。
+ * 左端の列を「中身に合わせる」表（列の幅が「そろえる」のときだけ）は、左端の列に、組んだ紙面で測った幅を書く（ほかの列は残りを同じ幅で分ける）。
+ * どちらも、しない表の HTML は前と同じ（印の class も付けない）
  */
 function renderTable(block: TableBlock, number: number, options: BodyRenderOptions): string {
+  // 列の幅「中身に合わせる」：短い字のセルは折り返さない（.nw。reportCss.ts）
+  const limit = block.widths === 'auto' ? noWrapLimit(Math.max(1, ...block.rows.map((r) => r.cells.length))) : 0
   const cellHtml = (cell: TableCell, header: boolean) => {
     const tag = header ? 'th' : 'td'
     const img = cell.imageId ? `<img src="${escapeHtml(options.imageSrc(cell.imageId))}" alt="">` : ''
     const placeholder = header ? '（見出し）' : '（クリックして入力）'
-    return `<${tag} data-cell-id="${escapeHtml(cell.id)}">${img}<span data-block-id="${escapeHtml(cell.id)}" data-placeholder="${placeholder}">${escapeHtml(cell.text)}</span></${tag}>`
+    const nw = limit > 0 && shortText(cell.text, limit) ? ' class="nw"' : ''
+    return `<${tag} data-cell-id="${escapeHtml(cell.id)}"${nw}>${img}<span data-block-id="${escapeHtml(cell.id)}" data-placeholder="${placeholder}">${escapeHtml(cell.text)}</span></${tag}>`
   }
   const [head, ...body] = block.rows
+  const fit = options.tableFits?.[block.id]
+  const rows = equalRows(block)
+  const label = fitsLabel(block)
+  // 印の class（測る前の紙面も、「中身に合わせる」の紙面と別の文書になるように）
+  const classes = [`widths-${block.widths === 'auto' ? 'auto' : 'equal'}`, ...(rows ? ['heights-equal'] : []), ...(label ? ['label-column'] : [])].join(' ')
+  const colgroup = label && fit?.label ? `<colgroup><col style="width:${ptText(fit.label)}"></colgroup>` : ''
+  const tr = rows && fit?.row ? `<tr style="height:${ptText(fit.row)}">` : '<tr>'
   const thead = head ? `<thead><tr>${head.cells.map((c) => cellHtml(c, true)).join('')}</tr></thead>` : ''
-  const tbody = `<tbody>${body.map((r) => `<tr>${r.cells.map((c) => cellHtml(c, false)).join('')}</tr>`).join('')}</tbody>`
-  return `<div class="data-table" data-table-id="${escapeHtml(block.id)}"><p class="table-caption">${captionHtml('表', number, block.caption, block.id)}</p><table class="widths-${block.widths === 'auto' ? 'auto' : 'equal'}">${thead}${tbody}</table></div>`
+  const tbody = `<tbody>${body.map((r) => `${tr}${r.cells.map((c) => cellHtml(c, false)).join('')}</tr>`).join('')}</tbody>`
+  return `<div class="data-table" data-table-id="${escapeHtml(block.id)}"><p class="table-caption">${captionHtml('表', number, block.caption, block.id)}</p><table class="${classes}">${colgroup}${thead}${tbody}</table></div>`
+}
+
+/** 表のセルの左右の余白と枠線（pt。reportCss.ts の .data-table th, td） */
+const CELL_CHROME_PT = 4 * 2 + 0.75
+
+/**
+ * 列の幅「中身に合わせる」の表で、折り返さないセルの字数の上限（全角の字の数）。どの列のセルもこの字数までなら、表の幅（本文の幅）に入る。
+ * 前は、長い字の列に幅を取られた列が、「使用箇／所」「コットンサテ／ン」のように1字だけの行を作っていた（依頼者が嫌う）。
+ * この字数までのセルは折り返さないので、その列はその字の幅より狭くならず、長い字の列が折り返しを受け持つ。
+ * 例：2列 18字・3列 11字・4列 8字・6列 5字
+ */
+export function noWrapLimit(columns: number): number {
+  const widthPt = (TEXT_WIDTH_MM / 25.4) * 72
+  return Math.max(1, Math.floor((widthPt - columns * CELL_CHROME_PT) / ((FONT_SIZE_PT + LETTER_SPACING_PT) * columns)))
+}
+
+/**
+ * 折り返さないセルか：字があり、どの行（改行で分けた行）も limit 字まで（半角は半分と数える）。
+ * 行の頭・終わりの空白や、続いた空白のある字は除く（折り返さないセルは空白をそのまま出すので、見た目が変わらないように）
+ */
+export function shortText(text: string, limit: number): boolean {
+  if (!text.trim()) return false
+  return text.split('\n').every((line) => {
+    if (/^\s|\s$|\s{2}/.test(line)) return false
+    let units = 0
+    for (const ch of line) units += /[ -~｡-ﾟ]/.test(ch) ? 0.5 : 1
+    return units <= limit
+  })
 }
 
 /**

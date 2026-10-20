@@ -2,8 +2,9 @@
 // 2026-10-20 の試作（?direct=1）を依頼者が試して、スマホのふつうの書き方にした。予備として ?direct=0 で、その端末だけ下から出る書く欄にできる。
 // - 印なしで紙面に直接書く。試作の札・メニューの「下の書く欄に戻す」はない。試作のときの覚えは消し、下の書く欄にするのは ?direct=0 だけ
 // - 表紙の項目・段落・見出し・抄録・図のタイトル・表のタイトル・表のセルを、紙面を拡大して、紙面の上で書く（下の書く欄は出ない）
-// - 「完了」・紙面の外を押すと、書き終えて1ページ全体の表示に戻る（表のセルで Enter のときは拡大したまま）
+// - 「完了」・紙面の外を押すと、書き終えて1ページ全体の表示に戻る（表のセルの Enter はマスの中の改行。拡大したまま書き続ける）
 // - 図を入れたら、図とタイトルの行を一緒に見せてタイトルを書く。表を入れたら、タイトルの行と表を一緒に見せる
+// - 図表のタイトルは、書いている間も番号（図4.・表2.）のすぐ後ろから書く（書き終えたときと同じ。captionGap.mjs）
 // - キーボードのすぐ上の細い道具（キーボードは visualViewport の高さを変えて仮に出す）。書いている行はキーボード・道具に隠れない
 // - 「戻す」「やり直す」・Enter で段落を分ける・先頭の Backspace でつなげる・日本語の変換・段落に打った見出し・見出しの Enter・
 //   Android のような改行・消す入力だけの Enter・Backspace・ページの終わりから次のページへ続く・「追加」の「小見出し」・指摘へ移る
@@ -17,6 +18,7 @@ import { resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { stubConfig } from './configStub.mjs'
 import { setupWriting } from './sampleReport.mjs'
+import { captionGap, gapDetail, gapOk } from './captionGap.mjs'
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'poc-output/phone-direct-v2'
@@ -731,12 +733,14 @@ export async function phoneDirectPhone(browser, check) {
       }
     }, id)
   const fig = await figVisible('f3')
+  const figGap = await captionGap(page, 'f3')
   await shotWithKeyboard(page, '2-figure-caption')
   check(
     '図のタイトルをタップすると、紙面の上で書く（下の書く欄は出ない）。キーボードの上の道具より上に、図の写真とタイトルの行が一緒に見える',
     fig.kind === 'figureCaption' && fig.onPaper && !fig.sheetOpen && fig.focused && fig.imgShown > 0.95 && fig.lineShown,
     JSON.stringify({ kind: fig.kind, onPaper: fig.onPaper, img: fig.img && [fig.img.top, fig.img.bottom].map(Math.round), imgShown: fig.imgShown.toFixed(2), line: fig.lineShown, bar: fig.bar && Math.round(fig.bar.top) }),
   )
+  check('図のタイトルを書いている間も、番号（図3.）が書く欄の前にあり、タイトルはそのすぐ後ろ（1字分以内。書き終えたときと同じ所）から始まる', gapOk(figGap, { filled: true }), gapDetail(figGap))
   await page.tap('.direct-bar .db-done')
   await wait(300)
   await ready()
@@ -754,14 +758,21 @@ export async function phoneDirectPhone(browser, check) {
   await wait(800)
   const newFig = await page.evaluate(() => window.__editor.getSnapshot().editingId)
   const ins = await figVisible(newFig)
+  const insLabel = await page.evaluate(() => ({ shown: getComputedStyle(window.__editor.overlay.element, '::before').content, text: window.__editor.overlay.text }))
   await page.keyboard.type('新しい図')
   await wait(200)
   const insTyped = await page.evaluate(() => window.__state())
+  const insGap = await captionGap(page, newFig)
   await shotWithKeyboard(page, '2b-figure-inserted')
   check(
     '「図を入れる」で写真を選ぶと、図のタイトルを紙面の上で書き始め、図の写真とタイトルの行が、キーボードの上の道具より上に一緒に見える',
     ins.kind === 'figureCaption' && ins.onPaper && ins.focused && ins.imgShown > 0.5 && ins.lineShown && insTyped.text === '新しい図',
     JSON.stringify({ kind: ins.kind, img: ins.img && [ins.img.top, ins.img.bottom].map(Math.round), imgShown: ins.imgShown.toFixed(2), line: ins.lineShown, text: insTyped.text }),
+  )
+  check(
+    '入れた図の空のタイトル：書く欄の前に番号（「図4. |」のように番号のすぐ後ろにカーソル）。打った字も番号のすぐ後ろ（1字分以内）で、書いた字に番号は入らない',
+    /^"図\d+\."$/.test(insLabel.shown) && insLabel.text === '' && gapOk(insGap) && insGap.text === '新しい図',
+    `${insLabel.shown} ${gapDetail(insGap)}`,
   )
   await page.tap('.direct-bar .db-done')
   await wait(300)
@@ -796,19 +807,21 @@ export async function phoneDirectPhone(browser, check) {
       tools: [...document.querySelectorAll('.direct-bar .db-table button')].map((b) => ({ name: b.textContent.trim(), w: Math.round(b.getBoundingClientRect().width), h: Math.round(b.getBoundingClientRect().height) })),
     }
   }, tableId)
+  const tabGap = await captionGap(page, tableId)
   await shotWithKeyboard(page, '3-table-title')
   check(
     '「表を入れる」で、表のタイトルを紙面の上で書き始め、タイトルの行とその下の表が、キーボードの上の道具より上に一緒に見える',
     tab.kind === 'tableCaption' && tab.onPaper && tab.focused && tab.text === '試着の記録' && tab.tableShown && tab.lineShown,
     JSON.stringify({ kind: tab.kind, text: tab.text, table: tab.table && [tab.table.top, tab.table.bottom].map(Math.round), line: tab.lineShown, bar: Math.round(tab.bar.top) }),
   )
+  check('入れた表のタイトル：書いている間も、番号（表n.）が書く欄の前にあり、打った字はそのすぐ後ろ（1字分以内）', gapOk(tabGap) && tabGap.text === '試着の記録', gapDetail(tabGap))
   check(
-    '表のタイトル・セルを書いている間は、キーボードの上の道具の2段目に表の道具（行を足す・列を足す・行を消す・列を消す・列の幅・表を削除。どれも 44px 以上）',
-    JSON.stringify(tab.tools.map((t) => t.name)) === JSON.stringify(['行を足す', '列を足す', '行を消す', '列を消す', '列の幅そろえる', '表を削除']) && tab.tools.every((t) => t.w >= 44 && t.h >= 44),
+    '表のタイトル・セルを書いている間は、キーボードの上の道具の2段目に表の道具（行を足す・列を足す・行を消す・列を消す・列の幅・左端の列・行の高さ・表を削除。どれも 44px 以上）',
+    JSON.stringify(tab.tools.map((t) => t.name)) === JSON.stringify(['行を足す', '列を足す', '行を消す', '列を消す', '列の幅そろえる', '左端の列ほかとそろえる', '行の高さ中身に合わせる', '表を削除']) && tab.tools.every((t) => t.w >= 44 && t.h >= 44),
     JSON.stringify(tab.tools),
   )
 
-  // ---- 21. 表のセルも、紙面の上で書く。Enter で書き終えても拡大したまま（隣のセルを続けて押せる）。「完了」で1ページ全体に ----
+  // ---- 21. 表のセルも、紙面の上で書く。Enter はマスの中の改行（拡大したまま書き続ける）。隣のセルを押すと続けて書ける。「完了」で1ページ全体に ----
   const cells = await page.evaluate((id) => {
     const t = window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === id)
     return t.rows[1].cells.map((c) => c.id)
@@ -819,19 +832,20 @@ export async function phoneDirectPhone(browser, check) {
   const cell = await page.evaluate(() => ({ ...window.__state(), tools: [...document.querySelectorAll('.direct-bar .db-table button')].map((b) => b.textContent.trim()) }))
   await page.keyboard.type('サテン')
   await page.keyboard.press('Enter')
+  await page.keyboard.type('光沢')
   await wait(400)
-  const cellEnter = await page.evaluate((id) => {
-    const t = window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === id)
-    return { ...window.__state(), value: t.rows[1].cells[0].text }
-  }, tableId)
+  const cellEnter = await page.evaluate(() => window.__state())
   await tapEl(page, `[data-cell-id="${cells[1]}"]`)
   await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 10000 }, cells[1]).catch(() => {})
   await wait(300)
-  const cell2 = await page.evaluate(() => window.__state())
+  const cell2 = await page.evaluate((id) => {
+    const t = window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === id)
+    return { ...window.__state(), value: t.rows[1].cells[0].text }
+  }, tableId)
   check(
-    '表のセルも、紙面の上で書く（下の書く欄は出ない。表の道具に「画像」も出る）。Enter で書き終えても拡大したまま、隣のセルを押して続けて書ける',
-    cell.kind === 'tableCell' && cell.onPaper && !cell.sheetOpen && cell.focused && cell.tools.includes('画像') && cellEnter.value === 'サテン' && cellEnter.editing === null && cellEnter.zoomed && cell2.editing === cells[1] && cell2.onPaper,
-    JSON.stringify({ kind: cell.kind, onPaper: cell.onPaper, tools: cell.tools, value: cellEnter.value, afterEnter: [cellEnter.editing, cellEnter.zoomed], next: cell2.editing === cells[1] }),
+    '表のセルも、紙面の上で書く（下の書く欄は出ない。表の道具に「画像」も出る）。Enter はマスの中の改行で、拡大したまま同じマスを書き続け、隣のセルを押すと続けて書ける（書いた字は原稿に入る）',
+    cell.kind === 'tableCell' && cell.onPaper && !cell.sheetOpen && cell.focused && cell.tools.includes('画像') && cellEnter.text === 'サテン\n光沢' && cellEnter.editing === cells[0] && cellEnter.zoomed && cell2.editing === cells[1] && cell2.onPaper && cell2.value === 'サテン\n光沢',
+    JSON.stringify({ kind: cell.kind, onPaper: cell.onPaper, tools: cell.tools, afterEnter: [cellEnter.text, cellEnter.editing, cellEnter.zoomed], next: cell2.editing === cells[1], value: cell2.value }),
   )
   await page.tap('.direct-bar .db-done')
   await wait(300)

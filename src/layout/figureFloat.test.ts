@@ -14,7 +14,7 @@ const chapter: Chapter = {
     { type: 'paragraph', id: 'p1', content: [{ type: 'text', text: '素材を選んだ' }] },
     { type: 'figureRow', id: 'g1', figures: [{ id: 'f1', imageId: 'i1', caption: '素材' }] },
     { type: 'paragraph', id: 'p2', content: [{ type: 'text', text: '使った素材は次の表のとおりである。' }] },
-    { type: 'table', id: 't1', caption: '使用素材表', widths: 'equal', rows: [] },
+    { type: 'table', id: 't1', caption: '使用素材表', widths: 'equal', heights: 'auto', rows: [] },
     { type: 'paragraph', id: 'p3', content: [{ type: 'text', text: '続き' }] },
   ],
 }

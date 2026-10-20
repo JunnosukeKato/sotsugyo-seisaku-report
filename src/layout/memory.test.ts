@@ -40,6 +40,15 @@ describe('前に開いたときの紙面の組み方を覚える', () => {
     expect(loadLayoutMemory()).toBeNull()
   })
 
+  it('表の行の高さ・左端の列の寸法も覚える（前の版で覚えた、寸法のないものも使える）', () => {
+    const withTables: LayoutMemory = { ...memory(), state: { ...memory().state, tables: { t1: { row: 40.25 }, t2: { label: 36.5 } } } }
+    saveLayoutMemory(withTables)
+    expect(loadLayoutMemory()?.state.tables).toEqual({ t1: { row: 40.25 }, t2: { label: 36.5 } })
+    saveLayoutMemory(memory())
+    expect(loadLayoutMemory()?.state.tables).toBeUndefined()
+    expect(loadLayoutMemory()).toEqual(memory())
+  })
+
   it('文書の要約は、写真の場所（blob:）が違っても同じ。中身が違えば違う', () => {
     const a = '<img src="blob:http://localhost:5173/11111111-2222-3333-4444-555555555555" style="width: 80mm">'
     const b = '<img src="blob:http://localhost:5173/99999999-8888-7777-6666-555555555555" style="width: 80mm">'

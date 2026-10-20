@@ -15,6 +15,8 @@ import { writingWrapPc } from './writingWrap.mjs'
 import { photoPagesPc } from './photoPages.mjs'
 import { tocLinksPc } from './tocLinks.mjs'
 import { autoHeadingPc } from './autoHeading.mjs'
+import { captionGapPc } from './captionGap.mjs'
+import { tableShapePc } from './tableShape.mjs'
 import { setupWriting } from './sampleReport.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
@@ -64,6 +66,7 @@ const paperMatchesWhole = (page) =>
       tocPageNumbers: r.tocPageNumbers,
       deferredGroups: r.deferredGroups,
       coverSubtitlePt: r.coverSubtitle?.pt,
+      tableFits: r.tableFits,
     })
     const mm = (v) => Math.round(v * 10) / 10
     const geometry = (pages) =>
@@ -2370,6 +2373,12 @@ await withEdge(async (browser) => {
 
   // ---- 段落に「Ⅲ．まとめ」のように打つと見出しになる（Enter・書く欄を閉じたとき・何行かの貼り付け。「戻す」。scripts/e2e/autoHeading.mjs） ----
   await autoHeadingPc(browser, check)
+
+  // ---- 図表のタイトルを書いている間も、番号（図4.・表2.）のすぐ後ろから書く（書き終えたときと同じ。scripts/e2e/captionGap.mjs） ----
+  await captionGapPc(browser, check)
+
+  // ---- 表の行の高さ「そろえる」・左端の列「中身に合わせる」・列の幅「中身に合わせる」で1字だけの行を作らない・マスの中の Enter は改行（scripts/e2e/tableShape.mjs） ----
+  await tableShapePc(browser, check)
 })
 
 /**

@@ -1,9 +1,11 @@
 import type { LayoutInfo, PageKind } from './measure'
+import type { TableFit } from './tableFit'
 
 /**
  * 前に開いたときの紙面の組み方を、この端末（ブラウザ）に覚えておく。
  * 開くたびに紙面をはじめから組み直していたため、スマホでは使えるようになるまで数秒〜十数秒かかっていた。
- * 覚えるのは、組み終えて落ち着いたときの状態（目次のページ番号・次のページへ送った図・表紙のサブタイトルの文字の大きさ・章を分けて組んだか）と、
+ * 覚えるのは、組み終えて落ち着いたときの状態（目次のページ番号・次のページへ送った図・表紙のサブタイトルの文字の大きさ・章を分けて組んだか・
+ * 行の高さを「そろえる」表などの、測った寸法）と、
  * 部分（表紙・抄録・目次・章ごと・残り）ごとの文書の要約（documentHash）とページの種類、紙面の情報（ページ数など）だけ。原稿の文字は入れない。
  * 次に開いたとき（editor/reportRenderer.ts）：
  * - 覚えた状態から組み始める（同じ原稿なら、組み直しが1回で済む）
@@ -12,8 +14,12 @@ import type { LayoutInfo, PageKind } from './measure'
  */
 export interface LayoutMemory {
   v: 1
-  /** subtitle.line は、表紙のサブタイトルの1行の要約（documentHash。文字そのものは入れない） */
-  state: { toc: Record<string, number>; deferred: string[]; subtitle: { line: string; pt: number }; split: boolean }
+  /**
+   * subtitle.line は、表紙のサブタイトルの1行の要約（documentHash。文字そのものは入れない）。
+   * tables：表の ID → 測った行の高さ・左端の列の幅（layout/tableFit.ts。前の版で覚えたものにはない。読むときに形を確かめる：readTableFits）。
+   * 部分ごとの文書（parts の hash）は、この寸法を書いた HTML のものなので、同じ寸法から組み始めれば、表のある章も覚えたときと同じ文書になる
+   */
+  state: { toc: Record<string, number>; deferred: string[]; subtitle: { line: string; pt: number }; split: boolean; tables?: Record<string, TableFit> }
   /** 部分ごとの文書の要約と、その部分のページの種類（ページ数＝種類の数） */
   parts: { hash: string; kinds: PageKind[] }[]
   layout: LayoutInfo

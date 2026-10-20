@@ -448,7 +448,7 @@ async function openCell(page, cellId, device) {
  */
 const drawPalette = (page, mode) =>
   page.evaluate(
-    ({ T, IC, mode }) => {
+    ({ T, mode }) => {
       const k = window.__v42
       const now = window.__v42now()
       const group = document.querySelector('.palette .group.ctx')

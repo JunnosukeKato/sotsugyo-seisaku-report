@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { demoReport } from './demoReport'
 import { migrateReport } from './migrate'
 import { addColumn, addRow, blankTable, cellPosition, clampTableSize, fromMaterialTable, materialTable, removeColumn, removeRow, setCellImage, swatchColumn, TABLE_SIZE } from './table'
+import type { TableBlock } from './types'
 
 let n = 0
 const newId = (p: string) => `${p}${++n}`
@@ -55,6 +56,42 @@ describe('表', () => {
     const id = t.rows[1].cells[1].id
     expect(setCellImage(t, id, 'img1').rows[1].cells[1].imageId).toBe('img1')
     expect(setCellImage(setCellImage(t, id, 'img1'), id, null).rows[1].cells[1].imageId).toBeNull()
+  })
+
+  it('新しい表・素材表・前の版の素材表は、行の高さ「中身に合わせる」・左端の列「ほかとそろえる」（今までどおり）', () => {
+    for (const t of [blankTable('t', newId), materialTable('t', newId), fromMaterialTable({ id: 't', rows: [] })]) {
+      expect(t).toMatchObject({ widths: 'equal', heights: 'auto' })
+      expect(t.labelColumn).toBeUndefined()
+    }
+  })
+
+  it('保存データ（自動保存・ドライブ・バックアップ）の、行の高さがない表は「中身に合わせる」。左端の列は true のときだけ残す', () => {
+    const rows = [{ id: 'r', cells: [{ id: 'c', text: 'a', imageId: null }] }]
+    const r = migrateReport({
+      formatVersion: 1,
+      body: [
+        {
+          id: 'c1',
+          title: '章',
+          blocks: [
+            { type: 'table', id: 'old', caption: '', widths: 'auto', rows },
+            { type: 'table', id: 'eq', caption: '', widths: 'equal', heights: 'equal', labelColumn: true, rows },
+            { type: 'table', id: 'bad', caption: '', widths: 'equal', heights: 'tall', labelColumn: 'yes', rows },
+            { type: 'table', id: 'off', caption: '', widths: 'equal', heights: 'auto', labelColumn: false, rows },
+          ],
+        },
+      ],
+    })
+    const [old, eq, bad, off] = r.body[0].blocks as TableBlock[]
+    expect(old).toMatchObject({ widths: 'auto', heights: 'auto' })
+    expect('labelColumn' in old).toBe(false)
+    expect(eq).toMatchObject({ widths: 'equal', heights: 'equal', labelColumn: true })
+    expect(bad).toMatchObject({ heights: 'auto' })
+    expect('labelColumn' in bad).toBe(false)
+    expect('labelColumn' in off).toBe(false)
+    // 前の版の素材表も、行の高さは「中身に合わせる」
+    const m = migrateReport({ formatVersion: 1, body: [{ id: 'c', title: '', blocks: [{ type: 'materialTable', id: 'm', caption: '素材', rows: [] }] }] })
+    expect(m.body[0].blocks[0]).toMatchObject({ type: 'table', heights: 'auto' })
   })
 
   it('前の版の素材表は、行と列を足せる表にする（文字と生地見本の写真は残る）', () => {

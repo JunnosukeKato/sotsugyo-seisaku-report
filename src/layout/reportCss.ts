@@ -183,6 +183,19 @@ figcaption,
   break-inside: avoid;
 }
 
+/* 列の幅「中身に合わせる」の表：短い字のセル（.nw。字数の上限は列の数で決める：bodyHtml.ts の noWrapLimit）は折り返さない。
+   前は、長い字の列に幅を取られた列で「使用箇／所」のように1字だけの行ができた。折り返しは長い字のセルが受け持つ。
+   折り返すセルも、最後の行が1字だけにならないように組む（text-wrap-style: pretty。使えないブラウザでは今までどおり）。
+   列の幅「そろえる」の表は変えない */
+.data-table table.widths-auto th,
+.data-table table.widths-auto td {
+  text-wrap-style: pretty;
+}
+
+.data-table table.widths-auto .nw {
+  white-space: pre;
+}
+
 /* セルの画像（生地見本など）：セルの幅に合わせて縮め、縦に長くなりすぎないようにする */
 .data-table td img,
 .data-table th img {

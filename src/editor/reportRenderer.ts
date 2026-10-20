@@ -5,6 +5,7 @@ import { FONT_SIZE_PT } from '../layout/documentCss'
 import { reviseDeferredGroups, sameSet } from '../layout/figureFloat'
 import { measureLayout, pageKind, samePageNumbers, type LayoutInfo, type PageKind } from '../layout/measure'
 import { documentHash, firstShowPlan, loadLayoutMemory, saveLayoutMemory, usualKinds, type LayoutMemory } from '../layout/memory'
+import { fitsFor, measureTableFits, readTableFits, sameTableFits, type TableFits } from '../layout/tableFit'
 import type { Figure, Report } from '../model/types'
 import { PageView, SENTINEL_PAGE_ATTR, type PartView } from './pageView'
 
@@ -62,7 +63,7 @@ const MOTION_CLASSES = ['is-under', 'is-under-current', 'turn-out', 'turn-in', '
 const FRONT_PARTS = 3
 
 /**
- * 紙面を組んだときの状態（目次のページ番号・次のページへ送った図・表紙のサブタイトルの大きさ・章を分けて組んだか）。
+ * 紙面を組んだときの状態（目次のページ番号・次のページへ送った図・表紙のサブタイトルの大きさ・章を分けて組んだか・表の行の高さと左端の列の幅）。
  * これと原稿から、組む HTML が決まる
  */
 interface LayoutState {
@@ -70,6 +71,8 @@ interface LayoutState {
   deferred: Set<string>
   subtitle: { line: string; pt: number }
   split: boolean
+  /** 行の高さを「そろえる」・左端の列を「中身に合わせる」表の、組んだ紙面で測った寸法（layout/tableFit.ts） */
+  tables: TableFits
 }
 
 interface Buffer {
@@ -95,6 +98,7 @@ const loadedChars = new Set<string>()
  * 目次のページ番号は組版した結果から読み取るため、番号が変わったときだけもう一度組み直す。
  * 段落のすぐ下に入りきらない図は次のページの上へ送る（figureFloat.ts）。送る図が変わったときも組み直す。
  * 表紙のサブタイトルが枠に入らないときも、文字を小さくして組み直す（文字の幅は書体によって違うため、組んだ紙面で測る）。
+ * 行の高さを「そろえる」表・左端の列を「中身に合わせる」表も、組んだ紙面で行の高さ・列の幅を測り、変わったら組み直す（layout/tableFit.ts）。
  *
  * 速くするため（組み直しは長い原稿では数秒かかっていた）：
  * - 表紙・抄録・目次・本文の章ごと・残りを、別々に組む（layout/document.ts の buildReportParts）。表示枠に組んである部分と同じ HTML なら組み直さない
@@ -118,6 +122,8 @@ export class ReportRenderer {
   private deferredGroups = new Set<string>()
   /** 前に組んだときの表紙のサブタイトル（1行全体）と文字の大きさ。サブタイトルが変わらなければ、次もこの大きさで組む */
   private coverSubtitle: { line: string; pt: number } | null = null
+  /** 前に組んだときの表の行の高さ・左端の列の幅（表が変わらなければ、次もこの寸法で組む） */
+  private tableFits: TableFits = {}
   /** 組んで落ち着いた原稿（状態によらない部分の HTML）と、そのときの状態 */
   private readonly settled = new Map<string, LayoutState>()
   /** 前に開いたときに覚えた組み方（layout/memory.ts）を、もう見たか（開いてはじめて組むときだけ使う） */
@@ -158,6 +164,7 @@ export class ReportRenderer {
     this.tocPageNumbers = {}
     this.deferredGroups = new Set()
     this.coverSubtitle = null
+    this.tableFits = {}
     this.settled.clear()
     this.borrow = null
     for (const b of this.buffers) {
@@ -186,13 +193,14 @@ export class ReportRenderer {
     const back = this.buffers[1 - this.frontIndex]
     const groupIds = new Set(report.body.flatMap((c) => c.blocks).filter((b) => b.type === 'figureRow').map((b) => b.id))
     const line = subtitleLine(report, config)
-    const build = (toc: Record<string, number>, deferred: ReadonlySet<string>, pt: number, split: boolean) =>
-      partList(buildReportParts(report, config, { ...sources, tocPageNumbers: toc, deferredGroups: deferred, coverSubtitlePt: pt }, split))
-    const docsOf = (s: LayoutState) => build(s.toc, s.deferred, s.subtitle.pt, s.split)
+    const build = (toc: Record<string, number>, deferred: ReadonlySet<string>, pt: number, split: boolean, tables: TableFits) =>
+      partList(buildReportParts(report, config, { ...sources, tocPageNumbers: toc, deferredGroups: deferred, coverSubtitlePt: pt, tableFits: tables }, split))
+    const docsOf = (s: LayoutState) => build(s.toc, s.deferred, s.subtitle.pt, s.split, s.tables)
     const adopt = (s: LayoutState) => {
       this.tocPageNumbers = s.toc
       this.deferredGroups = s.deferred
       this.coverSubtitle = s.subtitle
+      this.tableFits = s.tables
     }
     // 表に出ている紙面が、すでにこの原稿の紙面なら、組み直さない（書く欄を開いて何も変えずに閉じた、など）
     if (front.state && front.layout && sameDocs(front.view, docsOf(front.state))) {
@@ -200,7 +208,7 @@ export class ReportRenderer {
       return { ms: 0, layout: front.layout, unchanged: true }
     }
     // 組む原稿の、状態によらない部分（覚えた状態を探す手がかり。どの部分にも同じ CSS が付くので、body から後ろだけ）
-    const key = build({}, new Set(), 0, true)
+    const key = build({}, new Set(), 0, true, {})
       .map((d) => d.slice(d.indexOf('<body>')))
       .join('\n')
     // 裏側に残っている紙面（ひとつ前の紙面）がこの原稿の紙面なら、そのときの状態から始める（組まずに済む。削除してすぐ元に戻したなど）。
@@ -213,16 +221,18 @@ export class ReportRenderer {
     if (memory) {
       // サブタイトルの文字の大きさは、サブタイトルの1行が覚えたときと同じときだけ使う（覚えているのは1行の要約だけ）
       const subtitle = { line: memory.state.subtitle.line === documentHash(line) ? line : '', pt: memory.state.subtitle.pt }
-      adopt({ toc: memory.state.toc, deferred: new Set(memory.state.deferred), subtitle, split: memory.state.split })
+      adopt({ toc: memory.state.toc, deferred: new Set(memory.state.deferred), subtitle, split: memory.state.split, tables: readTableFits(memory.state.tables) })
     }
 
     let deferred = new Set([...this.deferredGroups].filter((id) => groupIds.has(id)))
+    // 表の寸法：前に組んだときのもの（消した表・「中身に合わせる」に戻した表の分は除く）。組んだ紙面で測って直す
+    let tables = fitsFor(report.body, this.tableFits)
     // 表紙のサブタイトルの文字の大きさ：はじめは字数から見積もり、組んだ紙面で枠に入るかを測って直す（入りきる大きさまで小さく）
     let subtitlePt = this.coverSubtitle?.line === line ? this.coverSubtitle.pt : fitLineFontPt(line, COVER_SUBTITLE)
     let subtitleTooBig = Infinity
     // 章を分けて組むか（章の中身がはみ出したら、この組み直しの間は分けない）
     let split = known?.split ?? memory?.state.split ?? true
-    let docs = build(this.tocPageNumbers, deferred, subtitlePt, split)
+    let docs = build(this.tocPageNumbers, deferred, subtitlePt, split, tables)
     // 開いたとき：見せるページのある部分を先に組んで見せられるか（覚えたときと同じ文書の部分は、ページ数が分かる。表紙は、いつも見せられる）
     const plan = first && !back.view.parts.some((p) => p.html !== null) ? firstShowPlan(docs, memory, first.page) : null
     /** 先に見せた部分（この表示枠は、もう表に出ている。null なら、まだ見せていない） */
@@ -311,10 +321,14 @@ export class ReportRenderer {
           if (!split || chaptersFit(assembly())) break
           if (shownPart !== null) return { ms, layout: measure((pages) => measureLayout(pages, report.body)), early: true, resettle: true }
           split = false
-          docs = build(this.tocPageNumbers, deferred, subtitlePt, split)
+          docs = build(this.tocPageNumbers, deferred, subtitlePt, split, tables)
         }
-        // 紙面の情報と、次に送る図を、まとめて測る（借りた部分のページを出して測るのを、1回で済ませる）
-        const measured = measure((pages) => ({ layout: measureLayout(pages, report.body), next: fallback ? deferred : reviseDeferredGroups(pages, report.body, deferred, blocked) }))
+        // 紙面の情報と、次に送る図と、表の寸法を、まとめて測る（借りた部分のページを出して測るのを、1回で済ませる）
+        const measured = measure((pages) => ({
+          layout: measureLayout(pages, report.body),
+          next: fallback ? deferred : reviseDeferredGroups(pages, report.body, deferred, blocked),
+          tables: measureTableFits(pages, report.body, tables),
+        }))
         layout = measured.layout
         const tocChanged = !samePageNumbers(layout.tocPageNumbers, this.tocPageNumbers)
         if (tocChanged) this.tocPageNumbers = layout.tocPageNumbers
@@ -327,16 +341,17 @@ export class ReportRenderer {
         const ratio = layout.coverSubtitle?.ratio ?? 0
         if (ratio > OVERFLOW_RATIO) subtitleTooBig = Math.min(subtitleTooBig, subtitlePt)
         const nextPt = refitLineFontPt(subtitlePt, ratio, COVER_SUBTITLE, subtitleTooBig)
-        const settled = sameSet(next, deferred) && !tocChanged && nextPt === subtitlePt
+        const tablesChanged = !sameTableFits(measured.tables, tables)
+        const settled = sameSet(next, deferred) && !tocChanged && nextPt === subtitlePt && !tablesChanged
         if (settled || pass >= MAX_PASSES + 2) {
           if (settled) {
-            back.state = { toc: this.tocPageNumbers, deferred, subtitle: { line, pt: subtitlePt }, split }
+            back.state = { toc: this.tocPageNumbers, deferred, subtitle: { line, pt: subtitlePt }, split, tables }
             back.layout = layout
             this.remember(key, back.state)
             // 次に開いたときのために、この端末に覚えておく（layout/memory.ts）
             saveLayoutMemory({
               v: 1,
-              state: { toc: back.state.toc, deferred: [...deferred], subtitle: { line: documentHash(line), pt: subtitlePt }, split },
+              state: { toc: back.state.toc, deferred: [...deferred], subtitle: { line: documentHash(line), pt: subtitlePt }, split, tables },
               parts: assembly().map((part, i) => ({ hash: documentHash(docs[i]), kinds: part.pageKinds() })),
               layout,
             })
@@ -347,12 +362,14 @@ export class ReportRenderer {
         if (stale()) return { ms, layout, stale: true, early: shownPart !== null }
         deferred = next
         subtitlePt = nextPt
-        docs = build(this.tocPageNumbers, deferred, subtitlePt, split)
+        tables = measured.tables
+        docs = build(this.tocPageNumbers, deferred, subtitlePt, split, tables)
         // 先に見せた紙面で、見せている部分か、その前の部分（ページ数が変わると、見せているページの番号がずれる）を組み直すことになった：
         // 表に出ている紙面は組み直さず、もう一方の表示枠で、はじめから組み直す（後ろの部分だけなら、見えないまま、この表示枠で組み直す）
         if (shownPart !== null && (docs.length !== back.view.parts.length || docs.slice(0, shownPart + 1).some((d, i) => d !== back.view.parts[i].html))) {
           this.deferredGroups = deferred
           this.coverSubtitle = { line, pt: subtitlePt }
+          this.tableFits = tables
           return { ms, layout, early: true, resettle: true }
         }
       }
@@ -362,6 +379,7 @@ export class ReportRenderer {
       this.borrow = borrowed.size > 0 ? { back, lender: front, parts: new Map(borrowed) } : null
       this.deferredGroups = deferred
       this.coverSubtitle = { line, pt: subtitlePt }
+      this.tableFits = tables
       return { ms, layout, early: shownPart !== null }
     } finally {
       back.element.classList.remove('measuring')

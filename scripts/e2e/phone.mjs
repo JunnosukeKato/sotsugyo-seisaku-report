@@ -15,6 +15,7 @@ import { autoHeadingPhone } from './autoHeading.mjs'
 import { undoHeaderPhone } from './undoHeader.mjs'
 import { phoneLivePhone } from './phoneLive.mjs'
 import { phoneDirectPhone } from './phoneDirect.mjs'
+import { tableShapePhone } from './tableShape.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -388,7 +389,8 @@ await withEdge(async (browser) => {
   await wait(300)
   fit = await toolsFit()
   await shot('7-cell-tools')
-  check('表のセルを書いているとき、道具（行・列・幅・戻すなど）が2段に折り返して全部見える', fit.n >= 7 && fit.out.length === 0 && !fit.scroll && fit.rows === 2, JSON.stringify(fit))
+  // （表の形の切り替えが「幅」「左端」「高さ」の3つになったので、予備の下の書く欄では3段まで。紙面に直接書くときは2段目を横にずらす：tableShape.mjs）
+  check('表のセルを書いているとき、道具（行・列・幅・左端・高さ・戻すなど）が3段までに折り返して全部見える', fit.n >= 9 && fit.out.length === 0 && !fit.scroll && fit.rows <= 3, JSON.stringify(fit))
   await page.click('.edit-sheet .done')
   await ready()
 
@@ -691,6 +693,9 @@ await withEdge(async (browser) => {
 
   // 試作：スマホで紙面に直接書く（リンクの ?direct=1 で入る。印がなければ今までどおり。scripts/e2e/phoneDirect.mjs）
   await phoneDirectPhone(browser, check)
+
+  // 表の行の高さ・左端の列の切り替え（キーボードの上の道具・表を選んだときの下の道具）・マスの中の Enter は改行（scripts/e2e/tableShape.mjs）
+  await tableShapePhone(browser, check)
 })
 
 /**
@@ -1442,13 +1447,20 @@ async function firstTimeFixesPhone(browser) {
   await page.evaluate(() => window.__editor.setZoom(false))
   await ready()
   // 選んでいる表・図の下の道具：「列の幅」（いまの幅を出すボタン1つ。押すと切り替わる）・「削除」などは、幅も高さも 44px 以上。道具は画面の中に入る
+  // （表の道具は「左端の列」「行の高さ」も並び、画面の幅に入らないときは、道具の帯を横にずらして見る。ずらすと画面に入ればよい）
   const selTools = () =>
-    page.evaluate(() =>
-      [...document.querySelectorAll('.sel-bar button')].map((b) => {
+    page.evaluate(async () => {
+      const out = []
+      for (const b of document.querySelectorAll('.sel-bar button')) {
+        b.scrollIntoView({ inline: 'nearest', block: 'nearest' })
+        await new Promise((r) => requestAnimationFrame(r))
         const r = b.getBoundingClientRect()
-        return { name: b.textContent.trim(), w: Math.round(r.width), h: Math.round(r.height), inside: r.left >= 0 && r.right <= innerWidth }
-      }),
-    )
+        out.push({ name: b.textContent.trim(), w: Math.round(r.width), h: Math.round(r.height), inside: r.left >= 0 && r.right <= innerWidth })
+      }
+      const group = document.querySelector('.sel-bar .group.ctx')
+      if (group) group.scrollLeft = 0
+      return out
+    })
   await page.evaluate(() => window.__editor.select({ kind: 'table', id: 'tM' }))
   await wait(400)
   const tableTools = await selTools()
