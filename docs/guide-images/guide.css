@@ -10,6 +10,8 @@ html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 :root { --ink: #15171c; --muted: #50545d; --navy: #1f2b5b; --mustard: #f2b632; --mustard-soft: #fdf3d9; --mustard-ink: #855a0c; --sky: #a9b8e8; --sky-soft: #e9edfa; --gray: #f2f0ec; --line: #dedad2; --red: #b3261e; }
 body { margin: 0; background: #e9e6e0; color: var(--ink); font-family: 'BIZ UDPGothic', sans-serif; font-size: 9.5pt; line-height: 1.55; -webkit-font-smoothing: antialiased; }
 .sheet { position: relative; width: 210mm; height: 297mm; overflow: hidden; background: #fff; break-after: page; }
+/* 言葉の切れ目で折り返す（「書／く。」のように、言葉の途中で行が変わったり、1字だけが行に残ったりしないように。ツールの画面と同じ） */
+.sheet { word-break: auto-phrase; text-wrap: pretty; }
 .sheet:last-child { break-after: auto; }
 @media screen { body { padding: 24px 0; } .sheet { margin: 0 auto 24px; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08), 0 20px 60px rgba(30, 25, 20, 0.16); } }
 @media print { body { background: none; padding: 0; } .sheet { margin: 0; box-shadow: none; } }

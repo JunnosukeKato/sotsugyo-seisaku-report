@@ -287,7 +287,8 @@ export function StartGuide({ editor, snap, config, configMissing, narrow, step, 
                 </span>
               </button>
             </div>
-            <span className="g-note">あとからでも、{narrow ? 'メニュー' : '右の欄'}の「Word で書いた分を読み込む」から読み込めます（今年度だけ）。</span>
+            {/* パソコンも、右の欄の「メニュー」の中（mockups/v37 案C） */}
+            <span className="g-note">あとからでも、{narrow ? '「メニュー」' : '右上の「メニュー」'}の「Word で書いた分を読み込む」から読み込めます（今年度だけ）。</span>
           </>
         )
       case 'studentId':

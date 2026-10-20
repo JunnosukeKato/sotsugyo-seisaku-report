@@ -5,7 +5,7 @@
 //   2. ツールの URL の QR コードを作る（docs/guide-images/qr-guide.svg）
 //      手引きで使っていない画像も撮っている（前の版の手引きで使っていたもの。デザイン案 mockups/v26・v27 が読む）
 //   3. 手引きの HTML（docs/手引き_学生用.html・手引き_先生用.html・手引き_管理者用.html。文は HTML に手で書く）を Edge で PDF にする。
-//      ページ数（1ページ）・用紙からのはみ出し・文字の大きさ（本文 10.5pt 以上）・1ページの文字数（350字まで）・書体・画像を確かめ、
+//      ページ数（1ページ）・用紙からのはみ出し・文字の大きさ（本文 10.5pt 以上）・1ページの文字数（350字まで）・1字だけの行・書体・画像を確かめ、
 //      外れていたら失敗にする
 //   4. PDF を public/guides/（student-guide.pdf・teacher-guide.pdf（先生用）・admin-guide.pdf（管理者用））に写す（GitHub Pages で公開される）
 // 使い方: node scripts/make-guides.mjs            … 画面を撮り直して PDF を作る（開発サーバーが http://localhost:5173 で動いていること）
@@ -314,6 +314,8 @@ async function prepareImages(list) {
 
 /** 「セルフチェック」の画像のために、わざと入れる誤り（「見頃」「記事」「です」） */
 const CHECK_TEXT = '二回目の仮縫いでは、前見頃の丈を2cm短くした。袖の記事が重く、腕が下がって見えたためです。'
+/** その段落（p7）のもとの文（セルフチェックの画像を撮ったら戻す） */
+const P7 = '二回目の仮縫いでは、実際に舞台の上で歩いたり腕を回したりして、動きやすさを確かめた。客席から見たときに袖の膨らみが十分に伝わるかも、離れた位置から確認した。'
 
 /** ページの中で、見本の原稿にする（setupReport）。started：抄録を書き始めているか */
 async function setupReport({ started = true } = {}) {
@@ -470,6 +472,8 @@ const clickText = (page, selector, text) => page.evaluate((selector, text) => [.
 /** 番号の吹き出しの場所（marks.js に書き出す。前に撮った分は残し、撮り直した分だけ入れ替える） */
 const MARKS_FILE = `${IMG}/marks.js`
 const MARKS = existsSync(MARKS_FILE) ? JSON.parse(readFileSync(MARKS_FILE, 'utf8').replace(/^[^=]*=\s*/, '').replace(/;\s*$/, '')) : {}
+// 前の版で撮っていた画像（今の画面にはないので、もう撮らない）：下書きの PDF の窓・管理ページの前の見出しの欄
+for (const old of ['g-export-draft', 'g-admin-draft']) delete MARKS[old]
 const writeMarks = () =>
   writeFileSync(
     MARKS_FILE,
@@ -527,6 +531,55 @@ const goToBlock = async (page, id, phone = false) => {
   await sleep(300)
   await ready(page, phone)
 }
+
+/** スマホの紙面の段落 id の、i 文字目（見ているページ）を指で押す（字の左寄りを押す） */
+async function tapChar(page, id, i) {
+  const pt = await page.evaluate(
+    (id, i) => {
+      const el = [...document.querySelectorAll(`.page-viewport.front [data-block-id="${id}"]`)].find((e) => e.getBoundingClientRect().width > 0)
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+      let acc = 0
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (i < acc + n.length) {
+          const range = document.createRange()
+          range.setStart(n, i - acc)
+          range.setEnd(n, i - acc + 1)
+          const r = [...range.getClientRects()].find((x) => x.height > 0)
+          return { x: r.left + r.width * 0.25, y: (r.top + r.bottom) / 2 }
+        }
+        acc += n.length
+      }
+      throw new Error(`${id} の ${i} 文字目がありません`)
+    },
+    id,
+    i,
+  )
+  await page.touchscreen.tap(pt.x, pt.y)
+}
+
+/** スマホのキーボードの高さ（iPhone の日本語のキーボードほど。scripts/e2e/phoneDirect.mjs と同じ） */
+const KB = 336
+/** スマホのキーボードを仮に出す（見えている所 visualViewport を低くし、写真のための灰色の板を置く。e2e/phoneDirect.mjs と同じ） */
+const fakeKeyboard = (page, on) =>
+  page.evaluate(
+    (kb, on) => {
+      document.querySelector('#fake-kb')?.remove()
+      if (on) Object.defineProperty(window.visualViewport, 'height', { configurable: true, get: () => window.innerHeight - kb })
+      else delete window.visualViewport.height
+      window.visualViewport.dispatchEvent(new Event('resize'))
+      if (!on) return
+      const k = document.createElement('div')
+      k.id = 'fake-kb'
+      k.textContent = 'キーボード'
+      Object.assign(k.style, { position: 'fixed', left: '0', right: '0', bottom: '0', height: `${kb}px`, zIndex: '200', pointerEvents: 'none', background: '#d3d6dc', color: '#6b6f78', display: 'grid', placeItems: 'center', font: '15px sans-serif' })
+      document.body.append(k)
+    },
+    KB,
+    on,
+  )
+
+/** 押したボタンなどに残る、選んでいる印（青い枠）を消す */
+const unfocus = (page) => page.evaluate(() => document.activeElement?.blur())
 
 /** 段落を開いて書き始める（caret：カーソルを置く文字の位置） */
 const openBlock = async (page, id, caret) => {
@@ -696,6 +749,10 @@ async function studentShots(browser, config, images) {
     await sleep(800)
     await ready(page)
   }
+  // わざと入れた誤りを戻す（このあとの画像に、指摘が写らないように）
+  await setParagraph(page, 'p7', P7)
+  await sleep(500)
+  await ready(page)
 
   // ---- 書く：段落を書いているところ（道具と紙面の上半分） ----
   await openBlock(page, 'p3', 999)
@@ -725,11 +782,14 @@ async function studentShots(browser, config, images) {
   {
     const head = await page.evaluate(rectOf, '.side .side-head')
     const pop = await page.evaluate(rectOf, '.drive-pop')
-    await capture(page, 'g-drive', union(head, pad(pop, 10)), [
+    // 窓のうしろの右の欄（セルフチェック）の字が、窓の端から少し見えるので、撮るあいだだけ隠す。右の端は、窓の右の端まで
+    await page.evaluate(() => document.querySelectorAll('.side .sec').forEach((e) => e.style.setProperty('visibility', 'hidden')))
+    const clip = union(head, pad(pop, 10))
+    await capture(page, 'g-drive', { ...clip, w: pop.x + pop.w + 4 - clip.x }, [
       { n: 1, box: await page.evaluate(rectOf, '.side .drive-chip-wrap .chip'), at: 'l' },
       { n: 2, box: await page.evaluate(rectOf, '.drive-pop button', 'この端末から原稿を消す'), at: 'l' },
-      { n: 3, box: await page.evaluate(rectOf, '.side .side-head a, .side .side-head button', '使い方'), at: 'l', optional: true },
     ])
+    await page.evaluate(() => document.querySelectorAll('.side .sec').forEach((e) => e.style.removeProperty('visibility')))
   }
   await page.keyboard.press('Escape')
   await sleep(300)
@@ -760,11 +820,15 @@ async function studentShots(browser, config, images) {
   await sleep(800)
   await ready(pp, true)
   await driveSaved(pp)
+  // 紙面の段落をタップすると、紙面が広がって、その場で書ける。キーボード（仮）のすぐ上に細い道具
   await goToBlock(pp, 'p3', true)
-  await pp.evaluate(() => window.__editor.openWhenReady('p3', 12))
-  await pp.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p3', { timeout: 30000 })
+  await tapChar(pp, 'p3', 14)
+  await pp.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p3' && window.__editor.getSnapshot().zoomed, { timeout: 30000 })
   await sleep(900)
-  await capture(pp, 'g-phone-write', { x: 0, y: 0, w: PHONE.width, h: PHONE.height }, [{ n: 1, box: await pp.evaluate(rectOf, '.edit-sheet .es-tools'), at: 't' }])
+  await fakeKeyboard(pp, true)
+  await sleep(700)
+  await capture(pp, 'g-phone-write', { x: 0, y: 0, w: PHONE.width, h: PHONE.height }, [{ n: 1, box: await pp.evaluate(rectOf, '.direct-bar'), at: 't' }])
+  await fakeKeyboard(pp, false)
   await pp.evaluate(() => window.__editor.finishEditing())
   await sleep(600)
   await pp.click('.p-top .icon-btn')
@@ -822,24 +886,55 @@ async function studentShots(browser, config, images) {
   await context.close()
 }
 
-/** 管理ページ（試験版）を開く。as：teacher なら先生の画面（試験版の管理者・先生のアドレスは example.ac.jp） */
-async function openAdmin(browser, { as } = {}) {
+/**
+ * 管理ページ（試験版）を開く。as：teacher なら先生の画面（試験版の管理者・先生のアドレスは example.ac.jp）。
+ * 管理ページは mockups/v43 案B：左の見出し（年度の設定・コース・書き方のチェック・先生の登録・変更履歴・詳細設定）と、選んだ区切り
+ */
+async function openAdmin(browser, { as, viewport = PC } = {}) {
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
   page.on('dialog', (d) => d.accept())
   await noHotReload(page)
-  await page.setViewport(PC)
+  await page.setViewport(viewport)
   await page.goto(`${APP}/admin.html`, { waitUntil: 'networkidle0' })
-  await page.evaluate(() => localStorage.removeItem('sotsugyo-admin-mock'))
+  await page.evaluate(() => {
+    localStorage.removeItem('sotsugyo-admin-mock')
+    localStorage.removeItem('sotsugyo-admin-year')
+    localStorage.removeItem('sotsugyo-admin-form-width')
+    sessionStorage.removeItem('sotsugyo-admin-section')
+  })
   await page.goto(`${APP}/admin.html${as ? `?as=${as}` : ''}`, { waitUntil: 'networkidle0' })
-  await page.waitForSelector(as === 'teacher' ? '.teacher-main' : '.admin .form')
+  await page.waitForSelector('.admin .content')
   await hideMockBadge(page)
   return { context, page }
 }
 
 /** 「試験用サーバー」の印は本物の管理ページにはないので出さない */
-const hideMockBadge = (page) => page.evaluate(() => [...document.querySelectorAll('.badge')].find((b) => b.textContent.includes('試験用'))?.style.setProperty('display', 'none'))
+const hideMockBadge = (page) => page.evaluate(() => [...document.querySelectorAll('.badge')].filter((b) => b.textContent.includes('試験用')).forEach((b) => b.style.setProperty('display', 'none')))
+
+/** 左の見出しの区切りを押す（title：「年度の設定」「コース」など） */
+const nav = async (page, title) => {
+  await page.evaluate((t) => [...document.querySelectorAll('.side-nav button')].find((b) => b.querySelector('.nt b').firstChild.textContent.trim() === t).click(), title)
+  await page.waitForFunction((t) => document.querySelector('.content .sec-h')?.textContent.startsWith(t), {}, title)
+  await sleep(500)
+  await hideMockBadge(page)
+}
+/** 左の見出しの区切りのボタン */
+const navBox = (page, title) =>
+  page.evaluate((t) => {
+    const b = [...document.querySelectorAll('.side-nav button')].find((b) => b.querySelector('.nt b').firstChild.textContent.trim() === t)
+    const r = b.getBoundingClientRect()
+    return { x: r.left, y: r.top, w: r.width, h: r.height }
+  }, title)
+
+/** 入力欄に字を入れる（React に知らせる） */
+const setValue = (handle, text) =>
+  handle.evaluate((el, text) => {
+    const proto = el instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype
+    Object.getOwnPropertyDescriptor(proto, 'value').set.call(el, text)
+    el.dispatchEvent(new Event('input', { bubbles: true }))
+  }, text)
 
 /** 管理ページの見本（iframe）は設定や幅が変わるたびに作り直されるので、表紙と抄録が出て、作り直しが止まるまで待つ */
 async function previewStable(page) {
@@ -856,133 +951,147 @@ async function previewStable(page) {
   }
   throw new Error('管理ページの見本が表示されません')
 }
-
-async function adminShots(browser) {
-  const { context, page } = await openAdmin(browser)
-  // 締切を1日ずらして、「保存していない変更があります」と保存のボタンが押せる状態にする
-  const field = (label) => page.evaluateHandle((label) => [...document.querySelectorAll('.f')].find((f) => f.querySelector('.l')?.textContent.startsWith(label)).querySelector('input, textarea'), label)
-  const deadline = await field('最終締切')
-  await deadline.evaluate((el) => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value').set.call(el, '2027-01-22')
-    el.dispatchEvent(new Event('input', { bubbles: true }))
-  })
-  await page.waitForSelector('.badge.warn')
-  await hideMockBadge(page)
-  await page.mouse.move(5, 5)
+const previewReady = async (page) => {
   await previewStable(page)
   await page.evaluate(() => document.querySelector('.preview iframe').contentDocument.fonts.ready)
   await sleep(600)
   await previewStable(page)
-  // 欄の名前（「共通の題目」など）の文字の範囲（吹き出しは画像の左の外に置き、名前の左の端まで線を引く）
-  const fieldBox = (label) =>
-    page.evaluate((label) => {
-      const l = [...document.querySelectorAll('.form .l')].find((e) => e.textContent.startsWith(label))
-      const range = document.createRange()
-      range.selectNodeContents(l)
-      const r = range.getBoundingClientRect()
-      return { x: r.left, y: r.top, w: r.width, h: r.height }
-    }, label)
-  const previewPage = await page.evaluate(() => {
+}
+/** 見本の1ページ目（表紙）の範囲 */
+const previewPage = (page) =>
+  page.evaluate(() => {
     const f = document.querySelector('.preview iframe')
     const fr = f.getBoundingClientRect()
     const r = f.contentDocument.querySelector('.page').getBoundingClientRect()
     return { x: fr.left + r.left, y: fr.top + r.top, w: r.width, h: r.height }
   })
-  await capture(page, 'g-admin-main', { x: 0, y: 0, w: PC.width, h: previewPage.y + previewPage.h + 14 }, [
-    { n: 1, box: union(await page.evaluate(rectOf, '.admin-header .sel'), await page.evaluate(rectOf, '.admin-header .badge.pub')), at: 'b' },
-    { n: 2, box: await fieldBox('共通の題目'), at: 'ol' },
-    { n: 3, box: await fieldBox('最終締切'), at: 'ol' },
-    { n: 4, box: await fieldBox('サブタイトルの形式'), at: 'ol' },
-    { n: 5, box: await fieldBox('指導教員'), at: 'ol' },
-    { n: 6, box: previewPage, at: 'tl', dx: 10, dy: 10 },
-    { n: 7, box: await page.evaluate(rectOf, '.admin-header .btn', '保存して学生に反映'), at: 'b' },
-    { n: 8, box: await page.evaluate(rectOf, '.admin-header a, .admin-header button', '使い方'), at: 'b', optional: true },
+
+/** 「ひな形を作る画面を開く」を押して、重ねた窓の中の学生のツールが開くまで待つ（e2e/templateMode.mjs と同じ） */
+async function openTemplate(page) {
+  await page.evaluate(() => document.querySelector('.course.open .tpl-open').click())
+  await page.waitForSelector('.tpl-overlay iframe')
+  await page.waitForFunction(() => !document.querySelector('.tpl-opening'), { timeout: 30000 })
+  const frame = page.frames().find((f) => f.url().includes('template=1') && f.parentFrame() === page.mainFrame())
+  await frame.waitForFunction(() => {
+    const s = window.__editor?.getSnapshot()
+    return s?.layout && !s.rendering && !s.turning && s.zoomed
+  }, { timeout: 60000 })
+  await sleep(900)
+  return frame
+}
+
+async function adminShots(browser) {
+  const { context, page } = await openAdmin(browser)
+
+  // ---- 年度の設定（左の見出し・年度の欄・右の見本） ----
+  await page.mouse.move(5, 5)
+  await previewReady(page)
+  {
+    const pp = await previewPage(page)
+    await capture(page, 'g-admin-main', { x: 0, y: 0, w: PC.width, h: pp.y + pp.h + 14 }, [
+      { n: 1, box: union(await page.evaluate(rectOf, '.admin-header .sel'), await page.evaluate(rectOf, '.admin-header .badge.pub')), at: 'b' },
+      { n: 2, box: await navBox(page, '年度の設定'), at: 'r' },
+      { n: 3, box: await page.evaluate(rectOf, '#y-commonTitle'), at: 'r' },
+      { n: 4, box: await page.evaluate(rectOf, '#y-deadline'), at: 'r' },
+      { n: 5, box: pp, at: 'tl', dx: 10, dy: 10 },
+      { n: 6, box: await page.evaluate(rectOf, '.admin-header .btn', '保存して学生に反映'), at: 'b' },
+      { n: 7, box: await page.evaluate(rectOf, '.admin-header button', '使い方'), at: 'b', optional: true },
+    ])
+  }
+
+  // ---- コース（開いたコースのカード：ひな形を作る画面を開く・お知らせ） ----
+  await nav(page, 'コース')
+  await page.waitForSelector('.course.open .tpl-open')
+  await page.mouse.move(5, 5)
+  await capture(page, 'g-admin-course', pad(await page.evaluate(rectOf, '.course.open'), 10), [
+    { n: 1, box: await page.evaluate(rectOf, '.course.open .tpl-open'), at: 'r' },
+    { n: 2, box: await page.evaluate(rectOf, '.course.open textarea.notice'), at: 'l' },
   ])
 
-  // コースのカード（下書きのひな形・お知らせ。お知らせの欄は、入っている例の薄い字のまま）
-  await page.evaluate(() => document.querySelector('.form .course').scrollIntoView({ block: 'start' }))
-  await sleep(500)
-  await capture(page, 'g-admin-course', pad(await page.evaluate(rectOf, '.form .course'), 10), [
-    { n: 1, box: await page.evaluate(rectOf, '.form .course .tpl-row'), at: 'l' },
-    { n: 2, box: await page.evaluate(rectOf, '.form .course .notice-field textarea'), at: 'l' },
+  // ---- 下書きのひな形を作る画面（管理ページの上に重ねた窓。中は学生と同じ紙面） ----
+  {
+    const frame = await openTemplate(page)
+    await page.mouse.move(5, 5)
+    const outer = await page.evaluate(() => document.querySelector('.tpl-overlay iframe').getBoundingClientRect().toJSON())
+    const back = await frame.evaluate(() => document.querySelector('.tpl-primary').getBoundingClientRect().toJSON())
+    await capture(page, 'g-admin-template', { x: 0, y: 0, w: PC.width, h: PC.height }, [{ n: 1, box: { x: outer.x + back.x, y: outer.y + back.y, w: back.width, h: back.height }, at: 'l' }])
+    // 直していないので、「やめる」で確かめずに閉じる
+    await frame.evaluate(() => [...document.querySelectorAll('.tpl-foot button')].find((b) => b.textContent === 'やめる').click())
+    await page.waitForFunction(() => !document.querySelector('.tpl-overlay'), { timeout: 10000 })
+  }
+
+  // ---- 書き方のチェック（書き間違えやすい語の一覧と、試しに確かめる） ----
+  await nav(page, '書き方のチェック')
+  await page.mouse.move(5, 5)
+  await capture(page, 'g-admin-words', pad(union(await page.evaluate(rectOf, '.content .sec-h'), await page.evaluate(rectOf, '.words')), 14), [
+    { n: 1, box: await page.evaluate(rectOf, '.wtable'), at: 'tl', dx: 12, dy: 12 },
+    { n: 2, box: await page.evaluate(rectOf, '.wtry'), at: 'tl', dx: 12, dy: 12 },
   ])
 
-  // 書き間違えやすい語の窓
-  await page.evaluate(() => document.querySelector('.words-btn').scrollIntoView({ block: 'center' }))
-  await page.click('.words-btn')
-  await page.waitForSelector('.words-modal')
-  await page.evaluate(() => document.activeElement?.blur())
-  await sleep(500)
-  await capture(page, 'g-admin-words', await page.evaluate(rectOf, '.words-modal'), [
-    { n: 1, box: await page.evaluate(rectOf, '.wtable'), at: 'l' },
-    { n: 2, box: await page.evaluate(rectOf, '.wtry'), at: 'l' },
-  ])
-  await page.keyboard.press('Escape')
-  await sleep(300)
-  if (await page.$('.words-modal')) await clickText(page, '.words-modal button', 'やめる')
-
-  // 下書きのひな形の窓
-  await page.evaluate(() => document.querySelector('.tpl-row button').click())
-  await page.waitForSelector('.tpl-modal')
-  await page.evaluate(() => document.activeElement?.blur())
-  await sleep(1200)
-  await capture(page, 'g-admin-template', await page.evaluate(rectOf, '.tpl-modal'), [])
-  await page.keyboard.press('Escape')
-  await sleep(300)
-  if (await page.$('.tpl-modal')) await clickText(page, '.tpl-modal button', 'やめる')
-
-  // 詳細設定：学生のドライブ保存の切り替え（Google の障害のとき）
-  await page.evaluate(() => {
-    const d = document.querySelector('details.details')
-    d.open = true
-    d.querySelector('.drive-switch').scrollIntoView({ block: 'center' })
-  })
-  await sleep(400)
-  await capture(page, 'g-admin-switch', pad(union(await page.evaluate(rectOf, 'details.details summary'), await page.evaluate(rectOf, '.drive-switch')), 10), [
+  // ---- 詳細設定：Google の障害のとき（学生のドライブ保存の切り替え） ----
+  await nav(page, '詳細設定')
+  await page.mouse.move(5, 5)
+  await capture(page, 'g-admin-switch', pad(await page.evaluate(rectOf, '.content .card', 'Google の障害のとき'), 10), [
     { n: 1, box: await page.evaluate(rectOf, '.drive-switch .seg2 button', '止める'), at: 'r' },
   ])
 
-  // 保存して学生に反映 → 新年度を作成（準備中）。画面の上の欄だけ
-  await clickText(page, '.admin-header button', '保存して学生に反映')
-  await page.waitForFunction(() => document.querySelector('.message.ok'))
-  await clickText(page, '.admin-header button', '新年度を作成')
+  // ---- 締切を1日ずらして保存 → 変更履歴 ----
+  await nav(page, '年度の設定')
+  await setValue(await page.$('#y-deadline'), '2027-01-22')
+  await page.waitForSelector('.dirty-bar')
+  await page.evaluate(() => document.querySelector('.dirty-bar .btn.primary').click())
+  await page.waitForFunction(() => !document.querySelector('.dirty-bar') && !document.querySelector('.admin-header .busy'), { timeout: 30000 })
+  await nav(page, '変更履歴')
+  await page.waitForSelector('.history li')
+  await page.mouse.move(5, 5)
+  await capture(page, 'g-admin-history', pad(union(await page.evaluate(rectOf, '.content .sec-h'), await page.evaluate(rectOf, '.history-sec .card')), 14), [
+    { n: 1, box: await page.evaluate(rectOf, '.history li button'), at: 'l' },
+  ])
+
+  // ---- 新年度を作成 → 準備中の年度：「新年度の準備」・題目を直したところ（下に、保存していない変更の帯）。管理者用の手引きの大きな画像 ----
+  await nav(page, '年度の設定')
+  await page.evaluate(() => document.querySelector('.next-year button').click())
   await page.waitForSelector('.modal')
   await clickText(page, '.modal button', '作成する')
-  await page.waitForFunction(() => document.querySelector('.badge.draft')?.textContent === '準備中')
-  await hideMockBadge(page)
+  await page.waitForFunction(() => document.querySelector('.badge.draft')?.textContent === '準備中', { timeout: 30000 })
+  await setValue(await page.$('#y-commonTitle'), '卒業イベント「アラジン」について')
+  await page.waitForSelector('.dirty-bar')
+  // 「作成しました」の知らせ（数秒）が消えるまで待つ
+  await page.waitForFunction(() => !document.querySelector('.admin-header .done-note'), { timeout: 15000 }).catch(() => {})
+  await page.evaluate(() => document.querySelector('.content')?.scrollTo?.(0, 0))
+  await unfocus(page)
   await page.mouse.move(5, 5)
+  await previewReady(page)
+  await hideMockBadge(page)
   await sleep(400)
-  {
-    const head = union(await page.evaluate(rectOf, '.admin-header .sel'), await page.evaluate(rectOf, '.admin-header .btn.primary'))
-    const header = await page.evaluate(rectOf, '.admin-header')
-    await capture(page, 'g-admin-draft', { x: head.x - 12, y: header.y, w: head.w + 24, h: header.h }, [
-      { n: 1, box: await page.evaluate(rectOf, '.admin-header button', '新年度を作成'), at: 'b' },
-      { n: 2, box: await page.evaluate(rectOf, '.admin-header .btn.primary'), at: 'b' },
-      { n: 3, box: await page.evaluate(rectOf, '.admin-header .link', '変更履歴'), at: 'b' },
-      { n: 4, box: await page.evaluate(rectOf, '.admin-header .link', '先生の登録'), at: 'b' },
-    ])
-  }
-
-  // 変更履歴
-  await clickText(page, '.admin-header button', '変更履歴')
-  await page.waitForSelector('.history li')
-  await page.evaluate(() => document.activeElement?.blur())
-  await sleep(400)
-  await capture(page, 'g-admin-history', await page.evaluate(rectOf, '.modal'), [{ n: 1, box: await page.evaluate(rectOf, '.history li button'), at: 'l' }])
+  await capture(page, 'g-admin-newyear', { x: 0, y: 0, w: PC.width, h: PC.height }, [
+    { n: 1, box: await navBox(page, '年度の設定'), at: 'l' },
+    { n: 2, box: await page.evaluate(rectOf, '.steps-card'), at: 'r' },
+    { n: 3, box: await page.evaluate(rectOf, '.dirty-bar .btn.primary'), at: 't' },
+    { n: 4, box: await page.evaluate(rectOf, '#publish-btn'), at: 'b' },
+    { n: 5, box: await navBox(page, '先生の登録'), at: 'l' },
+    { n: 6, box: await navBox(page, '変更履歴'), at: 'l' },
+    { n: 7, box: await navBox(page, '詳細設定'), at: 'l' },
+    { n: 8, box: await previewPage(page), at: 'tl', dx: 10, dy: 10 },
+  ])
   await context.close()
 
-  // 先生の画面
-  const t = await openAdmin(browser, { as: 'teacher' })
+  // ---- 先生の画面（コースと書き方のチェックだけ）。お知らせを書いたところ（下に、保存していない変更の帯） ----
+  // 先生用の手引きでは、画像の横に手順を並べるので、画面を小さめ（1180×640）にして、コースのカードのすぐ下に帯が来るようにする
+  const TEACHER = { width: 1180, height: 640, deviceScaleFactor: 2 }
+  const t = await openAdmin(browser, { as: 'teacher', viewport: TEACHER })
+  await t.page.waitForSelector('.course.open textarea.notice')
+  await setValue(await t.page.$('.course.open textarea.notice'), '12月4日（金）の中間発表では、本文の下書きを印刷して持ってきてください')
+  await t.page.waitForSelector('.dirty-bar')
+  await unfocus(t.page)
   await t.page.mouse.move(5, 5)
-  await sleep(500)
-  {
-    const firstCourse = await t.page.evaluate(rectFirst, '.teacher-main .course')
-    await capture(t.page, 'g-admin-teacher', { x: 0, y: 0, w: PC.width, h: firstCourse.y + firstCourse.h + 16 }, [
-      { n: 1, box: await t.page.evaluate(rectOf, '.teacher-main .course .tpl-row button'), at: 'r' },
-      { n: 2, box: await t.page.evaluate(rectOf, '.teacher-main .course .notice-field textarea'), at: 'r' },
-      { n: 3, box: await t.page.evaluate(rectOf, '.admin-header .btn.primary'), at: 'b' },
-    ])
-  }
+  await hideMockBadge(t.page)
+  await sleep(600)
+  await capture(t.page, 'g-admin-teacher', { x: 0, y: 0, w: TEACHER.width, h: TEACHER.height }, [
+    { n: 1, box: await t.page.evaluate(rectOf, '.course.open .tpl-open'), at: 'l' },
+    { n: 2, box: await t.page.evaluate(rectOf, '.course.open textarea.notice'), at: 'r' },
+    { n: 3, box: await t.page.evaluate(rectOf, '.dirty-bar .btn.primary'), at: 't' },
+  ])
   await t.context.close()
 }
 
@@ -1033,7 +1142,38 @@ async function makePdf(browser, guide) {
       if (pt < min.pt) min = { pt, who }
       if (pt < minPt) small.push(`${pt}pt ${who}`)
     }
-    return { fonts, images, missing, sheets: sheets.length, over, min, small }
+    // 1字だけが行に残っている文（「…書／く。」のような折り返し）。字のある部品（行の箱）ごとに、1字ずつの位置から行を分け、
+    // 句読点・かっこを除いて1字以下の行があれば知らせる（1行だけの部品は見ない。e2e/admin.mjs の lonelyLines と同じ数え方）
+    const lonely = []
+    const boxes = new Map()
+    const range = document.createRange()
+    const walker = document.createTreeWalker(document.querySelector('.sheet'), NodeFilter.SHOW_TEXT)
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+      if (!n.textContent.trim() || n.parentElement.closest('svg, style, script')) continue
+      let box = n.parentElement
+      while (box && getComputedStyle(box).display === 'inline') box = box.parentElement
+      if (!box || !box.getClientRects().length) continue
+      if (!boxes.has(box)) boxes.set(box, [])
+      const list = boxes.get(box)
+      for (let i = 0; i < n.length; i++) {
+        if (/\s/.test(n.data[i])) continue
+        range.setStart(n, i)
+        range.setEnd(n, i + 1)
+        const r = range.getBoundingClientRect()
+        if (r.height) list.push({ y: (r.top + r.bottom) / 2, h: r.height, ch: n.data[i] })
+      }
+    }
+    for (const list of boxes.values()) {
+      const lines = []
+      for (const c of list.sort((a, b) => a.y - b.y)) {
+        const line = lines.at(-1)
+        if (line && Math.abs(c.y - line.y) < line.h * 0.55) line.chars.push(c.ch)
+        else lines.push({ y: c.y, h: c.h, chars: [c.ch] })
+      }
+      const bare = (l) => l.chars.join('').replace(/[、。，．・：；！？）」』】〕〉》,.:;!?)\]]/g, '')
+      if (lines.length > 1 && lines.some((l) => bare(l).length <= 1)) lonely.push(`${lines.map((l) => l.chars.join('')).join('／')}`.slice(0, 80))
+    }
+    return { fonts, images, missing, sheets: sheets.length, over, min, small, lonely }
   }, MIN_EXEMPT, MIN_PT, JP.source)
   const problems = [...failed]
   if (check.fonts.length) problems.push(`書体を読み込めませんでした：${check.fonts.join(', ')}（node_modules/@fontsource があるか確かめてください）`)
@@ -1043,6 +1183,7 @@ async function makePdf(browser, guide) {
   for (const o of check.over) if (o.px > 0) problems.push(`${o.page}ページ：用紙・枠から ${o.px}px はみ出しています（${o.who}）。文を短くしてください`)
   for (const o of check.over) if (o.chars > MAX_CHARS) problems.push(`${o.page}ページ：${o.chars}字あります（${MAX_CHARS}字まで）。文を短くしてください`)
   if (check.small.length) problems.push(`文字が ${MIN_PT}pt より小さいところがあります：${check.small.slice(0, 6).join('　')}`)
+  for (const l of check.lonely) problems.push(`1字だけの行があります（言葉の切れ目で折り返すよう、文を直してください）：${l}`)
   console.log(`  ${guide.html}：${check.over.map((o) => o.chars).join('・')}字　いちばん小さい文字 ${check.min.pt}pt（${check.min.who}。柱・ページ番号などを除く）`)
   await page.pdf({ path: guide.pdf, printBackground: true, preferCSSPageSize: true })
   await page.close()
