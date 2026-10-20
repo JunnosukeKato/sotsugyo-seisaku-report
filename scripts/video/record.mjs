@@ -19,7 +19,10 @@ await withEdge(async (browser) => {
     const { context, page } = await session.openTool(browser, { device: meta.device, ...meta.open })
     await scene.prepare?.({ page, h })
     // パソコンは、矢印が始めから見えるよう、紙面の右下に置いておく
-    if (meta.device !== 'phone') await rec.moveTo(page, 900, 560)
+    if (meta.device !== 'phone') {
+      const view = page.viewport()
+      await rec.moveTo(page, Math.round(view.width * 0.7), Math.round(view.height * 0.78))
+    }
     const recording = await rec.startRecording(page, `poc-output/video/${name}`)
     await rec.sleep(1000)
     await scene.run({ page, rec: recording, h })

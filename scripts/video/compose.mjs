@@ -3,6 +3,7 @@
 // 絵を重ねるのは Edge の中の canvas（字幕の書体は BIZ UDPゴシック）。1コマずつ JPEG にして、ffmpeg で MP4 にまとめる。
 // 使い方: node scripts/video/compose.mjs [場面の名前 …]（名前を書かなければ、録ってある場面を全部）
 //   できた動画は poc-output/video/out/<番号>_<題名>.mp4。ffmpeg は FFMPEG（なければ winget で入れた場所）を使う
+//   CAPTIONS_ONLY=1 のときは、字幕の行の分け方を出すだけ（動画は作らない。録る前でもよい）
 import { spawnSync } from 'node:child_process'
 import { createServer } from 'node:http'
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
@@ -26,7 +27,7 @@ const names = process.argv.slice(2).length
   : readdirSync('scripts/video/scenes')
       .filter((f) => f.endsWith('.mjs'))
       .map((f) => f.replace(/\.mjs$/, ''))
-      .filter((n) => existsSync(join(ROOT, n, 'timeline.json')))
+      .filter((n) => process.env.CAPTIONS_ONLY || existsSync(join(ROOT, n, 'timeline.json')))
 mkdirSync(OUT, { recursive: true })
 
 // 写真を渡し、できたコマを受け取るだけのサーバー（この PC の中だけ）
@@ -76,25 +77,34 @@ async function setup(p) {
   const ease = (k) => (k <= 0 ? 0 : k >= 1 ? 1 : k < 0.5 ? 4 * k * k * k : 1 - (-2 * k + 2) ** 3 / 2)
 
   // ---- 拡大（パソコン）：印ごとに、見せたい範囲（focus）が字幕の外に収まるよう寄る。1秒かけて移る ----
-  /** 字幕のためにあける高さ（録画の画面の CSS px。倍率 1 のとき。2行の字幕が入る高さ） */
-  const CAPTION_RESERVE = 150
+  /** 録画の画面の大きさ（CSS px） */
+  const VW = p.viewport.width
+  const VH = p.viewport.height
+  /** 字幕のためにあける高さ（録画の画面の CSS px。倍率 1 のとき。2行の字幕が入る高さ。画面の高さの約2割） */
+  const CAPTION_RESERVE = Math.round(VH * 0.2083)
+  /** 見せたい範囲から、寄る倍率を決める */
+  const zoomFor = (f) => {
+    const pad = 36
+    return Math.min(2.1, Math.max(1, Math.min(VW / (f.w + pad * 2), (VH - CAPTION_RESERVE) / (f.h + pad * 2))))
+  }
   /**
    * 字幕を上に出すか：見せたい範囲が画面の下のほうにあるとき（右下の「PDFを書き出す」など。拡大しても下の端より下へは動かせず、
    * 下の字幕に隠れるため）。範囲のない印は、その前の印に合わせる
    */
   let place = 'bottom'
   const placeOf = marks.map((m) => {
-    if (m.full) place = 'bottom'
-    else if (m.focus) place = m.focus.y + m.focus.h > 720 - CAPTION_RESERVE ? 'top' : 'bottom'
+    // place：字幕の位置を、印で決める（全体を見せているとき、案内の吹き出しが下にあるときなど）
+    if (m.place) place = m.place
+    else if (m.full) place = 'bottom'
+    else if (m.focus) place = m.focus.y + m.focus.h > VH - CAPTION_RESERVE / zoomFor(m.focus) - 8 ? 'top' : 'bottom'
     return place
   })
   const fromFocus = (f, where) => {
-    const pad = 36
-    const z = Math.min(2.1, Math.max(1, Math.min(1280 / (f.w + pad * 2), (720 - CAPTION_RESERVE) / (f.h + pad * 2))))
+    const z = zoomFor(f)
     return { cx: f.x + f.w / 2, cy: f.y + f.h / 2 + ((where === 'top' ? -1 : 1) * CAPTION_RESERVE) / z / 2, z }
   }
   const targets = marks
-    .map((m, i) => ({ t: m.t, v: p.meta.zoom?.[m.name] ?? (m.full ? { cx: 640, cy: 360, z: 1 } : m.focus ? fromFocus(m.focus, placeOf[i]) : null) }))
+    .map((m, i) => ({ t: m.t, v: p.meta.zoom?.[m.name] ?? (m.full ? { cx: VW / 2, cy: VH / 2, z: 1 } : m.focus ? fromFocus(m.focus, placeOf[i]) : null) }))
     .filter((x) => x.v)
   /** 録画の時刻 t の、字幕の位置 */
   const placeAt = (t) => {
@@ -105,7 +115,7 @@ async function setup(p) {
     return cur
   }
   const zoomAt = (t) => {
-    let v = { cx: 640, cy: 360, z: 1 }
+    let v = { cx: VW / 2, cy: VH / 2, z: 1 }
     for (const x of targets) {
       if (t < x.t) break
       const k = ease((t - x.t) / 1.0)
@@ -138,19 +148,89 @@ async function setup(p) {
   }
 
   /** 文字を幅に合わせて行に分ける（行の頭に、。」）が来ないように） */
-  const wrap = (text, font, max) => {
-    g.font = font
+  /**
+   * 文字を幅に合わせて行に分ける。字幕の文に「\n」があれば、そこで必ず分ける。
+   * 分けてよいのは言葉の切れ目だけ（「、」「。」の後ろ・かぎかっこの前・ひらがなから漢字やカタカナに変わる所など）。
+   * 行の頭に「、。」）」や小さい字が来ないようにし、何行かになるときは行の長さをそろえる（最後の行に1字だけ残らないように）
+   */
+  const OPEN = '「『（(【'
+  const CLOSE = '」』）)】'
+  const PUNCT = '、。，．・：！？'
+  const isHira = (c) => /[ぁ-ゟ]/.test(c)
+  const isSmall = (c) => /[ぁぃぅぇぉっゃゅょゎァィゥェォッャュョヮー]/.test(c)
+  const canBreak = (a, b) => {
+    if (!a || !b) return false
+    if (CLOSE.includes(b) || PUNCT.includes(b) || isSmall(b)) return false
+    if (OPEN.includes(a)) return false
+    // 空白の後ろ（「Backspace で」の「で」のように、ひらがなが続くときは分けない）
+    if (a === ' ' || a === '　') return !isHira(b)
+    if (PUNCT.includes(a) || OPEN.includes(b)) return true
+    if (CLOSE.includes(a)) return !isHira(b)
+    return isHira(a) && !isHira(b) && b !== ' '
+  }
+  /** 言葉の切れ目で区切った、ひとかたまりずつ（かぎかっこの中の、ボタンの名前などは分けない） */
+  const unitsOf = (text) => {
+    const chars = [...text]
+    const units = []
+    let cur = ''
+    let depth = 0
+    chars.forEach((ch, i) => {
+      if (cur && depth === 0 && canBreak(chars[i - 1], ch)) {
+        units.push(cur)
+        cur = ''
+      }
+      if ('「『'.includes(ch)) depth++
+      if ('」』'.includes(ch)) depth = Math.max(0, depth - 1)
+      cur += ch
+    })
+    if (cur) units.push(cur)
+    return units
+  }
+  const width = (s) => g.measureText(s.trimEnd()).width
+  /** 幅 max に、かたまりを前から詰めていく（1つのかたまりが max より長いときだけ、字の間で分ける） */
+  const greedy = (text, max) => {
     const lines = []
     let line = ''
-    for (const ch of text) {
-      if (g.measureText(line + ch).width > max && line && !/[、。」）]/.test(ch)) {
+    for (const unit of unitsOf(text)) {
+      if (line && width(line + unit) > max) {
         lines.push(line)
-        line = ch
-      } else line += ch
+        line = unit
+      } else line += unit
     }
     if (line) lines.push(line)
-    return lines
+    // 長すぎるかたまり：字の間で分ける（行の頭に句読点などが来ないように）
+    return lines.flatMap((l) => {
+      if (width(l) <= max) return [l]
+      const out = []
+      let cur = ''
+      for (const ch of l) {
+        if (cur && width(cur + ch) > max && !CLOSE.includes(ch) && !PUNCT.includes(ch) && !isSmall(ch)) {
+          out.push(cur)
+          cur = ch
+        } else cur += ch
+      }
+      if (cur) out.push(cur)
+      return out
+    })
   }
+  const wrap = (text, font, max) => {
+    g.font = font
+    return text.split('\n').flatMap((part) => {
+      const first = greedy(part, max)
+      if (first.length <= 1) return first.map((l) => l.trimEnd())
+      // 行の数を変えずに、いちばん狭くできる幅で組み直す（行の長さがそろう）
+      let lo = 0
+      let hi = max
+      for (let i = 0; i < 16; i++) {
+        const mid = (lo + hi) / 2
+        if (greedy(part, mid).length <= first.length) hi = mid
+        else lo = mid
+      }
+      return greedy(part, hi).map((l) => l.trimEnd())
+    })
+  }
+  /** 1字だけの行（句読点・かっこを数えない） */
+  const lonely = (lines) => lines.length > 1 && lines.some((l) => [...l].filter((c) => !PUNCT.includes(c) && !OPEN.includes(c) && !CLOSE.includes(c)).length <= 1)
   const roundRect = (x, y, w, h, r, fill) => {
     g.beginPath()
     g.roundRect(x, y, w, h, r)
@@ -202,18 +282,20 @@ async function setup(p) {
   const drawPointer = (shot, t) => {
     if (phone) {
       for (const e of mouse) if (e.tap) ring(shot, e, t, 0.6, (a) => `rgba(255,255,255,${a})`, (a) => `rgba(40,40,40,${0.45 * a})`)
-      // なぞっている間は、指の位置に丸
+      // なぞっている間は、指の位置に丸（2本の指で広げるときは2つ）
       const touches = mouse.filter((e) => e.touch)
       const last = touches.filter((e) => e.t <= t).at(-1)
       if (last && last.touch !== 'end') {
-        const q = shot.map(last.x, last.y)
-        g.beginPath()
-        g.arc(q.x, q.y, 20 * shot.unit, 0, Math.PI * 2)
-        g.fillStyle = 'rgba(40,40,40,.4)'
-        g.fill()
-        g.lineWidth = 3 * shot.unit
-        g.strokeStyle = '#fff'
-        g.stroke()
+        for (const pt of last.points ?? [last]) {
+          const q = shot.map(pt.x, pt.y)
+          g.beginPath()
+          g.arc(q.x, q.y, 20 * shot.unit, 0, Math.PI * 2)
+          g.fillStyle = 'rgba(40,40,40,.4)'
+          g.fill()
+          g.lineWidth = 3 * shot.unit
+          g.strokeStyle = '#fff'
+          g.stroke()
+        }
       }
       return
     }
@@ -256,6 +338,8 @@ async function setup(p) {
     g.globalAlpha = 1
   }
 
+  /** スマホ：右の字幕の幅（縦長の画面の右。drawPhone と同じ位置から） */
+  const PHONE_CAPTION_W = W - (330 + Math.round((960 * p.viewport.width) / p.viewport.height) + 130) - 120
   /** スマホ：縦長の画面を左に、右に題名と字幕 */
   const drawPhone = (bmp, t) => {
     g.fillStyle = '#f2efe8'
@@ -292,7 +376,7 @@ async function setup(p) {
     if (cap) {
       g.globalAlpha = Math.min(1, (t - cap.since) / 0.25)
       const font = `bold 56px ${FONT}`
-      const lines = wrap(cap.text, font, W - x - 120)
+      const lines = wrap(cap.text, font, PHONE_CAPTION_W)
       g.font = font
       g.fillStyle = '#1c1c1c'
       lines.forEach((l, i) => g.fillText(l, x, 420 + i * 84))
@@ -317,7 +401,14 @@ async function setup(p) {
     g.globalAlpha = 1
   }
 
+  // 字幕の行の分け方（作る前に、node の側に出して確かめる。1字だけの行があれば知らせる）
+  const report = Object.entries(p.meta.captions).map(([name, text]) => {
+    const lines = phone ? wrap(text, `bold 56px ${FONT}`, PHONE_CAPTION_W) : wrap(text, `bold 46px ${FONT}`, 1480)
+    return { name, lines, lonely: lonely(lines) }
+  })
+
   window.__R = {
+    report,
     total: Math.round((p.title + p.duration + p.tail) * p.fps),
     async render(from, to) {
       for (let n = from; n < to; n++) {
@@ -336,7 +427,7 @@ async function setup(p) {
       }
     },
   }
-  return window.__R.total
+  return { total: window.__R.total, report }
 }
 
 await withEdge(async (browser) => {
@@ -347,13 +438,18 @@ await withEdge(async (browser) => {
   for (const name of names) {
     current = name
     const { meta } = await import(`./scenes/${name}.mjs`)
-    const timeline = JSON.parse(readFileSync(join(ROOT, name, 'timeline.json'), 'utf8'))
-    const viewport = meta.device === 'phone' ? { width: 390, height: 844 } : { width: 1280, height: 720 }
+    const timeline = process.env.CAPTIONS_ONLY ? { marks: [], frames: [], mouse: [], duration: 0 } : JSON.parse(readFileSync(join(ROOT, name, 'timeline.json'), 'utf8'))
+    // 録った画面の大きさ（前に録ったものには書いていないので、そのときの大きさ）
+    const viewport = timeline.viewport ?? (meta.device === 'phone' ? { width: 390, height: 844 } : { width: 1280, height: 720 })
     const dir = join(ROOT, name, 'out')
+    const started = Date.now()
+    const { total, report } = await page.evaluate(setup, { meta, viewport, marks: timeline.marks, frames: timeline.frames, mouse: timeline.mouse, duration: timeline.duration, fps: FPS, title: TITLE, tail: TAIL })
+    console.log(name)
+    for (const c of report) console.log(`  字幕 ${c.name}：${c.lines.join(' ／ ')}${c.lonely ? '　← 1字だけの行があります' : ''}`)
+    if (process.env.CAPTIONS_ONLY) continue
+    if (report.some((c) => c.lonely)) throw new Error('1字だけの行がある字幕があります（字幕の文を直してください）')
     rmSync(dir, { recursive: true, force: true })
     mkdirSync(dir, { recursive: true })
-    const started = Date.now()
-    const total = await page.evaluate(setup, { meta, viewport, marks: timeline.marks, frames: timeline.frames, mouse: timeline.mouse, duration: timeline.duration, fps: FPS, title: TITLE, tail: TAIL })
     for (let n = 0; n < total; n += 120) await page.evaluate((a, b) => window.__R.render(a, b), n, Math.min(total, n + 120))
     const mp4 = join(OUT, `${meta.number}_${meta.label}.mp4`)
     const r = spawnSync(FFMPEG, ['-hide_banner', '-loglevel', 'error', '-y', '-framerate', String(FPS), '-i', join(dir, '%06d.jpg'), '-c:v', 'libx264', '-preset', 'slow', '-crf', '21', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', mp4])

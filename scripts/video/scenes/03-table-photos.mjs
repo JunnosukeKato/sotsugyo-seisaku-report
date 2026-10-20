@@ -1,4 +1,6 @@
 // 動画 3：表・作品写真（パソコン）
+// 2026-10-20 の画面：表の大きさはマス目で選ぶ・マスの中は Enter で改行・列の幅（そろえる・中身に合わせる・自分で決める）、
+// 作品写真は、つかんでずらしてトリミング・「写真のページを足す」（1ページに4枚まで）
 import { resolve } from 'node:path'
 
 export const meta = {
@@ -7,14 +9,16 @@ export const meta = {
   device: 'pc',
   captions: {
     table: '表は、入れたい文で「表を入れる」を押します',
-    kind: 'マス目で表の大きさを選びます（1行目は見出し。下に素材表のひな形もあります）',
-    tcaption: '表の上のタイトルを打ちます。「表2.」の番号と、本文の「（表2）」は自動です',
+    kind: 'マス目で表の大きさを選びます（1行目は見出し）',
+    tcaption: '表の上のタイトルを打ちます。番号と、本文の「（表2）」は自動です',
     cell: 'マスをクリックして、中身を書きます',
-    row: 'あとから行や列を増やすときは、左の「行を足す」「列を足す」を押します',
-    photos: '作品写真のページでは、左で写真の並べ方を選びます',
+    newline: 'マスの中で Enter を押すと、改行できます',
+    widths: '列の幅は、左の道具で「中身に合わせる」などに変えられます',
+    photos: '作品写真のページでは、左の「並べ方」で写真の数を選びます',
     photoAdd: '空いている枠をクリックして、写真を選びます',
-    fit: '写真が枠で切れるときは、「全体を入れる（切らない）」を押します',
-    end: '作品写真は1ページに4枚まで。多いときは「＋ 写真のページを足す」',
+    trim: '写真をつかんでずらすと、写る所（トリミング）を変えられます',
+    pageAdd: '写真は1ページに4枚まで。多いときは「写真のページを足す」を押します',
+    end: '作品写真のページが増えました。枠をクリックして写真を入れます',
   },
 }
 
@@ -36,24 +40,24 @@ const cellCenter = (page, id) =>
     const r = el.getBoundingClientRect()
     return { x: r.left + r.width / 2, y: r.top + r.height / 2, w: r.width, h: r.height }
   }, id)
+const box = (c) => ({ x: c.x - c.w / 2, y: c.y - c.h / 2, w: c.w, h: c.h })
 
 export async function run({ page, rec, h }) {
   // 1. 段落の終わりをクリックして「表を入れる」
   const p12 = await h.blockRect(page, 'p12')
   const btn = await h.centerOf(page, '.palette .tb', '表を入れる')
-  rec.mark('table', { focus: h.union(p12, { x: btn.x - btn.w / 2, y: btn.y - btn.h / 2, w: btn.w, h: btn.h }) })
+  rec.mark('table', { focus: h.union(p12, box(btn)) })
   const end = await h.endOfBlock(page, 'p12')
-  await h.clickAt(page, end.x, end.y, { pause: 1200 })
+  await h.clickAt(page, end.x, end.y, { pause: 1000 })
   await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p12', { timeout: 30000 })
-  await page.keyboard.press('End')
-  await h.sleep(800)
-  await h.clickAt(page, btn.x, btn.y, { pause: 900 })
+  await h.sleep(600)
+  await h.clickAt(page, btn.x, btn.y, { pause: 800 })
   await page.waitForSelector('.palette .tgrid')
-  await h.sleep(400)
+  await h.sleep(300)
 
   // 2. 表の大きさ：マス目の上で矢印を動かし、2列×3行を選ぶ（マス目は 6列×10行。左上から行ごとに並ぶ）
   rec.mark('kind', { focus: await h.rectOf(page, '.palette .table-menu') })
-  await h.sleep(1800)
+  await h.sleep(1500)
   const cellAt = (index) =>
     page.evaluate((index) => {
       const r = document.querySelectorAll('.palette .tgrid button')[index].getBoundingClientRect()
@@ -62,38 +66,42 @@ export async function run({ page, rec, h }) {
   for (const index of [0, 7, 13]) {
     const c = await cellAt(index)
     await h.moveTo(page, c.x, c.y)
-    await h.sleep(700)
+    await h.sleep(500)
   }
-  await h.sleep(1200)
+  await h.sleep(600)
   const pick = await cellAt(13)
-  await h.clickAt(page, pick.x, pick.y, { pause: 300 })
+  await h.clickAt(page, pick.x, pick.y, { pause: 250 })
   await page.waitForFunction(() => window.__editor.getSnapshot().editingKind === 'tableCaption', { timeout: 30000 })
   // 表が入って紙面を組み直し終えてから、位置を測る
-  await h.sleep(600)
+  await h.sleep(500)
   await h.ready(page)
-  await h.sleep(600)
+  await h.sleep(400)
 
   // 3. 表のタイトル
   let table = await tableNow(page)
   const tableRect = async () => h.union(await h.blockRect(page, 'p12'), await h.blockRect(page, table.id))
   rec.mark('tcaption', { focus: await tableRect() })
-  await h.sleep(1600)
+  await h.sleep(1100)
   await h.typeSlow(page, '帯とズボンの寸法')
-  await h.sleep(1600)
+  await h.sleep(1000)
   await page.keyboard.press('Escape')
   await h.ready(page)
-  await h.sleep(500)
+  await h.sleep(400)
 
-  // 4. マスに書く（見出しの行と、2行）
+  // 4. マスに書く（見出しの行と、2行）。最後のマスは Enter で改行して2行に
   table = await tableNow(page)
-  rec.mark('cell', { focus: await tableRect() })
-  await h.sleep(1200)
+  const tableOnly = async () => {
+    const r = await h.blockRect(page, table.id)
+    return { ...r, y: r.y - 20, h: r.h + 70 }
+  }
+  rec.mark('cell', { focus: await tableOnly() })
+  await h.sleep(900)
   const write = async (cell, text) => {
     const c = await cellCenter(page, cell.id)
-    await h.clickAt(page, c.x, c.y, { pause: 450 })
-    await h.sleep(400)
-    await h.typeSlow(page, text)
-    await h.sleep(300)
+    await h.clickAt(page, c.x, c.y, { pause: 250 })
+    await h.sleep(200)
+    await h.typeSlow(page, text, 80)
+    await h.sleep(150)
   }
   await write(table.rows[0].cells[0], '箇所')
   await write(table.rows[0].cells[1], '寸法')
@@ -101,66 +109,92 @@ export async function run({ page, rec, h }) {
   await write(table.rows[1].cells[1], '15cm')
   await write(table.rows[2].cells[0], 'ズボンの丈')
   await write(table.rows[2].cells[1], '98cm')
-  await h.sleep(600)
-
-  // 5. 行を足す
-  const rowBtn = await h.centerOf(page, '.palette .tb', '行を足す')
-  rec.mark('row', { focus: h.union({ x: rowBtn.x - rowBtn.w / 2, y: rowBtn.y - rowBtn.h / 2, w: rowBtn.w, h: rowBtn.h }, await h.blockRect(page, table.id)) })
+  await h.sleep(300)
+  rec.mark('newline', { focus: await tableOnly() })
   await h.sleep(1200)
-  await h.clickAt(page, rowBtn.x, rowBtn.y, { pause: 800 })
-  await page.waitForFunction((id, n) => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === id).rows.length > n, { timeout: 30000 }, table.id, table.rows.length)
+  await page.keyboard.press('Enter')
+  await h.sleep(500)
+  await h.typeSlow(page, '（裾のゴムを含む）', 85)
+  await h.sleep(1200)
+
+  // 5. 列の幅：中身に合わせる（左の道具の「列の幅」「左端の列」「行の高さ」に寄ってから押し、表に寄って結果を見せる）
+  const widthSeg = await page.evaluate(() => {
+    const segs = [...document.querySelectorAll('.palette .seg')].filter((s) => s.getBoundingClientRect().width > 0)
+    const rs = segs.map((s) => s.getBoundingClientRect())
+    const x = Math.min(...rs.map((r) => r.left))
+    const y = Math.min(...rs.map((r) => r.top)) - 22
+    const seg = segs.find((s) => s.getAttribute('aria-label') === '列の幅')
+    const b = [...seg.querySelectorAll('button')].find((x) => x.textContent.includes('中身')).getBoundingClientRect()
+    return { segs: { x, y, w: Math.max(...rs.map((r) => r.right)) - x, h: Math.max(...rs.map((r) => r.bottom)) - y }, fit: { x: b.left + b.width / 2, y: b.top + b.height / 2 } }
+  })
+  rec.mark('widths', { focus: widthSeg.segs })
+  await h.moveTo(page, widthSeg.fit.x, widthSeg.fit.y)
+  await h.sleep(1500)
+  await h.clickAt(page, widthSeg.fit.x, widthSeg.fit.y, { pause: 300 })
   await h.sleep(400)
   await h.ready(page).catch(() => {})
-  await h.sleep(500)
-  await h.typeSlow(page, '袖丈')
-  table = await tableNow(page)
-  await write(table.rows.at(-1).cells[1], '62cm')
-  await h.sleep(1200)
+  rec.mark('widthsDone', { focus: await tableOnly() })
+  await h.sleep(2000)
   await page.keyboard.press('Escape')
   await h.ready(page)
-  await h.sleep(800)
-
-  // 6. 作品写真のページ：並べ方を選ぶ
-  await page.evaluate(() => window.__editor.goToArea('photos'))
   await h.sleep(500)
+
+  // 6. 作品写真のページ（左のページの一覧の、いちばん下）：並べ方を選ぶ
+  const thumb = await page.evaluate(() => {
+    const b = [...document.querySelectorAll('.thumbs-col .t')].at(-1)
+    b.scrollIntoView({ block: 'nearest' })
+    const r = b.getBoundingClientRect()
+    return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+  })
+  await h.sleep(300)
+  await h.clickAt(page, thumb.x, thumb.y, { pause: 500 })
+  await h.sleep(400)
   await h.ready(page)
-  rec.mark('photos', { focus: h.union(await h.rectOf(page, '.palette .layouts'), await h.rectOf(page, CUR)) })
-  await h.sleep(2200)
+  await h.sleep(300)
+  rec.mark('photos', { focus: h.union(await h.rectOf(page, '.palette .photo-arrange'), await h.rectOf(page, CUR)) })
+  await h.sleep(1500)
   const lay = await page.evaluate(() => {
     const b = [...document.querySelectorAll('.palette .lay')].find((x) => x.title.startsWith('2枚（左右'))
     const r = b.getBoundingClientRect()
     return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
   })
-  await h.clickAt(page, lay.x, lay.y, { pause: 800 })
+  await h.clickAt(page, lay.x, lay.y, { pause: 600 })
   await h.sleep(400)
   await h.ready(page)
-  await h.sleep(800)
+  await h.sleep(600)
 
   // 7. 空いている枠に写真を入れる
   const slot = await h.rectOf(page, `${CUR} [data-photo-slot="1"]`)
   rec.mark('photoAdd', { focus: await h.rectOf(page, CUR) })
   const sc = { x: slot.x + slot.w / 2, y: slot.y + slot.h / 2 }
   await h.moveTo(page, sc.x, sc.y)
-  await h.sleep(2200)
-  h.logClick(page, sc.x, sc.y)
-  const [chooser] = await Promise.all([page.waitForFileChooser(), page.mouse.click(sc.x, sc.y)])
-  await h.sleep(900)
-  await chooser.accept([resolve('docs/guide-images/sample/process.jpg')])
+  await h.sleep(1800)
+  await h.chooseFile(page, sc.x, sc.y, [resolve('docs/guide-images/sample/process.jpg')])
   await page.waitForFunction(() => !!window.__editor.getSnapshot().report.workPhotos[0].imageIds[1], { timeout: 30000 })
   await h.ready(page)
-  await h.sleep(1200)
+  await h.sleep(1000)
 
-  // 8. 全体を入れる（切らない）
-  if (!(await h.rectOf(page, '.palette .photo-sw'))) {
-    await h.clickAt(page, sc.x, sc.y, { pause: 500 })
-    await page.waitForSelector('.palette .photo-sw', { timeout: 10000 })
-  }
-  const sw = await h.rectOf(page, '.palette .photo-sw')
-  rec.mark('fit', { focus: h.union(sw, await h.rectOf(page, CUR)) })
-  await h.sleep(2200)
-  await h.clickAt(page, sw.x + sw.w / 2, sw.y + sw.h / 2, { pause: 800 })
+  // 8. トリミング：1枚目の写真をつかんで、右へずらす
+  const s0 = await h.rectOf(page, `${CUR} [data-photo-slot="0"]`)
+  rec.mark('trim', { focus: await h.rectOf(page, CUR) })
+  const from = { x: s0.x + s0.w * 0.45, y: s0.y + s0.h * 0.45 }
+  await h.moveTo(page, from.x, from.y)
+  await h.sleep(1300)
+  await h.dragTo(page, from, { x: from.x + 130, y: from.y }, 1100)
+  await h.sleep(500)
+  await h.ready(page).catch(() => {})
+  await h.sleep(1600)
+
+  // 9. 写真のページを足す
+  const add = await h.centerOf(page, '.palette .photo-pages .tb', 'ページを足す')
+  rec.mark('pageAdd', { focus: h.union(await h.rectOf(page, '.palette .photo-pages'), await h.rectOf(page, CUR)) })
+  await h.moveTo(page, add.x, add.y)
+  await h.sleep(1800)
+  await h.clickAt(page, add.x, add.y, { pause: 300 })
+  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos.length === 2, { timeout: 30000 })
+  await h.sleep(400)
   await h.ready(page)
-  await h.sleep(2600)
-  rec.mark('end', { focus: await h.rectOf(page, CUR) })
-  await h.sleep(2400)
+  await h.sleep(400)
+  rec.mark('end', { focus: h.union(await h.rectOf(page, '.palette'), await h.rectOf(page, CUR)) })
+  await h.sleep(3000)
 }

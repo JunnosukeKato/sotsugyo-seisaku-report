@@ -11,9 +11,13 @@ const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const config = JSON.parse(readFileSync('scripts/e2e/config-fixture.json', 'utf8'))
 for (const c of config.courses) delete c.notice
 
-/** 録る画面：パソコンは 1280×720、スマホは 390×844（どちらも2倍の細かさで撮る） */
+/**
+ * 録る画面：パソコンは 1440×810、スマホは 390×844（パソコンは 2560×1440、スマホは2倍の細かさで撮る）。
+ * パソコンは前は 1280×720 だったが、表のマスを選んだときの左の道具が画面の高さに入らず、道具の欄に横にも縦にも
+ * スクロールが出て、ボタンの名前が切れていた（2026-10-20）。1440×810 なら道具が全部入る
+ */
 export const VIEWPORTS = {
-  pc: { width: 1280, height: 720, deviceScaleFactor: 2 },
+  pc: { width: 1440, height: 810, deviceScaleFactor: 2560 / 1440 },
   phone: { width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true },
 }
 
@@ -34,13 +38,48 @@ export const blockRect = (page, id) =>
     return { x, y, w: Math.max(...rs.map((r) => r.right)) - x, h: Math.max(...rs.map((r) => r.bottom)) - y }
   }, id)
 
-/** 段落の最後の字のあたり（クリックで、段落の終わりから書ける位置） */
+/**
+ * 段落の最後の字の右の端（クリックで、段落の終わりから書ける位置）。
+ * 前は段落の要素の四角の右端・高さの真ん中にしていたが、2行以上の段落では1行目の終わりに入っていた（2026-10-20）
+ */
 export const endOfBlock = (page, id) =>
   page.evaluate((id) => {
     const els = [...document.querySelectorAll(`.page-viewport.front [data-vivliostyle-page-container].is-current [data-block-id="${id}"]`)]
-    const last = els.flatMap((e) => [...e.getClientRects()]).at(-1)
-    return last ? { x: last.right - 4, y: last.top + last.height / 2 } : null
+    let last = null
+    for (const el of els) {
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+      for (let node = walker.nextNode(); node; node = walker.nextNode()) if (node.textContent.trim()) last = node
+    }
+    if (!last) return null
+    const end = last.textContent.trimEnd().length
+    const range = document.createRange()
+    range.setStart(last, end - 1)
+    range.setEnd(last, end)
+    const r = [...range.getClientRects()].at(-1) ?? range.getBoundingClientRect()
+    return { x: r.right - 1, y: r.top + r.height / 2 }
   }, id)
+
+/**
+ * スマホ：キーボードを仮に出す・しまう（ヘッドレスの Edge では本物のキーボードは出ない）。
+ * iPhone と同じく、見えている所（visualViewport）を低くして、画面の下に灰色の「キーボード」の札を置く（押せない。scripts/e2e/phoneDirect.mjs と同じやり方）
+ */
+export const phoneKeyboard = (page, on, height = 300) =>
+  page.evaluate(
+    (on, height) => {
+      document.querySelector('#video-kb')?.remove()
+      if (on) Object.defineProperty(window.visualViewport, 'height', { configurable: true, get: () => window.innerHeight - height })
+      else delete window.visualViewport.height
+      window.visualViewport.dispatchEvent(new Event('resize'))
+      if (!on) return
+      const k = document.createElement('div')
+      k.id = 'video-kb'
+      k.textContent = 'キーボード'
+      Object.assign(k.style, { position: 'fixed', left: '0', right: '0', bottom: '0', height: `${height}px`, zIndex: '200', pointerEvents: 'none', background: '#d1d4da', color: '#5f636c', display: 'grid', placeItems: 'center', font: '600 17px "BIZ UDPGothic", sans-serif', letterSpacing: '0.1em' })
+      document.body.append(k)
+    },
+    on,
+    height,
+  )
 
 /** 現在の紙面のページで、ブロックの中の文字（はじめに見つかったもの）の範囲（CSS px）。クリックで、その文字の後ろから書くのに使う */
 export const textRect = (page, id, text) =>

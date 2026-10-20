@@ -21,14 +21,14 @@ export async function moveTo(page, x, y) {
   const log = logOf(page)
   const from = log.at ?? { x: x - 220, y: y + 140 }
   const dist = Math.hypot(x - from.x, y - from.y)
-  const steps = Math.max(10, Math.min(45, Math.round(dist / 16)))
+  const steps = Math.max(8, Math.min(28, Math.round(dist / 22)))
   for (let i = 1; i <= steps; i++) {
     const k = i / steps
     const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2
     const p = { x: from.x + (x - from.x) * e, y: from.y + (y - from.y) * e }
     await page.mouse.move(p.x, p.y)
     log.events.push({ t: Date.now() / 1000, ...p })
-    await sleep(16)
+    await sleep(12)
   }
   log.at = { x, y }
 }
@@ -39,6 +39,48 @@ export async function clickAt(page, x, y, { pause = 350 } = {}) {
   await sleep(pause)
   logOf(page).events.push({ t: Date.now() / 1000, x, y, click: true })
   await page.mouse.click(x, y)
+}
+
+/** つかんで動かす（作品写真のトリミングなど。from で押し、ms かけて to まで動かして離す。動画では、押した所に輪を描く） */
+export async function dragTo(page, from, to, ms = 800) {
+  const log = logOf(page)
+  await page.mouse.move(from.x, from.y)
+  log.events.push({ t: Date.now() / 1000, ...from })
+  await page.mouse.down()
+  log.events.push({ t: Date.now() / 1000, ...from, click: true })
+  await sleep(150)
+  const steps = 24
+  for (let i = 1; i <= steps; i++) {
+    const k = i / steps
+    const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2
+    const p = { x: from.x + (to.x - from.x) * e, y: from.y + (to.y - from.y) * e }
+    await page.mouse.move(p.x, p.y)
+    log.events.push({ t: Date.now() / 1000, ...p })
+    await sleep(ms / steps)
+  }
+  await sleep(120)
+  await page.mouse.up()
+  log.at = { ...to }
+}
+
+/**
+ * 押して、ファイルを選ぶ窓で files を選ぶ（パソコン）。録画の間は、まれに窓が開いたことを受け取れないことがあるので、
+ * 6秒待っても開かなければ、もう一度押す
+ */
+export async function chooseFile(page, x, y, files, { tries = 3 } = {}) {
+  for (let i = 0; i < tries; i++) {
+    logClick(page, x, y)
+    const waiting = page.waitForFileChooser({ timeout: 6000 })
+    await page.mouse.click(x, y)
+    const chooser = await waiting.catch(() => null)
+    if (chooser) {
+      await sleep(700)
+      await chooser.accept(files)
+      return
+    }
+    console.log('  （ファイルを選ぶ窓が開かないので、もう一度押す）')
+  }
+  throw new Error('ファイルを選ぶ窓が開きません')
 }
 
 /** 押したことを残す（page.mouse.click を自分で呼ぶとき。ファイルを選ぶ窓を待つときなど） */
@@ -66,6 +108,34 @@ export async function swipe(page, from, to, ms = 450) {
   }
   await page.touchscreen.touchEnd()
   log.events.push({ t: Date.now() / 1000, ...to, touch: 'end' })
+}
+
+/**
+ * スマホ：2本の指で広げる・縮める（点 c を真ん中に、横に d0 離して置き、d1 まで）。
+ * 動画では、2本の指の位置に丸を描く（touch の印に points を残す）
+ */
+export async function pinch(page, c, d0, d1, ms = 700) {
+  const log = logOf(page)
+  const client = page._client()
+  const steps = 16
+  const at = (d) => [
+    { x: c.x - d / 2, y: c.y, id: 1 },
+    { x: c.x + d / 2, y: c.y, id: 2 },
+  ]
+  const send = async (type, points) => {
+    await client.send('Input.dispatchTouchEvent', { type, touchPoints: type === 'touchEnd' ? [] : points })
+    log.events.push({ t: Date.now() / 1000, x: c.x, y: c.y, touch: type === 'touchStart' ? 'start' : type === 'touchEnd' ? 'end' : 'move', points: points.map(({ x, y }) => ({ x, y })) })
+  }
+  await send('touchStart', at(d0))
+  await sleep(120)
+  for (let i = 1; i <= steps; i++) {
+    const k = i / steps
+    const e = k < 0.5 ? 2 * k * k : 1 - (-2 * k + 2) ** 2 / 2
+    await send('touchMove', at(d0 + (d1 - d0) * e))
+    await sleep(ms / steps)
+  }
+  await sleep(120)
+  await send('touchEnd', at(d1))
 }
 
 /** 要素の中央（text があれば、その文字を含む要素）。見つからなければ例外 */
@@ -135,7 +205,7 @@ export async function startRecording(page, dir, { quality = 88 } = {}) {
       await Promise.all(writes)
       const end = Date.now() / 1000
       const mouse = logOf(page).events.map((e) => ({ ...e, t: e.t - start }))
-      const timeline = { duration: end - start, frames, marks, mouse }
+      const timeline = { duration: end - start, viewport: { width: view.width, height: view.height }, frames, marks, mouse }
       writeFileSync(join(dir, 'timeline.json'), JSON.stringify(timeline))
       return timeline
     },
