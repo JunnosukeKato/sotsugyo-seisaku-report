@@ -1,0 +1,37 @@
+{
+  "now": {
+    "plain": {
+      "stageTop": 48,
+      "pageTop": 79.34375,
+      "pageBottom": 602.625,
+      "pageH": 523.28125,
+      "band": null,
+      "pagerTop": 670,
+      "insetTop": 12
+    },
+    "toc": {
+      "stageTop": 48,
+      "pageTop": 32.34375,
+      "pageBottom": 555.625,
+      "pageH": 523.28125,
+      "band": {
+        "top": 585.5625,
+        "bottom": 660
+      },
+      "pagerTop": 670,
+      "insetTop": 12
+    },
+    "empty": {
+      "stageTop": 48,
+      "pageTop": 38.34375,
+      "pageBottom": 561.625,
+      "pageH": 523.28125,
+      "band": {
+        "top": 598,
+        "bottom": 660
+      },
+      "pagerTop": 670,
+      "insetTop": 12
+    }
+  }
+}

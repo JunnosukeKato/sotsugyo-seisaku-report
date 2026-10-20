@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v46：帯が出るページで紙面が動く</title>
+<style>
+  body { margin: 0; padding: 28px 32px 36px; background: #f4f2ee; color: #2a2622; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; width: 1036px; box-sizing: border-box; }
+  h1 { margin: 0 0 6px; font-size: 24px; }
+  .lead { margin: 0 0 22px; font-size: 15px; color: #6b655d; }
+  .row { display: grid; grid-template-columns: 170px repeat(3, 240px); gap: 16px; align-items: start; margin-bottom: 26px; padding: 16px 18px; border-radius: 14px; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08); }
+  .row.rec { box-shadow: 0 0 0 3px #2f3e75; }
+  .name { font-size: 19px; font-weight: 700; line-height: 1.45; }
+  .name small { display: block; word-break: auto-phrase; margin-top: 8px; font-size: 14px; font-weight: 400; line-height: 1.6; color: #6b655d; }
+  .tag { display: inline-block; margin-top: 10px; padding: 3px 10px; border-radius: 99px; background: #2f3e75; color: #fff; font-size: 13px; }
+  figure { position: relative; margin: 0; text-align: center; font-size: 13px; color: #6b655d; }
+  figure img { display: block; width: 240px; border-radius: 10px; box-shadow: 0 0 0 1px #ddd8cf; }
+  /* いつもの紙面の上端（帯のないページ）。紙面が動いたかが分かるように */
+  figure .line { position: absolute; left: -6px; right: -6px; border-top: 2px dashed #c0392b; }
+  figure figcaption { margin-top: 6px; }
+  .note { margin: 0; font-size: 13.5px; color: #6b655d; }
+  .note b { color: #c0392b; }
+</style>
+</head>
+<body>
+<h1>スマホ：案内の帯が出るページで、紙面が上に動く</h1>
+<p class="lead">赤い点線：帯のないページの、紙面の上の端</p>
+
+<div class="row">
+  <div class="name">いま<small>帯が出るページだけ、紙面が少し上に動く</small></div>
+  <figure><img src="shots/now-plain.png" alt=""><i class="line" style="top: 78.3px"></i><figcaption>本文（帯なし）</figcaption></figure>
+  <figure><img src="shots/now-toc.png" alt=""><i class="line" style="top: 78.3px"></i><figcaption>目次</figcaption></figure>
+  <figure><img src="shots/now-empty.png" alt=""><i class="line" style="top: 78.3px"></i><figcaption>まだ書いていない段落</figcaption></figure>
+</div>
+
+<div class="row rec">
+  <div class="name">案A<br>紙面をいつも<br>上に寄せる<small>どのページも同じ位置。帯は紙面の下の空いた所に出る</small><span class="tag">おすすめ</span></div>
+  <figure><img src="shots/a-plain.png" alt=""><i class="line" style="top: 36.9px"></i><figcaption>本文（帯なし）</figcaption></figure>
+  <figure><img src="shots/a-toc.png" alt=""><i class="line" style="top: 36.9px"></i><figcaption>目次</figcaption></figure>
+  <figure><img src="shots/a-empty.png" alt=""><i class="line" style="top: 36.9px"></i><figcaption>まだ書いていない段落</figcaption></figure>
+</div>
+
+<div class="row">
+  <div class="name">案B<br>紙面は動かさず、<br>帯を重ねる<small>紙面はいまの位置のまま。紙面の下の端が、帯に少し隠れる</small></div>
+  <figure><img src="shots/b-plain.png" alt=""><i class="line" style="top: 78.3px"></i><figcaption>本文（帯なし）</figcaption></figure>
+  <figure><img src="shots/b-toc.png" alt=""><i class="line" style="top: 78.3px"></i><figcaption>目次</figcaption></figure>
+  <figure><img src="shots/b-empty.png" alt=""><i class="line" style="top: 78.3px"></i><figcaption>まだ書いていない段落</figcaption></figure>
+</div>
+
+<p class="note">案B：画面の短いスマホでは、<b>ページ番号のあたりまで隠れる</b>ことがあります</p>
+</body>
+</html>
