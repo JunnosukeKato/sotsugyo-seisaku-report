@@ -19,6 +19,7 @@ import { tableShapePhone } from './tableShape.mjs'
 import { tableCustomPhone } from './tableCustom.mjs'
 import { cellBorderPhone } from './cellBorder.mjs'
 import { tableSettingsPhone } from './tableSettings.mjs'
+import { trialFixesPhone } from './trialFixes.mjs'
 import { closeShape, pickWidth } from './shapeUi.mjs'
 import { waitingPhone } from './waiting.mjs'
 
@@ -368,7 +369,7 @@ await withEdge(async (browser) => {
       const s = window.__editor.getSnapshot()
       const t = s.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'table' && b.id === window.__editor.tableIdOf(s.editingId ?? ''))
       const redo = [...document.querySelectorAll('.edit-sheet .es-tools button')].find((b) => b.textContent.includes('やり直す'))
-      return { editing: s.editingKind, caption: t?.caption ?? null, open: !!document.querySelector('.edit-sheet.open'), redoOff: redo?.disabled ?? null, canRedo: s.canRedo }
+      return { editing: s.editingKind, caption: t?.caption ?? null, open: !!document.querySelector('.edit-sheet.open'), redoOff: redo ? redo.getAttribute('aria-disabled') === 'true' : null, canRedo: s.canRedo }
     })
   await tapEl('.edit-sheet .es-tools button', '戻す')
   await page.waitForFunction(() => window.__editor.getSnapshot().editingKind === 'tableCaption', { timeout: 30000 })
@@ -710,6 +711,8 @@ await withEdge(async (browser) => {
 
   // 「表の形」の下から出る欄（mockups/v45 案A：道具の段は横にずらさない7つ・欄の選びと絵・44px 以上・自分で決めるは丸いつまみ。scripts/e2e/tableSettings.mjs）
   await tableSettingsPhone(browser, check)
+  // はじめて使う学生の試し（2026-10-21）の直し：薄いボタン・マスの「戻す」・行を消したあと・空の見出しの Backspace・サブタイトル・追加の欄の折り返し（scripts/e2e/trialFixes.mjs）
+  await trialFixesPhone(browser, check)
 
   // 待つ間の表示（押したボタンに回る印と言葉・2秒を過ぎたら「数秒かかることがあります」・終わったら知らせ。ボタンは 44px 以上。依頼者の要望 2026-10-20。scripts/e2e/waiting.mjs）
   await waitingPhone(browser, check)

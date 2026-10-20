@@ -1287,6 +1287,8 @@ button.row { cursor: pointer; }
 @media print { .ur-tip { display: none !important; } }
 /* スマホ：書く欄の「戻す」「やり直す」は、道具が折り返すときも2つ並べたまま */
 .es-tools .es-undo { display: flex; flex: none; align-items: center; gap: 2px; }
+/* 押せないときの「戻す」「やり直す」（disabled にしない：押すと書き終わりになっていたため。app/Phone.tsx の offWhen） */
+.es-tools .es-undo button.off { opacity: 0.4; cursor: default; }
 /* スマホの使い方（画面いっぱいの欄）では、指で押しやすい高さ（44px 以上。前の「追加」の欄の「＋ 引用・参考文献を入れる」と同じ） */
 .help-sheet .help-topic .help-action.help-refs { min-height: 44px; }
 
@@ -1530,7 +1532,7 @@ button.row { cursor: pointer; }
 .direct-bar .db-row { display: flex; align-items: center; gap: 2px; }
 .direct-bar .db-row button { flex: none; min-width: 44px; min-height: 44px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px; padding: 2px 6px; border: 0; border-radius: 8px; background: none; color: var(--ink); font: inherit; font-size: 10.5px; line-height: 1.2; white-space: nowrap; }
 .direct-bar .db-row button svg { width: 20px; height: 20px; }
-.direct-bar .db-row button:disabled { color: #b5b7bc; }
+.direct-bar .db-row button:disabled, .direct-bar .db-row button.off { color: #b5b7bc; }
 .direct-bar .db-row button.on { background: var(--accent-soft); color: var(--accent); }
 .direct-bar .db-row button.danger { color: var(--error); }
 .direct-bar .db-row .db-done { margin-left: auto; flex-direction: row; padding: 0 18px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 700; border-radius: 10px; }
@@ -1759,17 +1761,27 @@ p.busy-line { display: flex; }
 .tpl-reset-ask { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid #e7c46e; border-radius: 10px; background: #fff8e6; color: #4d3500; font-size: 13.5px; line-height: 1.6; }
 .tpl-reset-ask .btns { display: flex; justify-content: flex-end; gap: 8px; }
 
-/* ---- 右の欄・チェックの欄・スマホの紙面の下の帯の文：最後の行に1字だけ残らないように（例：「…空いてい／る」。依頼者の要望） ---- */
+/* ---- 右の欄・チェックの欄・スマホの紙面の下の帯・下から出る欄・案内・PDF の窓の文：最後の行に1字だけ残らないように（例：「…空いてい／る」。依頼者の要望） ---- */
 .issue .ttl,
 .issue .detail,
 .check-prog li,
 .export-note,
 .course-notice,
 .page-band .t,
-.page-band p {
+.page-band p,
+.sheet-hint,
+.guide p,
+.pdf-file small,
+.modal .lead,
+.modal .note {
   /* 言葉の切れ目で折り返す（「空／いている」のように言葉の途中で分けない。対応していないブラウザは、ふつうの折り返し） */
   word-break: auto-phrase;
   text-wrap: pretty;
+}
+
+/* 紙面の表のマスの仮の文字（「（クリックして入力）」「（見出し）」）も、狭い列で「（クリッ／クして入／力）」と言葉の途中で折れないように（はじめて使う学生の試し 2026-10-21） */
+.page-viewport [data-cell-id] [data-placeholder]:empty {
+  word-break: auto-phrase;
 }
 
 /* ---- 左の道具の中を上下に動かすとき（とても低い画面。表の道具は「表の形を整える」1つにしたので、1280×720 などでは動かさずに全部見える） ---- */
@@ -1867,3 +1879,6 @@ p.busy-line { display: flex; }
 .table-shape .so-check small { font-size: 12px; line-height: 1.4; }
 /* 予備の下の書く欄の道具の「表の形」 */
 .es-tools .shape-btn { color: var(--accent); font-weight: 700; }
+
+/* 書く欄のすぐ後ろに続く決まった字（表紙のサブタイトルの「の衣装制作―」。紙面のその字は書く欄に隠れるため、書く欄の中で後ろに見せる。editor/overlayEditor.ts の suffix） */
+.overlay-editor[data-suffix]::after { content: attr(data-suffix); pointer-events: none; user-select: none; }

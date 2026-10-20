@@ -50,6 +50,8 @@ export interface OverlayCallbacks {
   onCommit(blockId: string, text: string, byKey: boolean, frozen: HTMLElement | null): void
   /** Enter で段落を分けた（見出しの Enter は、後ろに段落を作る） */
   onSplit(blockId: string, before: string, after: string): void
+  /** 空の見出しなど（1行の欄）で Backspace を押したとき、その欄を消せるか（消せるなら onMergeBackward で消して、前の欄へ移る） */
+  canRemoveEmpty?(blockId: string): boolean
   /** 段落の先頭で Backspace を押した（前の段落とつなげる） */
   onMergeBackward(blockId: string, text: string): void
   /** 1行目で↑、最終行で↓を押した */
@@ -118,6 +120,11 @@ export interface OverlayTarget extends OverlayPlacement {
   refs?: (text: string) => [number, number][]
   /** 紙面のその欄の要素（ページをまたぐと複数）。文字が同じなら、書く欄にその中身を写す（紙面と同じ組み方を、測らずに使う） */
   page?: HTMLElement[]
+  /**
+   * 欄のすぐ後ろに続く、同じ行の決まった字（表紙のサブタイトルの「の衣装制作―」など）。書く欄の字のすぐ後ろに見せる
+   * （紙面のその字は、書く欄に隠れる。前は隠れたままで、字が消えたように見えた：はじめて使う学生の試し 2026-10-21）
+   */
+  suffix?: string
 }
 
 /** 書く欄の文字と、選んでいる範囲（元に戻すときに戻す） */
@@ -520,6 +527,11 @@ export class OverlayEditor {
     // 紙面の上の位置と見た目は、写しに合わせておく（段落は、打った字をその場で見せる。ほかの欄は見えない：仮の表示に使う）
     if (this.sheetHost) this.sheetHost.closest('.edit-sheet')?.classList.add('open')
     this.copyStyle(target.styleSource, target.kind)
+    // 後ろに決まった字が続く欄：書く欄の字のすぐ後ろに見せ（index.css の .overlay-editor[data-suffix]）、字は左から並べる（紙面の前の字「―」に続ける）
+    if (target.suffix) {
+      this.element.dataset.suffix = target.suffix
+      this.element.style.textAlign = 'left'
+    } else delete this.element.dataset.suffix
     this.clip.hidden = false
     // 紙面と同じ組み方で組むには、紙面と同じ幅が要る（行の位置を測って、句読点を詰めるかを決める）。幅を決めてから中身を組む
     this.box.style.transform = `scale(${target.scale})`
@@ -1498,6 +1510,12 @@ export class OverlayEditor {
       this.callbacks.onUndoEmpty?.()
       return
     }
+    // 空の見出しで消した（Backspace のキーの知らせがなかった。Android の文字入力など）：キーの Backspace と同じく、見出しを消して前の欄へ
+    if (!this.typeset && this.target?.kind === 'line' && /^deleteContentBackward$|^deleteWordBackward$/.test(e.inputType) && this.text === '' && this.callbacks.canRemoveEmpty?.(this.target.blockId)) {
+      e.preventDefault()
+      const { blockId } = this.target
+      return this.handOff(() => this.callbacks.onMergeBackward(blockId, ''))
+    }
     if (!this.typeset || !this.target || e.inputType === 'insertCompositionText') return
     // スマホで紙面に直接書く：日本語の変換中の入力（変換中の字を消すなど）は、ブラウザに任せる（変換を終えたら、書く欄の中身から読み直す）
     if (this.direct && (this.composingNow || e.isComposing)) return
@@ -1668,6 +1686,10 @@ export class OverlayEditor {
     } else if (e.key === 'Backspace' && kind === 'paragraph' && caret === 0 && collapsed) {
       e.preventDefault()
       this.handOff(() => this.callbacks.onMergeBackward(blockId, text))
+    } else if (e.key === 'Backspace' && kind === 'line' && text === '' && collapsed && this.callbacks.canRemoveEmpty?.(blockId)) {
+      // 空の見出しで Backspace：見出しを消して、前の欄の終わりへ（スマホの道具には「削除」がないため。はじめて使う学生の試し 2026-10-21）
+      e.preventDefault()
+      this.handOff(() => this.callbacks.onMergeBackward(blockId, text))
     } else if (kind !== 'cell' && ((e.key === 'ArrowUp' && this.caretOnEdgeLine('first')) || (e.key === 'ArrowDown' && this.caretOnEdgeLine('last')))) {
       e.preventDefault()
       const direction = e.key === 'ArrowUp' ? 'prev' : 'next'
@@ -1705,10 +1727,37 @@ export class OverlayEditor {
     document.execCommand('insertText', false, '\n')
   }
 
-  /** スマホのキーボードの上の道具の「戻す」：書く欄の中で書いた文字を戻す（紙面と同じ組み方で書いている段落だけ。戻すものがなければ false） */
+  /**
+   * スマホのキーボードの上の道具の「戻す」：書く欄の中で書いた文字を戻す（戻すものがなければ false）。
+   * 紙面と同じ組み方で書いていない欄（表のセル・見出しなど）は、開いてから書いた分だけを戻す（undoPlain。前は戻せず、ボタンも薄いままだった）
+   */
   undoTyping(): boolean {
-    if (!this.typeset || !this.target || this.undoStack.length === 0) return false
+    if (!this.target) return false
+    if (!this.typeset) return this.undoPlain()
+    if (this.undoStack.length === 0) return false
     this.undoStep()
+    return true
+  }
+
+  /**
+   * 紙面と同じ組み方で書いていない欄：開いてから書いた分を、ブラウザの「元に戻す」で1回分戻す（開いたときの字より前には戻さない：
+   * 何も書いていなければ false。同じ書く欄で前に書いていた欄の字を戻さないように）。ブラウザが戻せなかったら、開いたときの字に戻す
+   */
+  private undoPlain(): boolean {
+    if (!this.target || this.text === this.target.text) return false
+    const before = this.text
+    if (document.activeElement !== this.element) this.element.focus()
+    let done = false
+    try {
+      done = document.execCommand('undo')
+    } catch {
+      done = false
+    }
+    if (!done || this.text === before) {
+      this.element.textContent = this.target.text
+      this.setCaret(this.target.text.length)
+      this.emitInput()
+    }
     return true
   }
 
@@ -1719,8 +1768,10 @@ export class OverlayEditor {
     return true
   }
 
-  /** 書く欄の中で、戻せる・やり直せる文字があるか（紙面と同じ組み方で書いている段落） */
+  /** 書く欄の中で、戻せる・やり直せる文字があるか */
   get typingHistory(): { undo: boolean; redo: boolean } {
+    // 紙面と同じ組み方で書いていない欄（表のセル・見出しなど）：開いてから字を書き換えていれば戻せる（undoPlain）
+    if (this.target && !this.typeset) return { undo: this.text !== this.target.text, redo: false }
     const on = this.typeset && !!this.target
     return { undo: on && this.undoStack.length > 0, redo: on && this.redoStack.length > 0 }
   }

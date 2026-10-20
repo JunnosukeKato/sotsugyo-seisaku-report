@@ -23,6 +23,12 @@ import { useUndoNotice } from './useUndoNotice'
 import { WordImportLink } from './WordImport'
 
 /**
+ * 書いている間の道具の、いまは押せないボタン（戻す・やり直す）。disabled にすると、押したときにボタンが受け取らず、
+ * 書く欄からカーソルが外れて書き終わりになっていた（はじめて使う学生の試し 2026-10-21）。押せる形のまま薄くし、押しても何もしない
+ */
+const offWhen = (off: boolean) => ({ 'aria-disabled': off || undefined, className: off ? 'off' : undefined })
+
+/**
  * スマホ版の画面（mockups/v7 案2 から）。
  * 上：細い帯（名前・保存・戻す・やり直す・メニュー）／中：紙面（左右・上下にはらってめくる。上下は拡大していないとき。2本の指で広げる・縮める）／
  * 下：タブ（ページ一覧・追加・チェック・PDF）
@@ -200,10 +206,10 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
         )}
         {/* 「戻す」の横に「やり直す」（戻しすぎたときに進める。mockups/v35 ④）。折り返すときも2つ並べたまま */}
         <span className="es-undo">
-          <button onMouseDown={keepFocus} disabled={!snap.canUndo} onClick={() => undoRedo(() => editor.undo())}>
+          <button onMouseDown={keepFocus} {...offWhen(!snap.canUndo)} onClick={() => snap.canUndo && undoRedo(() => editor.undo())}>
             {Icon.undo}戻す
           </button>
-          <button onMouseDown={keepFocus} disabled={!snap.canRedo} onClick={() => undoRedo(() => editor.redo())}>
+          <button onMouseDown={keepFocus} {...offWhen(!snap.canRedo)} onClick={() => snap.canRedo && undoRedo(() => editor.redo())}>
             {Icon.redo}やり直す
           </button>
         </span>
@@ -267,11 +273,11 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
           </p>
         )}
         <div className="db-row">
-          <button onMouseDown={keepFocus} disabled={!snap.typingUndo && !snap.canUndo} onClick={() => undoRedo(() => editor.undoTyping(), () => editor.undo())}>
+          <button onMouseDown={keepFocus} {...offWhen(!snap.typingUndo && !snap.canUndo)} onClick={() => (snap.typingUndo || snap.canUndo) && undoRedo(() => editor.undoTyping(), () => editor.undo())}>
             {Icon.undo}
             <span>戻す</span>
           </button>
-          <button onMouseDown={keepFocus} disabled={!snap.typingRedo && !snap.canRedo} onClick={() => undoRedo(() => editor.redoTyping(), () => editor.redo())}>
+          <button onMouseDown={keepFocus} {...offWhen(!snap.typingRedo && !snap.canRedo)} onClick={() => (snap.typingRedo || snap.canRedo) && undoRedo(() => editor.redoTyping(), () => editor.redo())}>
             {Icon.redo}
             <span>やり直す</span>
           </button>

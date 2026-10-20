@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { ReportEditor } from '../editor/reportEditor'
-import { headingNotice, noticeText, undoable, type UndoNotice } from '../editor/undoNotice'
+import { headingNotice, noticeText, tableCutNotice, undoable, type UndoNotice } from '../editor/undoNotice'
 import { Icon } from './icons'
 import { keepFocus } from './uiShared'
 
@@ -89,7 +89,7 @@ export function UndoBar({
           {undoable(notice) ? (
             <>
               <NoticeWords notice={notice} />
-              <button onMouseDown={headingNotice(notice) ? keepFocus : undefined} onClick={() => editor.undo()}>
+              <button onMouseDown={headingNotice(notice) || tableCutNotice(notice) ? keepFocus : undefined} onClick={() => editor.undo()}>
                 {Icon.undo}戻す
               </button>
               {/* 残りの時間（細い線が右から縮む） */}

@@ -24,7 +24,7 @@ import { PLACEHOLDER_ATTR } from './pageView'
 import { copyRange, deleteRange, pasteClip, rangePieces, resolveRange, sameClipText, type Clip, type ModelPoint, type ModelRange } from './rangeOps'
 import { caretAt, caretBefore, domPoint, includeClosing, markHangingSelection, paperPoint, type Caret } from './rangeSelection'
 import { SelectionBar, type Bounds } from './selectionBar'
-import { changedPlace, headingNotice, type ChangedPlace, type NoticeBody, type RemovedWhat, type UndoNotice } from './undoNotice'
+import { changedPlace, headingNotice, tableCutNotice, type ChangedPlace, type NoticeBody, type RemovedWhat, type UndoNotice } from './undoNotice'
 import { submissionTitle } from '../model/fileName'
 
 /**
@@ -210,6 +210,13 @@ function resetShift(elements: HTMLElement[]): void {
   }
 }
 
+/** 紙面の欄の要素のすぐ後ろに続く、同じ要素の中の字（なければ undefined） */
+function suffixAfter(el: HTMLElement): string | undefined {
+  let text = ''
+  for (let n = el.nextSibling; n; n = n.nextSibling) text += n.textContent ?? ''
+  return text.trim() ? text : undefined
+}
+
 /** 原稿の抄録・本文にある ID（段落・章・ブロック・図）。削除して消えたものを見つけるため */
 function bodyIds(report: Report): Set<string> {
   const ids = new Set(report.abstract.paragraphs.map((p) => p.id))
@@ -342,6 +349,7 @@ export class ReportEditor {
       onInput: (id, text) => {
         // 書き始めたら、書く欄の近くの「貼り付け」は出さない
         this.chipDismissed = true
+        this.keepObjectShown = null
         this.inputSeq += 1
         this.report = ops.setText(this.report, id, text)
         this.afterChange({ render: 'debounce', save: true })
@@ -385,6 +393,14 @@ export class ReportEditor {
         const base = auto ? ops.setText(this.report, auto.prevId, auto.original) : this.report
         const result = ops.mergeBackward(ops.setText(base, id, text), id, text)
         if (!result) {
+          // 空の段落・見出しで、前とつなげられない（前が図・表・見出し、章の初め、空の見出し）：消して、前の欄の終わりへ移る（removeEmptyBackward）
+          const removed = ops.removeEmptyBackward(ops.setText(base, id, text), id, text)
+          if (removed) {
+            this.pushHistory(this.reportBeforeEdit ?? this.report)
+            this.report = removed.report
+            this.continueWriting(removed.targetId, removed.caret, { alsoHide: id })
+            return
+          }
           this.openEditor(id, 0)
           return
         }
@@ -392,6 +408,8 @@ export class ReportEditor {
         this.report = result.report
         this.continueWriting(result.targetId, result.caret, { alsoHide: id })
       },
+      // 空の見出しで Backspace：消せるか（消せるなら、onMergeBackward で消して前の欄へ移る）
+      canRemoveEmpty: (id) => !!ops.removeEmptyBackward(ops.setText(this.report, id, ''), id, ''),
       onNavigate: (id, text, direction) => {
         const found = ops.neighbor(ops.setText(this.report, id, text), id, direction)
         // ひな形を作る画面：表紙の項目・表の中身の行には移らない（その欄にとどまる）
@@ -1432,6 +1450,13 @@ export class ReportEditor {
   private lastTap: { x: number; y: number; time: number } | null = null
   /** 紙面で直接書く：入れたばかりの図・表のタイトル（紙面に出たら、図・表と一緒に見せる：settleContinued） */
   private revealObjectFor: string | null = null
+  /**
+   * 紙面で直接書く：図・表と一緒に見せた、入れたばかりのタイトル。書き始めるまでは、キーボードの上の道具の高さが変わっても（表の道具は2段）、
+   * 図・表が隠れないように見せ直す（前は1段の道具の高さで見せたので、入れた素材表が2段の道具の下に隠れていた：はじめて使う学生の試し 2026-10-21）
+   */
+  private keepObjectShown: string | null = null
+  /** 表の行・列を消す前に書いていたマスと位置（知らせの「戻す」で行・列を戻したら、そのマスを書き続ける） */
+  private tableCutFrom: { id: string; caret: number } | null = null
   private caretFrame = 0
 
   /** 紙面で直接書く：次の絵を描く前に、カーソルの行が見えているか確かめる（打った・カーソルを動かした・行が増えた。何回呼ばれても1回） */
@@ -1464,7 +1489,8 @@ export class ReportEditor {
     if (bottom - top < line + 4) return
     const margin = Math.min(12, (bottom - top - line) / 2)
     const kind = ops.findEditable(this.report, id)?.kind
-    const object = at !== null ? this.captionObject(id, kind) : null
+    if (this.keepObjectShown !== id) this.keepObjectShown = null
+    const object = at !== null || this.keepObjectShown === id ? this.captionObject(id, kind) : null
     let delta: number | null = null
     if (object) {
       const safe = this.keyboardSafeBottom(top, bottom) - margin
@@ -2027,6 +2053,8 @@ export class ReportEditor {
       refs: this.refsFor(editable.kind, id),
       // 紙面の段落の中身（組版エンジンが句読点などを包んだもの）を、書く欄に写す（紙面と同じ所で折り返す。overlayEditor.ts の copyPage）
       page: this.renderer.pageView.fragments(id),
+      // 表紙の項目のすぐ後ろに続く決まった字（サブタイトルの「の衣装制作―」）：書く欄の中で、字の後ろに見せる
+      suffix: editable.kind === 'field' ? suffixAfter(styleSource) : undefined,
     }
   }
 
@@ -2178,7 +2206,10 @@ export class ReportEditor {
     this.hideStyle.textContent = this.editingStyle(id)
     this.followCaret()
     // 入れたばかりの図・表のタイトルが紙面に出た：図・表と一緒に見せる（revealCaret）
-    if (this.revealObjectFor === id && this.writingOnPaper) this.revealAt = Number.NaN
+    if (this.revealObjectFor === id && this.writingOnPaper) {
+      this.revealAt = Number.NaN
+      this.keepObjectShown = id
+    }
     this.revealObjectFor = null
     if (this.phone) this.revealEditing()
     this.refreshHighlights()
@@ -2949,6 +2980,9 @@ export class ReportEditor {
     // 削除の知らせが出ている間に戻した（知らせの「戻す」でも、道具の「元に戻す」でも）：「〜を戻しました」と知らせる。
     // 「抄録を書き始めました」が出ている間に戻した：「抄録を書き始める前に戻しました」
     const shown = this.currentNotice
+    // 表の行・列を消した知らせの「戻す」：消す前に書いていたマスを、戻したあと書き続ける（消したあとも書き続けているため）
+    const keepWriting = shown && tableCutNotice(shown) && this.overlay.blockId ? (this.tableCutFrom ?? { id: this.overlay.blockId, caret: this.overlay.caret }) : null
+    this.tableCutFrom = null
     this.commitForChange()
     // 段落を見出しにしたのを戻す（知らせの「戻す」でも、Ctrl+Z・道具の「元に戻す」でも）：打ったままの段落に戻る
     const heading = this.history.last ? this.headingSteps.get(this.history.last) : undefined
@@ -2968,6 +3002,7 @@ export class ReportEditor {
     // 削除して、まだ組み直していない間に戻したもの：すぐまた見せる
     this.hideRemoved()
     this.notify()
+    if (keepWriting && ops.findEditable(this.report, keepWriting.id)) this.openWhenReady(keepWriting.id, keepWriting.caret)
   }
 
   /**
@@ -3064,8 +3099,11 @@ export class ReportEditor {
       return at && at.history === this.historySeq && at.input === this.inputSeq ? this.notice.notice : null
     }
     const fresh = this.notice.until !== undefined ? Date.now() < this.notice.until : this.notice.report === this.report
-    // 戻すもののない知らせ（表の行・列を消せないわけ）は、書いている間も出す（セルを書いている間に押すため）
-    return fresh && (!this.overlay.blockId || this.notice.notice.kind === 'info') ? this.notice.notice : null
+    // 戻すもののない知らせ（表の行・列を消せないわけ）と、表の行・列を消した知らせは、書いている間も出す（セルを書いている間に押すため。
+    // 消したあとも、となりのマスを書き続ける）
+    const n = this.notice.notice
+    const whileEditing = n.kind === 'info' || tableCutNotice(n)
+    return fresh && (!this.overlay.blockId || whileEditing) ? n : null
   }
 
   /**
@@ -3474,7 +3512,13 @@ export class ReportEditor {
     if (!at) return
     if (at.table.rows.length <= 2) return this.noticeInfo(`表には、見出しの行ともう1行が要ります。${this.removeTableHow()}`)
     if (at.row <= 0) return this.noticeInfo(`見出しの行（1行目）は消せません。ほかの行は、その行のセルを書いているときに「行を消す」で消せます。`)
-    this.changeTable(tableId, (t) => removeRow(t, at.row))
+    // 書いていたら、消したあとは1つ上の行の同じ列のマスを書く（前は書き終わりになり、スマホではキーボードが閉じて、次の「行を消す」が
+    // 見えない行を消していた）。画面の下に「表の行を消しました［戻す］」（はじめて使う学生の試し 2026-10-21）
+    const keep = this.overlay.blockId ? at.table.rows[at.row - 1]?.cells[at.column]?.id : undefined
+    const caret = this.overlay.blockId ? this.overlay.caret : 0
+    this.changeTable(tableId, (t) => removeRow(t, at.row), keep)
+    this.tableCutFrom = keep ? { id: at.cellId, caret } : null
+    this.noticeRemoved('表の行')
   }
 
   /** 表を消せない操作のあとに添える、表ごと消す方法（その画面で、表の「削除」がどこにあるか） */
@@ -3529,7 +3573,13 @@ export class ReportEditor {
     const at = this.currentCell(tableId)
     if (!at) return
     if (Math.max(...at.table.rows.map((r) => r.cells.length)) <= 1) return this.noticeInfo(`表には1列以上が要ります。${this.removeTableHow()}`)
-    this.changeTable(tableId, (t) => removeColumn(t, at.column))
+    // 書いていたら、消したあとは同じ行の左のマス（いちばん左の列なら、右にあったマス）を書く。画面の下に「表の列を消しました［戻す］」
+    const row = at.table.rows[at.row]?.cells ?? []
+    const keep = this.overlay.blockId ? row[at.column > 0 ? at.column - 1 : at.column + 1]?.id : undefined
+    const caret = this.overlay.blockId ? this.overlay.caret : 0
+    this.changeTable(tableId, (t) => removeColumn(t, at.column), keep)
+    this.tableCutFrom = keep ? { id: at.cellId, caret } : null
+    this.noticeRemoved('表の列')
   }
 
   /**

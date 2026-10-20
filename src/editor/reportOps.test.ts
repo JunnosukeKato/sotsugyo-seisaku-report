@@ -132,6 +132,9 @@ describe('split / mergeBackward / replaceWithParagraphs', () => {
     const r3 = ops.removeEmptyBackward(emptyChapter, 'cx', '')!
     expect(r3.what).toBe('大見出し（章）')
     expect(r3.report.body.some((c) => c.id === 'cx')).toBe(false)
+    // ひな形の段落（ここに書くことの説明が付いた段落）は消さない
+    const hinted = { ...withEmpty, body: withEmpty.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === after.id && b.type === 'paragraph' ? { ...b, hint: '何を書くか' } : b)) })) }
+    expect(ops.removeEmptyBackward(hinted, after.id, '')).toBeNull()
     // 抄録の段落は消さない
     expect(ops.removeEmptyBackward(ops.setText(report, 'a2', ''), 'a2', '')).toBeNull()
   })

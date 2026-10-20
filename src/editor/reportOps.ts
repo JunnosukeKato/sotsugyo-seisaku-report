@@ -364,7 +364,8 @@ export function removeEmptyBackward(report: Report, id: string, text: string): {
   const prev = neighbor(report, id, 'prev')
   if (!prev || prev.kind === 'field' || prev.kind === 'abstractParagraph') return null
   const to = { targetId: prev.id, caret: prev.text.length }
-  if (kind === 'paragraph') return { report: removeBlock(report, id), ...to, what: '段落' }
+  // ひな形の段落（先生の「ここに書くこと」が付いた段落）は消さない（書く前に、うっかり Backspace を押して説明ごと消さないように）
+  if (kind === 'paragraph') return findParagraph(report, id)?.hint ? null : { report: removeBlock(report, id), ...to, what: '段落' }
   if (kind === 'subheading') return { report: removeBlock(report, id), ...to, what: '小見出し' }
   if (kind === 'chapter') {
     const num = numbering(report)
