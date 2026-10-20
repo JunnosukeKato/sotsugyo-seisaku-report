@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v48：スマホの小さな直し</title>
+<style>
+  body { margin: 0; padding: 26px 30px 34px; background: #f4f2ee; color: #2a2622; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; width: 1040px; box-sizing: border-box; }
+  h1 { margin: 0 0 18px; font-size: 24px; }
+  .card { margin-bottom: 22px; padding: 16px 18px 18px; border-radius: 14px; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08); }
+  .card h2 { margin: 0 0 4px; font-size: 19px; }
+  .card .why { margin: 0 0 12px; font-size: 14px; color: #6b655d; line-height: 1.6; word-break: auto-phrase; }
+  .opts { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  figure { margin: 0; width: 230px; font-size: 13.5px; color: #4a453f; text-align: center; }
+  figure.wide { width: 320px; }
+  figure img { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px #ddd8cf; }
+  figure.rec img { box-shadow: 0 0 0 3px #2f3e75; }
+  figcaption { margin-top: 7px; line-height: 1.5; word-break: auto-phrase; }
+  figcaption b { display: block; font-size: 14.5px; color: #2a2622; }
+  .tag { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 99px; background: #2f3e75; color: #fff; font-size: 12px; vertical-align: 1px; }
+</style>
+</head>
+<body>
+<h1>スマホの小さな直し（はじめて使う学生の試しから）</h1>
+
+<div class="card">
+  <h2>A 書くときの字が小さい（10px ほど）</h2>
+  <p class="why">紙面の本文の幅を画面に合わせているため。大きくすると、行が画面からはみ出し、横にずらしながら書くことになります。</p>
+  <div class="opts">
+    <figure><img src="shots/a-now.png" alt=""><figcaption><b>いま</b>字は 10px ほど</figcaption></figure>
+    <figure class="rec"><img src="shots/a-1.png" alt=""><figcaption><b>案1 一度だけ知らせる<span class="tag">おすすめ</span></b>2本の指で広げると大きくなる（次からもその大きさ）</figcaption></figure>
+    <figure><img src="shots/a-2.png" alt=""><figcaption><b>案2 はじめから 1.3 倍</b>字は 12px ほど。行が右へはみ出す</figcaption></figure>
+  </div>
+</div>
+
+<div class="card">
+  <h2>B 目次の行が押しにくく、押すと書き始めてしまう</h2>
+  <p class="why">目次の行は高さ 11px ほど。押すと、その見出しを書き始めてキーボードが出ます（見出しへ移りたいだけのことが多い）。</p>
+  <div class="opts">
+    <figure><img src="shots/b-now.png" alt=""><figcaption><b>いま</b>押すと見出しを書き始める</figcaption></figure>
+    <figure class="rec"><img src="shots/b-1a.png" alt=""><figcaption><b>案 押せる所を行の間まで広げる<span class="tag">おすすめ</span></b>点線の範囲のどこを押してもよい</figcaption></figure>
+    <figure class="rec"><img src="shots/b-1b.png" alt=""><figcaption><b>案 押したら、見出しを光らせるだけ</b>書くときは、もう一度見出しを押す</figcaption></figure>
+  </div>
+</div>
+
+<div class="card">
+  <h2>C 小さいスマホ（360×740）で、列の幅を自分で決めた表を書くとき</h2>
+  <p class="why">キーボードの上の道具が3段（152px）になり、紙面が 200px ほどしか見えません。</p>
+  <div class="opts">
+    <figure><img src="shots/c-now.png" alt=""><figcaption><b>いま</b>道具が3段（紙面 204px）</figcaption></figure>
+    <figure class="rec"><img src="shots/c-1.png" alt=""><figcaption><b>案 3段目をやめる<span class="tag">おすすめ</span></b>「丸を左右に…」は表の上に一度だけ。「同じ幅に戻す」は「表の形」の欄の中（紙面 254px）</figcaption></figure>
+  </div>
+</div>
+
+<div class="card">
+  <h2>D 上の帯の保存の時刻が、時計に見える</h2>
+  <p class="why">「08:10」だけだと、いまの時刻と間違えやすい。日付が付くときは「10/20 23:47」。</p>
+  <div class="opts">
+    <figure class="wide"><img src="shots/d-now-390.png" alt=""><figcaption><b>いま</b></figcaption></figure>
+    <figure class="wide rec"><img src="shots/d-1-390.png" alt=""><figcaption><b>案1「保存 08:10」<span class="tag">おすすめ</span></b>360px の画面にも入る</figcaption></figure>
+    <figure class="wide"><img src="shots/d-2-390.png" alt=""><figcaption><b>案2「保存済み」</b>時刻は ≡ の中で見る</figcaption></figure>
+  </div>
+</div>
+
+<div class="card">
+  <h2>E キーボードの上の道具に「削除」がない</h2>
+  <p class="why">空の段落・見出しは Backspace で消せるようにしました。字の入った段落ごと消すボタンを足すかどうか。</p>
+  <div class="opts">
+    <figure class="wide"><img src="shots/e-now.png" alt=""><figcaption><b>いま</b>（360px の画面）</figcaption></figure>
+    <figure class="wide"><img src="shots/e-1.png" alt=""><figcaption><b>案「削除」を足す</b>押すと段落ごと消える（「戻す」の知らせが出る）。360px にも入る</figcaption></figure>
+  </div>
+</div>
+</body>
+</html>

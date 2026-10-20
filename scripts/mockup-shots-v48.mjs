@@ -220,6 +220,9 @@ async function shots(browser) {
   await ready(page)
 
   // ---- D 上の帯の保存の時刻 ----
+  // 一度保存させて、上の帯に保存した時刻を出す
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 'p7' && b.type === 'paragraph' ? { ...b, content: [...b.content] } : b)) })) })))
+  await page.waitForFunction(() => /\d{1,2}:\d{2}/.test(document.querySelector('.p-top')?.textContent ?? ''), { timeout: 30000 }).catch(() => console.log('時刻が出ない'))
   for (const [name, vp] of [['390', PHONE], ['360', SMALL]]) {
     await page.setViewport(vp)
     await sleep(500)

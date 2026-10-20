@@ -1,0 +1,50 @@
+{
+  "glyphNow": 9.6,
+  "glyph13": 12.4,
+  "tocRowH": [
+    11.4,
+    11.4,
+    11.4,
+    11.4,
+    11.4,
+    11.4,
+    11.4,
+    11.4,
+    11.4,
+    11.4
+  ],
+  "tocTapEditing": "chapter",
+  "tocZoneH": [
+    17,
+    11,
+    11,
+    14,
+    14,
+    11,
+    11,
+    11,
+    14,
+    20
+  ],
+  "smallBar": {
+    "barH": 152,
+    "paper": 204
+  },
+  "smallBarFixed": {
+    "barH": 102,
+    "paper": 254
+  },
+  "d1-390": {
+    "over": false
+  },
+  "d2-390": {
+    "over": false
+  },
+  "d1-360": {
+    "over": false
+  },
+  "d2-360": {
+    "over": false
+  },
+  "deleteFits": true
+}
