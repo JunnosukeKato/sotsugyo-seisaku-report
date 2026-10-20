@@ -150,7 +150,8 @@ export function measureLayout(pages: HTMLElement[], chapters: Chapter[]): Layout
     tocPageNumbers,
     figuresPerBodyPage: pages.filter((_, i) => kinds[i] === 'body').map((page) => page.querySelectorAll('figure').length),
     pageBreaks: pages.flatMap((page, i) =>
-      [...page.querySelectorAll<HTMLElement>('.page-break[data-block-id]')].map((el) => {
+      // 章のいちばん最後の改ページ（.end。改ページしない）は数えない（下が空くのは章の終わりのため）
+      [...page.querySelectorAll<HTMLElement>('.page-break[data-block-id]:not(.end)')].map((el) => {
         const p = page.getBoundingClientRect()
         const top = ((el.getBoundingClientRect().top - p.top) / p.height) * 297
         const emptyRatio = Math.max(0, Math.min(1, (CONTENT_BOTTOM_MM - top) / (CONTENT_BOTTOM_MM - CONTENT_TOP_MM)))

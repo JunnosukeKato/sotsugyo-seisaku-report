@@ -99,3 +99,16 @@ describe('buildBodyDocument', () => {
     expect(doc).not.toContain('<b>x</b>')
   })
 })
+
+describe('改ページ', () => {
+  it('章の途中の改ページは改ページする。章のいちばん最後の改ページは、印だけで改ページしない（次の章はもう次のページから始まり、空のページができていた）', () => {
+    const withBreaks: Chapter[] = [
+      { id: 'b1', title: '一', blocks: [{ type: 'paragraph', id: 'q1', content: [{ type: 'text', text: '前' }] }, { type: 'pageBreak', id: 'pb1' }, { type: 'paragraph', id: 'q2', content: [{ type: 'text', text: '後' }] }, { type: 'pageBreak', id: 'pb2' }] },
+      { id: 'b2', title: '二', blocks: [{ type: 'paragraph', id: 'q3', content: [{ type: 'text', text: '次' }] }] },
+    ]
+    const html = buildBodyDocument(withBreaks, options)
+    expect(html).toContain('<div class="page-break" data-block-id="pb1"></div>')
+    expect(html).toContain('<div class="page-break end" data-block-id="pb2"></div>')
+    expect(html).toMatch(/\.page-break\.end\s*\{\s*break-after: auto;/)
+  })
+})

@@ -206,10 +206,14 @@ function captionHtml(kind: '図' | '表', number: number, name: string, blockId:
 function renderChapter(chapter: Chapter, index: number, numbers: Map<string, number>, tableIds: Set<string>, options: BodyRenderOptions): string {
   let subIndex = 0
   const blocks = chapter.blocks
-    .map((block) =>
+    .map((block, i) =>
       block.type === 'subheading'
         ? `<h2 class="subheading">${labeledHtml(subheadingLabel(subIndex++), block.title, block.id)}</h2>`
-        : renderBlock(block, numbers, tableIds, options),
+        : // 章のいちばん最後の改ページ：次の章（または本文の終わり）はもう次のページから始まるので、改ページはしない（印だけ出す）。
+          // 前は改ページが2つ重なって、何も書けない空のページができていた（先生の試し 2026-10-21）
+          block.type === 'pageBreak' && i === chapter.blocks.length - 1
+          ? `<div class="page-break end" data-block-id="${escapeHtml(block.id)}"></div>`
+          : renderBlock(block, numbers, tableIds, options),
     )
     .join('\n')
   // 章の終わりの目印（高さなし）：組版エンジンは、次のページへ切り替わる直前（次の章の前・本文の終わり）の要素が入りきらないとき、

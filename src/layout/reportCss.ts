@@ -89,6 +89,11 @@ h1.chapter + h2.subheading {
   height: 0;
 }
 
+/* 章のいちばん最後の改ページ（次の章・本文の終わりは、もう次のページから始まる）：改ページしない（bodyHtml.ts の renderChapter） */
+.page-break.end {
+  break-after: auto;
+}
+
 /* 小見出しの下に本文が3行以上入らないときは、小見出しごと次のページへ送る（見出しの下に1〜2行だけ残さない） */
 h2.subheading + p {
   orphans: 3;

@@ -194,6 +194,24 @@ export async function trialFixesPc(browser, check) {
     JSON.stringify({ title, note }),
   )
 
+  // ---- 5b. 章のいちばん最後の改ページ：空のページを作らない（次の章はもう次のページから始まる） ----
+  const pagesBefore = await page.evaluate(() => window.__editor.getSnapshot().pageCount)
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, body: r.body.map((c, i) => (i === 0 ? { ...c, blocks: [...c.blocks, { type: 'pageBreak', id: 'pb-end' }] } : c)) })))
+  await ready()
+  await wait(500)
+  const endBreak = await page.evaluate(() => ({
+    pages: window.__editor.getSnapshot().pageCount,
+    marker: !!document.querySelector('.page-viewport [data-block-id="pb-end"].page-break.end'),
+    gap: window.__editor.getSnapshot().findings.some((f) => f.ruleId === 'page-break-gap'),
+  }))
+  check(
+    'パソコン：章のいちばん最後に改ページを入れても、空のページはできない（改ページの印は残る。「ページの半分以上が空いている」とも言わない）',
+    endBreak.pages === pagesBefore && endBreak.marker && !endBreak.gap,
+    JSON.stringify({ pagesBefore, ...endBreak }),
+  )
+  await page.evaluate(() => window.__editor.undo())
+  await ready()
+
   // ---- 6. 低い画面（1280×586）でも、「表を入れる」の大きさを選ぶメニューが画面に入り、「素材表」まで押せる ----
   await page.setViewport({ width: 1280, height: 586 })
   await wait(400)
