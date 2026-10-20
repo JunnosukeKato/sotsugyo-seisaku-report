@@ -181,6 +181,28 @@ describe('改ページ', () => {
     expect(ids(report, layout({ pageBreaks: [{ id: 'pb1', page: 4, emptyRatio: 0.7 }] }))).toContain('page-break-gap')
     expect(ids(report, layout({ pageBreaks: [{ id: 'pb1', page: 4, emptyRatio: 0.3 }] }))).not.toContain('page-break-gap')
   })
+
+  it('ひな形の改ページで、その前にまだ書いていないひな形の段落があるうちは出さない（書いたら出す）', () => {
+    const base = demoReport()
+    const chapter = base.body[0]
+    const withBreak = (text: string): Report => ({
+      ...base,
+      body: [
+        {
+          ...chapter,
+          blocks: [
+            ...chapter.blocks,
+            { type: 'paragraph', id: 'tp1', hint: '工夫した点を書く', content: text ? [{ type: 'text', text }] : [] },
+            { type: 'pageBreak', id: 'pb1' },
+          ],
+        },
+        ...base.body.slice(1),
+      ],
+    })
+    const gap = layout({ pageBreaks: [{ id: 'pb1', page: 4, emptyRatio: 0.7 }] })
+    expect(ids(withBreak(''), gap)).not.toContain('page-break-gap')
+    expect(ids(withBreak('袖の刺繍を工夫した。'), gap)).toContain('page-break-gap')
+  })
 })
 
 describe('手で書いた図表の番号', () => {

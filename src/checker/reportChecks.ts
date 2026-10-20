@@ -396,9 +396,24 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     }
   }
 
-  // 改ページ：ページの半分以上が空いている（ページ数を増やすためだけの改ページになっていないか）
+  // 改ページ：ページの半分以上が空いている（ページ数を増やすためだけの改ページになっていないか）。
+  // ひな形の改ページで、その前（同じ章の、前の改ページか章の初めから）にまだ書いていないひな形の段落があるうちは出さない
+  // （書き始めたばかりで空いているのは当たり前のため。書き始めたら、ふつうに確かめる。依頼者の判断）
+  const unwrittenBefore = (breakId: string): boolean => {
+    for (const chapter of report.body) {
+      const at = chapter.blocks.findIndex((x) => x.id === breakId)
+      if (at < 0) continue
+      for (let i = at - 1; i >= 0; i--) {
+        const x = chapter.blocks[i]
+        if (x.type === 'pageBreak') break
+        if (x.type === 'paragraph' && x.hint && !contentToText(x.content, num).trim()) return true
+      }
+      return false
+    }
+    return false
+  }
   for (const b of layout?.pageBreaks ?? []) {
-    if (b.emptyRatio > 0.5) {
+    if (b.emptyRatio > 0.5 && !unwrittenBefore(b.id)) {
       findings.push({
         ruleId: 'page-break-gap',
         severity: 'warning',
