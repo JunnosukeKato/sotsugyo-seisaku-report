@@ -1151,24 +1151,24 @@ await withEdge(async (browser) => {
     const urState = () =>
       page.evaluate((id) => {
         const s = window.__editor.getSnapshot()
-        const bs = [...document.querySelectorAll('.palette .undo-redo .tb')]
+        const bs = [...document.querySelectorAll('.view-bar .undo-redo .tb')]
         return { has: s.report.body.flatMap((c) => c.blocks).some((b) => b.id === id), canUndo: s.canUndo, canRedo: s.canRedo, buttons: bs.map((b) => `${b.textContent.trim()}${b.disabled ? '×' : '○'}`).join(',') }
       }, t34?.id)
     const after34 = await urState()
-    check('道具のいちばん下に「元に戻す」「やり直す」が並ぶ（まだ戻していないので「やり直す」は押せない）', after34.has && after34.buttons === '元に戻す○,やり直す×', JSON.stringify(after34))
-    await page.evaluate(() => [...document.querySelectorAll('.palette .undo-redo .tb')].find((b) => b.textContent.includes('元に戻す')).click())
+    check('右下に「元に戻す」「やり直す」が並ぶ（まだ戻していないので「やり直す」は押せない。mockups/v47 案C）', after34.has && after34.buttons === '元に戻す○,やり直す×', JSON.stringify(after34))
+    await page.evaluate(() => [...document.querySelectorAll('.view-bar .undo-redo .tb')].find((b) => b.textContent.includes('元に戻す')).click())
     await ready()
     const undone34 = await urState()
     // 「やり直す」にマウスを乗せると、キーボードでの押し方が出る
-    const redoBox = await page.evaluate(() => { const r = [...document.querySelectorAll('.palette .undo-redo .tb')][1].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+    const redoBox = await page.evaluate(() => { const r = [...document.querySelectorAll('.view-bar .undo-redo .tb')][1].getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
     await page.mouse.move(redoBox.x, redoBox.y)
     await pause(700)
-    const tip = await page.evaluate(() => { const t = document.querySelector('.ur-tip'); const r = t?.getBoundingClientRect(); const b = [...document.querySelectorAll('.palette .undo-redo .tb')][1].getBoundingClientRect(); return t ? { text: t.textContent, right: r.left >= b.right } : null })
+    const tip = await page.evaluate(() => { const t = document.querySelector('.ur-tip'); const r = t?.getBoundingClientRect(); const b = [...document.querySelectorAll('.view-bar .undo-redo .tb')][1].getBoundingClientRect(); return t ? { text: t.textContent, right: r.bottom <= b.top } : null })
     await page.mouse.click(redoBox.x, redoBox.y)
     await ready()
     const redone34 = await urState()
     check(
-      '「元に戻す」で表が消え、「やり直す」で戻る（マウスを乗せると「やり直す（Ctrl+Y）／Mac は ⌘+Shift+Z」が右に出る）',
+      '「元に戻す」で表が消え、「やり直す」で戻る（マウスを乗せると「やり直す（Ctrl+Y）／Mac は ⌘+Shift+Z」がボタンの上に出る）',
       !undone34.has && undone34.buttons === '元に戻す○,やり直す○' && tip?.text === 'やり直す（Ctrl+Y）Mac は ⌘+Shift+Z' && tip.right && redone34.has && !redone34.canRedo && before34 !== (await bodyKey()),
       JSON.stringify({ undone34, tip, redone34 }),
     )
@@ -1376,7 +1376,7 @@ await withEdge(async (browser) => {
   await ready()
   s = await snap()
   check('「外す」で枠が空になり、セルフチェックに空いている枠の注意が出る', s.report.workPhotos[0].imageIds[0] === '' && s.findings.some((f) => f.ruleId === 'photos-empty-slot') && !(await page.$('.page-viewport.front [data-photo-slot="0"] img')), JSON.stringify(s.report.workPhotos))
-  await page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('元に戻す')).click())
+  await page.evaluate(() => [...document.querySelectorAll('.view-bar .tb')].find((b) => b.textContent.includes('元に戻す')).click())
   await pause(300)
   await ready()
   s = await snap()
@@ -2481,7 +2481,7 @@ async function photoWholeCheck(browser) {
   }
   // 道具の「元に戻す」（ほかの道具の「戻す」と取り違えないように、名前で探す）
   const undo = async () => {
-    await page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('元に戻す')).click())
+    await page.evaluate(() => [...document.querySelectorAll('.view-bar .tb')].find((b) => b.textContent.includes('元に戻す')).click())
     await pause(300)
     await ready()
   }

@@ -767,7 +767,7 @@ async function studentShots(browser, config, images) {
       { n: 2, box: await tool('図を入れる'), at: 'r' },
       { n: 3, box: await tool('表を入れる'), at: 'r' },
       { n: 4, box: union(await tool('小見出し'), await tool('大見出し')), at: 'r' },
-      { n: 5, box: await tool('元に戻す'), at: 'r' },
+      // 「元に戻す」は右下へ移した（mockups/v47 案C）。この絵の範囲の外なので、印は付けない
     ])
   }
   await page.keyboard.press('Escape')

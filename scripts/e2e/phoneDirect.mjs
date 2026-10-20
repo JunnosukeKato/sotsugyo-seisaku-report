@@ -647,7 +647,9 @@ export async function phoneDirectPhone(browser, check) {
   await page.tap('.p-nav .add')
   await page.waitForSelector('.add-grid .tb')
   await wait(300)
-  await page.tap('.add-grid .tb')
+  // 名前で探して押す（並びは大見出し → 小見出し）
+  await page.evaluate(() => [...document.querySelectorAll('.add-grid .tb')].find((b) => b.textContent.includes('小見出し')).setAttribute('data-test-sub', ''))
+  await page.tap('.add-grid .tb[data-test-sub]')
   await wait(800)
   const added = await page.evaluate(() => window.__state())
   await page.keyboard.type('採寸')

@@ -328,7 +328,8 @@ export async function editorFixesV3Pc(browser, check) {
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 6 })
     await page.keyboard.type('戻す前に書いた文')
     await page.keyboard.press('Enter')
-    await page.click('.palette .undo-btn, .palette button[title*="元に戻す"]').catch(() => page.evaluate(() => window.__editor.undo()))
+    // 組み直す前に「元に戻す」と同じことをする（CPU を遅くしているので、ボタンの見た目が押せる形になる前に押してしまわないよう、直接呼ぶ）
+    await page.evaluate(() => window.__editor.undo())
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 })
     await ready()
     const once = await blocks()

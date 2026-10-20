@@ -104,9 +104,8 @@ const UNDO_TIP = ['元に戻す（Ctrl+Z）']
 const REDO_TIP = ['やり直す（Ctrl+Y）', 'Mac は ⌘+Shift+Z']
 
 /**
- * 道具のいちばん下の「元に戻す」「やり直す」（mockups/v35 ④ 案A：いまの場所に2つ並べる）。
- * マウスを乗せる（キーボードで移る）と、少しして、ボタンの右に黒い吹き出しでキーボードでの押し方を出す
- * （道具が画面に入りきらず、道具の中を上下に動かすときも切れないよう、画面に重ねて出す）
+ * 紙面の右下の「元に戻す」「やり直す」（ViewBar の中。前は左の道具のいちばん下にあったが、低い画面で道具が入りきらず隠れたため移した：mockups/v47 案C）。
+ * マウスを乗せる（キーボードで移る）と、少しして、ボタンの上に黒い吹き出しでキーボードでの押し方を出す（画面に重ねて出す）
  */
 function UndoRedo({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
   const [tip, setTip] = useState<{ lines: string[]; left: number; top: number } | null>(null)
@@ -116,7 +115,7 @@ function UndoRedo({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot
     clearTimeout(timer.current)
     timer.current = window.setTimeout(() => {
       const r = el.getBoundingClientRect()
-      setTip({ lines, left: r.right + 10, top: r.top + r.height / 2 })
+      setTip({ lines, left: r.left + r.width / 2, top: r.top - 8 })
     }, 350)
   }
   const hide = () => {
@@ -148,12 +147,37 @@ function UndoRedo({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot
       {button('元に戻す', Icon.undo, UNDO_TIP, 'Control+Z Meta+Z', snap.canUndo, () => editor.undo())}
       {button('やり直す', Icon.redo, REDO_TIP, 'Control+Y Control+Shift+Z Meta+Shift+Z', snap.canRedo, () => editor.redo())}
       {tip && (
-        <div className="ur-tip" role="tooltip" style={{ left: tip.left, top: tip.top }}>
+        <div className="ur-tip above" role="tooltip" style={{ left: tip.left, top: tip.top }}>
           {tip.lines.map((line) => (
             <span key={line}>{line}</span>
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+/**
+ * 紙面の右下の道具：「元に戻す」「やり直す」と、表示の大きさ（全体／見開き／拡大。mockups/v35 ③ 案A。見開きは、台が狭いときは出さない）。
+ * 学生のツール（App）と、ひな形を作る画面（TemplateApp）で使う
+ */
+export function ViewBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
+  return (
+    <div className="view-bar">
+      <UndoRedo editor={editor} snap={snap} />
+      <div className="zoom" role="group" aria-label="表示の大きさ">
+        <button className={!snap.zoomed && !snap.spread ? 'on' : ''} aria-pressed={!snap.zoomed && !snap.spread} title="1ページ全体を表示" onClick={() => editor.setView('fit')}>
+          {Icon.fit}全体
+        </button>
+        {(snap.spreadFits || snap.spread) && (
+          <button className={snap.spread ? 'on' : ''} aria-pressed={snap.spread} title="いまのページと次のページを並べて表示（2ページずつめくる）" onClick={() => editor.setView('spread')}>
+            {Icon.spread}見開き
+          </button>
+        )}
+        <button className={snap.zoomed ? 'on' : ''} aria-pressed={snap.zoomed} title="文字を大きく表示（マウスのホイールで上下に動かす）" onClick={() => editor.setView('zoom')}>
+          {Icon.zoom}拡大
+        </button>
+      </div>
     </div>
   )
 }
@@ -351,9 +375,11 @@ export function SelectionTools({ editor, snap, phone, template }: SelectionTools
       <div className="group ctx">
         <div className="ctx-label">この表</div>
         {/* 画像は、書いているマス1つに入れるので、表全体を変える道具（行・列・表の形・削除）より前に置く（依頼者の判断） */}
-        {editingKind === 'tableCell' &&
-          !template &&
-          (editor.currentCellHasImage(tableId) ? (
+        {/* マスを書いていないとき（表を選んでいる・表のタイトルを書いている）も、薄くして同じ所に出す（あるときとないときで、下のボタンの位置がずれて押し間違えていた：mockups/v47） */}
+        {!template &&
+          (editingKind !== 'tableCell' ? (
+            <Tool label="画像を入れる" icon={Icon.image} title="マスを書いているときに、そのマスに画像（生地見本など）を入れます" disabled onClick={() => {}} />
+          ) : editor.currentCellHasImage(tableId) ? (
             <Tool label="画像を外す" icon={Icon.image} title="このセルの画像を外す" onClick={() => editor.removeCellImage(tableId)} />
           ) : (
             <Tool label="画像を入れる" icon={Icon.image} title="このセルに画像（生地見本など）を入れる" onClick={() => void editor.setCellImage(tableId)} />
@@ -436,7 +462,8 @@ export function Palette({ editor, snap, onReferences, template }: Props) {
   const onObject = !!snap.selection || ['tableCell', 'tableCaption', 'figureCaption'].includes(snap.editingKind ?? '')
   return (
     <nav className={`palette${onObject ? ' compact' : ''}`} aria-label="道具">
-      <div className="p-head">
+      {/* 低い画面では、ひとこと（span）を出さず、マウスを乗せると出す（title。index.css の「低い画面の左の道具」） */}
+      <div className="p-head" title={(template && TEMPLATE_CONTEXT[kind]) || context.hint}>
         {/* 作品写真が何ページかあるときは「作品写真 2」（mockups/v38 案A） */}
         <b className={kind === 'photos' ? 'photo-name' : undefined}>{kind === 'photos' && snap.photoPage !== null ? photoPageName(snap.photoPage, snap.report.workPhotos.length) : context.name}</b>
         <span>{(template && TEMPLATE_CONTEXT[kind]) || context.hint}</span>
@@ -451,8 +478,9 @@ export function Palette({ editor, snap, onReferences, template }: Props) {
       {kind === 'body' && !onObject && (
         <>
           <div className="group">
-            <Tool label="小見出し" icon={Icon.heading2} title="小見出し（ⅰ．）を足す" onPreview={preview} onClick={() => editor.addSubheading()} />
+            {/* 大きい順（大見出し → 小見出し）に並べる（依頼者の判断 2026-10-21） */}
             <Tool label="大見出し" icon={Icon.heading1} title="大見出し（Ⅰ．）を足す" onPreview={preview} onClick={() => editor.addChapter()} />
+            <Tool label="小見出し" icon={Icon.heading2} title="小見出し（ⅰ．）を足す" onPreview={preview} onClick={() => editor.addSubheading()} />
             <Tool label="改ページ" icon={Icon.pageBreak} title="ここで改ページする（この後ろは次のページから始まります）" onPreview={preview} onClick={() => editor.addPageBreak()} />
           </div>
           <div className="group">
@@ -485,7 +513,6 @@ export function Palette({ editor, snap, onReferences, template }: Props) {
         </div>
       )}
       <SelectionTools editor={editor} snap={snap} template={template} />
-      <UndoRedo editor={editor} snap={snap} />
     </nav>
   )
 }

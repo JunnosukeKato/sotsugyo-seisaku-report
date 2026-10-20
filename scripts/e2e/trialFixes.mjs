@@ -123,7 +123,8 @@ export async function trialFixesPc(browser, check) {
   await page.keyboard.press('Escape')
   await wait(300)
   await ready()
-  await clickTool(page, '元に戻す')
+  await page.click('.view-bar .undo-redo .tb:first-child')
+  await wait(150)
   await wait(300)
   await ready()
   const undone2 = await tableOf(page)
@@ -232,6 +233,66 @@ export async function trialFixesPc(browser, check) {
     menu.top >= 0 && menu.bottom <= menu.h && menu.material !== null && menu.material <= menu.h,
     JSON.stringify(menu),
   )
+
+  // ---- 7. 低い画面の左の道具（mockups/v47 案C）：「元に戻す」は右下・道具のひとことは出さない・矢印は右下・「画像を入れる」は同じ所 ----
+  await page.evaluate(() => window.__editor.finishEditing())
+  await ready()
+  // 作品写真を2枚（4枚の並べ方）にして、1枚目を選ぶ（全体の表示）
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, workPhotos: r.workPhotos.map((p, i) => (i === 0 ? { ...p, layout: 4, columns: 2, imageIds: [p.imageIds[0], p.imageIds[0], '', ''] } : p)) })))
+  await ready()
+  await page.evaluate(() => window.__editor.goToPage(window.__editor.getSnapshot().layout.kinds.indexOf('photos'), 'none'))
+  await ready()
+  await wait(300)
+  const photoAt = await page.evaluate(() => { const r = document.querySelector('.page-viewport.front [data-photo-slot="0"] img').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  await page.mouse.click(photoAt.x, photoAt.y)
+  await wait(500)
+  const photoPal = await page.evaluate(() => {
+    const p = document.querySelector('.palette')
+    const r = p.getBoundingClientRect()
+    const hidden = [...p.querySelectorAll('button')].filter((b) => b.getBoundingClientRect().bottom > r.bottom + 1).map((b) => b.textContent.trim())
+    return { scrolls: p.scrollHeight > p.clientHeight + 1, hidden, hint: getComputedStyle(document.querySelector('.palette .p-head span')).display, undoInBar: !!document.querySelector('.view-bar .undo-redo .tb'), undoInPalette: !!document.querySelector('.palette .undo-redo') }
+  })
+  await page.screenshot({ path: `${OUT}/pc-7-photo-1280x586.png` })
+  check(
+    'パソコン（1280×586）：作品写真を選んでも、左の道具が画面に入る（隠れるボタンがない）。道具のひとことは出さず、「元に戻す」「やり直す」は右下（mockups/v47 案C）',
+    !photoPal.scrolls && photoPal.hidden.length === 0 && photoPal.hint === 'none' && photoPal.undoInBar && !photoPal.undoInPalette,
+    JSON.stringify(photoPal),
+  )
+  // 拡大で表のマスを書く：ページ送りの「‹」は右下で、左の道具に重ならない。表を選ぶと「画像を入れる」は薄く、同じ所にある
+  await page.evaluate(() => window.__editor.finishEditing())
+  await page.evaluate(() => { const ed = window.__editor; const t = ed.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.id === 't1'); ed.goToPage(ed.pageOfBlock(t.rows[1].cells[0].id), 'none') })
+  await ready()
+  if (!(await page.evaluate(() => window.__editor.getSnapshot().zoomed))) {
+    await page.evaluate(() => [...document.querySelectorAll('.zoom button')].find((b) => b.textContent.includes('拡大')).click())
+    await ready()
+  }
+  const t1 = await tableOf(page)
+  await openCell(page, ready, t1.ids[2][1])
+  const imgSlot = () => page.evaluate(() => {
+    const b = [...document.querySelectorAll('.palette .tb')].find((x) => x.textContent.includes('画像を入れる') || x.textContent.includes('画像を外す'))
+    const rows = [...document.querySelectorAll('.palette .tb')].find((x) => x.textContent.includes('行を足す'))
+    return { has: !!b, disabled: b?.disabled ?? null, rowsTop: rows ? Math.round(rows.getBoundingClientRect().top) : null }
+  })
+  const editingSlot = await imgSlot()
+  const arrow = await page.evaluate(() => {
+    const p = document.querySelector('.palette').getBoundingClientRect()
+    const a = document.querySelector('.arrow.prev').getBoundingClientRect()
+    return { overlap: a.left < p.right && a.right > p.left && a.top < p.bottom && a.bottom > p.top, rightSide: a.left > innerWidth / 2 }
+  })
+  await page.evaluate(() => window.__editor.finishEditing())
+  await page.evaluate(() => window.__editor.select({ kind: 'table', id: 't1' }))
+  await wait(400)
+  const selectedSlot = await imgSlot()
+  check(
+    'パソコン（1280×586・拡大）：ページ送りの「‹」は右下で、左の道具に重ならない。表を選ぶと「画像を入れる」は薄く同じ所に出て、下の「行を足す」の位置がずれない',
+    !arrow.overlap && arrow.rightSide && editingSlot.has && !editingSlot.disabled && selectedSlot.has && selectedSlot.disabled === true && selectedSlot.rowsTop === editingSlot.rowsTop,
+    JSON.stringify({ arrow, editingSlot, selectedSlot }),
+  )
+  // 高い画面（1440×900）では、道具のひとことを出す
+  await page.setViewport({ width: 1440, height: 900 })
+  await wait(400)
+  const tall = await page.evaluate(() => getComputedStyle(document.querySelector('.palette .p-head span')).display)
+  check('パソコン（1440×900）：高い画面では、道具のひとこと（「クリックしてその場で書く」など）を今までどおり出す', tall !== 'none', tall)
   await context.close()
 }
 
@@ -328,6 +389,29 @@ export async function trialFixesPhone(browser, check) {
     JSON.stringify(hint),
   )
   await stop()
+
+  // ---- 4b. 表の空いたマスの「＋」の印は、どのマスでも真ん中（狭い列でも上にずれない。依頼者の指摘 2026-10-21） ----
+  await page.evaluate(() => window.__editor.update((r) => ({ ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 't1' ? { ...b, rows: [...b.rows, { id: 'rx', cells: b.rows[0].cells.map((_, i) => ({ id: `rx:${i}`, text: '', imageId: null })) }] } : b)) })) })))
+  await ready()
+  await goTo('rx:0')
+  await wait(500)
+  const plus = await page.evaluate(() =>
+    [0, 1, 2].map((i) => {
+      const cell = document.querySelector(`.page-viewport.front [data-cell-id="rx:${i}"]`).getBoundingClientRect()
+      const span = document.querySelector(`.page-viewport.front [data-cell-id="rx:${i}"] [data-block-id]`)
+      const a = getComputedStyle(span, '::after')
+      const s = span.getBoundingClientRect()
+      return { cellMid: Math.round((cell.top + cell.bottom) / 2), markMid: Math.round(s.top + s.height / 2), content: a.content, top: a.top }
+    }),
+  )
+  await page.screenshot({ path: `${OUT}/ph-4b-plus.png` })
+  check(
+    'スマホ：表の空いたマスの「＋」の印は、狭い列でもほかのマスと同じ高さ（マスの真ん中）に出る',
+    plus.every((p) => p.content !== 'none' && Math.abs(p.markMid - p.cellMid) <= 3) && new Set(plus.map((p) => p.markMid)).size === 1,
+    JSON.stringify(plus),
+  )
+  await page.evaluate(() => window.__editor.undo())
+  await ready()
 
   // ---- 5. 表紙のサブタイトルを書く間も、後ろの「の衣装制作―」が書く欄の字のすぐ後ろに見える ----
   await page.evaluate(() => window.__editor.goToPage(0, 'none'))

@@ -3,7 +3,7 @@ import { ReportEditor, type EditorSnapshot } from '../editor/reportEditor'
 import type { PageKind } from '../layout/measure'
 import { Spinner } from '../app/Busy'
 import { Icon } from '../app/icons'
-import { Palette } from '../app/Palette'
+import { Palette, ViewBar } from '../app/Palette'
 import { PageColumn } from '../app/SidePanel'
 import { TocNotice } from '../app/TocNotice'
 import { UndoBar } from '../app/UndoBar'
@@ -302,19 +302,7 @@ function TemplateScreen({ init }: { init: InitPayload }) {
             <button className="arrow next" aria-label="次のページ" title="次のページ（→）" disabled={(snap.spread ? snap.page - (snap.page % 2) + 1 : snap.page) >= snap.pageCount - 1} onClick={() => editor.nextPage()}>
               {Icon.next}
             </button>
-            <div className="zoom" role="group" aria-label="表示の大きさ">
-              <button className={!snap.zoomed && !snap.spread ? 'on' : ''} aria-pressed={!snap.zoomed && !snap.spread} title="1ページ全体を表示" onClick={() => editor.setView('fit')}>
-                {Icon.fit}全体
-              </button>
-              {(snap.spreadFits || snap.spread) && (
-                <button className={snap.spread ? 'on' : ''} aria-pressed={snap.spread} title="いまのページと次のページを並べて表示" onClick={() => editor.setView('spread')}>
-                  {Icon.spread}見開き
-                </button>
-              )}
-              <button className={snap.zoomed ? 'on' : ''} aria-pressed={snap.zoomed} title="文字を大きく表示（マウスのホイールで上下に動かす）" onClick={() => editor.setView('zoom')}>
-                {Icon.zoom}拡大
-              </button>
-            </div>
+            <ViewBar editor={editor} snap={snap} />
             <UndoBar editor={editor} notice={undoNotice.notice} onClose={undoNotice.close} className="on-stage" />
             {off && (
               <div className="tpl-off-note" role="note">

@@ -407,8 +407,9 @@ function AddTools({ editor, snap, onDone, direct }: { editor: ReportEditor; snap
     <>
       <p className="sheet-hint">{pageName(snap)}の、最後に触ったところの後ろに入ります。段落は、{direct ? '' : '書く欄で'}改行すると分かれます。</p>
       <div className="add-grid">
-        {tool('小見出し', Icon.heading2, () => editor.addSubheading())}
+        {/* 大きい順（大見出し → 小見出し）に並べる（依頼者の判断 2026-10-21） */}
         {tool('大見出し', Icon.heading1, () => editor.addChapter())}
+        {tool('小見出し', Icon.heading2, () => editor.addSubheading())}
         {tool('改ページ', Icon.pageBreak, () => editor.addPageBreak())}
       </div>
       <p className="sheet-hint">

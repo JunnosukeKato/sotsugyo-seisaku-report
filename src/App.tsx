@@ -19,7 +19,7 @@ import { ExportDialog } from './app/ExportDialog'
 import { ConflictDialog, IdMismatchDialog, LoginGate, OtherAccountDialog, ReloginDialog, WipeDialog, type DriveControls, type GateState } from './app/DriveUi'
 import { Icon } from './app/icons'
 import { loadPlace, openLastPlace, useRememberPlace, useRememberZoom } from './app/lastPlace'
-import { Palette } from './app/Palette'
+import { Palette, ViewBar } from './app/Palette'
 import { PageBand } from './app/PageBand'
 import { TocNotice } from './app/TocNotice'
 import { PhoneChrome } from './app/Phone'
@@ -920,20 +920,8 @@ export default function App() {
             <button className="arrow next" aria-label="次のページ" title="次のページ（→）" disabled={(snap.spread ? snap.page - (snap.page % 2) + 1 : snap.page) >= snap.pageCount - 1} onClick={() => editor.nextPage()}>
               {Icon.next}
             </button>
-            {/* 全体／見開き／拡大（mockups/v35 ③ 案A。見開きは、台が狭いときは出さない） */}
-            <div className="zoom" role="group" aria-label="表示の大きさ">
-              <button className={!snap.zoomed && !snap.spread ? 'on' : ''} aria-pressed={!snap.zoomed && !snap.spread} title="1ページ全体を表示" onClick={() => editor.setView('fit')}>
-                {Icon.fit}全体
-              </button>
-              {(snap.spreadFits || snap.spread) && (
-                <button className={snap.spread ? 'on' : ''} aria-pressed={snap.spread} title="いまのページと次のページを並べて表示（2ページずつめくる）" onClick={() => editor.setView('spread')}>
-                  {Icon.spread}見開き
-                </button>
-              )}
-              <button className={snap.zoomed ? 'on' : ''} aria-pressed={snap.zoomed} title="文字を大きく表示（マウスのホイールで上下に動かす）" onClick={() => editor.setView('zoom')}>
-                {Icon.zoom}拡大
-              </button>
-            </div>
+            {/* 右下：元に戻す・やり直す と、全体／見開き／拡大（mockups/v47 案C・v35 ③ 案A） */}
+            <ViewBar editor={editor} snap={snap} />
             {/* 削除したあとの「段落を削除しました［戻す］」（紙面の台の下の真ん中。スマホは PhoneChrome の中。mockups/v32 ② 案A） */}
             <UndoBar editor={editor} notice={undoNotice.notice} onClose={undoNotice.close} className="on-stage" />
           </>

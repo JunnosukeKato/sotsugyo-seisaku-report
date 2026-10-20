@@ -177,10 +177,10 @@ body.resizing .page-viewport { pointer-events: none; }
 /* 拡大：紙面を大きくするため左右の余白を狭め、道具は台の左端、ページ送りの矢印は下に置く（道具は紙面の左の余白に少し重なってもよい） */
 .stage.zoomed { --inset-side: 110px; }
 .stage.zoomed .palette { left: 12px; }
-/* 拡大・見開き：左のページ送りの矢印（左下）と左の道具が重なる低い画面（1366×634・1280×586）では、道具を上に重ねる
-   （前は矢印が上で、道具の「元に戻す」を押すとページがめくれた：はじめて使う学生の試し 2026-10-21。矢印の置き場所は見本 v47 で決める） */
+/* 拡大・見開き：左の道具は、ほかの浮いている部品より上に重ねる（ページ送りは右下：mockups/v47） */
 .stage.zoomed .palette, .stage.spread .palette { z-index: 11; }
-.stage.zoomed .arrow.prev { left: 31px; top: auto; bottom: 20px; translate: none; }
+/* 拡大・見開き：ページ送り「‹ ›」は右下にまとめる（前は左下で、左の道具に重なり「元に戻す」を押すとページがめくれた：mockups/v47） */
+.stage.zoomed .arrow.prev { left: auto; right: 87px; top: auto; bottom: 68px; translate: none; }
 .stage.zoomed .arrow.next { left: auto; right: 31px; top: auto; bottom: 68px; translate: none; }
 .palette .group { display: flex; flex-direction: column; gap: 1px; }
 .palette .group + .group { border-top: 1px solid var(--palette-line); margin-top: 5px; padding-top: 5px; }
@@ -220,7 +220,14 @@ body.resizing .page-viewport { pointer-events: none; }
 .arrow:disabled { opacity: 0.25; }
 .arrow.prev { left: calc(50% - var(--page-w) / 2 - 104px - 64px); }
 .arrow.next { left: calc(50% + var(--page-w) / 2 + 16px); }
-.zoom { position: absolute; z-index: 10; right: 16px; bottom: 16px; display: flex; gap: 2px; padding: 3px; background: rgba(255, 255, 255, 0.88); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--float-shadow); }
+/* 紙面の右下の道具（app/Palette.tsx の ViewBar）：元に戻す・やり直す と、表示の大きさ（mockups/v47 案C） */
+.view-bar { position: absolute; z-index: 10; right: 16px; bottom: 16px; display: flex; align-items: center; gap: 2px; padding: 3px; background: rgba(255, 255, 255, 0.88); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--float-shadow); }
+.view-bar, .view-bar * { box-sizing: border-box; }
+.zoom { display: flex; gap: 2px; }
+.view-bar .undo-redo { display: flex; gap: 2px; padding-right: 4px; margin-right: 2px; border-right: 1px solid var(--line); }
+.view-bar .undo-redo .tb { flex-direction: row; gap: 4px; width: auto; padding: 5px 10px 5px 7px; border-radius: 7px; font-size: 12px; letter-spacing: 0; color: var(--ink); white-space: nowrap; }
+.view-bar .undo-redo .tb svg { width: 16px; height: 16px; }
+.view-bar .undo-redo .tb:disabled { color: #b5b7bc; opacity: 1; }
 .zoom button { display: flex; align-items: center; gap: 4px; border: 0; background: none; border-radius: 7px; padding: 5px 10px 5px 7px; font-size: 12px; color: var(--muted); }
 .zoom button svg { width: 16px; height: 16px; }
 .zoom button.on { background: var(--accent-soft); color: var(--accent); font-weight: 700; }
@@ -475,7 +482,7 @@ body.resizing .page-viewport { pointer-events: none; }
 /* ---- 印刷（PDFに保存）：紙面だけを、すべてのページを順に出す ---- */
 @media print {
   html, body, #root, .app, .stage { display: block !important; height: auto !important; overflow: visible !important; background: #fff !important; }
-  .side, .thumbs-col, .resize-handle, .palette, .arrow, .zoom, #overlay-layer, .loading, .modal-backdrop, .popover-backdrop,
+  .side, .thumbs-col, .resize-handle, .palette, .arrow, .zoom, .view-bar, #overlay-layer, .loading, .modal-backdrop, .popover-backdrop,
   .p-top, .p-nav, .pager, .sel-bar, .edit-sheet, .sheet, .scrim, .unzoom, .popover, .guide, .tour { display: none !important; }
   .page-scroller { position: static !important; overflow: visible !important; }
   .page-viewport:not(.front) { display: none !important; }
@@ -1069,6 +1076,9 @@ body.resizing .page-viewport { pointer-events: none; }
    印の上の方を押すと見出しが開いていた）。印のまわり 44px 四方は、その段落の押せる範囲（editor/reportEditor.ts の markerAt） */
 @media screen {
   .app.phone .stage[data-band='fields'] .page-viewport section.body p[data-block-id][data-placeholder]:empty::after { left: calc(-17px / var(--s)); }
+  /* 表のマス：「＋」はマスの欄の真ん中に（狭い列では、見えない仮の文字が2行に折れ、1行目に置いた「＋」がほかのマスより上にずれていた：依頼者の指摘 2026-10-21） */
+  .app.phone .stage[data-band='fields'] .page-viewport [data-cell-id] [data-block-id][data-placeholder]:empty { display: inline-block; }
+  .app.phone .stage[data-band='fields'] .page-viewport [data-cell-id] [data-block-id][data-placeholder]:empty::after { left: 50%; top: 50%; transform: translate(-50%, -50%); }
 }
 
 /* ---- v33 横向きのスマホ：作品写真のページの道具を、紙面の右の列に出す（mockups/v33 案A。部品は app/PageBand.tsx の SideColumn） ----
@@ -1265,7 +1275,7 @@ button.row { cursor: pointer; }
 /* 道具は台の左端、←→は下（拡大のときと同じ） */
 .stage.spread .palette { left: 12px; top: var(--inset-top); }
 .stage.spread .palette.compact { max-height: calc(100% - var(--inset-top) - 12px); }
-.stage.spread .arrow.prev { left: 31px; top: auto; bottom: 20px; translate: none; }
+.stage.spread .arrow.prev { left: auto; right: 87px; top: auto; bottom: 68px; translate: none; }
 .stage.spread .arrow.next { left: auto; right: 31px; top: auto; bottom: 68px; translate: none; }
 /* 並べる隣のページも出し、組の右のページを右へずらす（--pair-dx は縮小前の px） */
 .page-viewport [data-vivliostyle-page-container].is-pair { display: block !important; z-index: 2; }
@@ -1281,12 +1291,12 @@ button.row { cursor: pointer; }
 
 /* ---- v35 元に戻す・やり直す（mockups/v35 ④ 案A。道具のいちばん下に2つ並べる。部品は app/Palette.tsx の UndoRedo。スマホは書く欄の「戻す」の横） ---- */
 /* 道具の幅（86px）に2つ並べるので、左右の余白まで広げ、字は少し小さく（読める大きさの 10px） */
-.palette .group.undo-redo { display: grid; grid-template-columns: 1fr 1fr; gap: 0; margin-left: -4px; margin-right: -4px; }
-.palette .undo-redo .tb { padding: 8px 0 7px; font-size: 10px; letter-spacing: -0.04em; white-space: nowrap; }
-.palette .undo-redo .tb svg { width: 20px; height: 20px; }
 /* マウスを乗せたときの、キーボードでの押し方（ボタンの右に黒い吹き出し） */
 .ur-tip { position: fixed; z-index: 70; display: flex; flex-direction: column; padding: 6px 10px; border-radius: 7px; background: #2b2e36; color: #fff; font-size: 12px; line-height: 1.5; letter-spacing: 0; white-space: nowrap; box-shadow: 0 6px 16px rgba(20, 20, 30, 0.25); pointer-events: none; transform: translateY(-50%); }
 .ur-tip::before { content: ''; position: absolute; top: -4px; left: 0; width: 9px; height: 9px; margin-left: -4.5px; background: #2b2e36; transform: rotate(45deg); }
+/* ボタンの上に出す（右下の道具の「元に戻す」「やり直す」） */
+.ur-tip.above { transform: translate(-50%, -100%); }
+.ur-tip.above::before { top: auto; bottom: -4px; left: 50%; }
 @media print { .ur-tip { display: none !important; } }
 /* スマホ：書く欄の「戻す」「やり直す」は、道具が折り返すときも2つ並べたまま */
 .es-tools .es-undo { display: flex; flex: none; align-items: center; gap: 2px; }
@@ -1793,7 +1803,6 @@ p.busy-line { display: flex; }
    「クリックし／て」「画像を入れ／る」のように1字だけの行ができ、ボタンも大きく切れていた。動かさないときの形は今までどおり */
 .palette { width: auto; min-width: 86px; scrollbar-width: thin; }
 .palette > * { flex: none; width: 72px; }
-.palette > .group.undo-redo { width: 80px; }
 
 /* ---- 表のセルを書いている間も、セルの罫線を見せる（依頼者の指摘 2026-10-20「細い欄に文字入力する際、罫線が消えて見える」） ---- */
 /* 紙面に重ねる書く欄は白い地で、細い欄では右どなりのセルまで広がり（120px より狭くしなかった）、見出しの行などでは下の線にもかかって、罫線を白く隠していた。
@@ -1885,3 +1894,9 @@ p.busy-line { display: flex; }
 
 /* 書く欄のすぐ後ろに続く決まった字（表紙のサブタイトルの「の衣装制作―」。紙面のその字は書く欄に隠れるため、書く欄の中で後ろに見せる。editor/overlayEditor.ts の suffix） */
 .overlay-editor[data-suffix]::after { content: attr(data-suffix); pointer-events: none; user-select: none; }
+
+/* ---- 低い画面の左の道具（ノートパソコンのブラウザ 1366×634・1280×586 など。mockups/v47 案C）：道具の中のひとことは出さない（マウスを乗せると出る：title）。
+   前は作品写真を選ぶと、道具が画面に入らず「このページを消す」などが隠れていた ---- */
+@media (max-height: 760px) {
+  .app:not(.phone) .palette :is(.p-head span, .ctx-note, .lay-sub) { display: none; }
+}

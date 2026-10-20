@@ -216,7 +216,7 @@ export async function autoHeadingPc(browser, check) {
   await ready()
   await convert('p8', 'Ⅲ．仕上げと確認')
   await ready()
-  await page.evaluate(() => [...document.querySelectorAll('.palette button')].find((b) => b.getAttribute('aria-label')?.startsWith('元に戻す')).click())
+  await page.evaluate(() => [...document.querySelectorAll('.view-bar button')].find((b) => b.getAttribute('aria-label')?.startsWith('元に戻す')).click())
   await page.waitForFunction(() => window.__editor.getSnapshot().report.body.length === 3, { timeout: 30000 }).catch(() => {})
   const byPalette = await state(page)
   check(

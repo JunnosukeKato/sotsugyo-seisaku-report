@@ -137,7 +137,7 @@ export async function tableSettingsPc(browser, check) {
     JSON.stringify(auto),
   )
   // 左の道具の「元に戻す」1回で戻る（窓の外を押すので、窓は閉じる。開き直すと、印も「列の幅をそろえる」に戻っている）
-  const undoBtn = () => page.click('.palette .undo-redo .tb:first-child')
+  const undoBtn = () => page.click('.view-bar .undo-redo .tb:first-child')
   await undoBtn()
   await wait(300)
   await ready()
