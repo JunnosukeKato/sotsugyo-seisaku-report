@@ -1,7 +1,7 @@
 // 表のセルを書いている間も、そのセルの罫線（上下左右）が見えている（依頼者の指摘 2026-10-20「細い欄に文字入力する際、罫線が消えて見える」）。
 // 前は、書く欄（白い地）がセルより広く（細い欄でも 120px 以上）、セルの右の線・下の線などを白く隠していた。
 // 細い列（自分で決めるの 10%・中身に合わせる）の、見出しの行・途中の行・最後の行のセルを書いて、画面の絵で4本の線を確かめる（パソコン・スマホ）
-// smoke.mjs（cellBorderPc）・phone.mjs（cellBorderPhone）から呼ぶ。これだけを動かすときは node scripts/e2e/cellBorder.mjs [pc|phone] [before|after]。画面の写真は poc-output/cell-border/
+// smoke.mjs（cellBorderPc）・phone.mjs（cellBorderPhone）から呼ぶ。これだけを動かすときは node scripts/e2e/cellBorder.mjs [pc|phone|both] [写真の名前の頭（before・after など）]。名前の頭を付けると、セルのまわりの写真を poc-output/cell-border/ に置く
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { FEATURES, openSample, showTable } from './tableShape.mjs'
@@ -147,7 +147,7 @@ async function run(browser, check, phone, tag) {
 export const cellBorderPc = (browser, check, tag) => run(browser, check, false, tag)
 export const cellBorderPhone = (browser, check, tag) => run(browser, check, true, tag)
 
-// これだけを動かす：node scripts/e2e/cellBorder.mjs [pc|phone] [写真の名前の頭]
+// これだけを動かす：node scripts/e2e/cellBorder.mjs [pc|phone|both] [写真の名前の頭]（両方は both。名前の頭がなければ写真は撮らない）
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
   const { withEdge } = await import('../poc/edge.mjs')
   const only = process.argv[2]

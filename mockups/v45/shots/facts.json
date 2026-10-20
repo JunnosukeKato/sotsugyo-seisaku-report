@@ -2,55 +2,119 @@
   "now-pc": {
     "bad": [],
     "info": [
-      "左の道具：下の端 593px／画面 768px"
+      "左の道具：下の端 717px／画面 768px"
     ]
   },
   "now-pc-pal": {
     "bad": [],
     "info": [
-      "左の道具：下の端 593px／画面 768px"
+      "左の道具：下の端 717px／画面 768px"
+    ]
+  },
+  "now-seg": {
+    "count": 7,
+    "height": 21,
+    "width": 64,
+    "font": "9.5px",
+    "names": [
+      "そろえる",
+      "中身に合わせる",
+      "自分で決める",
+      "中身に合わせる",
+      "ほかとそろえる",
+      "そろえる",
+      "中身に合わせる"
     ]
   },
   "now-pc-pal-marked": {
     "bad": [],
     "info": [
-      "左の道具：下の端 593px／画面 768px"
+      "左の道具：下の端 717px／画面 768px"
     ]
   },
   "now-pc-custom": {
     "bad": [],
     "info": [
-      "左の道具：下の端 602px／画面 768px"
+      "左の道具：下の端 722px／画面 768px"
     ]
   },
   "now-pc-custom-hover": {
     "bad": [],
     "info": [
-      "左の道具：下の端 602px／画面 768px"
+      "左の道具：下の端 722px／画面 768px"
     ]
   },
   "now-pc-custom-drag": {
     "bad": [],
     "info": [
-      "左の道具：下の端 602px／画面 768px"
+      "左の道具：下の端 722px／画面 768px"
     ]
+  },
+  "now-palette-1280x720-equal": {
+    "scroll": 697,
+    "client": 661,
+    "bottom": 708,
+    "width": 96
   },
   "now-pc-low": {
     "bad": [],
     "info": [
-      "左の道具：下の端 620px／画面 720px"
+      "左の道具の中が動く（中身 697px／見える所 661px）"
     ]
   },
-  "now-pc-low-palette": {
-    "scroll": 573,
-    "client": 573,
-    "bottom": 620
-  },
-  "now-pc-low-custom": {
+  "now-pc-low-pal": {
     "bad": [],
     "info": [
-      "左の道具：下の端 629px／画面 720px"
+      "左の道具の中が動く（中身 697px／見える所 661px）"
     ]
+  },
+  "now-palette-1280x720-custom": {
+    "scroll": 702,
+    "client": 661,
+    "bottom": 708,
+    "width": 96
+  },
+  "now-palette-1280x586-equal": {
+    "scroll": 697,
+    "client": 554,
+    "bottom": 574,
+    "width": 96
+  },
+  "now-pc-586": {
+    "bad": [],
+    "info": [
+      "左の道具の中が動く（中身 697px／見える所 554px）"
+    ]
+  },
+  "now-palette-1280x586-custom": {
+    "scroll": 702,
+    "client": 554,
+    "bottom": 574,
+    "width": 96
+  },
+  "now-pc-586-custom": {
+    "bad": [],
+    "info": [
+      "左の道具の中が動く（中身 702px／見える所 554px）"
+    ]
+  },
+  "now-pc-586-pal": {
+    "bad": [],
+    "info": [
+      "左の道具の中が動く（中身 702px／見える所 554px）"
+    ]
+  },
+  "now-palette-1366x634-equal": {
+    "scroll": 697,
+    "client": 602,
+    "bottom": 622,
+    "width": 96
+  },
+  "now-palette-1366x634-custom": {
+    "scroll": 702,
+    "client": 602,
+    "bottom": 622,
+    "width": 96
   },
   "now-ph": {
     "bad": [],
@@ -77,6 +141,12 @@
     ]
   },
   "now-ph-custom": {
+    "bad": [],
+    "info": [
+      "道具の段が横に動く（中身 434px／見える所 374px）"
+    ]
+  },
+  "now-ph-custom-marked": {
     "bad": [],
     "info": [
       "道具の段が横に動く（中身 434px／見える所 374px）"
@@ -112,6 +182,12 @@
       "左の道具：下の端 570px／画面 768px"
     ]
   },
+  "a-pc-idle-zoom": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 570px／画面 768px"
+    ]
+  },
   "a-pc-hover-zoom": {
     "bad": [],
     "info": [
@@ -136,13 +212,15 @@
       "左の道具：下の端 570px／画面 768px"
     ]
   },
-  "a-pc-1280-fit": {
+  "a-pc-1280x720-fit": {
+    "screen": "1280×720",
     "palette": 550,
     "visible": 550,
+    "scrolls": false,
     "bottom": 597,
-    "screen": 720,
-    "panelBottom": 545,
-    "panelTop": 8
+    "panelTop": 8,
+    "panelBottom": 588,
+    "panelFits": true
   },
   "a-pc-1280": {
     "bad": [],
@@ -150,19 +228,31 @@
       "左の道具：下の端 597px／画面 720px"
     ]
   },
-  "a-pc-586-fit": {
+  "a-pc-1280x586-fit": {
+    "screen": "1280×586",
     "palette": 550,
     "visible": 550,
+    "scrolls": false,
     "bottom": 570,
-    "screen": 586,
-    "panelBottom": 468,
-    "panelTop": 11
+    "panelTop": 8,
+    "panelBottom": 488,
+    "panelFits": true
   },
   "a-pc-586": {
     "bad": [],
     "info": [
       "左の道具：下の端 570px／画面 586px"
     ]
+  },
+  "a-pc-1366x634-fit": {
+    "screen": "1366×634",
+    "palette": 550,
+    "visible": 550,
+    "scrolls": false,
+    "bottom": 570,
+    "panelTop": 29,
+    "panelBottom": 478,
+    "panelFits": true
   },
   "a-ph-bar": {
     "bad": [],
@@ -177,6 +267,202 @@
     "info": []
   },
   "a-ph-custom": {
+    "bad": [],
+    "info": []
+  },
+  "b-pc-edit": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 307px／画面 768px"
+    ]
+  },
+  "b-pc-edit-zoom": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 307px／画面 768px"
+    ]
+  },
+  "b-pc-open": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 307px／画面 768px"
+    ]
+  },
+  "b-pc-open-zoom": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 307px／画面 768px"
+    ]
+  },
+  "b-pc-rowcol-zoom": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 307px／画面 768px"
+    ]
+  },
+  "b-pc-height-zoom": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 307px／画面 768px"
+    ]
+  },
+  "b-pc-custom": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 307px／画面 768px"
+    ]
+  },
+  "b-pc-custom-zoom": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 307px／画面 768px"
+    ]
+  },
+  "b-pc-1280x720-fit": {
+    "screen": "1280×720",
+    "palette": 287,
+    "visible": 287,
+    "scrolls": false,
+    "bottom": 333,
+    "panelTop": 36,
+    "panelBottom": 193,
+    "panelFits": true
+  },
+  "b-pc-1280": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 333px／画面 720px"
+    ]
+  },
+  "b-pc-1280x586-fit": {
+    "screen": "1280×586",
+    "palette": 287,
+    "visible": 287,
+    "scrolls": false,
+    "bottom": 307,
+    "panelTop": 202,
+    "panelBottom": 359,
+    "panelFits": true
+  },
+  "b-pc-586": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 307px／画面 586px"
+    ]
+  },
+  "b-pc-1366x634-fit": {
+    "screen": "1366×634",
+    "palette": 287,
+    "visible": 287,
+    "scrolls": false,
+    "bottom": 307,
+    "panelTop": 219,
+    "panelBottom": 376,
+    "panelFits": true
+  },
+  "b-ph-bar": {
+    "bad": [],
+    "info": []
+  },
+  "b-ph-bar-zoom": {
+    "bad": [],
+    "info": []
+  },
+  "b-ph-sheet": {
+    "bad": [],
+    "info": []
+  },
+  "b-ph-rowcol": {
+    "bad": [],
+    "info": []
+  },
+  "c-pc-edit": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 552px／画面 768px"
+    ]
+  },
+  "c-pc-edit-zoom": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 552px／画面 768px"
+    ]
+  },
+  "c-pc-open": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 552px／画面 768px"
+    ]
+  },
+  "c-pc-open-zoom": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 552px／画面 768px"
+    ]
+  },
+  "c-pc-custom": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 552px／画面 768px"
+    ]
+  },
+  "c-pc-custom-zoom": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 552px／画面 768px"
+    ]
+  },
+  "c-pc-1280x720-fit": {
+    "screen": "1280×720",
+    "palette": 532,
+    "visible": 532,
+    "scrolls": false,
+    "bottom": 578,
+    "panelTop": 88,
+    "panelBottom": 632,
+    "panelFits": true
+  },
+  "c-pc-1280": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 578px／画面 720px"
+    ]
+  },
+  "c-pc-1280x586-fit": {
+    "screen": "1280×586",
+    "palette": 532,
+    "visible": 532,
+    "scrolls": false,
+    "bottom": 552,
+    "panelTop": 21,
+    "panelBottom": 565,
+    "panelFits": true
+  },
+  "c-pc-586": {
+    "bad": [],
+    "info": [
+      "左の道具：下の端 552px／画面 586px"
+    ]
+  },
+  "c-pc-1366x634-fit": {
+    "screen": "1366×634",
+    "palette": 532,
+    "visible": 532,
+    "scrolls": false,
+    "bottom": 552,
+    "panelTop": 45,
+    "panelBottom": 589,
+    "panelFits": true
+  },
+  "c-ph-bar": {
+    "bad": [],
+    "info": []
+  },
+  "c-ph-bar-zoom": {
+    "bad": [],
+    "info": []
+  },
+  "c-ph-sheet": {
     "bad": [],
     "info": []
   }

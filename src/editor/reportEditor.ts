@@ -963,7 +963,11 @@ export class ReportEditor {
       return
     }
     // 先に見せたページのほかを組んでいる間は、紙面の情報（ページ数など）を使うチェックはしない（組み終えてからする）
-    const checked = checkReportDetailed(this.report, this.config, this.provisional ? null : this.layout)
+    // 本文の段落に「Ⅲ．まとめ」と打っている途中：見出しになると消える番号（Ⅲ）には「機種依存文字を使わない」を出さない（checkReportDetailed の typing）
+    const id = this.overlay.blockId
+    const editing = id ? ops.findEditable(this.report, id) : undefined
+    const typing = id && editing?.kind === 'paragraph' ? { id, text: editing.text, heading: this.headingOf(id, editing.text) } : null
+    const checked = checkReportDetailed(this.report, this.config, this.provisional ? null : this.layout, typing)
     // 書いている途中の段落は「空の段落がある」と言わない（閉じても空のままなら言う）
     const writing = this.writingBlankIds()
     this.findings = writing.size ? checked.findings.filter((f) => !(f.ruleId === 'paragraph-empty' && f.blockId && writing.has(f.blockId))) : checked.findings
@@ -2108,8 +2112,9 @@ export class ReportEditor {
   /** 書いているブロックの紙面での見せ方。PC は入力欄を重ねるので隠し、スマホは下の欄で書くので枠で示す */
   private editingStyle(id: string): string {
     const selector = `.page-viewport [data-block-id="${CSS.escape(id)}"]`
-    // 表のセルを紙面に重ねて書くとき：書く欄は地が透けている（罫線を隠さない。index.css）ので、書いているセルを、セルの中だけうすく色付けして示す
-    const cell = `.page-viewport :is(td, th):has(${selector.slice('.page-viewport '.length)}) { background-color: rgba(47, 62, 117, 0.07); }`
+    // 表のセルを紙面に重ねて書くとき：書く欄は地が透けている（罫線を隠さない。index.css）ので、書いているセル（td・th。layout/bodyHtml.ts）を、
+    // セルの中だけうすく色付けして示す
+    const cell = `.page-viewport [data-cell-id="${CSS.escape(id)}"] { background-color: rgba(47, 62, 117, 0.07); }`
     return this.overlay.inSheet
       ? `${selector} { outline: 2px solid #2f3e75; outline-offset: 2px; background: rgba(47, 62, 117, 0.08); }`
       : [`${selector} { visibility: hidden !important; }`, cell].join(' ')
