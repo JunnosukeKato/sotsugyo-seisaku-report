@@ -454,6 +454,9 @@ export async function phoneLivePhone(browser, check) {
   await holdRender(page, true)
   await page.keyboard.sendCharacter('続きに書いた')
   await wait(400)
+  // 打つ手が止まってからの測り直し（overlayEditor.ts の flushMirror。時間を分けて測る）を終えるまで待つ。
+  // 測り直す前の写しは、書いている所から遠い行の句読点・括弧の詰めを前のまま並べるので、行の折り返しが1字ずれることがある（400ms では終わっていないことがあった）
+  await page.waitForFunction(() => !window.__editor.overlay.mirrorJob && window.__editor.overlay.dirtyFrom === null, { timeout: 10000 })
   const span2 = await page.evaluate((id, at) => {
     const m = document.querySelector('.overlay-mirror')
     return { ...window.__live(id), first: window.__charRect(m, at), firstChar: m.textContent[at], typed: window.__charRect(m, at + 6), starts: window.__lineStarts([m]) }
