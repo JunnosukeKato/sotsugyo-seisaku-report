@@ -1,0 +1,240 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>v44 下書きのひな形を、書くときと同じ画面で作る</title>
+<!-- 画面の絵は node scripts/mockup-shots-v44.mjs で作る（本物の学生用ツール・管理ページを開き、案の部分だけ書き足して写したもの）。このページの写し（shots/review-template.png）は同じスクリプトの review で作る -->
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/400.css">
+<link rel="stylesheet" href="../../node_modules/@fontsource/biz-udpgothic/700.css">
+<style>
+  :root { --ink: #24262b; --muted: #5d6068; --accent: #2f3e75; --line: #ecebe8; --ok: #3f7a55; --ng: #b5443b; --pin: #d4380d; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 28px 32px 40px; background: #eceae6; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; color: var(--ink); word-break: auto-phrase; text-wrap: pretty; }
+  main { max-width: 1136px; }
+  .top { margin: 0 0 18px; font-size: 13.5px; color: var(--muted); line-height: 1.8; }
+  .top b { color: var(--ink); font-size: 13.5px; }
+  .top q { color: var(--ink); font-weight: 700; quotes: '「' '」'; }
+  h1 { font-size: 21px; margin: 0 0 6px; letter-spacing: 0.04em; }
+  h2 { font-size: 17px; margin: 26px 0 8px; letter-spacing: 0.04em; }
+  figure { margin: 0 0 18px; background: #fff; border-radius: 14px; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,0.08); }
+  figure.is-rec { box-shadow: 0 0 0 2.5px var(--accent), 0 2px 10px rgba(0,0,0,0.08); }
+  figcaption { padding: 12px 16px 10px; border-bottom: 1px solid var(--line); }
+  figcaption b { display: block; font-size: 16px; margin-bottom: 3px; }
+  figcaption span { font-size: 13.5px; color: var(--muted); line-height: 1.7; }
+  .rec { display: inline-block; margin-left: 8px; padding: 1px 9px; border-radius: 999px; background: var(--accent); color: #fff !important; font-size: 11.5px !important; font-weight: 700; letter-spacing: 0.06em; vertical-align: 2px; }
+  .why { display: block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #e8ebf5; color: var(--accent) !important; font-size: 13px !important; }
+  img { display: block; width: 100%; }
+  a { color: inherit; }
+  .row { display: grid; gap: 1px; background: var(--line); align-items: start; }
+  .row + .row { border-top: 1px solid var(--line); }
+  .row > div { background: #fff; align-self: stretch; }
+  .row > .lbl { grid-column: 1 / -1; padding: 7px 16px 5px !important; background: #f4f2ee !important; font-size: 12.5px; font-weight: 700; color: var(--muted); letter-spacing: 0.06em; }
+  .ph { padding: 10px; background: #faf9f7 !important; }
+  .ph img { border-radius: 8px; border: 1px solid #ddd; }
+  .ph a { display: block; }
+  .ph a + a, .ph small + a { margin-top: 10px; }
+  .ph small { display: block; padding: 6px 4px 0; font-size: 13px; color: var(--muted); line-height: 1.6; }
+  .ph small b { color: var(--ink); }
+  .ph small a { display: inline; }
+  .note { display: flex; flex-direction: column; justify-content: center; padding: 14px 18px !important; font-size: 13.5px; color: var(--muted); line-height: 1.8; background: #faf9f7 !important; }
+  .note b { color: var(--ink); }
+  .note p { margin: 0 0 8px; }
+  .note p:last-child { margin-bottom: 0; }
+  .note ul { margin: 0; padding-left: 18px; }
+  .note li + li { margin-top: 4px; }
+  .say { color: var(--accent); font-weight: 700; }
+  .pw { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--line); border-top: 1px solid var(--line); }
+  .pw > div { background: #fff; padding: 9px 16px 11px; font-size: 13.5px; line-height: 1.75; }
+  .pw b { font-size: 12.5px; letter-spacing: 0.06em; }
+  .pw .good b { color: var(--ok); }
+  .pw .weak b { color: var(--ng); }
+  .pw ul { margin: 2px 0 0; padding-left: 18px; }
+  /* いまの作り方：分かりにくいところ */
+  ol.audit { margin: 0; padding: 0; list-style: none; counter-reset: a; }
+  ol.audit li { position: relative; padding: 0 0 0 34px; font-size: 14px; line-height: 1.7; color: var(--ink); counter-increment: a; }
+  ol.audit li + li { margin-top: 9px; }
+  ol.audit li::before { content: counter(a); position: absolute; left: 0; top: 0; width: 24px; height: 24px; border-radius: 50%; background: var(--pin); color: #fff; font-size: 13px; font-weight: 700; line-height: 24px; text-align: center; }
+  ol.audit small { display: block; color: var(--muted); font-size: 12.5px; }
+  .common { margin: 0 0 18px; padding: 12px 16px; border-radius: 14px; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,0.05); display: grid; grid-template-columns: 1fr 300px; gap: 18px; align-items: center; }
+  .common > div:first-child { font-size: 13.5px; line-height: 1.8; }
+  .common > div:first-child > b { font-size: 13px; letter-spacing: 0.06em; color: var(--accent); }
+  .common ul { margin: 2px 0 0; padding-left: 20px; }
+  .common img { border-radius: 8px; border: 1px solid #ddd; }
+  .common small { display: block; padding-top: 4px; font-size: 12px; color: var(--muted); text-align: center; }
+  .ask { margin: 0 0 18px; padding: 12px 18px; border-radius: 12px; background: #fff8e6; border: 1.5px solid #e6c46a; font-size: 13.5px; line-height: 1.8; }
+  .ask > b { font-size: 14px; color: #7a5a00; letter-spacing: 0.04em; }
+  .ask ol { margin: 4px 0 0; padding-left: 22px; }
+  .ask li + li { margin-top: 4px; }
+  .ask li b { color: var(--ink); }
+  .ask small { display: block; color: var(--muted); font-size: 12.5px; line-height: 1.7; }
+  .how { margin: 0 0 18px; padding: 12px 18px; border-radius: 12px; background: #fff; border: 1px solid #dcdad5; font-size: 13.5px; line-height: 1.8; color: var(--muted); }
+  .how > b { font-size: 13px; color: var(--ink); letter-spacing: 0.04em; }
+  .how ul { margin: 4px 0 0; padding-left: 20px; }
+  .how li b { color: var(--ink); }
+
+  /* 行の形 */
+  .r-now { grid-template-columns: 1fr 370px; }
+  .r-now2 { grid-template-columns: 300px 1fr 1fr; }
+  .r-a1 { grid-template-columns: 340px 1fr; }
+  .r-1 { grid-template-columns: 1fr; }
+  .r-a2b { grid-template-columns: 1fr 230px 1fr; }
+  .r-2 { grid-template-columns: 1fr 1fr; }
+  .r-a5 { grid-template-columns: 170px 1fr 1fr; }
+  .r-a8 { grid-template-columns: 1fr 300px; }
+  .r-b2 { grid-template-columns: 1fr 370px; }
+  .stack > * + * { margin-top: 10px; }
+</style>
+</head>
+<body>
+<main>
+
+<h1>v44　下書きのひな形を、書くときと同じ画面で作る</h1>
+<p class="top">先生の声：<q>実際に書く時と同じように書くことは出来ないですか？</q><br>
+<b>2つの案から1つ選んでください</b>（おすすめは案A）。<br>
+画面は本物の学生用ツールと管理ページに、案の部分だけ書き足して写したものです（絵を押すと大きく見られます）。<br>
+見本は「映画・舞台衣装デザイナー コース」のひな形（2026年度の初期値）。</p>
+
+<!-- ===================================================================== -->
+<h2>いまのひな形の作り方</h2>
+<figure>
+  <figcaption><b>いま：管理ページのコースのカードの「編集する」で開く窓</b><span>左に入力欄の一覧、右に学生が最初に見る本文の見本。番号は、下の分かりにくいところと同じです。</span></figcaption>
+  <div class="row r-now">
+    <div class="ph"><a href="shots/now-template-pins.png"><img src="shots/now-template-pins.png" alt=""></a><small>1366×768（<a href="shots/now-template.png">番号のない絵</a>）</small></div>
+    <div class="note">
+      <ol class="audit">
+        <li>紙面ではなく、入力欄が縦に並んだ一覧。<br>でき上がりの形が見えません。</li>
+        <li>「説明」が、学生に薄い字で見せる文だと<br>分かりにくい。</li>
+        <li>左で書いて、右の見本で確かめる。<br>目が行ったり来たりします。</li>
+        <li>足すボタンは、一覧のいちばん下。<br>どこに入るか（選んだ行の下）も見えません。</li>
+        <li>抄録の書き出し例は、いちばん上の小さな欄。<br>抄録のページでの見え方が分かりません。</li>
+        <li>「図の枠」「素材表」「説明」など、<br>学生の画面と、言葉も道具も違います。</li>
+        <li>「反映する」を押しても、まだ学生に届きません。<small>もう一度、上の「保存して学生に反映」が要ります。</small></li>
+      </ol>
+    </div>
+  </div>
+  <div class="row r-now2">
+    <div class="ph"><a href="shots/now-card.png"><img src="shots/now-card.png" alt=""></a><small>コースのカード。「編集する」は小さなボタン</small></div>
+    <div class="ph"><a href="shots/now-template-adds.png"><img src="shots/now-template-adds.png" alt=""></a><small>④ 足すボタン（一覧を下まで動かしたところ）</small></div>
+    <div class="note"><p>学生は紙面に直接書きますが、先生は<b>別の形の画面</b>でひな形を作っています。<br>この差が、分かりにくさのもとです。</p></div>
+  </div>
+</figure>
+
+<!-- ===================================================================== -->
+<h2>2つの案</h2>
+<figure class="is-rec">
+  <figcaption><b>案A　ひな形を作る画面を、学生のツールで開く<span class="rec">おすすめ</span></b><span>管理ページの「ひな形を作る画面を開く」で、学生のツールが新しいタブで開きます。紙面も左の道具も、学生と同じ。書き終えたら「管理ページに戻して反映」。</span><span class="why">おすすめの理由：学生が使う画面そのものなので、新しく覚えることがなく、でき上がりの形もそのまま見えるから。</span></figcaption>
+
+  <div class="row r-a1">
+    <div class="lbl">① 管理ページから開く</div>
+    <div class="ph"><a href="shots/a-1-card.png"><img src="shots/a-1-card.png" alt=""></a></div>
+    <div class="note">
+      <p>コースのカードのボタンを<br><span class="say">ひな形を作る画面を開く</span>（新しいタブの印つき）に。</p>
+      <p>押すと、新しいタブで<b>学生のツール</b>が開きます。管理ページのタブは、開いたままにしておきます。</p>
+      <p>ひな形の一行の数え方も、学生の言葉に合わせます（大見出し・小見出し・図・素材表）。</p>
+    </div>
+  </div>
+
+  <div class="row r-1">
+    <div class="lbl">② ひな形を作る画面（パソコン 1366×768。表示は「拡大」）</div>
+    <div class="ph"><a href="shots/a-2-main.png"><img src="shots/a-2-main.png" alt=""></a></div>
+  </div>
+  <div class="row r-a2b">
+    <div class="ph"><a href="shots/a-2-zoom.png"><img src="shots/a-2-zoom.png" alt=""></a><small>近くで：本文の字は、学生に見せる薄い字と同じ色。<br>紙の左の余白に「ここに書くこと」の札</small></div>
+    <div class="ph"><a href="shots/a-2-panel.png"><img src="shots/a-2-panel.png" alt=""></a><small>右の欄：セルフチェックの代わり</small></div>
+    <div class="note">
+      <p>いちばん上の帯：<br><span class="say">ひな形を作っています：映画・舞台衣装デザイナー コース（学生の画面ではありません）</span></p>
+      <p>左の道具は学生と同じ（大見出し・小見出し・改ページ・図を入れる・表を入れる）。見出しは、紙面の上で押して、そのまま直します。</p>
+      <p>図の枠は「（学生が写真を入れる枠）」、素材表の中は「（学生が書く）」。</p>
+      <p>ページの一覧では、表紙と作品写真に「ひな形に入らない」の札。チェックの赤い印は出しません。</p>
+    </div>
+  </div>
+
+  <div class="row r-2">
+    <div class="lbl">③ 先生が「ここに書くこと」を書く　→　④ 学生には、こう見える</div>
+    <div class="ph"><a href="shots/a-3-typing.png"><img src="shots/a-3-typing.png" alt=""></a><a href="shots/a-3-typing-zoom.png"><img src="shots/a-3-typing-zoom.png" alt=""></a><small><b>先生</b>：「Ⅱ．制作過程」の段落を押して打っているところ。書いている欄の下に<span class="say">ここに書くこと　学生には薄い字で出ます</span></small></div>
+    <div class="ph"><a href="shots/a-4-student.png"><img src="shots/a-4-student.png" alt=""></a><a href="shots/a-4-student-zoom.png"><img src="shots/a-4-student-zoom.png" alt=""></a><small><b>学生</b>（管理ページで保存したあと）：空の段落に、薄い字で「（…を書く）」。押すと消えて、すぐ書けます（いまと同じ。本物の学生の画面）</small></div>
+  </div>
+
+  <div class="row r-a5">
+    <div class="lbl">⑤ 表を入れる　／　⑥ 抄録の書き出し例　／　表紙</div>
+    <div class="ph"><a href="shots/a-5-table.png"><img src="shots/a-5-table.png" alt=""></a><small>「表を入れる」で素材表（学生と同じメニュー）</small></div>
+    <div class="ph"><a href="shots/a-6-abstract.png"><img src="shots/a-6-abstract.png" alt=""></a><a href="shots/a-6-abstract-zoom.png"><img src="shots/a-6-abstract-zoom.png" alt=""></a><small>抄録のページの上で、書き出しの例をそのまま直す。上の欄（年度・学籍番号など）は自動か学生が入れる所なので、薄く</small></div>
+    <div class="ph"><a href="shots/a-cover.png"><img src="shots/a-cover.png" alt=""></a><small>表紙は見るだけ。紙面に<br>「表紙は、学生が書きます」</small></div>
+  </div>
+
+  <div class="row r-a8">
+    <div class="lbl">⑦ 「管理ページに戻して反映」を押したあと（管理ページ）</div>
+    <div class="ph"><a href="shots/a-8-back.png"><img src="shots/a-8-back.png" alt=""></a></div>
+    <div class="ph stack">
+      <a href="shots/a-8-back-card.png"><img src="shots/a-8-back-card.png" alt=""></a>
+      <small>コースのカードに<br><span class="say">ひな形：変更あり（まだ学生に届いていません）</span></small>
+      <small>ひな形のタブは閉じ、管理ページに戻ります。上に「ひな形を受け取りました」（数秒で消えます）。画面の下の帯は、v43 で考えている帯と同じ形です。</small>
+    </div>
+  </div>
+  <div class="pw">
+    <div class="good"><b>よいところ</b><ul><li>学生と同じ画面・同じ道具。新しく覚えることがない。</li><li>ページの区切り・図や表の大きさまで、でき上がりのまま見える。</li><li>抄録の書き出し例も、抄録のページの上で直せる。</li></ul></div>
+    <div class="weak"><b>弱いところ</b><ul><li>タブが2つになる（管理ページを閉じないでおく）。</li><li>タブからタブへひな形を渡すしくみを、新しく作る（本番の Google の上で、先に試します）。</li><li>表紙など、ひな形に入らない所の見せ方に、少し工夫が要る。</li></ul></div>
+  </div>
+</figure>
+
+<!-- ===================================================================== -->
+<figure>
+  <figcaption><b>案B　管理ページの中に、紙面に似た画面</b><span>いまの「編集する」の窓の中身を、紙のような画面に入れ替えます。左の道具で足し、紙の上で直接書きます。窓の「反映する」と、その後の保存は、いまのまま。</span></figcaption>
+  <div class="row r-2">
+    <div class="lbl">パソコン（1366×768）</div>
+    <div class="ph"><a href="shots/b-main.png"><img src="shots/b-main.png" alt=""></a><small><b>開いたところ</b>：紙のいちばん上に、抄録の書き出し例の欄</small></div>
+    <div class="ph"><a href="shots/b-typing.png"><img src="shots/b-typing.png" alt=""></a><small><b>書いているところ</b>：押した段落に枠。左の「選んでいる所」で上へ・下へ・削除</small></div>
+  </div>
+  <div class="row r-b2">
+    <div class="lbl">近くで ／ 学生の画面とのちがい</div>
+    <div class="ph"><a href="shots/b-typing-zoom.png"><img src="shots/b-typing-zoom.png" alt=""></a></div>
+    <div class="note">
+      <ul>
+        <li><b>1枚の長い紙</b>。ページの区切りは線だけ（ページ番号・目次・表紙は出ません）。</li>
+        <li>道具は管理ページ用。学生の道具とは、形も言葉も別です。</li>
+        <li>抄録の書き出し例は、紙のいちばん上の別の欄。</li>
+        <li>字の大きさや行の折り返しは、だいたい（学生の紙面と少しずれることがあります）。</li>
+      </ul>
+    </div>
+  </div>
+  <div class="pw">
+    <div class="good"><b>よいところ</b><ul><li>管理ページの中だけで済む。タブの行き来がない。</li><li>戻すしくみは、いまの「反映する」のまま。作る手間は案A より少なめ。</li></ul></div>
+    <div class="weak"><b>弱いところ</b><ul><li>学生の画面に「似ている」だけ。道具も言葉も、学生とは別のもの。</li><li>ページの区切りが見えず、でき上がりと少し違う。</li><li>学生のツールと管理ページに、書く画面が2つ。直すたびに両方の手入れが要る。</li></ul></div>
+  </div>
+</figure>
+
+<!-- ===================================================================== -->
+<div class="common">
+  <div><b>どちらの案でも同じ：ひな形に入らないもの</b>
+    <ul>
+      <li>表紙の学生の項目（氏名・学籍番号・サブタイトルの学生が入れる所）。</li>
+      <li>作品写真のページと、引用・参考文献。</li>
+      <li>図の写真と、素材表の中身。<br>入るのは、図の枠・表のタイトルだけです。</li>
+      <li>本文に書いた字は、すべて「ここに書くこと」（薄い字）になります。<br>学生の文章として、最初から入れておくことはできません。</li>
+      <li>すでに書き始めた学生の原稿は、変わりません（いまと同じ）。</li>
+    </ul>
+  </div>
+  <div><a href="shots/a-cover.png"><img src="shots/a-cover.png" alt=""></a><small>案A の表紙（見るだけ）</small></div>
+</div>
+
+<div class="how"><b>案A のしくみ（参考）</b>
+  <ul>
+    <li>管理ページは Google の上、学生のツールは別の場所にあります。そこで、<b>開いたままの管理ページのタブへ、ひな形を手渡し</b>します（ブラウザの決まった方法）。</li>
+    <li>管理ページのタブを閉じていると、手渡しできません。そのときは、ひな形の画面に「管理ページを開いたまま、もう一度」と出し、書いたものは消しません。</li>
+    <li>ひな形の画面で書いたものは、ドライブにも、学生の原稿にも保存しません。管理ページのまだ保存していないひな形を開くので、続きから直せます。</li>
+    <li>本番の Google の上で、この手渡しが動くかを、最初に小さく試します。</li>
+  </ul>
+</div>
+
+<div class="ask"><b>決めていただきたいこと</b>
+  <ol>
+    <li><b>案A・案B</b>のどちらにしますか。<small>（おすすめは案A）</small></li>
+    <li>案A のとき、ひな形の画面を<b>新しいタブで開く</b>（絵のとおり）か、<b>管理ページの上に重ねて開く</b>か。<small>重ねて開くと、タブが増えず、戻すのも確実です。見た目は絵と同じ（いちばん上の帯と右の欄）。</small></li>
+    <li>「改ページ」と、ふつうの表（素材表でない表）も、ひな形に入れられるようにしますか。<small>いまのひな形のしくみには、この2つがありません。入れるなら、しくみを少し広げます。入れないなら、ひな形の画面では「改ページ」のボタンと、表の大きさを選ぶ所を出しません（素材表だけ）。</small></li>
+  </ol>
+</div>
+
+</main>
+</body>
+</html>
