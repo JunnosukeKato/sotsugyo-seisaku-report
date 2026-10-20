@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useDialogFocus } from '../app/useDialogFocus'
 import { parseAddresses, studentIdFromEmail, UNIVERSITY_DOMAIN } from '../model/account'
 import { isMockServer, server, type Member } from './server'
+import { useDone, useSlow } from './useWait'
+import { DoneNote, SlowNote, Waiting } from './Wait'
 
 /**
  * 管理者と先生の登録（管理者だけが使う）。
@@ -21,6 +23,13 @@ const allowed = (email: string) => DOMAINS.some((d) => email.toLowerCase().endsW
 const DOMAIN_TEXT = `大学のアドレス（@${UNIVERSITY_DOMAIN}${isMockServer ? '。試験用サーバーでは @example.ac.jp も' : ''}）だけ登録できます`
 
 /** 管理者を2人以上にしておく（1人だけだと、その人が使えなくなったときに、だれも設定を変えられなくなる） */
+/**
+ * サーバーを待っている操作（押したボタンに回る印と「登録しています…」などを出し、ほかの操作は終わるまで押せなくする）。
+ * email は、役割を変えている・外している人
+ */
+type Busy = { kind: 'add' | 'role' | 'remove'; email?: string }
+const WAIT_TEXT: Record<Busy['kind'], string> = { add: '登録しています…', role: '変更しています…', remove: '外しています…' }
+
 const ONE_ADMIN = '管理者が1人だけになります。その人が異動などで使えなくなると、だれも年度の設定を変えられなくなるため、管理者は2人以上にしておいてください。'
 
 export function MembersDialog({ me, studentIdPattern, onClose }: { me: string; studentIdPattern: string | null; onClose: () => void }) {
@@ -32,6 +41,11 @@ export function MembersDialog({ me, studentIdPattern, onClose }: { me: string; s
   const [error, setError] = useState('')
   /** 役割を変えた・登録を外したときの知らせ */
   const [info, setInfo] = useState('')
+  const [busy, setBusy] = useState<Busy | null>(null)
+  // 長く待っている（一覧の読み込み・登録・変更）ときは「数秒〜十数秒かかることがあります」
+  const slow = useSlow(busy !== null || (members === null && !error))
+  /** 終わったときの短い知らせ（「登録しました」など。数秒で消える） */
+  const [doneText, showDone] = useDone()
   const ref = useRef<HTMLDivElement>(null)
   /** 窓の外・「×」「閉じる」・Esc：登録の欄に入力したまま（まだ登録していない）なら、消えてよいか確かめてから閉じる */
   const close = () => {
@@ -44,14 +58,18 @@ export function MembersDialog({ me, studentIdPattern, onClose }: { me: string; s
     server.getMembers().then(setMembers, (e) => setError(String(e?.message ?? e)))
   }, [])
 
-  const run = async (fn: () => Promise<Member[]>, done = '') => {
+  const run = async (what: Busy, fn: () => Promise<Member[]>, done = '') => {
     setError('')
     setInfo('')
+    setBusy(what)
     try {
       setMembers(await fn())
       setInfo(done)
+      showDone(what.kind === 'add' ? '登録しました' : what.kind === 'role' ? '変更しました' : '外しました')
     } catch (e) {
       setError(String((e as Error)?.message ?? e))
+    } finally {
+      setBusy(null)
     }
   }
 
@@ -67,14 +85,14 @@ export function MembersDialog({ me, studentIdPattern, onClose }: { me: string; s
     if (adminsAfter(after) === 1) lines.push('', ONE_ADMIN)
     // 「キャンセル」なら何もしない（選ぶ欄は、元の役割に戻る）
     if (!confirm(lines.join('\n'))) return
-    void run(() => server.addMember(m.email, next, m.memo), `${m.email} を「${next}」にしました（その人が管理ページを開き直すと、${next}の画面になります）`)
+    void run({ kind: 'role', email: m.email }, () => server.addMember(m.email, next, m.memo), `${m.email} を「${next}」にしました（その人が管理ページを開き直すと、${next}の画面になります）`)
   }
   const remove = (m: Member) => {
     if (!members) return
     const lines = [`${m.email} の登録を外しますか？`]
     if (adminsAfter(members.filter((x) => x.email !== m.email)) === 1) lines.push('', ONE_ADMIN)
     if (!confirm(lines.join('\n'))) return
-    void run(() => server.removeMember(m.email), `${m.email} の登録を外しました`)
+    void run({ kind: 'remove', email: m.email }, () => server.removeMember(m.email), `${m.email} の登録を外しました`)
   }
 
   const rows: Row[] = parseAddresses(text).map((p) => {
@@ -109,7 +127,11 @@ export function MembersDialog({ me, studentIdPattern, onClose }: { me: string; s
         {error && <div className="message ng">{error}</div>}
         {!error && info && <div className="message ok">{info}</div>}
         {!members ? (
-          <p className="lead">読み込んでいます…</p>
+          !error && (
+            <p className="lead wait-line" role="status">
+              <Waiting text="読み込んでいます…" />
+            </p>
+          )
         ) : (
           <ul className="member-list">
             {members.map((m) => (
@@ -118,15 +140,20 @@ export function MembersDialog({ me, studentIdPattern, onClose }: { me: string; s
                   {m.email}
                   {m.memo && <small>{m.memo}</small>}
                 </span>
-                <select className="sel" value={m.role} disabled={m.email.toLowerCase() === me.toLowerCase()} onChange={(e) => changeRole(m, e.target.value as Member['role'])}>
+                <select className="sel" value={m.role} disabled={m.email.toLowerCase() === me.toLowerCase() || !!busy} onChange={(e) => changeRole(m, e.target.value as Member['role'])}>
                   <option value="先生">先生</option>
                   <option value="管理者">管理者</option>
                 </select>
                 {m.email.toLowerCase() === me.toLowerCase() ? (
                   <span className="hint">（自分）</span>
+                ) : busy?.kind === 'role' && busy.email === m.email ? (
+                  // 役割を変えている間は、「外す」の代わりに回る印と「変更しています…」
+                  <span className="wait-line" role="status">
+                    <Waiting text={WAIT_TEXT.role} />
+                  </span>
                 ) : (
-                  <button className="danger" onClick={() => remove(m)}>
-                    外す
+                  <button className={`danger${busy?.kind === 'remove' && busy.email === m.email ? ' busy' : ''}`} disabled={!!busy} aria-busy={busy?.kind === 'remove' && busy.email === m.email} onClick={() => remove(m)}>
+                    {busy?.kind === 'remove' && busy.email === m.email ? <Waiting text={WAIT_TEXT.remove} /> : '外す'}
                   </button>
                 )}
               </li>
@@ -149,10 +176,11 @@ export function MembersDialog({ me, studentIdPattern, onClose }: { me: string; s
             <option value="管理者">管理者</option>
           </select>
           <button
-            className="primary"
-            disabled={!chosen.length}
+            className={`primary${busy?.kind === 'add' ? ' busy' : ''}`}
+            disabled={!chosen.length || !!busy}
+            aria-busy={busy?.kind === 'add'}
             onClick={() =>
-              void run(async () => {
+              void run({ kind: 'add' }, async () => {
                 const list = await server.addMembers(
                   chosen.map((r) => ({ email: r.email, memo: r.name })),
                   role,
@@ -163,7 +191,7 @@ export function MembersDialog({ me, studentIdPattern, onClose }: { me: string; s
               })
             }
           >
-            {many ? `${chosen.length}人を登録する` : '登録する'}
+            {busy?.kind === 'add' ? <Waiting text={WAIT_TEXT.add} /> : many ? `${chosen.length}人を登録する` : '登録する'}
           </button>
         </div>
         {text.trim() && !rows.length && <p className="bulk-hint">メールアドレスが見つかりません</p>}
@@ -197,6 +225,9 @@ export function MembersDialog({ me, studentIdPattern, onClose }: { me: string; s
           </>
         )}
         <div className="row-buttons">
+          {/* 長く待っているときの1行と、終わったときの短い知らせ（「登録しました」など） */}
+          <SlowNote show={slow} />
+          {!slow && <DoneNote text={doneText} />}
           <span className="spacer" />
           <button onClick={close}>閉じる</button>
         </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Icon } from '../app/icons'
 import { useDialogFocus } from '../app/useDialogFocus'
 import { DEFAULT_WORD_CHECKS } from '../checker/textRules'
@@ -12,9 +12,14 @@ import { describeChanges, mergeEdits, sameConfig, shortChanges } from './changes
 import { MembersDialog } from './Members'
 import { Preview } from './Preview'
 import { isMockServer, roleOf, server, type AdminState, type HistoryRow, type TemplateSet, type YearRow } from './server'
+import { endsWithCourse, joinSubtitle, splitSubtitle, subtitleExample } from './subtitleText'
 import { TemplateEditor } from './TemplateEditor'
 import { templateSummary } from './templateText'
+import { useFormWidth } from './useFormWidth'
 import { useLeaveGuard } from './useLeaveGuard'
+import { useReorder } from './useReorder'
+import { useDone, useSlow } from './useWait'
+import { DoneNote, PageLoading, SlowNote, Waiting } from './Wait'
 import { WordsEditor } from './WordsEditor'
 import { wordSummary } from './wordsText'
 import { deleteConfirmText, deletedMessage, deliveryNote, newYearNotice, publishConfirmText, saveButtonLabel, saveConfirmText, savedMessage, templateFootNote, type NoticeItem } from './yearText'
@@ -29,6 +34,15 @@ import { deleteConfirmText, deletedMessage, deliveryNote, newYearNotice, publish
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b)
+
+/**
+ * サーバーを待っている操作。押したボタンに、回る印と「保存しています…」などをすぐ出し、終わるまで押せなくする
+ * （ほかのサーバーの操作と、保存・公開などの間は入力欄も）。長く待つと「数秒〜十数秒かかることがあります」を足し、
+ * 終わったら「保存しました」などを数秒出す（useWait.ts）。年度の切り替えと「この内容を読み込む」は、読み込んである内容を出すだけなので待たない
+ */
+type Busy = 'save' | 'publish' | 'create' | 'delete' | 'history'
+const WAIT_TEXT: Record<Busy, string> = { save: '保存しています…', publish: '公開しています…', create: '作成しています…', delete: '削除しています…', history: '読み込んでいます…' }
+const DONE_TEXT: Record<Busy, string> = { save: '保存しました', publish: '公開しました', create: '作成しました', delete: '削除しました', history: '' }
 
 /** 画面の上の知らせ。items があれば箇条書きにする（text は太字の1行目、detail はその下の文） */
 type Notice = { kind: 'ok' | 'ng'; text: string; detail?: string; items?: NoticeItem[] }
@@ -85,11 +99,6 @@ function rememberYear(year: number): void {
 function today(): string {
   const d = new Date()
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-}
-
-function splitTemplate(template: string): [string, string] {
-  const i = template.indexOf('{input}')
-  return i < 0 ? [template, ''] : [template.slice(0, i), template.slice(i + '{input}'.length)]
 }
 
 /** 書き間違えやすい語の欄：見出しと、語の数を出すボタン（押すと窓が開く） */
@@ -233,29 +242,32 @@ function OptionalNumberInput({ value, onChange, placeholder }: { value: number |
 
 function CourseCard({
   course,
-  index,
-  count,
   published,
   onChange,
-  onMove,
+  grip,
+  dragging,
   onRemove,
   onFocus,
   focused,
   onEditTemplate,
 }: {
   course: Course
-  index: number
-  count: number
   published: boolean
   onChange: (c: Course) => void
-  onMove: (delta: number) => void
+  /** 並べ替えのつまみ（⋮⋮）に付ける属性（useReorder の gripProps） */
+  grip: ReturnType<ReturnType<typeof useReorder>['gripProps']>
+  /** つかんで動かしているところ */
+  dragging: boolean
   onRemove: () => void
   onFocus: () => void
   focused: boolean
   onEditTemplate: () => void
 }) {
-  const [before, after] = splitTemplate(course.subtitleTemplate)
+  // サブタイトルの形式の前後の「―」は、欄の外に固定の印として出す（欄には「―」を除いた部分だけ。保存するときに付け直す）
+  const [before, after] = splitSubtitle(course.subtitleTemplate)
   const [advisor, setAdvisor] = useState('')
+  const nameWarnId = useId()
+  const nameWarn = endsWithCourse(course.name)
   const addAdvisor = () => {
     const name = advisor.trim()
     if (!name) return
@@ -263,21 +275,40 @@ function CourseCard({
     setAdvisor('')
   }
   return (
-    <div className={`course${focused ? ' on' : ''}${course.hidden ? ' hidden-course' : ''}`} onFocus={onFocus} onClick={onFocus}>
+    <div className={`course${focused ? ' on' : ''}${course.hidden ? ' hidden-course' : ''}${dragging ? ' dragging' : ''}`} onFocus={onFocus} onClick={onFocus}>
       <div className="top">
-        <input className="in name" value={course.name} placeholder="コース名（「コース」は付けない）" onChange={(e) => onChange({ ...course, name: e.target.value })} />
+        {/* 並べ替えのつまみ（カードの左上）。つかんで上下に動かす。キーボードでは ↑・↓ */}
+        <button className="grip" {...grip}>
+          ⋮⋮
+        </button>
+        {/* 「コース」は欄の外に固定で付ける（名前には付けない。表紙では自動で付く） */}
+        <span className="name-box">
+          <input className="in name" value={course.name} placeholder="コース名" aria-describedby={nameWarn ? nameWarnId : undefined} onChange={(e) => onChange({ ...course, name: e.target.value })} />
+          <span className="suffix">コース</span>
+        </span>
         <label className="toggle-label">
           <input type="checkbox" checked={!course.hidden} onChange={(e) => onChange({ ...course, hidden: !e.target.checked })} />
           学生に表示
         </label>
       </div>
+      {nameWarn && (
+        <div className="name-warn" id={nameWarnId}>
+          名前の最後の「コース」は消してください（表紙では自動で付きます）
+        </div>
+      )}
       <div className="l">サブタイトルの形式</div>
       <div className="template">
-        <input className="in" value={before} onChange={(e) => onChange({ ...course, subtitleTemplate: `${e.target.value}{input}${after}` })} />
+        <span className="dash" title="この線は自動で付きます">
+          ―
+        </span>
+        <input className="in" aria-label="学生が入力する部分の前" value={before} onChange={(e) => onChange({ ...course, subtitleTemplate: joinSubtitle(e.target.value, after) })} />
         <span className="slot">学生が入力</span>
-        <input className="in" value={after} onChange={(e) => onChange({ ...course, subtitleTemplate: `${before}{input}${e.target.value}` })} />
+        <input className="in" aria-label="学生が入力する部分の後ろ" value={after} onChange={(e) => onChange({ ...course, subtitleTemplate: joinSubtitle(before, e.target.value) })} />
+        <span className="dash" title="この線は自動で付きます">
+          ―
+        </span>
       </div>
-      <div className="hint">例：{before}シンドバッド{after}</div>
+      <div className="hint">例：{subtitleExample(course.subtitleTemplate)}</div>
       <div className="l">指導教員（抄録に表示）</div>
       <div className="tags">
         {course.advisors.map((name, i) => (
@@ -305,12 +336,6 @@ function CourseCard({
       <TemplateRow course={course} onEdit={onEditTemplate} />
       <NoticeField course={course} onChange={(notice) => onChange({ ...course, notice })} />
       <div className="course-actions">
-        <button disabled={index === 0} onClick={() => onMove(-1)}>
-          ↑ 上へ
-        </button>
-        <button disabled={index === count - 1} onClick={() => onMove(1)}>
-          ↓ 下へ
-        </button>
         <span className="spacer" />
         {published ? (
           <span className="hint">公開したことのあるコースは、削除せずに「学生に表示」を外してください</span>
@@ -344,7 +369,7 @@ function NoticeField({ course, onChange }: { course: Course; onChange: (notice: 
       <span className="l">このコースの学生へのお知らせ（任意）</span>
       {/* 書いてから消したときは「お知らせなし」に戻す（空の文字のまま残すと、保存していない変更があるように見えるため） */}
       <textarea className="in" rows={2} value={course.notice ?? ''} placeholder="例：12月4日（金）の中間発表では、本文の下書きを印刷して持ってきてください" onChange={(e) => onChange(e.target.value || undefined)} />
-      <span className="hint">このコースの学生のツールの、セルフチェック欄の上に表示されます。インターネット上の誰でも読めます。個人の情報（連絡先など）は書かないでください</span>
+      <span className="hint">このコースの学生のツールの、セルフチェック欄の上に表示されます。</span>
     </label>
   )
 }
@@ -371,7 +396,12 @@ export function AdminApp() {
   const [state, setState] = useState<AdminState | null>(null)
   const [year, setYear] = useState<number | null>(null)
   const [draft, setDraft] = useState<YearConfig | null>(null)
-  const [busy, setBusy] = useState(false)
+  /** サーバーを待っている操作（なければ null） */
+  const [busy, setBusy] = useState<Busy | null>(null)
+  /** 長く待っている（「数秒〜十数秒かかることがあります」を出す） */
+  const slow = useSlow(busy !== null)
+  /** 終わったときの短い知らせ（「保存しました」など。数秒で消える） */
+  const [doneText, showDone] = useDone()
   const [message, setMessage] = useState<Notice | null>(null)
   const [focusedCourse, setFocusedCourse] = useState(0)
   const [dialog, setDialog] = useState<'newYear' | 'history' | 'members' | null>(null)
@@ -381,6 +411,27 @@ export function AdminApp() {
   const [newYear, setNewYear] = useState('')
   /** 「？ 使い方」の欄を開いている */
   const [help, setHelp] = useState(false)
+  // コースのカードの並べ替え（つまみをつかんで動かす・キーボードの ↑↓。前の「↑ 上へ」「↓ 下へ」と同じく、保存するまでは画面の中だけ）
+  const courseListRef = useRef<HTMLDivElement>(null)
+  const courseOrder = useReorder(
+    courseListRef,
+    draft?.courses.length ?? 0,
+    (from, to) => {
+      setDraft((d) => {
+        if (!d) return d
+        const courses = [...d.courses]
+        const [c] = courses.splice(from, 1)
+        courses.splice(to, 0, c)
+        return { ...d, courses }
+      })
+      setFocusedCourse(to)
+    },
+    '.course',
+  )
+  // 左の入力欄の幅（右の見本との境目をつかんで変える）
+  const formWidth = useFormWidth()
+  // 最初の読み込み（年度の設定の一覧）が長くかかっている
+  const loadingSlow = useSlow(!state && !message)
 
   const row: YearRow | undefined = state?.years.find((y) => y.year === year)
   // 意味の同じ書き方の違い（空のお知らせとお知らせなし など）は、変更とみなさない
@@ -446,6 +497,7 @@ export function AdminApp() {
    * recover を渡すと、別のタブ・ほかの人が先に保存していて断られたときに、自分の変更を入れ直す
    */
   const run = async (
+    kind: Busy,
     done: string | Omit<Notice, 'kind'> | ((s: AdminState) => string),
     fn: () => Promise<AdminState>,
     options: { nextYear?: number; recover?: { verb: string; button: string } } = {},
@@ -453,7 +505,7 @@ export function AdminApp() {
     // 押したときの年度と内容（断られたときに、最新の内容と合わせるため）
     const base = row
     const mine = draft
-    setBusy(true)
+    setBusy(kind)
     setMessage(null)
     try {
       const s = await fn()
@@ -461,15 +513,17 @@ export function AdminApp() {
       select(s, options.nextYear ?? year!)
       const notice = typeof done === 'function' ? done(s) : done
       setMessage(typeof notice === 'string' ? { kind: 'ok', text: notice } : { kind: 'ok', ...notice })
+      showDone(DONE_TEXT[kind])
     } catch (e) {
       const recovered = base && mine && options.recover ? await recoverConflict(base, mine, options.recover.verb, options.recover.button).catch(() => null) : null
       setMessage(recovered ?? { kind: 'ng', text: `できませんでした：${String((e as Error)?.message ?? e)}` })
     } finally {
-      setBusy(false)
+      setBusy(null)
     }
   }
 
-  if (!state) return <div className="admin-loading">{message ? message.text : '読み込んでいます…'}</div>
+  // 最初の読み込み：画面の真ん中に、回る印と「読み込んでいます…」（長くかかるときは「数秒〜十数秒かかることがあります」も）
+  if (!state) return message ? <div className="admin-loading">{message.text}</div> : <PageLoading slow={loadingSlow} />
   const role = roleOf(state)
   if (!role)
     return (
@@ -492,13 +546,15 @@ export function AdminApp() {
         setDraft={setDraft}
         dirty={dirty}
         busy={busy}
+        slow={slow}
+        doneText={doneText}
         message={message}
         onMessage={setMessage}
         onSelectYear={(y) => select(state, y)}
         onSave={(templates, words, notices) =>
           // ひな形・お知らせ・書き間違えやすい語を、まとめて1回で保存する（途中で失敗して一部だけ保存されないように）
           // 画面を開いたときの更新日時も送る（そのあとにほかの先生などが保存していたら、その変更を消さないよう保存しない）
-          void run(savedMessage(row.status, 'teacher'), () => server.saveTeacherEdits(row.year, { templates, notices, ...(words ? { words } : {}) }, row.updatedAt), {
+          void run('save', savedMessage(row.status, 'teacher'), () => server.saveTeacherEdits(row.year, { templates, notices, ...(words ? { words } : {}) }, row.updatedAt), {
             recover: { verb: '保存', button: saveButtonLabel(row.status) },
           })
         }
@@ -507,13 +563,6 @@ export function AdminApp() {
 
   const set = (patch: Partial<YearConfig>) => setDraft({ ...draft, ...patch })
   const setCourse = (i: number, c: Course) => set({ courses: draft.courses.map((x, j) => (j === i ? c : x)) })
-  const moveCourse = (i: number, delta: number) => {
-    const courses = [...draft.courses]
-    const [c] = courses.splice(i, 1)
-    courses.splice(i + delta, 0, c)
-    set({ courses })
-    setFocusedCourse(i + delta)
-  }
   const publishedIds = new Set(state.years.filter((y) => y.status !== '準備中').flatMap((y) => y.config.courses.map((c) => c.id)))
   const isPublished = row.status === '公開中'
   const saveLabel = saveButtonLabel(row.status)
@@ -524,7 +573,7 @@ export function AdminApp() {
       return setMessage({ kind: 'ng', text: isPublished ? '公開中の年度は、エラーを直してから保存してください' : '終了した年度も、この年度に書き始めた学生が使っているため、エラーを直してから保存してください' })
     const text = saveConfirmText(row.status, row.year, describeChanges(row.config, draft))
     if (text && !confirm(text)) return
-    void run(savedMessage(row.status, 'admin'), () => server.saveYear(draft, row.updatedAt), { recover: { verb: '保存', button: saveLabel } })
+    void run('save', savedMessage(row.status, 'admin'), () => server.saveYear(draft, row.updatedAt), { recover: { verb: '保存', button: saveLabel } })
   }
   const publish = () => {
     if (errors.length) return setMessage({ kind: 'ng', text: 'エラーを直してから公開してください' })
@@ -532,6 +581,7 @@ export function AdminApp() {
     if (!confirm(publishConfirmText(draft, current?.year ?? null, dirty))) return
     // 画面を開いたあとにほかの人が保存していたら、見ていない内容を公開しないよう、公開せずに知らせる
     void run(
+      'publish',
       `${draft.fiscalYear}年度を学生に公開しました。まだ書き始めていない学生は、この年度の設定で書き始めます（学生がツールを開き直すと、1分ほどで届きます）`,
       async () => {
         let updatedAt = row.updatedAt
@@ -540,6 +590,19 @@ export function AdminApp() {
       },
       { recover: { verb: '公開', button: 'この年度を学生に公開' } },
     )
+  }
+
+  /** 変更履歴を読み込んで開く（読み込めなかったら、理由を知らせる） */
+  const openHistory = async () => {
+    setBusy('history')
+    try {
+      setHistory(await server.getHistory(row.year))
+      setDialog('history')
+    } catch (e) {
+      setMessage({ kind: 'ng', text: `変更履歴を読み込めませんでした：${String((e as Error)?.message ?? e)}` })
+    } finally {
+      setBusy(null)
+    }
   }
 
   // 削除できる年度（一度も公開していない「準備中」。サーバーの deleteYear と同じ決まりで、サーバーが deletable を付けて返す）。
@@ -553,6 +616,7 @@ export function AdminApp() {
     const next = otherYears.find((y) => y.status === '公開中') ?? otherYears[0]
     if (!confirm(deleteConfirmText(row.year, next))) return
     void run(
+      'delete',
       (s) => deletedMessage(row.year, s.years.find((y) => y.year === next.year) ?? s.years[0]),
       () => server.deleteYear(row.year, row.updatedAt),
       { nextYear: next.year },
@@ -569,6 +633,7 @@ export function AdminApp() {
           <select
             className="sel"
             value={year ?? ''}
+            disabled={!!busy}
             onChange={(e) => {
               if (dirty && !confirm('保存していない変更があります。破棄して年度を切り替えますか？')) return
               select(state, Number(e.target.value))
@@ -581,14 +646,16 @@ export function AdminApp() {
             ))}
           </select>
           <span className={`badge ${isPublished ? 'pub' : row.status === '準備中' ? 'draft' : 'old'}`}>{row.status}</span>
-          {dirty && <span className="badge warn">保存していない変更があります</span>}
+          {/* 保存・公開している間は、「保存していない変更があります」の代わりに、ボタンの「保存しています…」を見てもらう */}
+          {dirty && busy !== 'save' && busy !== 'publish' && <span className="badge warn">保存していない変更があります</span>}
           <span className="spacer" />
-          <button className="btn" disabled={busy || !dirty} onClick={save}>
-            {saveLabel}
+          <DoneNote text={doneText} />
+          <button className={`btn${busy === 'save' ? ' busy' : ''}`} disabled={!!busy || !dirty} aria-busy={busy === 'save'} onClick={save}>
+            {busy === 'save' ? <Waiting text={WAIT_TEXT.save} /> : saveLabel}
           </button>
           {!isPublished && (
-            <button className="btn primary" disabled={busy} onClick={publish}>
-              この年度を学生に公開
+            <button className={`btn primary${busy === 'publish' ? ' busy' : ''}`} disabled={!!busy} aria-busy={busy === 'publish'} onClick={publish}>
+              {busy === 'publish' ? <Waiting text={WAIT_TEXT.publish} /> : 'この年度を学生に公開'}
             </button>
           )}
         </div>
@@ -597,27 +664,22 @@ export function AdminApp() {
           <span className="user">{state.user}</span>
           {isMockServer && <span className="badge old">試験用サーバー</span>}
           <span className="spacer" />
-          <button
-            className="link"
-            onClick={async () => {
-              setHistory(await server.getHistory(row.year))
-              setDialog('history')
-            }}
-          >
-            変更履歴
+          <button className={`link${busy === 'history' ? ' busy' : ''}`} disabled={!!busy} aria-busy={busy === 'history'} onClick={() => void openHistory()}>
+            {busy === 'history' ? <Waiting text={WAIT_TEXT.history} /> : '変更履歴'}
           </button>
           {canDelete && (
-            <button className="link del" disabled={busy} onClick={removeYear}>
-              {Icon.remove}この年度を削除
+            <button className={`link del${busy === 'delete' ? ' busy' : ''}`} disabled={!!busy} aria-busy={busy === 'delete'} onClick={removeYear}>
+              {busy === 'delete' ? <Waiting text={WAIT_TEXT.delete} /> : <>{Icon.remove}この年度を削除</>}
             </button>
           )}
           <span className="sep" />
-          <button className="link" onClick={() => setDialog('members')}>
+          <button className="link" disabled={!!busy} onClick={() => setDialog('members')}>
             先生の登録
           </button>
           <span className="sep" />
           <button
             className="link"
+            disabled={!!busy}
             onClick={() => {
               // 新年度は保存されている内容からコピーするので、保存していない変更は入らない（年度を切り替えるときと同じく確かめる）
               if (dirty && !confirm('保存していない変更があります。新年度は保存されている内容からコピーして作るため、この変更は入りません。破棄して新年度を作成しますか？')) return
@@ -627,11 +689,14 @@ export function AdminApp() {
           >
             新年度を作成
           </button>
+          {/* 長く待っているときの1行（保存・公開のボタンのすぐ下。新年度の作成は、窓の中に出す） */}
+          <SlowNote show={slow && busy !== 'create'} />
         </div>
       </header>
 
-      <main className="admin-main">
-        <section className="form">
+      <main className="admin-main" style={formWidth.style}>
+        {/* 保存・公開・作成・削除の間は、入力欄を触れなくする（終わると、サーバーから返った内容に置き換わり、その間に書いた分が消えるため） */}
+        <section className="form" inert={busy !== null && busy !== 'history'} aria-busy={busy !== null && busy !== 'history'}>
           {message && <MessageBox message={message} />}
           {problems.length > 0 && (
             <div className="problems">
@@ -656,24 +721,30 @@ export function AdminApp() {
           </Field>
 
           <h2>コースと指導教員</h2>
-          {draft.courses.map((c, i) => (
-            <CourseCard
-              key={c.id}
-              course={c}
-              index={i}
-              count={draft.courses.length}
-              published={publishedIds.has(c.id)}
-              focused={focusedCourse === i}
-              onFocus={() => setFocusedCourse(i)}
-              onChange={(course) => setCourse(i, course)}
-              onMove={(delta) => moveCourse(i, delta)}
-              onRemove={() => {
-                set({ courses: draft.courses.filter((_, j) => j !== i) })
-                setFocusedCourse(0)
-              }}
-              onEditTemplate={() => setEditingTemplate(i)}
-            />
-          ))}
+          {/* カードは左上のつまみ（⋮⋮）をつかんで並べ替える。落とす場所に線を出す */}
+          <div className="course-list" ref={courseListRef}>
+            {draft.courses.map((c, i) => (
+              <CourseCard
+                key={c.id}
+                course={c}
+                published={publishedIds.has(c.id)}
+                focused={focusedCourse === i}
+                onFocus={() => setFocusedCourse(i)}
+                onChange={(course) => setCourse(i, course)}
+                grip={courseOrder.gripProps(i, c.id)}
+                dragging={courseOrder.drag?.from === i}
+                onRemove={() => {
+                  set({ courses: draft.courses.filter((_, j) => j !== i) })
+                  setFocusedCourse(0)
+                }}
+                onEditTemplate={() => setEditingTemplate(i)}
+              />
+            ))}
+            {courseOrder.drag?.line != null && <div className="drop-line" style={{ top: courseOrder.drag.line }} />}
+          </div>
+          <div className="sr-only" aria-live="polite">
+            {courseOrder.message}
+          </div>
           <button
             className="add"
             onClick={() => {
@@ -696,7 +767,7 @@ export function AdminApp() {
                   必須（ふだん）
                 </button>
                 <button aria-pressed={draft.driveSave === 'off'} className={draft.driveSave === 'off' ? 'on stop' : 'stop'} onClick={() => set({ driveSave: 'off' })}>
-                  止める（Google の障害のとき）
+                  止める
                 </button>
               </div>
               {draft.driveSave === 'off' ? (
@@ -771,6 +842,8 @@ export function AdminApp() {
           </div>
           <Preview config={draft} courseId={draft.courses[focusedCourse]?.id ?? draft.courses[0]?.id ?? ''} />
         </section>
+        {/* 入力欄と見本の境目：つかんで動かすと入力欄の幅が変わる。ダブルクリックで元の幅。選んで ←・→ でも変わる */}
+        <div className="form-resize" {...formWidth.handleProps} />
       </main>
       {help && <AdminHelp admin onClose={() => setHelp(false)} />}
 
@@ -803,7 +876,7 @@ export function AdminApp() {
       {dialog === 'members' && <MembersDialog me={state.user} studentIdPattern={draft.studentIdPattern} onClose={() => setDialog(null)} />}
 
       {dialog === 'newYear' && (
-        <Modal title="新年度を作成" onClose={() => setDialog(null)}>
+        <Modal title="新年度を作成" onClose={() => busy !== 'create' && setDialog(null)}>
           {/* コピーするのは、保存されている設定（保存していない変更は入らない。作成の前に確かめている） */}
           <p className="lead">{row.year}年度の、保存されている設定をコピーして、新しい年度を作ります。作った年度は「準備中」になり、公開するまで学生には見えません。</p>
           <Field label="新しい年度">
@@ -811,19 +884,23 @@ export function AdminApp() {
             <TextInput value={newYear} onChange={(v) => setNewYear(v.replace(/[^0-9０-９]/g, ''))} />
           </Field>
           <div className="row-buttons">
+            <SlowNote show={slow && busy === 'create'} />
             <span className="spacer" />
-            <button onClick={() => setDialog(null)}>やめる</button>
+            <button disabled={busy === 'create'} onClick={() => setDialog(null)}>
+              やめる
+            </button>
             <button
-              className="primary"
-              disabled={!/^\d{4}$/.test(halfDigits(newYear))}
+              className={`primary${busy === 'create' ? ' busy' : ''}`}
+              disabled={!/^\d{4}$/.test(halfDigits(newYear)) || !!busy}
+              aria-busy={busy === 'create'}
               onClick={() => {
                 const n = Number(halfDigits(newYear))
-                setDialog(null)
-                // 作ったあと、前の年度のままの項目（題目・締切・お知らせなど）を知らせる
-                void run(newYearNotice(row.config, n), () => server.createYear(row.year, n), { nextYear: n })
+                // 作っている間は窓を開いたまま、ボタンに「作成しています…」を出す。終わったら閉じて、
+                // 前の年度のままの項目（題目・締切・お知らせなど）を知らせる（できなかったときも閉じて、理由を知らせる）
+                void run('create', newYearNotice(row.config, n), () => server.createYear(row.year, n), { nextYear: n }).finally(() => setDialog(null))
               }}
             >
-              作成する
+              {busy === 'create' ? <Waiting text={WAIT_TEXT.create} /> : '作成する'}
             </button>
           </div>
         </Modal>
@@ -875,6 +952,8 @@ function TeacherView({
   setDraft,
   dirty,
   busy,
+  slow,
+  doneText,
   message,
   onMessage,
   onSelectYear,
@@ -885,7 +964,12 @@ function TeacherView({
   draft: YearConfig
   setDraft: (c: YearConfig) => void
   dirty: boolean
-  busy: boolean
+  /** サーバーを待っている操作（先生の画面では保存だけ） */
+  busy: Busy | null
+  /** 長く待っている（「数秒〜十数秒かかることがあります」を出す） */
+  slow: boolean
+  /** 終わったときの短い知らせ（「保存しました」） */
+  doneText: string | null
   message: Notice | null
   /** 画面の上の知らせ（ひな形を反映した、など） */
   onMessage: (message: Notice | null) => void
@@ -931,6 +1015,7 @@ function TeacherView({
           <select
             className="sel"
             value={row.year}
+            disabled={!!busy}
             onChange={(e) => {
               if (dirty && !confirm('保存していない変更があります。破棄して年度を切り替えますか？')) return
               onSelectYear(Number(e.target.value))
@@ -943,19 +1028,24 @@ function TeacherView({
             ))}
           </select>
           <span className={`badge ${isPublished ? 'pub' : row.status === '準備中' ? 'draft' : 'old'}`}>{row.status}</span>
-          {dirty && <span className="badge warn">保存していない変更があります</span>}
+          {dirty && busy !== 'save' && <span className="badge warn">保存していない変更があります</span>}
           <span className="spacer" />
-          <button className="btn primary" disabled={busy || !dirty} onClick={save}>
-            {saveButtonLabel(row.status)}
+          <DoneNote text={doneText} />
+          <button className={`btn primary${busy === 'save' ? ' busy' : ''}`} disabled={!!busy || !dirty} aria-busy={busy === 'save'} onClick={save}>
+            {busy === 'save' ? <Waiting text={WAIT_TEXT.save} /> : saveButtonLabel(row.status)}
           </button>
         </div>
         <div className="head-sub">
           <span className="who">ログイン中：</span>
           <span className="user">{state.user}（先生）</span>
           {isMockServer && <span className="badge old">試験用サーバー</span>}
+          {/* 長く待っているときの1行（保存のボタンのすぐ下） */}
+          {slow && <span className="spacer" />}
+          <SlowNote show={slow} />
         </div>
       </header>
-      <main className="teacher-main">
+      {/* 保存している間は、入力欄を触れなくする（終わると、保存した内容に置き換わるため） */}
+      <main className="teacher-main" inert={!!busy} aria-busy={!!busy}>
         {message && <MessageBox message={message} />}
         <h2>コースごとの下書きのひな形とお知らせ（{draft.fiscalYear}年度）</h2>
         <p className="hint">学生が最初に見る本文の組み立て（大見出し・小見出し・書くことの説明・図の枠・素材表）と、そのコースの学生へのお知らせを、コースごとに決めます。先生は、どのコースも編集できます。</p>

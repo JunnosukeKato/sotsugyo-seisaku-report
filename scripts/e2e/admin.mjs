@@ -1,8 +1,10 @@
 // 管理ページの通しの動作確認（試験用サーバーで。Edge を自動で操作する）
-// 使い方: node scripts/e2e/admin.mjs（開発サーバーが http://localhost:5173 で動いていること）
+// 使い方: node scripts/e2e/admin.mjs（開発サーバーが http://localhost:5173 で動いていること。APP_URL で変えられる）
 import { mkdirSync } from 'node:fs'
 import { withEdge } from '../poc/edge.mjs'
 
+// 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
+const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'poc-output/e2e'
 // 先生のお試しで見つかった問題の直し（確認の言葉・知らせ）の画面
 const SHOTS = 'poc-output/admin-fixes'
@@ -43,7 +45,7 @@ await withEdge(async (browser) => {
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
   const dialogs = dialogLog(page)
   await page.setViewport({ width: 1440, height: 900 })
-  await page.goto('http://localhost:5173/admin.html', { waitUntil: 'networkidle0' })
+  await page.goto(`${APP}/admin.html`, { waitUntil: 'networkidle0' })
   await page.evaluate(() => {
     localStorage.removeItem('sotsugyo-admin-mock')
     localStorage.removeItem('sotsugyo-admin-year')
@@ -51,7 +53,11 @@ await withEdge(async (browser) => {
   await page.reload({ waitUntil: 'networkidle0' })
   await page.waitForSelector('.admin .form')
 
-  const previewText = () => page.evaluate(() => document.querySelector('.preview iframe').contentDocument.body.innerText.replace(/\s/g, ''))
+  // 見本の iframe は、設定が変わるたびに読み込み直す（読み込みの途中は中身がない）。中身が出てから読む
+  const previewText = async () => {
+    await page.waitForFunction(() => document.querySelector('.preview iframe')?.contentDocument?.body?.innerText.trim(), { timeout: 5000 }).catch(() => {})
+    return page.evaluate(() => document.querySelector('.preview iframe').contentDocument.body.innerText.replace(/\s/g, ''))
+  }
   const fieldInput = (label) => page.evaluateHandle((label) => [...document.querySelectorAll('.f')].find((f) => f.querySelector('.l')?.textContent.startsWith(label)).querySelector('input, textarea'), label)
   const clickButton = (text) => page.evaluate((text) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(text)).click(), text)
   const messageText = (p = page) => p.evaluate(() => document.querySelector('.message')?.textContent ?? '')
@@ -330,7 +336,7 @@ await withEdge(async (browser) => {
   // 学生のドライブ保存を止める（詳細設定の中。Google の障害のとき。mockups/v22 ② 案B）
   const savedDriveSave = () => page.evaluate(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config.driveSave)
   await page.evaluate(() => (document.querySelector('details.details').open = true))
-  await clickButton('止める（Google の障害のとき）')
+  await clickButton('止める')
   const stopWarn = await page.evaluate(() => document.querySelector('.drive-switch.off .warn')?.textContent ?? '')
   await page.screenshot({ path: `${OUT}/admin-drive-switch.png` })
   await clickButton('保存して学生に反映')
@@ -372,7 +378,7 @@ await withEdge(async (browser) => {
   const teacher = await context.newPage()
   const teacherDialogs = dialogLog(teacher)
   await teacher.setViewport({ width: 1440, height: 900 })
-  await teacher.goto('http://localhost:5173/admin.html?as=teacher', { waitUntil: 'networkidle0' })
+  await teacher.goto(`${APP}/admin.html?as=teacher`, { waitUntil: 'networkidle0' })
   await teacher.waitForSelector('.teacher-main')
   check('先生には、ひな形の一覧だけの画面が出る（年度の設定の欄は出ない）', !(await teacher.$('.form')) && (await teacher.$$('.teacher-main .tpl-row')).length > 0)
   check('先生の画面にも、ソースコードの場所のリンクが出る（AGPL）', await teacher.evaluate(() => !!document.querySelector('.teacher-main .source a')?.href))
@@ -471,7 +477,7 @@ await withEdge(async (browser) => {
   const second = await context.newPage()
   dialogLog(second)
   await second.setViewport({ width: 1440, height: 900 })
-  await second.goto('http://localhost:5173/admin.html', { waitUntil: 'networkidle0' })
+  await second.goto(`${APP}/admin.html`, { waitUntil: 'networkidle0' })
   await second.waitForSelector('.admin .form')
   const secondNotice = await second.$('.form .course .notice-field textarea')
   await secondNotice.evaluate((el) => el.select())
@@ -500,7 +506,7 @@ await withEdge(async (browser) => {
   // 同じ項目（お知らせ）を両方で別の内容に変えていたら、入れ直さずに読み込み直しを頼む（どちらも消さない）
   const third = await context.newPage()
   dialogLog(third)
-  await third.goto('http://localhost:5173/admin.html', { waitUntil: 'networkidle0' })
+  await third.goto(`${APP}/admin.html`, { waitUntil: 'networkidle0' })
   await third.waitForSelector('.admin .form')
   const thirdNotice = await third.$('.form .course .notice-field textarea')
   await thirdNotice.evaluate((el) => el.select())
@@ -775,6 +781,598 @@ await withEdge(async (browser) => {
   await page.waitForSelector('.admin .form')
   check('開き直すと、最後に見ていた年度（2026年度・終了）から開く', await page.evaluate(() => document.querySelector('.admin-header .sel').value === '2026' && document.querySelector('.badge.old')?.textContent === '終了'))
   await context.close()
+
+  /** 1字だけで次の行に残っている文（selectors に合う、見えている要素ごと。残っていなければ空の一覧） */
+  const lonelyLines = (p, selectors) =>
+    p.evaluate((selectors) => {
+      const bad = []
+      for (const sel of selectors)
+        for (const el of document.querySelectorAll(sel)) {
+          if (!el.getClientRects().length) continue
+          const lines = []
+          const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+          for (let n = walker.nextNode(); n; n = walker.nextNode())
+            for (let i = 0; i < n.data.length; i++) {
+              if (/\s/.test(n.data[i])) continue
+              const range = document.createRange()
+              range.setStart(n, i)
+              range.setEnd(n, i + 1)
+              const r = range.getClientRects()[0]
+              if (!r) continue
+              const y = r.top + r.height / 2
+              const line = lines.find((l) => Math.abs(l.y - y) < 6)
+              if (line) line.n++
+              else lines.push({ y, n: 1 })
+            }
+          if (lines.length > 1 && lines.at(-1).n === 1) bad.push(`${sel}「${el.textContent.trim()}」`)
+        }
+      return bad
+    }, selectors)
+  /** 1280・1366・1920 の幅で、1字だけ次の行に残っている文（最後は 1366×768 に戻す） */
+  const lonelyAtWidths = async (p, selectors) => {
+    const bad = []
+    for (const width of [1280, 1920, 1366]) {
+      await p.setViewport({ width, height: 768 })
+      await sleep(250)
+      bad.push(...(await lonelyLines(p, selectors)).map((s) => `${width}:${s}`))
+    }
+    return bad
+  }
+
+  // ==== 先生のお試しのあとの直し（コース名の「コース」・サブタイトルの「―」・お知らせの案内・ドラッグで並べ替え・入力欄の幅・「止める」） ====
+  // 新しい入れ物（試験用サーバーは最初の状態から）で、ノートパソコンの画面（1366×768）で確かめる
+  const fixes = await browser.createBrowserContext()
+  const fx = await fixes.newPage()
+  fx.on('pageerror', (e) => console.log('pageerror:', e.message))
+  const fxDialogs = dialogLog(fx)
+  await fx.setViewport({ width: 1366, height: 768 })
+  await fx.goto(`${APP}/admin.html`, { waitUntil: 'networkidle0' })
+  await fx.waitForSelector('.admin .form')
+  const fxSaved = () => fx.evaluate(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).years.find((y) => y.year === 2026).config)
+  const fxDirty = () => fx.evaluate(() => !!document.querySelector('.badge.warn'))
+  const fxClick = (text) => fx.evaluate((text) => [...document.querySelectorAll('button')].find((b) => b.textContent.trim().startsWith(text)).click(), text)
+  const fxSave = async () => {
+    await fxClick('保存して学生に反映')
+    await fx.waitForFunction(() => document.querySelector('.message.ok'), { timeout: 10000 })
+  }
+  const firstCard = '.course-list > .course'
+
+  // ---- 1. コース名：欄の外の右に「コース」。名前の最後に「コース」があると、やさしく知らせる（名前は変えない） ----
+  const nameBox = await fx.evaluate((sel) => {
+    const card = document.querySelector(sel)
+    const input = card.querySelector('.in.name')
+    const a = input.getBoundingClientRect()
+    const suffix = card.querySelector('.name-box .suffix')
+    const r = suffix.getBoundingClientRect()
+    return { text: suffix.textContent, placeholder: input.placeholder, value: input.value, gap: Math.round(r.left - a.right), middle: Math.abs((r.top + r.bottom) / 2 - (a.top + a.bottom) / 2) < 3, warn: !!card.querySelector('.name-warn') }
+  }, firstCard)
+  check(
+    'コース名の欄の外の右に「コース」が付く（欄の見本の字は「コース名」。名前には「コース」を付けない）',
+    nameBox.text === 'コース' && nameBox.placeholder === 'コース名' && nameBox.value === '映画・舞台衣装デザイナー' && nameBox.gap >= 0 && nameBox.gap <= 10 && nameBox.middle && !nameBox.warn,
+    JSON.stringify(nameBox),
+  )
+  const nameInput = await fx.$(`${firstCard} .in.name`)
+  await nameInput.focus()
+  await fx.keyboard.press('End')
+  await nameInput.type('コース')
+  await sleep(300)
+  const warned = await fx.evaluate((sel) => {
+    const card = document.querySelector(sel)
+    const w = card.querySelector('.name-warn')
+    return {
+      text: w?.textContent ?? null,
+      described: !!w && card.querySelector('.in.name').getAttribute('aria-describedby') === w.id,
+      cover: document.querySelector('.preview iframe').contentDocument.querySelector('.cover .course')?.textContent ?? '',
+    }
+  }, firstCard)
+  await fx.evaluate((sel) => document.querySelector(sel).scrollIntoView({ block: 'start' }), firstCard)
+  await sleep(200)
+  await fx.screenshot({ path: `${SHOTS}/12-course-name-suffix.png` })
+  check(
+    '名前の最後に「コース」があると、「名前の最後の「コース」は消してください（表紙では自動で付きます）」と知らせる（名前は勝手に変えない）',
+    warned.text === '名前の最後の「コース」は消してください（表紙では自動で付きます）' && warned.described && warned.cover === '映画・舞台衣装デザイナーコース コース',
+    JSON.stringify(warned),
+  )
+  const staticLonely = await lonelyAtWidths(fx, ['.course .name-warn', '.course .name-box .suffix', '.course .template + .hint', '.course .template .slot', '.course .notice-field .hint'])
+  check('新しい字（「コース」・知らせ・例・お知らせの案内）は、1280・1366・1920 の幅で1字だけ次の行に残らない', staticLonely.length === 0, staticLonely.join(' / '))
+  await nameInput.focus()
+  await fx.keyboard.press('End')
+  for (let i = 0; i < 3; i++) await fx.keyboard.press('Backspace')
+  await sleep(200)
+  check('「コース」を消すと、知らせも「保存していない変更があります」も消える', !(await fx.$('.course .name-warn')) && !(await fxDirty()))
+
+  // ---- 2. サブタイトルの形式：前後の「―」は欄の外の固定の印。保存する形式には、いつも前後に「―」が付く ----
+  const subtitleRow = () =>
+    fx.evaluate((sel) => {
+      const card = document.querySelector(sel)
+      return {
+        parts: [...card.querySelectorAll('.template > *')].map((e) => (e.tagName === 'INPUT' ? `[${e.value}]` : e.className === 'slot' ? '〔学生が入力〕' : e.textContent)).join(''),
+        hint: card.querySelector('.template + .hint').textContent,
+        cover: document.querySelector('.preview iframe').contentDocument.querySelector('.cover .subtitle')?.textContent ?? '',
+      }
+    }, firstCard)
+  const row0 = await subtitleRow()
+  check(
+    'サブタイトルの形式は「―」［前］〔学生が入力〕［後ろ］「―」の並び。今の形式（―{input}の衣装制作―）は、欄に「―」を入れずに出る（例・見本にも「―」）',
+    row0.parts === '―[]〔学生が入力〕[の衣装制作]―' && row0.hint === '例：―シンドバッドの衣装制作―' && row0.cover === '―の衣装制作―',
+    JSON.stringify(row0),
+  )
+  const [beforeIn, afterIn] = await fx.$$(`${firstCard} .template input`)
+  await beforeIn.type('x')
+  const typedDirty = await fxDirty()
+  await beforeIn.press('Backspace')
+  await sleep(200)
+  check('前の欄に書いて消すと、「保存していない変更があります」も消える（開いて保存するだけでは、形式は変わらない）', typedDirty && !(await fxDirty()))
+  await afterIn.click({ count: 3 })
+  await afterIn.type('の衣装デザイン')
+  await sleep(300)
+  const row1 = await subtitleRow()
+  await fx.evaluate((sel) => document.querySelector(sel).scrollIntoView({ block: 'start' }), firstCard)
+  await sleep(200)
+  await fx.screenshot({ path: `${SHOTS}/13-subtitle-dashes.png` })
+  await fxSave()
+  const savedTemplate = (await fxSaved()).courses[0].subtitleTemplate
+  check(
+    '後ろの欄を「の衣装デザイン」にすると、例・見本は「―…の衣装デザイン―」になり、「―{input}の衣装デザイン―」で保存される（確認にサブタイトルの形式が出る）',
+    row1.parts === '―[]〔学生が入力〕[の衣装デザイン]―' && row1.hint === '例：―シンドバッドの衣装デザイン―' && row1.cover === '―の衣装デザイン―' && savedTemplate === '―{input}の衣装デザイン―' && fxDialogs.last().includes('・映画・舞台衣装デザイナー コースのサブタイトルの形式'),
+    `${JSON.stringify(row1)} / ${savedTemplate}`,
+  )
+  // 前に保存した形式（線を「—」で書いていた）も、線を外して欄に出る。開いただけでは変更にならない
+  const setStoredTemplate = (template) =>
+    fx.evaluate((template) => {
+      const store = JSON.parse(localStorage.getItem('sotsugyo-admin-mock'))
+      store.years[0].config.courses[0].subtitleTemplate = template
+      localStorage.setItem('sotsugyo-admin-mock', JSON.stringify(store))
+    }, template)
+  await setStoredTemplate('—卒業制作「{input}」—')
+  await fx.reload({ waitUntil: 'networkidle0' })
+  await fx.waitForSelector('.admin .form')
+  const legacy = await subtitleRow()
+  check(
+    '前の形式（—卒業制作「{input}」—）も、前後の線を外して［卒業制作「］〔学生が入力〕［」］と出る（開いただけでは変更にならない）',
+    legacy.parts === '―[卒業制作「]〔学生が入力〕[」]―' && !(await fxDirty()),
+    JSON.stringify(legacy),
+  )
+  await setStoredTemplate('―{input}の衣装制作―')
+  await fx.reload({ waitUntil: 'networkidle0' })
+  await fx.waitForSelector('.admin .form')
+
+  // ---- 3. お知らせの欄の案内は、どこに出るかだけ（管理者・先生の画面とも） ----
+  const NOTICE_HINT = 'このコースの学生のツールの、セルフチェック欄の上に表示されます。'
+  const adminHint = await fx.evaluate(() => [...document.querySelectorAll('.notice-field .hint')].map((h) => h.textContent))
+  await fx.evaluate(() => document.querySelector('.course .notice-field').scrollIntoView({ block: 'center' }))
+  await sleep(200)
+  await fx.screenshot({ path: `${SHOTS}/14-notice-hint.png` })
+  const teacherFx = await fixes.newPage()
+  dialogLog(teacherFx)
+  await teacherFx.setViewport({ width: 1366, height: 768 })
+  await teacherFx.goto(`${APP}/admin.html?as=teacher`, { waitUntil: 'networkidle0' })
+  await teacherFx.waitForSelector('.teacher-main')
+  const teacherHint = await teacherFx.evaluate(() => [...document.querySelectorAll('.notice-field .hint')].map((h) => h.textContent))
+  const teacherLonely = await lonelyAtWidths(teacherFx, ['.notice-field .hint'])
+  await teacherFx.close()
+  check(
+    'お知らせの欄の案内は「このコースの学生のツールの、セルフチェック欄の上に表示されます。」だけ（管理者・先生の画面とも。1字だけ次の行に残らない）',
+    adminHint.length > 0 && adminHint.every((h) => h === NOTICE_HINT) && teacherHint.length > 0 && teacherHint.every((h) => h === NOTICE_HINT) && teacherLonely.length === 0,
+    JSON.stringify({ adminHint, teacherHint, teacherLonely }),
+  )
+
+  // ---- 4. コースのカードの並べ替え：「↑ 上へ」「↓ 下へ」はなくし、左上のつまみ（⋮⋮）をつかんで動かす ----
+  const gripInfo = await fx.evaluate((sel) => {
+    const card = document.querySelector(sel)
+    const g = card.querySelector('.top > .grip:first-child')
+    const a = card.getBoundingClientRect()
+    const r = g.getBoundingClientRect()
+    return {
+      arrows: [...document.querySelectorAll('.course button')].some((b) => /上へ|下へ|↑|↓/.test(b.textContent)),
+      text: g.textContent,
+      label: g.getAttribute('aria-label'),
+      tag: g.tagName,
+      dx: Math.round(r.left - a.left),
+      dy: Math.round(r.top - a.top),
+      cursor: getComputedStyle(g).cursor,
+      touch: getComputedStyle(g).touchAction,
+    }
+  }, firstCard)
+  check(
+    'コースのカードに「↑ 上へ」「↓ 下へ」はなく、左上につまみ「⋮⋮」（ボタン。名前は「並べ替え（矢印キーで動かす）」）がある',
+    !gripInfo.arrows && gripInfo.text === '⋮⋮' && gripInfo.label === '並べ替え（矢印キーで動かす）' && gripInfo.tag === 'BUTTON' && gripInfo.dx < 24 && gripInfo.dy < 24 && gripInfo.cursor === 'grab' && gripInfo.touch === 'none',
+    JSON.stringify(gripInfo),
+  )
+  const A = '映画・舞台衣装デザイナー'
+  const B = '試験二'
+  const C = '試験三'
+  for (const name of [B, C]) {
+    await fxClick('＋ コースを追加')
+    await sleep(150)
+    const inputs = await fx.$$('.course-list > .course .in.name')
+    await inputs.at(-1).type(name)
+  }
+  const order = () => fx.evaluate(() => [...document.querySelectorAll('.course-list > .course .in.name')].map((i) => i.value).join('|'))
+  const cardBox = (i, sel) =>
+    fx.evaluate(
+      (i, sel) => {
+        const card = document.querySelectorAll('.course-list > .course')[i]
+        const r = (sel ? card.querySelector(sel) : card).getBoundingClientRect()
+        return { x: r.x + r.width / 2, y: r.y + r.height / 2, top: r.top, bottom: r.bottom }
+      },
+      i,
+      sel,
+    )
+  const live = () => fx.evaluate(() => document.querySelector('.form .sr-only[aria-live]').textContent.replace(/​/g, ''))
+  // マウス：いちばん下（試験三）のつまみをつかんで、2番目のカードの上半分まで動かす
+  await fx.evaluate(() => document.querySelectorAll('.course-list > .course')[1].scrollIntoView({ block: 'start' }))
+  await sleep(200)
+  const gripC = await cardBox(2, '.grip')
+  const cardB = await cardBox(1)
+  await fx.mouse.move(gripC.x, gripC.y)
+  await fx.mouse.down()
+  await fx.mouse.move(gripC.x, cardB.top + 30, { steps: 12 })
+  await sleep(200)
+  const midDrag = await fx.evaluate(() => {
+    const line = document.querySelector('.course-list > .drop-line')
+    const cards = [...document.querySelectorAll('.course-list > .course')]
+    return {
+      line: line ? Math.round(line.getBoundingClientRect().top + line.getBoundingClientRect().height / 2) : null,
+      between: Math.round((cards[0].getBoundingClientRect().bottom + cards[1].getBoundingClientRect().top) / 2),
+      dragging: cards.findIndex((c) => c.classList.contains('dragging')),
+      grabbing: document.body.classList.contains('reordering'),
+    }
+  })
+  await fx.screenshot({ path: `${SHOTS}/15-drag-reorder.png` })
+  await fx.mouse.up()
+  await sleep(250)
+  const afterMouse = { order: await order(), line: !!(await fx.$('.drop-line')), live: await live() }
+  check(
+    'マウスでつまみをつかんで動かすと、つかんだカードが薄くなり、落とす場所（カードとカードの間）に線が出る。離すとそこへ移り、「2番目に移しました」と読み上げる',
+    midDrag.dragging === 2 && midDrag.grabbing && midDrag.line !== null && Math.abs(midDrag.line - midDrag.between) <= 2 && afterMouse.order === `${A}|${C}|${B}` && !afterMouse.line && afterMouse.live === '2番目に移しました',
+    JSON.stringify({ midDrag, afterMouse }),
+  )
+  // 一覧の下の端の近くまで動かすと、入力欄がスクロールし、いちばん下まで運べる
+  await fx.evaluate(() => (document.querySelector('.form').scrollTop = 0))
+  await sleep(200)
+  const gripA = await cardBox(0, '.grip')
+  const formBottom = await fx.evaluate(() => document.querySelector('.form').getBoundingClientRect().bottom)
+  await fx.mouse.move(gripA.x, gripA.y)
+  await fx.mouse.down()
+  await fx.mouse.move(gripA.x, formBottom - 6, { steps: 15 })
+  await sleep(2500)
+  const scrolledBy = await fx.evaluate(() => document.querySelector('.form').scrollTop)
+  await fx.mouse.up()
+  await sleep(250)
+  check('つかんだまま入力欄の下の端の近くまで動かすと、入力欄がスクロールし、いちばん下まで運べる', scrolledBy > 300 && (await order()) === `${C}|${B}|${A}`, `${scrolledBy} / ${await order()}`)
+  // 指（タッチ）でも動かせる：2番目（試験二）を、3番目の下半分まで
+  await fx.evaluate(() => document.querySelectorAll('.course-list > .course')[1].scrollIntoView({ block: 'start' }))
+  await sleep(200)
+  const gripB = await cardBox(1, '.grip')
+  const cardA = await cardBox(2)
+  await fx.touchscreen.touchStart(gripB.x, gripB.y)
+  for (let k = 1; k <= 10; k++) await fx.touchscreen.touchMove(gripB.x, gripB.y + ((cardA.bottom - 30 - gripB.y) * k) / 10)
+  await sleep(100)
+  await fx.touchscreen.touchEnd()
+  await sleep(250)
+  check('指（タッチ）でも、つまみをつかんで動かせる', (await order()) === `${C}|${A}|${B}`, await order())
+  // キーボード：つまみを選んで ↓・↑。動かしたカードのつまみが選ばれたまま。端では「いちばん下です」
+  const focusedCard = () => fx.evaluate(() => (document.activeElement?.classList.contains('grip') ? document.activeElement.closest('.course').querySelector('.in.name').value : null))
+  await (await fx.$$('.course-list > .course .grip'))[0].focus()
+  const steps = []
+  for (const key of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp']) {
+    await fx.keyboard.press(key)
+    await sleep(150)
+    steps.push(`${await order()}／${await live()}／${await focusedCard()}`)
+  }
+  check(
+    'キーボード：つまみを選んで ↓・↑ で1つずつ動き、「3番目に移しました」などと読み上げる（動かしたカードのつまみが選ばれたまま。端では「いちばん下です」）',
+    steps.join(' ; ') === [`${A}|${C}|${B}／2番目に移しました／${C}`, `${A}|${B}|${C}／3番目に移しました／${C}`, `${A}|${B}|${C}／いちばん下です／${C}`, `${A}|${C}|${B}／2番目に移しました／${C}`].join(' ; '),
+    steps.join(' ; '),
+  )
+  const pageScroll = await fx.evaluate(() => ({ height: document.documentElement.scrollHeight, inner: innerHeight, y: scrollY, header: document.querySelector('.admin-header').getBoundingClientRect().top }))
+  check('コースが増えて入力欄が長くなっても、ページ全体はスクロールしない（見出しはいつも画面の上に見える）', pageScroll.height <= pageScroll.inner && pageScroll.y === 0 && pageScroll.header === 0, JSON.stringify(pageScroll))
+  // 「学生に表示」を外したコースも並べ替えられる
+  await fx.evaluate(() => document.querySelectorAll('.course-list > .course')[2].querySelector('.toggle-label input').click())
+  await sleep(100)
+  await (await fx.$$('.course-list > .course .grip'))[2].focus()
+  await fx.keyboard.press('ArrowUp')
+  await sleep(150)
+  const hiddenMoved = await fx.evaluate(() => document.querySelectorAll('.course-list > .course')[1].classList.contains('hidden-course'))
+  check('「学生に表示」を外したコースも、同じように並べ替えられる', hiddenMoved && (await order()) === `${A}|${B}|${C}`, await order())
+  await fxSave()
+  const savedOrder1 = (await fxSaved()).courses.map((c) => c.name).join('|')
+  await (await fx.$$('.course-list > .course .grip'))[2].focus()
+  await fx.keyboard.press('ArrowUp')
+  await sleep(150)
+  await fxSave()
+  const savedOrder2 = (await fxSaved()).courses.map((c) => c.name).join('|')
+  check(
+    '並べ替えた順番は、今までどおり「保存して学生に反映」で保存される（保存の確認に「コースの順番」が出る）',
+    savedOrder1 === `${A}|${B}|${C}` && savedOrder2 === `${A}|${C}|${B}` && fxDialogs.last().includes('・コースの順番'),
+    `${savedOrder1} → ${savedOrder2} / ${fxDialogs.last().replace(/\n/g, '⏎')}`,
+  )
+  // 下書きのひな形の窓の行も、同じ「↑」「↓」のボタンだったので、つまみで並べ替える
+  await fx.evaluate(() => document.querySelector('.course-list > .course .tpl-row button').click())
+  await fx.waitForSelector('.tpl-modal')
+  const tplRows = () => fx.evaluate(() => [...document.querySelectorAll('.tpl-modal .row input')].map((i) => i.value))
+  const tplInfo = await fx.evaluate(() => ({
+    grips: [...document.querySelectorAll('.tpl-modal .row')].every((r) => r.firstElementChild.classList.contains('grip') && r.firstElementChild.textContent === '⋮⋮' && r.firstElementChild.getAttribute('aria-label') === '並べ替え（矢印キーで動かす）'),
+    arrows: [...document.querySelectorAll('.tpl-modal .row button')].some((b) => /↑|↓/.test(b.textContent) || /上へ|下へ/.test(b.title)),
+  }))
+  const tpl0 = await tplRows()
+  await (await fx.$$('.tpl-modal .row .grip'))[1].focus()
+  await fx.keyboard.press('ArrowDown')
+  await sleep(150)
+  const tplKey = await tplRows()
+  const tplLive = await fx.evaluate(() => document.querySelector('.tpl-modal .sr-only[aria-live]').textContent.replace(/​/g, ''))
+  const gripRow4 = await fx.evaluate(() => {
+    const r = document.querySelectorAll('.tpl-modal .row .grip')[4].getBoundingClientRect()
+    return { x: r.x + r.width / 2, y: r.y + r.height / 2 }
+  })
+  const row1Top = await fx.evaluate(() => document.querySelectorAll('.tpl-modal .row')[1].getBoundingClientRect().top)
+  await fx.mouse.move(gripRow4.x, gripRow4.y)
+  await fx.mouse.down()
+  await fx.mouse.move(gripRow4.x, row1Top + 6, { steps: 8 })
+  await sleep(150)
+  const tplLine = !!(await fx.$('.tpl-modal .drop-line'))
+  await fx.screenshot({ path: `${SHOTS}/18-template-rows-grip.png` })
+  await fx.mouse.up()
+  await sleep(200)
+  const tplMouse = await tplRows()
+  const swapped = [tpl0[0], tpl0[2], tpl0[1], ...tpl0.slice(3)]
+  const dragged = [swapped[0], swapped[4], swapped[1], swapped[2], swapped[3], ...swapped.slice(5)]
+  check(
+    'ひな形の窓の行も「↑」「↓」をなくし、行の左のつまみで並べ替える（キーボードの ↓、マウスでつかんで動かす）',
+    tplInfo.grips && !tplInfo.arrows && JSON.stringify(tplKey) === JSON.stringify(swapped) && tplLive === '3番目に移しました' && tplLine && JSON.stringify(tplMouse) === JSON.stringify(dragged),
+    JSON.stringify({ tplInfo, tpl0: tpl0.slice(0, 6), tplKey: tplKey.slice(0, 6), tplMouse: tplMouse.slice(0, 6), tplLive }),
+  )
+  await fx.evaluate(() => [...document.querySelectorAll('.tpl-foot button')].find((b) => b.textContent === 'やめる').click())
+  await fx.waitForFunction(() => !document.querySelector('.tpl-modal'), { timeout: 3000 }).catch(() => {})
+
+  // ---- 5. 左の入力欄の幅：右の見本との境目をつかんで変える。覚えておき、ダブルクリックで元の幅。←・→ でも変わる ----
+  const formWidth = () => fx.evaluate(() => Math.round(document.querySelector('.admin-main > .form').getBoundingClientRect().width))
+  const storedWidth = () => fx.evaluate(() => localStorage.getItem('sotsugyo-admin-form-width'))
+  const handleBox = async () => {
+    const b = await (await fx.$('.form-resize')).boundingBox()
+    return { x: b.x + b.width / 2, y: 400 }
+  }
+  const handleInfo = await fx.evaluate(() => {
+    const h = document.querySelector('.form-resize')
+    return { role: h.getAttribute('role'), label: h.getAttribute('aria-label'), tab: h.tabIndex, cursor: getComputedStyle(h).cursor, edge: Math.abs(h.getBoundingClientRect().left + h.getBoundingClientRect().width / 2 - document.querySelector('.admin-main > .form').getBoundingClientRect().right) }
+  })
+  const width0 = await formWidth()
+  const drag = async (dx) => {
+    const h = await handleBox()
+    await fx.mouse.move(h.x, h.y)
+    await fx.mouse.down()
+    await fx.mouse.move(h.x + dx, h.y, { steps: 8 })
+    await fx.mouse.up()
+    await sleep(200)
+  }
+  let h = await handleBox()
+  await fx.mouse.move(h.x, h.y)
+  await sleep(300)
+  const hoverLine = await fx.evaluate(() => getComputedStyle(document.querySelector('.form-resize'), '::after').backgroundColor)
+  await drag(120)
+  const widened = { width: await formWidth(), stored: await storedWidth() }
+  h = await handleBox()
+  await fx.mouse.move(h.x, h.y)
+  await sleep(300)
+  await fx.screenshot({ path: `${SHOTS}/16-panel-resize.png` })
+  check(
+    '入力欄と見本の境目は、マウスを重ねると細い線が見え（カーソルは左右の矢印）、つかんで右へ 120px 動かすと入力欄が 480px → 600px になる（このブラウザに覚える）',
+    handleInfo.role === 'separator' && handleInfo.label === '入力欄の幅（←→キーで変える）' && handleInfo.tab === 0 && handleInfo.cursor === 'col-resize' && handleInfo.edge <= 2 && hoverLine !== 'rgba(0, 0, 0, 0)' && width0 === 480 && widened.width === 600 && widened.stored === '600',
+    JSON.stringify({ handleInfo, hoverLine, width0, widened }),
+  )
+  await fx.reload({ waitUntil: 'networkidle0' })
+  await fx.waitForSelector('.admin .form')
+  const remembered = await formWidth()
+  await fx.focus('.form-resize')
+  await fx.keyboard.press('ArrowRight')
+  await sleep(100)
+  const keyRight = await formWidth()
+  await fx.keyboard.press('ArrowLeft')
+  await fx.keyboard.press('ArrowLeft')
+  await sleep(100)
+  const keyLeft = await formWidth()
+  check('開き直しても、決めた幅（600px）のまま。境目を選んで → で広く、← で狭くなる（16px ずつ）', remembered === 600 && keyRight === 616 && keyLeft === 584, `${remembered} → ${keyRight} → ${keyLeft}`)
+  await drag(-600)
+  const narrowest = await formWidth()
+  await drag(900)
+  const widest = await formWidth()
+  h = await handleBox()
+  await fx.mouse.click(h.x, h.y, { count: 2 })
+  await sleep(200)
+  const reset = { width: await formWidth(), stored: await storedWidth() }
+  check('狭くても 400px、広くても 760px まで。ダブルクリックで元の幅（480px）に戻り、覚えた幅も消える', narrowest === 400 && widest === 760 && reset.width === 480 && reset.stored === null, JSON.stringify({ narrowest, widest, reset }))
+
+  // ---- 6. 詳細設定の「止める（Google の障害のとき）」は「止める」に ----
+  await fx.evaluate(() => (document.querySelector('details.details').open = true))
+  await fx.evaluate(() => document.querySelector('.drive-switch').scrollIntoView({ block: 'center' }))
+  await sleep(200)
+  const drive = await fx.evaluate(() => ({ buttons: [...document.querySelectorAll('.drive-switch .seg2 button')].map((b) => b.textContent), summary: document.querySelector('details.details summary').textContent }))
+  await fx.screenshot({ path: `${SHOTS}/17-drive-stop-label.png` })
+  const driveLonely = await lonelyAtWidths(fx, ['.drive-switch .seg2 button'])
+  check(
+    '詳細設定のボタンは「必須（ふだん）」と「止める」（見出しの「詳細設定（手順書の改訂・Google の障害のとき）」はそのまま）',
+    drive.buttons.join('|') === '必須（ふだん）|止める' && drive.summary === '詳細設定（手順書の改訂・Google の障害のとき）' && driveLonely.length === 0,
+    JSON.stringify({ drive, driveLonely }),
+  )
+  await fixes.close()
+
+  // ==== サーバーを待つ間の表示（試験用サーバーを遅くして確かめる。本番の Apps Script は、10秒ほどかかることがある） ====
+  const DELAY = 3500
+  const waiting = await browser.createBrowserContext()
+  const sw = await waiting.newPage()
+  sw.on('pageerror', (e) => console.log('pageerror:', e.message))
+  const swDialogs = dialogLog(sw)
+  await sw.setViewport({ width: 1366, height: 768 })
+  await sw.goto(`${APP}/admin.html?delay=${DELAY}`, { waitUntil: 'domcontentloaded' })
+  await sw.waitForSelector('.page-wait')
+  const firstWait = await sw.evaluate(() => ({ all: document.querySelector('.page-wait').textContent, spin: !!document.querySelector('.page-wait .spin'), small: document.querySelector('.page-wait small')?.textContent ?? null }))
+  await sleep(2300)
+  const firstSlow = await sw.evaluate(() => document.querySelector('.page-wait small')?.textContent ?? null)
+  await sw.screenshot({ path: `${SHOTS}/19-wait-first-load.png` })
+  const loadLonely = await lonelyLines(sw, ['.page-wait'])
+  await sw.waitForSelector('.admin .form', { timeout: 15000 })
+  check(
+    '最初の読み込み：画面の真ん中に回る印と「読み込んでいます…」。2秒を過ぎると、その下に「数秒〜十数秒かかることがあります」',
+    firstWait.all === '読み込んでいます…' && firstWait.spin && firstWait.small === null && firstSlow === '数秒〜十数秒かかることがあります' && loadLonely.length === 0,
+    JSON.stringify({ firstWait, firstSlow, loadLonely }),
+  )
+  const swState = () =>
+    sw.evaluate(() => {
+      const main = [...document.querySelectorAll('.admin-header .head-row button')].find((b) => b.classList.contains('busy')) ?? null
+      return {
+        busy: main ? { text: main.textContent, spin: !!main.querySelector('.spin'), disabled: main.disabled, aria: main.getAttribute('aria-busy') } : null,
+        buttons: [...document.querySelectorAll('.admin-header .head-row button:not(.help-open)')].map((b) => `${b.textContent}:${b.disabled}`),
+        select: document.querySelector('.admin-header .sel').disabled,
+        links: [...document.querySelectorAll('.admin-header .head-sub .link')].map((b) => b.disabled),
+        inert: document.querySelector('.admin .form').inert,
+        slow: document.querySelector('.slow-note')?.textContent ?? null,
+        done: document.querySelector('.done-note')?.textContent ?? null,
+        message: document.querySelector('.form .message')?.textContent ?? null,
+      }
+    })
+  const swClick = (text, scope = '.admin-header') => sw.evaluate((text, scope) => [...document.querySelectorAll(`${scope} button`)].find((b) => b.textContent.trim() === text).click(), text, scope)
+  // 保存して学生に反映
+  const swTitle = await sw.evaluateHandle(() => [...document.querySelectorAll('.f')].find((f) => f.querySelector('.l')?.textContent.startsWith('共通の題目')).querySelector('input'))
+  await swTitle.type('（待つ）')
+  await swClick('保存して学生に反映')
+  await sleep(80)
+  const saving = await swState()
+  await sw.screenshot({ path: `${SHOTS}/20-wait-saving.png` })
+  await sleep(2200)
+  const savingSlow = await swState()
+  const waitLonely = await lonelyAtWidths(sw, ['.admin-header button.busy', '.head-sub .slow-note'])
+  await sw.screenshot({ path: `${SHOTS}/21-wait-slow.png` })
+  await sw.waitForFunction(() => document.querySelector('.form .message.ok'), { timeout: 15000 })
+  const savedState = await swState()
+  await sw.screenshot({ path: `${SHOTS}/22-wait-done.png` })
+  check(
+    '「保存して学生に反映」を押すと、すぐボタンに回る印と「保存しています…」が出て押せなくなる（年度の選択・見出しの下の段のリンク・入力欄も、終わるまで触れない）',
+    saving.busy?.text === '保存しています…' && saving.busy.spin && saving.busy.disabled && saving.busy.aria === 'true' && saving.select && saving.links.every(Boolean) && saving.inert && saving.slow === null && saving.done === null,
+    JSON.stringify(saving),
+  )
+  check(
+    '2秒を過ぎると、見出しの下の段の右の端（ボタンのすぐ下）に「数秒〜十数秒かかることがあります」（1280・1366・1920 の幅で、1字だけ次の行に残らない）',
+    savingSlow.slow === '数秒〜十数秒かかることがあります' && savingSlow.busy?.text === '保存しています…' && waitLonely.length === 0,
+    JSON.stringify({ savingSlow, waitLonely }),
+  )
+  check(
+    '保存が終わると、ボタンのとなりに「✓ 保存しました」が出て、ボタン・リンク・入力欄は元に戻る（いつもの知らせも出る）',
+    savedState.done === '保存しました' && savedState.busy === null && savedState.buttons.join('|') === '保存して学生に反映:true' && !savedState.inert && !savedState.select && !savedState.links.some(Boolean) && savedState.slow === null && savedState.message.includes('反映'),
+    JSON.stringify(savedState),
+  )
+  const doneGone = await sw.waitForFunction(() => !document.querySelector('.done-note'), { timeout: 7000 }).then(() => true, () => false)
+  check('「✓ 保存しました」は数秒で消える', doneGone)
+  // 変更履歴（読み込む間は、リンクに回る印と「読み込んでいます…」）
+  await swClick('変更履歴')
+  await sleep(80)
+  const histWait = await sw.evaluate(() => {
+    const b = document.querySelector('.head-sub .link.busy')
+    return { text: b?.textContent ?? null, spin: !!b?.querySelector('.spin'), disabled: !!b?.disabled, save: document.querySelector('.admin-header .head-row .btn').disabled, others: [...document.querySelectorAll('.head-sub .link:not(.busy)')].every((x) => x.disabled) }
+  })
+  await sw.waitForSelector('.history li', { timeout: 15000 })
+  check('「変更履歴」を押すと、すぐリンクに回る印と「読み込んでいます…」が出て（ほかのリンク・保存も押せない）、読み込むと窓が開く', histWait.text === '読み込んでいます…' && histWait.spin && histWait.disabled && histWait.save && histWait.others, JSON.stringify(histWait))
+  await sw.keyboard.press('Escape')
+  await sleep(200)
+  // 新年度を作成（作っている間は窓を開いたまま、「作成する」に回る印と「作成しています…」）
+  await swClick('新年度を作成')
+  await sw.waitForSelector('.modal')
+  await swClick('作成する', '.modal')
+  await sleep(80)
+  const creating = await sw.evaluate(() => {
+    const b = document.querySelector('.modal button.primary')
+    const cancel = [...document.querySelectorAll('.modal button')].find((x) => x.textContent === 'やめる')
+    return { text: b?.textContent, spin: !!b?.querySelector('.spin'), disabled: b?.disabled, cancel: cancel?.disabled, slow: document.querySelector('.modal .slow-note')?.textContent ?? null }
+  })
+  await sw.keyboard.press('Escape')
+  await sleep(2200)
+  const createSlow = await sw.evaluate(() => ({ open: !!document.querySelector('.modal'), slow: document.querySelector('.modal .slow-note')?.textContent ?? null }))
+  const createLonely = await lonelyLines(sw, ['.modal button.busy', '.modal .slow-note'])
+  await sw.screenshot({ path: `${SHOTS}/23-wait-create.png` })
+  await sw.waitForFunction(() => !document.querySelector('.modal') && document.querySelector('.badge.draft'), { timeout: 15000 })
+  const created = await swState()
+  check(
+    '新年度の「作成する」を押すと、窓を開いたまま、ボタンに回る印と「作成しています…」（「やめる」・Esc でも閉じない）。2秒を過ぎると窓の中に「数秒〜十数秒かかることがあります」。作ると窓が閉じ、「✓ 作成しました」',
+    creating.text === '作成しています…' && creating.spin && creating.disabled && creating.cancel && creating.slow === null && createSlow.open && createSlow.slow === '数秒〜十数秒かかることがあります' && createLonely.length === 0 && created.done === '作成しました' && created.message.startsWith('2027年度を作成しました'),
+    JSON.stringify({ creating, createSlow, createLonely, created }),
+  )
+  // この年度を学生に公開（保存して公開。回る印と「公開しています…」）
+  await swClick('この年度を学生に公開')
+  await sleep(80)
+  const publishing = await swState()
+  await sw.waitForFunction(() => document.querySelector('.badge.pub')?.textContent === '公開中', { timeout: 15000 })
+  const published = await swState()
+  check(
+    '「この年度を学生に公開」を押すと、すぐボタンに回る印と「公開しています…」が出て押せなくなり、終わると「✓ 公開しました」',
+    publishing.busy?.text === '公開しています…' && publishing.busy.spin && publishing.busy.disabled && publishing.inert && publishing.links.every(Boolean) && published.done === '公開しました',
+    JSON.stringify({ publishing, published: published.done }),
+  )
+  // この年度を削除（準備中の年度。リンクに回る印と「削除しています…」）
+  await swClick('新年度を作成')
+  await sw.waitForSelector('.modal')
+  await swClick('作成する', '.modal')
+  await sw.waitForFunction(() => !document.querySelector('.modal') && document.querySelector('.badge.draft'), { timeout: 15000 })
+  await sw.evaluate(() => document.querySelector('.head-sub .link.del').click())
+  await sleep(80)
+  const deleting = await sw.evaluate(() => {
+    const b = document.querySelector('.head-sub .link.del')
+    return { text: b?.textContent, spin: !!b?.querySelector('.spin'), disabled: b?.disabled, save: [...document.querySelectorAll('.admin-header .head-row .btn')].every((x) => x.disabled), inert: document.querySelector('.admin .form').inert }
+  })
+  await sw.waitForFunction(() => document.querySelector('.form .message.ok')?.textContent.includes('削除しました'), { timeout: 15000 })
+  const deleted = await swState()
+  check(
+    '「この年度を削除」を押すと（確かめたあと）、すぐリンクに回る印と「削除しています…」が出て、保存・公開も押せない。終わると「✓ 削除しました」',
+    deleting.text === '削除しています…' && deleting.spin && deleting.disabled && deleting.save && deleting.inert && deleted.done === '削除しました',
+    JSON.stringify({ deleting, deleted: deleted.done, confirm: swDialogs.last().slice(0, 30) }),
+  )
+  // 先生の登録（一覧の読み込み・登録）
+  await swClick('先生の登録')
+  await sw.waitForSelector('.modal.members')
+  await sleep(80)
+  const membersLoading = await sw.evaluate(() => ({ text: document.querySelector('.modal.members .wait-line')?.textContent ?? null, spin: !!document.querySelector('.modal.members .wait-line .spin') }))
+  await sw.waitForSelector('.modal.members .member-list li', { timeout: 15000 })
+  await sw.type('.member-add textarea', 'wait-test@example.ac.jp')
+  await swClick('登録する', '.modal.members')
+  await sleep(80)
+  const adding = await sw.evaluate(() => {
+    const b = document.querySelector('.member-add button.primary')
+    return { text: b?.textContent, spin: !!b?.querySelector('.spin'), disabled: b?.disabled, others: [...document.querySelectorAll('.member-list button, .member-list select')].every((x) => x.disabled) }
+  })
+  await sleep(2200)
+  const addingSlow = await sw.evaluate(() => document.querySelector('.modal.members .slow-note')?.textContent ?? null)
+  await sw.screenshot({ path: `${SHOTS}/24-wait-members.png` })
+  await sw.waitForFunction(() => [...document.querySelectorAll('.member-list li .who')].some((w) => w.textContent.includes('wait-test@example.ac.jp')), { timeout: 15000 })
+  const addedNote = await sw.evaluate(() => document.querySelector('.modal.members .done-note')?.textContent ?? null)
+  check(
+    '先生の登録：一覧を読み込む間は回る印と「読み込んでいます…」。「登録する」を押すと、ボタンに回る印と「登録しています…」（ほかの「外す」・役割も押せない）。2秒を過ぎると「数秒〜…」。終わると「✓ 登録しました」',
+    membersLoading.text === '読み込んでいます…' && membersLoading.spin && adding.text === '登録しています…' && adding.spin && adding.disabled && adding.others && addingSlow === '数秒〜十数秒かかることがあります' && addedNote === '登録しました',
+    JSON.stringify({ membersLoading, adding, addingSlow, addedNote }),
+  )
+  await swClick('閉じる', '.modal.members')
+  // 先生の画面の保存（ひな形・お知らせ・書き間違えやすい語）
+  const tw = await waiting.newPage()
+  dialogLog(tw)
+  await tw.setViewport({ width: 1366, height: 768 })
+  await tw.goto(`${APP}/admin.html?as=teacher&delay=${DELAY}`, { waitUntil: 'domcontentloaded' })
+  await tw.waitForSelector('.teacher-main', { timeout: 15000 })
+  await tw.type('.teacher-main .notice-field textarea', '待つ間の表示の確かめ')
+  await tw.evaluate(() => [...document.querySelectorAll('.admin-header button')].find((b) => b.textContent.startsWith('保存して')).click())
+  await sleep(80)
+  const teacherSaving = await tw.evaluate(() => {
+    const b = document.querySelector('.admin-header .btn.primary')
+    return { text: b?.textContent, spin: !!b?.querySelector('.spin'), disabled: b?.disabled, select: document.querySelector('.admin-header .sel').disabled, inert: document.querySelector('.teacher-main').inert }
+  })
+  await sleep(2200)
+  const teacherSlow = await tw.evaluate(() => document.querySelector('.head-sub .slow-note')?.textContent ?? null)
+  await tw.screenshot({ path: `${SHOTS}/25-wait-teacher.png` })
+  await tw.waitForFunction(() => document.querySelector('.message.ok'), { timeout: 15000 })
+  const teacherDone = await tw.evaluate(() => document.querySelector('.done-note')?.textContent ?? null)
+  check(
+    '先生の画面の保存も、すぐボタンに回る印と「保存しています…」（年度の選択・入力欄も触れない）。2秒を過ぎると「数秒〜…」、終わると「✓ 保存しました」',
+    teacherSaving.text === '保存しています…' && teacherSaving.spin && teacherSaving.disabled && teacherSaving.select && teacherSaving.inert && teacherSlow === '数秒〜十数秒かかることがあります' && teacherDone === '保存しました',
+    JSON.stringify({ teacherSaving, teacherSlow, teacherDone }),
+  )
+  await waiting.close()
 })
 
 const failed = results.filter((r) => !r.ok)

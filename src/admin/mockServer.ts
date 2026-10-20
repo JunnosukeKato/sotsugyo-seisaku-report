@@ -42,7 +42,12 @@ function save(store: Store): void {
   localStorage.setItem(KEY, JSON.stringify(store))
 }
 
-const wait = () => new Promise((r) => setTimeout(r, 200))
+/**
+ * 1回のやり取りにかかる時間。admin.html?delay=3000 で開くと 3 秒待つ（本番の Apps Script は、しばらく使っていないと
+ * 10秒ほどかかることがあるので、待つ間の表示「保存しています…」「数秒〜十数秒かかることがあります」を確かめるため）
+ */
+const DELAY = Number(new URLSearchParams(location.search).get('delay')) || 200
+const wait = () => new Promise((r) => setTimeout(r, DELAY))
 const clone = <T>(v: T): T => JSON.parse(JSON.stringify(v))
 
 export function createMockServer(): AdminServer {

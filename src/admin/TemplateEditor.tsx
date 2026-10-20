@@ -7,6 +7,7 @@ import { bodyContentHtml } from '../layout/bodyHtml'
 import { reportCss } from '../layout/reportCss'
 import { bodyFromTemplate, DEFAULT_TEMPLATE } from '../model/template'
 import { useLeaveGuard } from './useLeaveGuard'
+import { useReorder } from './useReorder'
 
 /**
  * コースの「下書きのひな形」を編集する画面（mockups/v8 案1：コースのカードから開く）。
@@ -170,13 +171,22 @@ export function TemplateEditor({ course, config, footNote, onApply, onClose }: P
   }, [focusKey])
 
   const setBlock = (i: number, block: TemplateBlock) => setRows(rows.map((r, j) => (j === i ? { ...r, block } : r)))
-  const move = (i: number, delta: number) => {
-    const next = [...rows]
-    const [r] = next.splice(i, 1)
-    next.splice(i + delta, 0, r)
-    setRows(next)
-    setSelected(i + delta)
-  }
+  // 行の並べ替え：行の左のつまみ（⋮⋮）をつかんで動かす（コースのカードと同じ。キーボードでは ↑・↓）
+  const listRef = useRef<HTMLDivElement>(null)
+  const order = useReorder(
+    listRef,
+    rows.length,
+    (from, to) => {
+      setRows((list) => {
+        const next = [...list]
+        const [r] = next.splice(from, 1)
+        next.splice(to, 0, r)
+        return next
+      })
+      setSelected(to)
+    },
+    '.row',
+  )
   const remove = (i: number) => {
     setRows(rows.filter((_, j) => j !== i))
     setSelected(Math.max(0, Math.min(i, rows.length - 2)))
@@ -231,9 +241,12 @@ export function TemplateEditor({ course, config, footNote, onApply, onClose }: P
                 標準のひな形に戻す
               </button>
             </div>
-            <div className="ol">
+            <div className="ol" ref={listRef}>
               {rows.map(({ key, block }, i) => (
-                <div key={key} className={`row ${block.type}${i === selected ? ' on' : ''}`} onClick={() => setSelected(i)}>
+                <div key={key} className={`row ${block.type}${i === selected ? ' on' : ''}${order.drag?.from === i ? ' dragging' : ''}`} onClick={() => setSelected(i)}>
+                  <button className="grip" {...order.gripProps(i, key)} onFocus={() => setSelected(i)}>
+                    ⋮⋮
+                  </button>
                   <span className="kind">
                     {KIND_LABELS[block.type]}
                     {nums[i] && <b>{nums[i]}</b>}
@@ -249,18 +262,16 @@ export function TemplateEditor({ course, config, footNote, onApply, onClose }: P
                     onChange={(e) => setBlock(i, withText(block, e.target.value))}
                   />
                   <span className="acts">
-                    <button title="上へ" disabled={i === 0} onClick={() => move(i, -1)}>
-                      ↑
-                    </button>
-                    <button title="下へ" disabled={i === rows.length - 1} onClick={() => move(i, 1)}>
-                      ↓
-                    </button>
                     <button title="この行を削除" onClick={() => remove(i)}>
                       ✕
                     </button>
                   </span>
                 </div>
               ))}
+              {order.drag?.line != null && <div className="drop-line" style={{ top: order.drag.line }} />}
+            </div>
+            <div className="sr-only" aria-live="polite">
+              {order.message}
             </div>
             <div className="adds">
               <span className="l">選んでいる行の下に足す：</span>

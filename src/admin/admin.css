@@ -47,8 +47,16 @@ button:disabled { opacity: 0.45; cursor: default; }
 .btn { border: 1px solid var(--line); background: #fff; border-radius: 8px; padding: 7px 14px; font-size: 13px; color: var(--ink); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 700; }
 
-.admin-main { display: grid; grid-template-columns: 480px 1fr; min-height: 0; }
-.form { background: var(--panel); border-right: 1px solid var(--line); overflow: auto; padding: 16px 20px 40px; }
+/* 左の入力欄の幅（--form-w）は、右の見本との境目をつかんで変える（useFormWidth.ts）。見本の欄には 360px を残す */
+.admin-main { position: relative; display: grid; grid-template-columns: min(var(--form-w, 480px), calc(100% - 360px)) minmax(0, 1fr); min-height: 0; }
+.form-resize { position: absolute; z-index: 5; top: 0; bottom: 0; left: calc(min(var(--form-w, 480px), 100% - 360px) - 5px); width: 9px; cursor: col-resize; touch-action: none; }
+.form-resize::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 3px; border-radius: 2px; background: transparent; transition: background 0.15s; }
+.form-resize:hover::after, .form-resize:focus-visible::after, body.resizing .form-resize::after { background: var(--accent); opacity: 0.5; }
+.form-resize:focus-visible { outline: none; }
+body.resizing { cursor: col-resize; user-select: none; }
+body.resizing iframe { pointer-events: none; }
+/* position: relative：中の読み上げだけの知らせ（.sr-only）などを、この欄の中に収める（外に出ると、ページ全体がスクロールしてしまう） */
+.form { position: relative; background: var(--panel); border-right: 1px solid var(--line); overflow: auto; padding: 16px 20px 40px; }
 .form h2 { font-size: 13px; color: var(--muted); font-weight: 400; margin: 20px 0 10px; letter-spacing: 0.04em; }
 /* 知らせは、言葉の切れ目で折り返す（mockups/v35-admin の知らせと同じ） */
 .message { border-radius: 8px; padding: 8px 12px; font-size: 13px; margin-bottom: 10px; word-break: auto-phrase; }
@@ -74,15 +82,37 @@ button:disabled { opacity: 0.45; cursor: default; }
 textarea.in { resize: vertical; }
 .in.num { width: 90px; }
 .range { display: flex; align-items: center; gap: 6px; font-size: 13px; }
+/* 最少〜最多の2つの欄は、詳細設定の半分の幅に収める（入力欄を狭くしても、横にはみ出さない） */
+.range .in.num { flex: 1 1 0; min-width: 0; width: 0; max-width: 90px; }
 
 .course { border: 1px solid var(--line); border-radius: 10px; padding: 12px; margin-bottom: 10px; display: grid; gap: 6px; }
 .course.on { border-color: var(--accent); }
 .course.hidden-course { background: #f7f8fa; }
 .course .top { display: flex; gap: 10px; align-items: center; }
 .course .name { font-weight: 700; }
+/* コース名の欄と、欄の外の右に固定で付ける「コース」 */
+.course .name-box { flex: 1; min-width: 0; display: flex; align-items: center; gap: 5px; }
+.course .name-box .suffix { flex: none; font-size: 14px; font-weight: 700; white-space: nowrap; }
+.course .name-warn { font-size: 11.5px; line-height: 1.6; color: var(--warn); word-break: auto-phrase; text-wrap: pretty; }
 .toggle-label { display: flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+/* サブタイトルの形式：「―」［前］〔学生が入力〕［後ろ］「―」。前後の「―」は固定の印（保存するときに付ける） */
 .template { display: flex; align-items: center; gap: 6px; }
-.template .slot { flex: none; font-size: 12px; color: var(--muted); background: var(--bg); border-radius: 6px; padding: 6px 8px; }
+.template .in { min-width: 0; }
+.template .dash { flex: none; font-size: 14px; color: var(--ink); }
+.template .slot { flex: none; font-size: 12px; color: var(--muted); background: var(--bg); border-radius: 6px; padding: 6px 8px; white-space: nowrap; }
+/* 並べ替えのつまみ（カードの左上。つかんで上下に動かす。mockups/v8 の行のつまみと同じ形） */
+.grip { flex: none; width: 22px; height: 30px; margin: 0 -4px 0 -4px; padding: 0; border: 0; border-radius: 6px; background: none; color: #9aa1ad; font-size: 14px; line-height: 1; letter-spacing: -1px; cursor: grab; touch-action: none; }
+.grip:hover { background: var(--bg); color: var(--accent); }
+.grip:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; color: var(--accent); }
+body.reordering, body.reordering * { cursor: grabbing !important; user-select: none; }
+body.reordering iframe { pointer-events: none; }
+.course-list { position: relative; }
+.course.dragging { opacity: 0.55; border-style: dashed; border-color: var(--accent); }
+/* 落とす場所の線（行と行の間） */
+.drop-line { position: absolute; left: 0; right: 0; height: 3px; margin-top: -1.5px; border-radius: 2px; background: var(--accent); pointer-events: none; z-index: 2; }
+.drop-line::before { content: ''; position: absolute; left: -3px; top: -3px; width: 9px; height: 9px; border-radius: 50%; background: var(--accent); }
+/* 画面には出さず、読み上げだけする知らせ */
+.sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 .tags { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 .tag { background: var(--accent-soft); color: var(--accent); border-radius: 999px; padding: 3px 4px 3px 10px; font-size: 12px; display: inline-flex; align-items: center; gap: 2px; }
 .tag button { border: 0; background: none; color: inherit; padding: 0 4px; }
@@ -94,7 +124,7 @@ textarea.in { resize: vertical; }
 
 .details { margin-top: 20px; border-top: 1px solid var(--line); padding-top: 10px; }
 .details summary { font-size: 13px; color: var(--muted); cursor: pointer; margin-bottom: 10px; }
-.details .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
+.details .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 12px; }
 
 .stage { display: grid; grid-template-rows: auto 1fr; min-height: 0; min-width: 0; }
 .stage .caption { display: flex; align-items: center; gap: 10px; padding: 12px 18px; font-size: 12px; color: var(--muted); }
@@ -131,12 +161,16 @@ textarea.in { resize: vertical; }
 .modal.tpl-modal { width: min(1240px, calc(100vw - 32px)); height: min(820px, calc(100vh - 32px)); max-height: none; padding: 0; display: grid; grid-template-rows: auto 1fr auto; overflow: hidden; }
 .tpl-modal > header { padding: 14px 20px; margin: 0; border-bottom: 1px solid var(--line); }
 .tpl-body { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); min-height: 0; }
-.tpl-edit { padding: 14px 18px; overflow: auto; border-right: 1px solid var(--line); }
+.tpl-edit { position: relative; padding: 14px 18px; overflow: auto; border-right: 1px solid var(--line); }
 .tpl-edit .f { margin-bottom: 10px; }
 .tpl-h { display: flex; align-items: baseline; justify-content: space-between; margin: 4px 0 6px; }
 .tpl-h .l, .tpl-modal .adds .l { font-size: 12px; color: var(--muted); }
-.tpl-modal .ol { display: flex; flex-direction: column; gap: 4px; }
-.tpl-modal .row { display: grid; grid-template-columns: 96px 1fr auto; align-items: center; gap: 8px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+.tpl-modal .ol { position: relative; display: flex; flex-direction: column; gap: 4px; }
+.tpl-modal .row { display: grid; grid-template-columns: auto 96px 1fr auto; align-items: center; gap: 8px; padding: 4px 8px; border: 1px solid var(--line); border-radius: 8px; background: #fff; }
+/* 行の左のつまみ（つかんで上下に動かす。コースのカードのつまみと同じ） */
+.tpl-modal .row .grip { width: 18px; height: 26px; margin: 0 -4px 0 -4px; padding: 0; border: 0; background: none; font-size: 12px; color: #9aa1ad; }
+.tpl-modal .row .grip:hover { background: var(--accent-soft); color: var(--accent); }
+.tpl-modal .row.dragging { opacity: 0.55; border-style: dashed; border-color: var(--accent); }
 .tpl-modal .row.subheading { margin-left: 22px; }
 .tpl-modal .row.paragraph, .tpl-modal .row.figure, .tpl-modal .row.materialTable { margin-left: 44px; background: #fafbfc; }
 .tpl-modal .row.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
@@ -239,3 +273,32 @@ textarea.in { resize: vertical; }
 .admin .help-dock { top: var(--head-h); }
 /* 使い方の欄を開いている間は、入力欄と見本をその分だけ左に寄せる（欄の下に隠さない） */
 .admin.help-on .admin-main, .admin.help-on .teacher-main { margin-right: min(380px, 100vw); }
+
+/* ---- サーバーを待つ間の表示（useWait.ts・Wait.tsx） ---- */
+/* 回る印：学生用ツールの PDF の窓の「保存の画面を開いています…」と同じ形（src/index.css の .pdf-wait） */
+.spin { display: inline-block; box-sizing: border-box; flex: none; width: 14px; height: 14px; border-radius: 50%; border: 2px solid var(--accent-soft); border-top-color: var(--accent); vertical-align: -2px; animation: admin-spin 0.8s linear infinite; }
+@keyframes admin-spin { to { transform: rotate(360deg); } }
+/* 押したボタン：回る印と「保存しています…」。押せない間も、薄くしない（待っていることが見えるように） */
+button.busy { display: inline-flex; align-items: center; gap: 6px; }
+button.busy:disabled { opacity: 1; cursor: progress; }
+.btn.primary .spin, .modal button.primary .spin { border-color: rgba(255, 255, 255, 0.4); border-top-color: #fff; }
+.head-sub .link.busy { color: var(--muted); gap: 5px; }
+.head-sub .link.busy .spin { width: 12px; height: 12px; }
+/* 長く待っているときの1行（「数秒〜十数秒かかることがあります」）。見出しの下の段の右の端（保存・公開のボタンのすぐ下）と、窓の下の段 */
+.slow-note { font-size: 12px; color: var(--warn); white-space: nowrap; }
+.head-sub .slow-note { margin-left: 4px; }
+/* 終わったときの短い知らせ（「✓ 保存しました」。数秒で消える） */
+.done-note { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; font-weight: 700; color: var(--ok); white-space: nowrap; }
+.done-note svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2.4; }
+/* 最初の読み込み（画面の真ん中） */
+.page-wait { display: grid; justify-items: center; gap: 10px; font-size: 14px; color: var(--ink); }
+.page-wait .spin { width: 28px; height: 28px; border-width: 3px; }
+.page-wait small { font-size: 12.5px; color: var(--muted); }
+/* 窓の中の待ち（先生の登録の一覧の読み込み・役割の変更） */
+.wait-line { display: inline-flex; align-items: center; gap: 6px; color: var(--muted); font-size: 12.5px; white-space: nowrap; }
+/* 保存などの間は、入力欄を触れない（少し薄くして、待っていることが分かるように） */
+.form[inert], .teacher-main[inert] { opacity: 0.6; transition: opacity 0.2s; }
+@media (prefers-reduced-motion: reduce) {
+  .spin { animation: none; }
+  .form[inert], .teacher-main[inert] { transition: none; }
+}
