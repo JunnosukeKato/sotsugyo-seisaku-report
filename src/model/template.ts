@@ -1,6 +1,6 @@
 import { findCourse, type TemplateBlock, type YearConfig } from '../config'
 import { templateProblems } from '../config/validate'
-import { materialTable } from './table'
+import { materialTable, tableFromTemplate } from './table'
 import type { BodyBlock, Chapter, ParagraphBlock, Report } from './types'
 
 /**
@@ -69,6 +69,13 @@ export function bodyFromTemplate(template: TemplateBlock[]): Chapter[] {
         break
       case 'materialTable':
         body = materialTable(newId('t'), newId, textOf(block.caption))
+        break
+      // 改ページ・ふつうの表（mockups/v44。表は、先生が書いた見出しの行と、学生が書く空の行）
+      case 'pageBreak':
+        body = { type: 'pageBreak', id: newId('pb') }
+        break
+      case 'table':
+        body = tableFromTemplate(newId('t'), newId, block)
         break
       default:
         continue

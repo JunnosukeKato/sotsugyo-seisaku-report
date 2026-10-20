@@ -88,7 +88,8 @@ export interface Course {
 
 /**
  * 下書きのひな形の部品。並べた順に本文になる（最初は大見出し）。
- * 段落の hint は「ここに何を書くか」の説明で、空の段落に薄く出す（画面だけ。PDF には出ない）
+ * 段落の hint は「ここに何を書くか」の説明で、空の段落に薄く出す（画面だけ。PDF には出ない）。
+ * 改ページ（pageBreak）と、ふつうの表（table）は mockups/v44 で足した（先生は見出しの行を書き、中身は学生が書く）
  */
 export type TemplateBlock =
   | { type: 'chapter'; title: string }
@@ -96,3 +97,20 @@ export type TemplateBlock =
   | { type: 'paragraph'; hint: string }
   | { type: 'figure'; caption: string }
   | { type: 'materialTable'; caption: string }
+  | { type: 'pageBreak' }
+  | TemplateTable
+
+/**
+ * ひな形のふつうの表。header は見出しの行の字（列ごと。空でもよい）。中身の行は学生が書くので、ひな形には行の数だけを持つ。
+ * rows：見出しの行の下の行の数（省略は1）。widths・colWidths・heights・labelColumn は、学生の表と同じ（model/types.ts の TableBlock。省略は「そろえる」・中身に合わせる）
+ */
+export interface TemplateTable {
+  type: 'table'
+  caption: string
+  header: string[]
+  rows?: number
+  widths?: 'equal' | 'auto' | 'custom'
+  colWidths?: number[]
+  heights?: 'equal' | 'auto'
+  labelColumn?: boolean
+}

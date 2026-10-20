@@ -12,10 +12,13 @@ export interface ConfigProblem {
   severity: 'error' | 'warning'
 }
 
-/** 文字数・数の上限（管理ページのサーバー gas/admin-project/Code.js の LIMITS と同じ値にする） */
-export const LIMITS = { blocks: 100, name: 100, hint: 300, abstractExample: 500, notice: 1000, words: 300, word: 50, wordNote: 200 }
+/**
+ * 文字数・数の上限（管理ページのサーバー gas/admin-project/Code.js の LIMITS と同じ値にする）。
+ * tableColumns・tableRows：ひな形の表の列の数と、見出しの下の行の数（学生の表と同じ：model/table.ts の TABLE_SIZE）
+ */
+export const LIMITS = { blocks: 100, name: 100, hint: 300, abstractExample: 500, notice: 1000, words: 300, word: 50, wordNote: 200, tableColumns: 6, tableRows: 9 }
 
-const BLOCK_LABELS: Record<TemplateBlock['type'], string> = { chapter: '大見出し', subheading: '小見出し', paragraph: '説明', figure: '図の枠', materialTable: '素材表' }
+const BLOCK_LABELS: Record<TemplateBlock['type'], string> = { chapter: '大見出し', subheading: '小見出し', paragraph: '説明', figure: '図の枠', materialTable: '素材表', pageBreak: '改ページ', table: '表' }
 const BLOCK_TYPES = new Set<unknown>(Object.keys(BLOCK_LABELS))
 
 const isText = (v: unknown): v is string => typeof v === 'string'
@@ -24,9 +27,32 @@ const filled = (v: unknown): v is string => isText(v) && v.trim() !== ''
 const isNumber = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v)
 const isObject = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v)
 
-/** ひな形の部品の、名前（段落は説明）の文字 */
+/** ひな形の部品の、名前（段落は説明）の項目の名前（改ページは名前がない） */
+export function templateTextKey(type: TemplateBlock['type']): 'title' | 'hint' | 'caption' | null {
+  return type === 'chapter' || type === 'subheading' ? 'title' : type === 'paragraph' ? 'hint' : type === 'pageBreak' ? null : 'caption'
+}
+
+/** ひな形の部品の、名前（段落は説明）の文字（改ページは空） */
 function blockText(block: TemplateBlock): string {
-  return block.type === 'chapter' || block.type === 'subheading' ? block.title : block.type === 'paragraph' ? block.hint : block.caption
+  const key = templateTextKey(block.type)
+  return key ? ((block as Record<string, unknown>)[key] as string) : ''
+}
+
+/**
+ * ひな形の表の、名前のほかの項目の形の問題（なければ null）。見出しの行（1〜6列の字）・行の数（1〜9）・列の幅などの切り替え
+ * （サーバーの cleanTable_ と同じ決まり）
+ */
+export function templateTableProblem(block: Record<string, unknown>): 'shape' | { header: number; length: number } | null {
+  const header = block.header
+  if (!Array.isArray(header) || header.length < 1 || header.length > LIMITS.tableColumns || !header.every(isText)) return 'shape'
+  const long = header.findIndex((h) => h.length > LIMITS.name)
+  if (block.rows !== undefined && !(Number.isInteger(block.rows) && (block.rows as number) >= 1 && (block.rows as number) <= LIMITS.tableRows)) return 'shape'
+  if (block.widths !== undefined && block.widths !== 'equal' && block.widths !== 'auto' && block.widths !== 'custom') return 'shape'
+  if (block.heights !== undefined && block.heights !== 'equal' && block.heights !== 'auto') return 'shape'
+  if (block.labelColumn !== undefined && typeof block.labelColumn !== 'boolean') return 'shape'
+  const ws = block.colWidths
+  if (ws !== undefined && !(Array.isArray(ws) && ws.length === header.length && ws.every((w) => isNumber(w) && w > 0 && w <= 100))) return 'shape'
+  return long >= 0 ? { header: long, length: header[long].length } : null
 }
 
 /**
@@ -46,6 +72,7 @@ export const tooLong = (max: number, length: number) => `が長すぎます（${
  * 下書きのひな形の問題（なければ空。説明の先頭に「…の下書きのひな形」を付けて使う）。
  * 管理ページの入力チェックと、学生のツールで崩れたひな形を使わないために使う（サーバーの cleanTemplate_ と同じ決まり）。
  * 部品の種類は決まったものだけ。大見出し・小見出し・図・表は名前が要る。段落の説明は空でもよいが、文字であること。
+ * 改ページは名前がない。ふつうの表は、見出しの行（1〜6列）と行の数などの形も確かめる（templateTableProblem）。
  * いちばん上は大見出し（空のひな形は「標準のひな形を使う」の意味なので、問題にしない）
  */
 export function templateProblems(template: unknown): string[] {
@@ -56,17 +83,21 @@ export function templateProblems(template: unknown): string[] {
   template.forEach((block: unknown, i) => {
     if (!isObject(block) || !BLOCK_TYPES.has(block.type)) return problems.push(`の${i + 1}行目の形が正しくありません`)
     const type = block.type as TemplateBlock['type']
-    const text = block[type === 'chapter' || type === 'subheading' ? 'title' : type === 'paragraph' ? 'hint' : 'caption']
+    const key = templateTextKey(type)
+    if (!key) return blocks.push(block as unknown as TemplateBlock)
+    const text = block[key]
     const max = type === 'paragraph' ? LIMITS.hint : LIMITS.name
-    if (!isText(text)) problems.push(`の${templateRowName(i, type, null)}の形が正しくありません`)
+    const table = type === 'table' ? templateTableProblem(block) : null
+    if (!isText(text) || table === 'shape') problems.push(`の${templateRowName(i, type, null)}の形が正しくありません`)
     else if (text.length > max) problems.push(`の${templateRowName(i, type, text)}${tooLong(max, text.length)}`)
+    else if (table) problems.push(`の${templateRowName(i, type, text)}の見出しの${table.header + 1}列目${tooLong(LIMITS.name, table.length)}`)
     else blocks.push(block as unknown as TemplateBlock)
   })
   if (problems.length) return problems
   // 部品の形が正しいときだけ、並びと名前を確かめる
   if (blocks.length > 0 && blocks[0].type !== 'chapter') problems.push('は、大見出しから始めてください')
   if (blocks.length > 0 && !blocks.some((b) => b.type === 'chapter')) problems.push('に大見出しがありません')
-  const blank = blocks.find((b) => b.type !== 'paragraph' && !blockText(b).trim())
+  const blank = blocks.find((b) => b.type !== 'paragraph' && b.type !== 'pageBreak' && !blockText(b).trim())
   if (blank) problems.push(`に、名前が空の${BLOCK_LABELS[blank.type]}があります`)
   return problems
 }

@@ -19,6 +19,8 @@ import { newYearSteps, type NewYearStep } from './newYearSteps'
 import { Preview } from './Preview'
 import { isMockServer, roleOf, server, type AdminState, type HistoryRow, type Member, type TemplateSet, type YearRow } from './server'
 import { TemplateEditor, TemplatePreview } from './TemplateEditor'
+import { TemplateOverlay, TemplateToast } from './TemplateOverlay'
+import { TEMPLATE_RECEIVED } from './templateText'
 import { useFormWidth } from './useFormWidth'
 import { useLeaveGuard } from './useLeaveGuard'
 import { useDone, useSlow } from './useWait'
@@ -34,7 +36,7 @@ import { deleteConfirmText, deletedMessage, deliveryNote, newYearNotice, publish
  * 直して保存していない間は、画面の下に帯（変更の数と保存のボタン）を出し、直した欄に「変更あり」を付ける。
  * まだ公開していない（準備中の）年度は、「年度の設定」に新年度の手順（題目 → 締切 → コース → 確かめる → 公開）を出す。
  * 「先生」として登録された人には、コースと書き方のチェックだけの画面（TeacherView）を出す。
- * コースごとの「下書きのひな形」は、コースの「ひな形を直す」から開く窓で編集する（mockups/v8 案1）
+ * コースごとの「下書きのひな形」は、コースの「ひな形を作る画面を開く」で、学生と同じ紙面で作る（mockups/v44 案A。TemplateOverlay.tsx）。前の窓（mockups/v8 案1）は「前の作り方で直す」から
  */
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v))
@@ -476,6 +478,10 @@ export function AdminApp() {
   const [previewCourse, setPreviewCourse] = useState<string | null>(null)
   const [dialog, setDialog] = useState<'newYear' | 'changes' | null>(null)
   const [editingTemplate, setEditingTemplate] = useState<number | null>(null)
+  /** ひな形を作る画面（学生と同じ紙面。管理ページの上に重ねて開く：mockups/v44 案A）を開いているコース */
+  const [templateScreen, setTemplateScreen] = useState<number | null>(null)
+  /** ひな形を受け取ったときの短い知らせ（数秒で消える） */
+  const [toast, showToast] = useDone()
   const [newYear, setNewYear] = useState('')
   /** 「？ 使い方」の欄を開いている */
   const [help, setHelp] = useState(false)
@@ -808,6 +814,7 @@ export function AdminApp() {
           if (previewCourse === id) setPreviewCourse(null)
         }}
         publishedIds={publishedIds}
+        onOpenTemplate={setTemplateScreen}
         onEditTemplate={setEditingTemplate}
         notices={notices}
       />
@@ -859,6 +866,26 @@ export function AdminApp() {
       {dirty && <DirtyBar changes={labels} row={row} teacher={false} busy={busy} onSave={save} onShow={() => setDialog('changes')} />}
       {help && <AdminHelp admin onClose={() => setHelp(false)} />}
 
+      {templateScreen !== null && draft.courses[templateScreen] && (
+        <TemplateOverlay
+          course={draft.courses[templateScreen]}
+          config={draft}
+          status={row.status}
+          onClose={() => setTemplateScreen(null)}
+          onFallback={() => {
+            setEditingTemplate(templateScreen)
+            setTemplateScreen(null)
+          }}
+          onApply={(template, abstractExample) => {
+            // 前の窓の「反映する」と同じ（まだ保存していない変更になる。カードに「変更あり」、画面の下に保存の帯）
+            setCourse(templateScreen, { ...draft.courses[templateScreen], template, abstractExample })
+            setTemplateScreen(null)
+            setMessage({ kind: 'ok', text: `ひな形を反映しました。${deliveryNote(row.status, 'admin')}` })
+            showToast(TEMPLATE_RECEIVED)
+          }}
+        />
+      )}
+      {toast && <TemplateToast text={toast} />}
       {editingTemplate !== null && draft.courses[editingTemplate] && (
         <TemplateEditor
           course={draft.courses[editingTemplate]}
@@ -955,6 +982,10 @@ function TeacherView({
 }) {
   const [section, setSectionState] = useState<Section>(() => loadSection(TEACHER_SECTIONS))
   const [editing, setEditing] = useState<number | null>(null)
+  /** ひな形を作る画面（学生と同じ紙面。管理ページの上に重ねて開く：mockups/v44 案A）を開いているコース */
+  const [templateScreen, setTemplateScreen] = useState<number | null>(null)
+  /** ひな形を受け取ったときの短い知らせ（数秒で消える） */
+  const [toast, showToast] = useDone()
   const [openCourse, setOpenCourse] = useState<string | null | undefined>(undefined)
   const [previewCourse, setPreviewCourse] = useState<string | null>(null)
   const [showChanges, setShowChanges] = useState(false)
@@ -1034,6 +1065,7 @@ function TeacherView({
                   }}
                   onFocusCourse={setPreviewCourse}
                   setCourse={(i, c) => setDraft({ ...draft, courses: draft.courses.map((x, j) => (j === i ? c : x)) })}
+                  onOpenTemplate={setTemplateScreen}
                   onEditTemplate={setEditing}
                   notices={message && <MessageBox message={message} />}
                 />
@@ -1057,6 +1089,25 @@ function TeacherView({
       {dirty && <DirtyBar changes={labels} row={row} teacher busy={busy} onSave={save} onShow={() => setShowChanges(true)} />}
       {help && <AdminHelp onClose={() => setHelp(false)} />}
       {showChanges && <ChangesDialog changes={labels} onClose={() => setShowChanges(false)} />}
+      {templateScreen !== null && draft.courses[templateScreen] && (
+        <TemplateOverlay
+          course={draft.courses[templateScreen]}
+          config={draft}
+          status={row.status}
+          onClose={() => setTemplateScreen(null)}
+          onFallback={() => {
+            setEditing(templateScreen)
+            setTemplateScreen(null)
+          }}
+          onApply={(template, abstractExample) => {
+            setDraft({ ...draft, courses: draft.courses.map((c, j) => (j === templateScreen ? { ...c, template, abstractExample } : c)) })
+            setTemplateScreen(null)
+            onMessage({ kind: 'ok', text: `ひな形を反映しました。${deliveryNote(row.status, 'teacher')}` })
+            showToast(TEMPLATE_RECEIVED)
+          }}
+        />
+      )}
+      {toast && <TemplateToast text={toast} />}
       {editing !== null && editingCourse && (
         <TemplateEditor
           course={editingCourse}

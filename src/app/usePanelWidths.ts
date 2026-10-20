@@ -97,13 +97,16 @@ export function usePanelWidths() {
     [],
   )
 
+  return { style: panelStyle(widths), startDrag, reset }
+}
+
+/** 欄の幅を CSS の値にする（ひな形を作る画面は、覚えた幅を読まず・覚えずに、既定の幅で使う：src/template/TemplateApp.tsx） */
+export function panelStyle(widths: Widths = PANEL_DEFAULTS): React.CSSProperties {
   const mini = Math.max(48, widths.left - THUMB_GUTTER)
-  const style = {
+  return {
     '--left-w': `${widths.left}px`,
     '--right-w': `${widths.right}px`,
     '--mini-w': `${mini}px`,
     '--mini-scale': String(mini / PAGE_W),
   } as React.CSSProperties
-
-  return { style, startDrag, reset }
 }

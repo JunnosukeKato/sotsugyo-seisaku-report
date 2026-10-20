@@ -35,6 +35,45 @@ export function materialTable(id: string, newId: NewId, caption = '使用素材�
   return { type: 'table', id, caption, widths: 'equal', heights: 'auto', rows: [row(newId, MATERIAL_HEADERS), row(newId, ['', '', ''])] }
 }
 
+/**
+ * ひな形のふつうの表から、学生の表を作る（mockups/v44。見出しの行は先生が書いた字、その下は空の行）。
+ * 崩れた項目（ない・形が違う）は、いつもの値にする（学生のツールが止まらないように）
+ */
+export function tableFromTemplate(
+  id: string,
+  newId: NewId,
+  t: { caption?: unknown; header?: unknown; rows?: unknown; widths?: unknown; colWidths?: unknown; heights?: unknown; labelColumn?: unknown },
+): TableBlock {
+  const header = (Array.isArray(t.header) && t.header.length > 0 ? t.header : ['', '']).slice(0, TABLE_SIZE.maxColumns).map((h) => (typeof h === 'string' ? h : ''))
+  const count = typeof t.rows === 'number' && Number.isInteger(t.rows) ? Math.max(1, Math.min(TABLE_SIZE.maxRows - 1, t.rows)) : 1
+  const widths = t.widths === 'auto' || t.widths === 'custom' ? t.widths : 'equal'
+  const colWidths = normalizeColumnWidths(t.colWidths, header.length)
+  return {
+    type: 'table',
+    id,
+    caption: typeof t.caption === 'string' ? t.caption : '',
+    widths,
+    ...(colWidths ? { colWidths } : {}),
+    heights: t.heights === 'equal' ? 'equal' : 'auto',
+    ...(t.labelColumn === true ? { labelColumn: true } : {}),
+    rows: [row(newId, header), ...Array.from({ length: count }, () => row(newId, header.map(() => '')))],
+  }
+}
+
+/** 素材表のひな形のままの表か（見出しが「名称・使用箇所・生地見本」、中身は1行、列の幅・行の高さ・左端の列は、いつもの形） */
+export function isPlainMaterialTable(table: TableBlock): boolean {
+  const head = table.rows[0]?.cells.map((c) => c.text) ?? []
+  return (
+    head.length === MATERIAL_HEADERS.length &&
+    head.every((h, i) => h === MATERIAL_HEADERS[i]) &&
+    table.rows.length === 2 &&
+    table.widths === 'equal' &&
+    table.heights === 'auto' &&
+    !table.labelColumn &&
+    !colWidthsOf(table)
+  )
+}
+
 /** セルの位置（行・列）。見つからなければ null */
 export function cellPosition(table: TableBlock, cellId: string): { row: number; column: number } | null {
   for (let r = 0; r < table.rows.length; r++) {

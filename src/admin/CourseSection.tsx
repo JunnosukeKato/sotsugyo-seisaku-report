@@ -1,4 +1,4 @@
-import { useId, useRef, useState, type ReactNode } from 'react'
+import { Fragment, useId, useRef, useState, type ReactNode } from 'react'
 import type { Course, YearConfig } from '../config'
 import { AdminIcon } from './adminIcons'
 import { courseChanged, courseName } from './changes'
@@ -33,12 +33,15 @@ interface Props {
   onRemove?: (i: number) => void
   /** 公開したことのあるコース（削除できない） */
   publishedIds?: Set<string>
+  /** 「ひな形を作る画面を開く」（学生と同じ紙面で作る画面を、管理ページの上に重ねて開く。mockups/v44 案A） */
+  onOpenTemplate: (i: number) => void
+  /** 「前の作り方で直す」（前のひな形の窓。予備） */
   onEditTemplate: (i: number) => void
   /** 区切りの見出しのすぐ下に出す知らせ（保存した・断られた、入力の誤りなど） */
   notices?: ReactNode
 }
 
-export function CourseSection({ draft, base, teacher = false, openId, onOpen, onFocusCourse, setCourse, onMove, onAdd, onRemove, publishedIds, onEditTemplate, notices }: Props) {
+export function CourseSection({ draft, base, teacher = false, openId, onOpen, onFocusCourse, setCourse, onMove, onAdd, onRemove, publishedIds, onOpenTemplate, onEditTemplate, notices }: Props) {
   const listRef = useRef<HTMLDivElement>(null)
   const order = useReorder(listRef, teacher ? 0 : draft.courses.length, (from, to) => onMove?.(from, to), '.course')
   const shown = draft.courses.map((c, i) => ({ c, i })).filter(({ c }) => !teacher || !c.hidden)
@@ -62,6 +65,7 @@ export function CourseSection({ draft, base, teacher = false, openId, onOpen, on
             dragging={order.drag?.from === i}
             published={!!publishedIds?.has(c.id)}
             onRemove={() => onRemove?.(i)}
+            onOpenTemplate={() => onOpenTemplate(i)}
             onEditTemplate={() => onEditTemplate(i)}
           />
         ))}
@@ -92,6 +96,7 @@ function CourseItem({
   dragging,
   published,
   onRemove,
+  onOpenTemplate,
   onEditTemplate,
 }: {
   course: Course
@@ -106,6 +111,7 @@ function CourseItem({
   dragging: boolean
   published: boolean
   onRemove: () => void
+  onOpenTemplate: () => void
   onEditTemplate: () => void
 }) {
   const bodyId = useId()
@@ -167,10 +173,26 @@ function CourseItem({
             </Row>
             <Row label="ひな形" sub="下書き" changed={changed('template') || changed('abstractExample')} hint={teacher ? '組み立ては右の見本のとおりです' : undefined}>
               <div className={`tpl-line${course.template?.length ? '' : ' default'}`}>
-                <b>{templateSummary(course)}</b>
-                <button className="btn sub sm" onClick={onEditTemplate}>
-                  {AdminIcon.template}ひな形を直す
-                </button>
+                {/* 要約は「・」の切れ目で折り返す（「図の枠」と数を別の行に分けない） */}
+                <b>
+                  {templateSummary(course)
+                    .split('・')
+                    .map((part, k) => (
+                      <Fragment key={k}>
+                        {k > 0 && '・'}
+                        <span className="part">{part}</span>
+                      </Fragment>
+                    ))}
+                </b>
+                {/* 学生と同じ紙面で作る画面を、管理ページの上に重ねて開く（mockups/v44 案A）。開けないときの予備に、前の窓も残す */}
+                <span className="tpl-acts">
+                  <button className="btn sub sm tpl-open" onClick={onOpenTemplate}>
+                    {AdminIcon.template}ひな形を作る画面を開く
+                  </button>
+                  <button className="link tpl-old" onClick={onEditTemplate}>
+                    前の作り方で直す
+                  </button>
+                </span>
               </div>
             </Row>
             {!teacher && <SubtitleRow course={course} changed={changed('subtitleTemplate')} onChange={onChange} />}

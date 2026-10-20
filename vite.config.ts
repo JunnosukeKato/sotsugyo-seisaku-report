@@ -58,8 +58,10 @@ function cspPlugin(): Plugin {
       dev = config.command === 'serve'
     },
     transformIndexHtml(html, ctx) {
-      // 開発中に見るデザイン案・試しのページ、管理ページの試験版には入れない
-      if (/(^|[\\/])(mockups|poc)[\\/]/.test(ctx.path) || /admin\.html$/.test(ctx.path)) return html
+      // 管理ページの試験版：中に開いてよい枠は、ひな形を作る画面（学生のツール。開発中は同じ開発サーバー）だけ（本番は vite.admin.config.ts）
+      if (/admin\.html$/.test(ctx.path)) return html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="frame-src 'self'" />`)
+      // 開発中に見るデザイン案・試しのページには入れない
+      if (/(^|[\\/])(mockups|poc)[\\/]/.test(ctx.path)) return html
       const policy = /check\.html$/.test(ctx.path) ? checkPagePolicy(dev) : contentSecurityPolicy(dev)
       return html.replace('<head>', `<head>\n    <meta http-equiv="Content-Security-Policy" content="${policy}" />`)
     },

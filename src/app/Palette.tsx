@@ -24,6 +24,18 @@ interface Props {
   editor: ReportEditor
   snap: EditorSnapshot
   onReferences: () => void
+  /**
+   * ひな形を作る画面（mockups/v44 案A）：写真・セルの画像を入れる道具は出さない（図は空の枠、写真は学生が入れる）。
+   * 表紙・作品写真のページは「見るだけ」（ひな形に入らない）
+   */
+  template?: boolean
+}
+
+/** ひな形を作る画面の、ページの名前の下のひとこと（言葉の切れ目で折り返す。1字だけの行にしない） */
+const TEMPLATE_CONTEXT: Partial<Record<string, string>> = {
+  cover: '学生が書く所\n（見るだけ）',
+  abstract: '書き出しの\n例を書く',
+  photos: '学生が\n入れる所\n（見るだけ）',
 }
 
 function Tool({
@@ -64,11 +76,12 @@ function Tool({
 }
 
 /** 表を入れる：ます目で大きさを選んで空の表を入れるか、素材表のひな形を入れる（mockups/v35 ②。メニューの中身は TableSize.tsx） */
-function TableMenu({ editor, disabled }: { editor: ReportEditor; disabled: boolean }) {
+function TableMenu({ editor, disabled, template }: { editor: ReportEditor; disabled: boolean; template?: boolean }) {
   const [open, setOpen] = useState(false)
+  const title = template ? 'この段落のすぐ下に表が入ります（見出しの行を書きます。中身は学生が書きます）' : '書いている文の終わりに「（表n）」が入り、この段落のすぐ下に表が入ります'
   return (
     <div className="menu-wrap">
-      <Tool label="表を入れる" icon={Icon.table} title="書いている文の終わりに「（表n）」が入り、この段落のすぐ下に表が入ります" disabled={disabled} onClick={() => setOpen(!open)} />
+      <Tool label="表を入れる" icon={Icon.table} title={title} disabled={disabled} onClick={() => setOpen(!open)} />
       {open && !disabled && (
         <TableSizeMenu
           onPick={(size) => {
@@ -178,10 +191,12 @@ interface SelectionToolsProps extends Omit<Props, 'onReferences'> {
 }
 
 /** 書いている物・選んでいる物の道具（削除する・外すと、画面の下に「戻す」の知らせが出る。UndoBar） */
-export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
+export function SelectionTools({ editor, snap, phone, template }: SelectionToolsProps) {
   const { editingKind, editingId, selection, report } = snap
   const kind = snap.layout?.kinds[snap.page]
 
+  // ひな形を作る画面：作品写真は学生が入れる（道具は出さない）
+  if (kind === 'photos' && template) return null
   if (kind === 'photos') {
     // 何ページ目の作品写真か（写真を押して選んでいれば、その写真のページ。mockups/v38 案A）
     const page = selection?.kind === 'photos' ? selection.page : (snap.photoPage ?? 0)
@@ -284,8 +299,9 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
     return (
       <div className="group ctx">
         <div className="ctx-label">この図</div>
-        <Tool label="差し替え" icon={Icon.replace} title="写真を差し替える" onClick={() => void editor.replaceFigureImage(figureId)} />
-        <Tool label="もう1枚" icon={Icon.beside} title="この図のすぐ後ろにもう1枚入れる（本文の参照の後ろにも「（図n）」が入ります）" onClick={() => void editor.addFigureBeside(figureId)} />
+        {/* ひな形を作る画面では、写真は選ばない（図は空の枠。写真は学生が入れる） */}
+        {!template && <Tool label="差し替え" icon={Icon.replace} title="写真を差し替える" onClick={() => void editor.replaceFigureImage(figureId)} />}
+        {!template && <Tool label="もう1枚" icon={Icon.beside} title="この図のすぐ後ろにもう1枚入れる（本文の参照の後ろにも「（図n）」が入ります）" onClick={() => void editor.addFigureBeside(figureId)} />}
         <Tool
           label="削除"
           icon={Icon.remove}
@@ -324,6 +340,7 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
         <Tool label="行を足す" icon={Icon.rowAdd} title="書いているセルの行の下に、行を足す" onClick={() => editor.addTableRow(tableId)} />
         <Tool label="列を足す" icon={Icon.colAdd} title="書いているセルの列の右に、列を足す" onClick={() => editor.addTableColumn(tableId)} />
         {editingKind === 'tableCell' &&
+          !template &&
           (editor.currentCellHasImage(tableId) ? (
             <Tool label="画像を外す" icon={Icon.image} title="このセルの画像を外す" onClick={() => editor.removeCellImage(tableId)} />
           ) : (
@@ -468,7 +485,7 @@ export function SelectionTools({ editor, snap, phone }: SelectionToolsProps) {
   return null
 }
 
-export function Palette({ editor, snap, onReferences }: Props) {
+export function Palette({ editor, snap, onReferences, template }: Props) {
   // 図・表は、段落を書いているとき（文中の入れたい位置にカーソルがあるとき）だけ入れられる
   const writing = snap.editingKind === 'paragraph'
   const kind = snap.layout?.kinds[snap.page] ?? 'unknown'
@@ -482,7 +499,7 @@ export function Palette({ editor, snap, onReferences }: Props) {
       <div className="p-head">
         {/* 作品写真が何ページかあるときは「作品写真 2」（mockups/v38 案A） */}
         <b className={kind === 'photos' ? 'photo-name' : undefined}>{kind === 'photos' && snap.photoPage !== null ? photoPageName(snap.photoPage, snap.report.workPhotos.length) : context.name}</b>
-        <span>{context.hint}</span>
+        <span>{(template && TEMPLATE_CONTEXT[kind]) || context.hint}</span>
       </div>
       {/* 目次のページ：行を押すと、その見出しへ移れること（mockups/v41 案C） */}
       {kind === 'toc' && (
@@ -502,11 +519,11 @@ export function Palette({ editor, snap, onReferences }: Props) {
             <Tool
               label="図を入れる"
               icon={Icon.figure}
-              title="書いている文の終わりに「（図n）」が入り、この段落のすぐ下に図が入ります"
+              title={template ? 'この段落のすぐ下に、図の枠が入ります（写真は学生が入れます）' : '書いている文の終わりに「（図n）」が入り、この段落のすぐ下に図が入ります'}
               disabled={!writing}
               onClick={() => void editor.addFigure()}
             />
-            <TableMenu editor={editor} disabled={!writing} />
+            <TableMenu editor={editor} disabled={!writing} template={template} />
             {/* 道具の幅（1行6字ほど）で、言葉の切れ目で折り返す（1字だけ次の行に残らないように） */}
             {!writing && (
               <div className="ctx-note">
@@ -527,7 +544,7 @@ export function Palette({ editor, snap, onReferences }: Props) {
           <Tool label="参考文献" icon={Icon.refs} title="引用・参考文献を編集する" onClick={onReferences} />
         </div>
       )}
-      <SelectionTools editor={editor} snap={snap} />
+      <SelectionTools editor={editor} snap={snap} template={template} />
       <UndoRedo editor={editor} snap={snap} />
     </nav>
   )

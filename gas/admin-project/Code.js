@@ -25,11 +25,11 @@ const ROLE_ADMIN = '管理者'
 const ROLE_TEACHER = '先生'
 const EMAIL_PATTERN = /^[^@\s]+@[^@\s]+$/
 
-/** 下書きのひな形の部品の種類と、その呼び名（管理ページのひな形の窓と同じ） */
-const BLOCK_TYPES = ['chapter', 'subheading', 'paragraph', 'figure', 'materialTable']
-const BLOCK_LABELS = { chapter: '大見出し', subheading: '小見出し', paragraph: '説明', figure: '図の枠', materialTable: '素材表' }
-/** 文字数・数の上限（学生のツールの src/config/validate.ts の LIMITS と同じ値にする） */
-const LIMITS = { blocks: 100, name: 100, hint: 300, abstractExample: 500, notice: 1000, words: 300, word: 50, wordNote: 200 }
+/** 下書きのひな形の部品の種類と、その呼び名（管理ページのひな形の窓と同じ。改ページ・ふつうの表は mockups/v44 で足した） */
+const BLOCK_TYPES = ['chapter', 'subheading', 'paragraph', 'figure', 'materialTable', 'pageBreak', 'table']
+const BLOCK_LABELS = { chapter: '大見出し', subheading: '小見出し', paragraph: '説明', figure: '図の枠', materialTable: '素材表', pageBreak: '改ページ', table: '表' }
+/** 文字数・数の上限（学生のツールの src/config/validate.ts の LIMITS と同じ値にする。tableColumns・tableRows：ひな形の表の列の数と、見出しの下の行の数） */
+const LIMITS = { blocks: 100, name: 100, hint: 300, abstractExample: 500, notice: 1000, words: 300, word: 50, wordNote: 200, tableColumns: 6, tableRows: 9 }
 
 /** 初期値（2026年度）。ビルド時に app/src/config/2026.json の内容が入る */
 const INITIAL_CONFIG = /*INITIAL_CONFIG*/ null
@@ -206,6 +206,8 @@ function cleanTemplate_(template, courseName) {
   if (template.length > LIMITS.blocks) throw new Error(label + 'の部品が多すぎます（' + LIMITS.blocks + '個まで）')
   const cleaned = template.map((block, i) => {
     if (!block || typeof block !== 'object' || BLOCK_TYPES.indexOf(block.type) < 0) throw new Error(label + 'の' + (i + 1) + '行目の形が正しくありません')
+    // 改ページは、種類だけ
+    if (block.type === 'pageBreak') return { type: 'pageBreak' }
     const key = block.type === 'chapter' || block.type === 'subheading' ? 'title' : block.type === 'paragraph' ? 'hint' : 'caption'
     const row = label + 'の' + rowName_(i, block.type, block[key])
     const text = checkText_(block[key], key === 'hint' ? LIMITS.hint : LIMITS.name, row)
@@ -213,10 +215,44 @@ function cleanTemplate_(template, courseName) {
     if (key !== 'hint' && !text.trim()) throw new Error(row + 'の名前が空です')
     const out = { type: block.type }
     out[key] = text
+    if (block.type === 'table') cleanTable_(block, out, row)
     return out
   })
   if (cleaned.length && cleaned[0].type !== 'chapter') throw new Error(label + 'は、大見出しから始めてください')
   return cleaned
+}
+
+/**
+ * ひな形のふつうの表の、名前のほかの項目（見出しの行・行の数・列の幅・行の高さ・左端の列）を確かめて out に写す。
+ * 形が崩れていたらエラー（学生のツールの src/config/validate.ts の templateTableProblem と同じ決まり）
+ */
+function cleanTable_(block, out, row) {
+  const header = block.header
+  if (!Array.isArray(header) || header.length < 1 || header.length > LIMITS.tableColumns || header.some((h) => typeof h !== 'string')) throw new Error(row + 'の見出しの行の形が正しくありません')
+  header.forEach((h, k) => checkText_(h, LIMITS.name, row + 'の見出しの' + (k + 1) + '列目'))
+  out.header = header.slice()
+  const rows = block.rows
+  if (rows !== undefined) {
+    if (!(typeof rows === 'number' && Number.isInteger(rows) && rows >= 1 && rows <= LIMITS.tableRows)) throw new Error(row + 'の行の数が正しくありません')
+    out.rows = rows
+  }
+  if (block.widths !== undefined) {
+    if (['equal', 'auto', 'custom'].indexOf(block.widths) < 0) throw new Error(row + 'の列の幅の形が正しくありません')
+    out.widths = block.widths
+  }
+  const ws = block.colWidths
+  if (ws !== undefined) {
+    if (!Array.isArray(ws) || ws.length !== header.length || ws.some((w) => typeof w !== 'number' || !isFinite(w) || w <= 0 || w > 100)) throw new Error(row + 'の列の幅の形が正しくありません')
+    out.colWidths = ws.slice()
+  }
+  if (block.heights !== undefined) {
+    if (block.heights !== 'equal' && block.heights !== 'auto') throw new Error(row + 'の行の高さの形が正しくありません')
+    out.heights = block.heights
+  }
+  if (block.labelColumn !== undefined) {
+    if (typeof block.labelColumn !== 'boolean') throw new Error(row + 'の左端の列の形が正しくありません')
+    out.labelColumn = block.labelColumn
+  }
 }
 
 /**

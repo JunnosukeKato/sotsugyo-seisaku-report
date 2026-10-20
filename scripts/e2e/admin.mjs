@@ -3,6 +3,7 @@
 // 管理ページは mockups/v43 案B（左の見出し）：左に区切り（年度の設定・コース・書き方のチェック・先生の登録・変更履歴・詳細設定）、右には選んだ区切りだけ
 import { mkdirSync } from 'node:fs'
 import { withEdge } from '../poc/edge.mjs'
+import { templateModeAdmin } from './templateMode.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -331,8 +332,8 @@ await withEdge(async (browser) => {
     saveConfirm.replace(/\n/g, '⏎'),
   )
 
-  // 下書きのひな形を編集する（コースを開いた所の「ひな形を直す」から）
-  const openTemplate = (p = page) => p.evaluate(() => document.querySelector('.course.open .tpl-line button').click())
+  // 下書きのひな形を編集する（前の作り方の窓。コースを開いた所の「前の作り方で直す」から。紙面で作る画面は templateMode.mjs）
+  const openTemplate = (p = page) => p.evaluate(() => document.querySelector('.course.open .tpl-line .tpl-old').click())
   await openTemplate()
   await page.waitForSelector('.tpl-modal')
   const tplFoot = await page.evaluate(() => document.querySelector('.tpl-foot .hint').textContent)
@@ -1202,7 +1203,7 @@ await withEdge(async (browser) => {
   // 下書きのひな形の窓の行も、つまみで並べ替える
   await fx.evaluate(() => document.querySelector('.course-list > .course .open-btn').click())
   await sleep(150)
-  await fx.evaluate(() => document.querySelector('.course.open .tpl-line button').click())
+  await fx.evaluate(() => document.querySelector('.course.open .tpl-line .tpl-old').click())
   await fx.waitForSelector('.tpl-modal')
   const tplRows = () => fx.evaluate(() => [...document.querySelectorAll('.tpl-modal .row input')].map((i) => i.value))
   const tplInfo = await fx.evaluate(() => ({
@@ -1699,7 +1700,7 @@ await withEdge(async (browser) => {
   }
   // 窓（ひな形・新年度・変更の一覧）の中も
   await nav(vb, 'コース')
-  await vb.evaluate(() => document.querySelector('.course.open .tpl-line button').click())
+  await vb.evaluate(() => document.querySelector('.course.open .tpl-line .tpl-old').click())
   await vb.waitForSelector('.tpl-modal')
   smallAll.push(...(await smallText(vb, '.tpl-modal')).map((s) => `ひな形の窓:${s}`))
   lonelyAll.push(...(await lonelyLines(vb, '.tpl-modal')).map((s) => `ひな形の窓:${s}`))
@@ -1772,6 +1773,9 @@ await withEdge(async (browser) => {
   await tv.screenshot({ path: `${V43}/9-teacher-dirty-1366.png` })
   check('先生の画面でも、直すと画面の下に帯（「まだ学生に届いていない変更が1か所あります」と保存のボタン）。左の見出しの「コース」に 1', teacherBar.head === 'まだ学生に届いていない変更が1か所あります' && teacherBar.buttons === '変更を見る|保存して学生に反映' && teacherBar.count === '1', JSON.stringify(teacherBar))
   await v43.close()
+
+  // 下書きのひな形を、学生と同じ紙面で作る画面（mockups/v44 案A。scripts/e2e/templateMode.mjs）
+  await templateModeAdmin(browser, check)
 })
 
 const failed = results.filter((r) => !r.ok)

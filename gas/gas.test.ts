@@ -550,6 +550,12 @@ describe('管理ページ（admin-project）', () => {
     // 正しい形なら保存でき、決まった項目だけが残る（段落の説明は空でもよい）
     const saved = gas.saveTeacherEdits(2026, template([{ ...chapter, extra: 'x' }, { type: 'paragraph', hint: '' }, { type: 'materialTable', caption: '使用素材表' }]))
     expect(saved.years[0].config.courses[0].template).toEqual([chapter, { type: 'paragraph', hint: '' }, { type: 'materialTable', caption: '使用素材表' }])
+    // 改ページ・ふつうの表（mockups/v44）も保存でき、決まった項目だけが残る
+    const table = { type: 'table', caption: '寸法表', header: ['部位', '寸法'], rows: 3, widths: 'auto', heights: 'equal', labelColumn: true }
+    const withNew = gas.saveTeacherEdits(2026, template([chapter, { type: 'pageBreak', title: 'x' }, { ...table, extra: 1 }]))
+    expect(withNew.years[0].config.courses[0].template).toEqual([chapter, { type: 'pageBreak' }, table])
+    expect(save(template([chapter, { ...table, header: ['a', 1] }]))).toThrow(/2行目の表「寸法表」の見出しの行の形が正しくありません/)
+    expect(save(template([chapter, { ...table, rows: 12 }]))).toThrow(/2行目の表「寸法表」の行の数が正しくありません/)
   })
 
   it('管理者の保存も、崩れたひな形は保存しない', () => {
@@ -679,6 +685,22 @@ describe('管理ページ（admin-project）', () => {
       [chapter, { type: 'paragraph', hint: `  ${'い'.repeat(320)}` }],
       [chapter, { type: 'figure', caption: '図'.repeat(5) + 'x'.repeat(100) }],
       Array.from({ length: 101 }, () => chapter),
+      // 改ページ・ふつうの表（mockups/v44）
+      [chapter, { type: 'pageBreak', extra: 1 }, { type: 'table', caption: '寸法表', header: ['部位', ''], rows: 2, widths: 'custom', colWidths: [40, 60], heights: 'equal', labelColumn: false, extra: 1 }],
+      [chapter, { type: 'table', caption: '表', header: [] }],
+      [chapter, { type: 'table', caption: '表', header: ['a', 2] }],
+      [chapter, { type: 'table', caption: '表', header: Array(7).fill('a') }],
+      [chapter, { type: 'table', caption: '表', header: ['a', 'b'], rows: 10 }],
+      [chapter, { type: 'table', caption: '表', header: ['a'], rows: 0 }],
+      [chapter, { type: 'table', caption: '表', header: ['a'], colWidths: [1, 2] }],
+      [chapter, { type: 'table', caption: '表', header: ['a'], colWidths: ['x'] }],
+      [chapter, { type: 'table', caption: '表', header: ['あ'.repeat(101)] }],
+      [chapter, { type: 'table', caption: '表', header: ['a'], widths: 'x' }],
+      [chapter, { type: 'table', caption: '表', header: ['a'], heights: 'x' }],
+      [chapter, { type: 'table', caption: '表', header: ['a'], labelColumn: 1 }],
+      [chapter, { type: 'table', caption: ' ', header: ['a'] }],
+      [chapter, { type: 'table', caption: 3, header: ['a'] }],
+      [{ type: 'pageBreak' }, chapter],
     ]
     for (const t of templates) expect(outcome(() => rules.cleanTemplate(t, '衣装'))).toBe(outcome(() => gas.cleanTemplate_(t, '衣装')))
     const words: unknown[] = [

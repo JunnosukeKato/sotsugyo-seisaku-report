@@ -19,6 +19,7 @@ import { captionGapPc } from './captionGap.mjs'
 import { tableShapePc } from './tableShape.mjs'
 import { tableCustomPc } from './tableCustom.mjs'
 import { waitingPc } from './waiting.mjs'
+import { templateStudentPc } from './templateStudent.mjs'
 import { setupWriting } from './sampleReport.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
@@ -2387,6 +2388,9 @@ await withEdge(async (browser) => {
 
   // ---- 待つ間の表示（押したボタンに回る印と言葉・2秒を過ぎたら「数秒かかることがあります」・終わったら知らせ。依頼者の要望 2026-10-20。scripts/e2e/waiting.mjs） ----
   await waitingPc(browser, check)
+
+  // ---- 先生がひな形を作る画面（mockups/v44 案A）で入れた改ページ・ふつうの表が、学生の新しい原稿に出る（scripts/e2e/templateStudent.mjs） ----
+  await templateStudentPc(browser, check)
 })
 
 /**

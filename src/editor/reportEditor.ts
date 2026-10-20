@@ -148,6 +148,19 @@ export interface EditorCallbacks {
   onImageWork?(work: { done: number; total: number } | null): void
 }
 
+/** 編集の中核の動き方 */
+export interface EditorOptions {
+  /**
+   * ひな形を作る画面（先生。mockups/v44 案A。src/template/TemplateApp.tsx）。学生の原稿ではないので：
+   * セルフチェックをしない・写真を選ばない（図は空の枠）・表紙・作品写真・表の中身の行は書かない・段落を分けても「。」を付けない・
+   * 図表を入れても本文に「（図n）」を足さない（段落の字は、学生に薄く出す説明のまま）・紙面の組み方をこの端末に覚えない
+   */
+  template?: boolean
+}
+
+/** ひな形を作る画面で書ける欄の種類（表のセルは、見出しの行だけ。templateEditable） */
+const TEMPLATE_KINDS = new Set<ops.EditableKind>(['abstractParagraph', 'chapter', 'subheading', 'paragraph', 'figureCaption', 'tableCaption', 'tableCell'])
+
 interface ImageEntry {
   url: string
   widthPx: number
@@ -214,6 +227,8 @@ export class ReportEditor {
   private report: Report
   private config: YearConfig
   private readonly callbacks: EditorCallbacks
+  /** ひな形を作る画面（EditorOptions.template） */
+  readonly template: boolean
   private readonly renderer: ReportRenderer
   private readonly overlay: OverlayEditor
   private readonly stage: PageStage
@@ -284,14 +299,15 @@ export class ReportEditor {
    * @param scroller 紙面の表示枠（2つ。組み直すたびに表と裏を入れ替える）を入れる要素。拡大したときはスクロールする
    * @param layer 入力欄などを紙面に重ねる層
    */
-  constructor(stage: HTMLElement, scroller: HTMLElement, layer: HTMLElement, config: YearConfig, report: Report, callbacks: EditorCallbacks) {
+  constructor(stage: HTMLElement, scroller: HTMLElement, layer: HTMLElement, config: YearConfig, report: Report, callbacks: EditorCallbacks, options: EditorOptions = {}) {
     this.config = config
     this.report = report
     this.callbacks = callbacks
+    this.template = !!options.template
     this.scroller = scroller
     this.stageEl = stage
     this.layer = layer
-    this.renderer = new ReportRenderer(scroller)
+    this.renderer = new ReportRenderer(scroller, { remember: !this.template })
     this.hideStyle = document.createElement('style')
     this.removedStyle = document.createElement('style')
     this.frozenStyle = document.createElement('style')
@@ -352,11 +368,12 @@ export class ReportEditor {
         const start = this.reportBeforeEdit ?? this.report
         if (ops.findEditable(start, id)?.text !== ops.findEditable(typed, id)?.text) this.pushHistory(start)
         this.pushHistory(typed)
-        const result = ops.split(typed, id, before, after)
+        // ひな形を作る画面では「。」を付けない（ひな形の説明は、先生が書いたまま）
+        const result = ops.split(typed, id, before, after, { period: !this.template })
         this.report = result.report
         // 前の段落に「。」を自動で付けたときは覚えておく（すぐ Backspace でつなぎ直したら、元に戻す）
         const kind = ops.findEditable(this.report, id)?.kind
-        this.autoPeriod = (kind === 'paragraph' || kind === 'abstractParagraph') && ops.withPeriod(before) !== before ? { prevId: id, newId: result.newId, original: before } : null
+        this.autoPeriod = !this.template && (kind === 'paragraph' || kind === 'abstractParagraph') && ops.withPeriod(before) !== before ? { prevId: id, newId: result.newId, original: before } : null
         this.continueWriting(result.newId, 0, { ghostOf: id })
         // はじめて「。」を自動で付けたときだけ（開いている間に1回）、画面の下に知らせる（黙って付けると、付いたことに気づかない）
         if (this.autoPeriod) this.noticeAutoPeriodOnce()
@@ -376,7 +393,9 @@ export class ReportEditor {
         this.continueWriting(result.targetId, result.caret, { alsoHide: id })
       },
       onNavigate: (id, text, direction) => {
-        const next = ops.neighbor(ops.setText(this.report, id, text), id, direction)
+        const found = ops.neighbor(ops.setText(this.report, id, text), id, direction)
+        // ひな形を作る画面：表紙の項目・表の中身の行には移らない（その欄にとどまる）
+        const next = found && (!this.template || this.templateEditable(found.id)) ? found : undefined
         // 段落を分けたばかりで、移る先の段落がまだ紙面にない（仮に表示している）：いまの欄を書き終えて（仮の表示はそのまま残る）、組み直したら移る
         if (next && this.overlay.ghostCount > 0 && this.renderer.pageView.fragments(next.id).length === 0) {
           // ↑↓で移るときは、見出しの形でも段落のまま（↑↓で移ったときは、ほかの所でも見出しにしない）
@@ -391,7 +410,8 @@ export class ReportEditor {
         // 表のセル：Tab で隣のセルへ（最後のセルでは書き終わる）
         this.report = ops.setText(this.report, id, text)
         const table = this.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'table' && b.rows.some((r) => r.cells.some((c) => c.id === id)))
-        const cells = table?.type === 'table' ? table.rows.flatMap((r) => r.cells) : []
+        // ひな形を作る画面では、見出しの行の中だけを移る（中身の行は学生が書く）
+        const cells = table?.type === 'table' ? (this.template ? (table.rows[0]?.cells ?? []) : table.rows.flatMap((r) => r.cells)) : []
         const next = cells[cells.findIndex((c) => c.id === id) + (backward ? -1 : 1)]
         if (next) this.continueWriting(next.id, next.text.length)
         else this.onCommitEdit(id, text, true)
@@ -626,6 +646,8 @@ export class ReportEditor {
   }
 
   private async importImage(purpose: 'figure' | 'swatch' | 'photo'): Promise<string | null> {
+    // ひな形を作る画面では、写真を選ばない（図は空の枠のまま。写真は学生が入れる）
+    if (this.template) return null
     const file = await this.callbacks.pickImage(purpose)
     if (!file) return null
     // 縮めて保存する間（大きな写真は、スマホで1〜数秒かかる）は、画面に「写真を取り込んでいます…」を出す
@@ -933,6 +955,13 @@ export class ReportEditor {
   // ---- セルフチェック ----
 
   private runChecks(): void {
+    // ひな形を作る画面では、チェックをしない（学生の原稿ではないので、赤い印も出さない）
+    if (this.template) {
+      this.findings = []
+      this.acknowledged = []
+      this.refreshHighlights()
+      return
+    }
     // 先に見せたページのほかを組んでいる間は、紙面の情報（ページ数など）を使うチェックはしない（組み終えてからする）
     const checked = checkReportDetailed(this.report, this.config, this.provisional ? null : this.layout)
     // 書いている途中の段落は「空の段落がある」と言わない（閉じても空のままなら言う）
@@ -2005,7 +2034,26 @@ export class ReportEditor {
     return (text) => (opened && text === opened.text ? opened.refs : ops.refRanges(text, num))
   }
 
+  /**
+   * ひな形を作る画面で書ける欄か：抄録・本文の見出し・段落・図表のタイトルと、表の見出しの行のセル。
+   * 表紙の項目（学籍番号・氏名など）と、表の中身の行は、学生が書く所なので書かない（mockups/v44）
+   */
+  templateEditable(id: string): boolean {
+    const kind = ops.findEditable(this.report, id)?.kind
+    if (!kind || !TEMPLATE_KINDS.has(kind)) return false
+    if (kind !== 'tableCell') return true
+    const table = this.report.body.flatMap((c) => c.blocks).find((b) => b.type === 'table' && b.rows.some((r) => r.cells.some((c) => c.id === id)))
+    return table?.type === 'table' && !!table.rows[0]?.cells.some((c) => c.id === id)
+  }
+
   openEditor(id: string, caret: number): void {
+    // ひな形を作る画面：学生が書く所（表紙の項目・表の中身の行）は書かない。表の中身の行を押したら、その表を選ぶ（表の道具が出る）
+    if (this.template && !this.templateEditable(id)) {
+      const tableId = this.tableIdOf(id)
+      if (tableId) this.select({ kind: 'table', id: tableId })
+      else this.noticeInfo('学籍番号・氏名・サブタイトルは、学生が書きます（ひな形には入りません）')
+      return
+    }
     // 開いた直後に頼まれていたページへの移動は、書き始めたらやめる（書いている欄が、急にほかのページへ移って閉じないように）
     this.cancelQueuedNav()
     // 書く位置が別のページにあれば、そのページを表示する（見開きで、並べている隣のページなら、紙面はそのまま）
@@ -2581,6 +2629,11 @@ export class ReportEditor {
     if (table) {
       const caption = table.querySelector<HTMLElement>('.table-caption [data-block-id]')
       if (caption) return this.select({ kind: 'table', id: caption.dataset.blockId! })
+    }
+    // ひな形を作る画面：作品写真のページは、学生が入れる所（ひな形に入らない）
+    if (this.template && target.closest('section.photos')) {
+      this.select(null)
+      return this.noticeInfo('作品写真は、学生が入れます（ひな形には入りません）')
     }
     const slot = target.closest<HTMLElement>('[data-photo-slot]')
     if (slot) {
@@ -3278,8 +3331,9 @@ export class ReportEditor {
     this.marker.hidden = true
     // 書いた文字を確定してから写真を選ぶ（写真を選ぶ画面を開くと入力欄は閉じる。段落のまま確定する：見出しの形でも見出しにしない）
     this.commitAsParagraph()
-    const imageId = await this.importImage('figure')
-    if (!imageId) {
+    // ひな形を作る画面：写真は選ばず、空の枠を入れる（学生が写真を入れる）
+    const imageId = this.template ? '' : await this.importImage('figure')
+    if (imageId === null) {
       this.reopenAfterRender(paragraphId, caret)
       return
     }
@@ -3302,7 +3356,8 @@ export class ReportEditor {
       this.report = ops.replaceBlock(this.report, paragraphId, block)
       return { id: paragraphId, place: 'over' }
     }
-    if (ops.paragraphEmpty(this.report, paragraphId)) {
+    // ひな形を作る画面：段落の字は学生に薄く出す説明なので、「（図n）」は足さずに、段落の下に置く
+    if (ops.paragraphEmpty(this.report, paragraphId) || this.template) {
       this.report = below(this.report)
       return { id: paragraphId, place: 'after' }
     }
@@ -3980,6 +4035,7 @@ export class ReportEditor {
    * 学科の設定でページ数の上限があって入りきらなかったときだけ、入れなかった枚数とわけを知らせる（上限がなければ、いつも全部入る）
    */
   async addPhotos(page: number, index: number): Promise<void> {
+    if (this.template) return
     const files = this.callbacks.pickImages ? await this.callbacks.pickImages('photo') : await this.callbacks.pickImage('photo').then((f) => (f ? [f] : []))
     if (files.length === 0) return
     const max = this.maxPhotoPages

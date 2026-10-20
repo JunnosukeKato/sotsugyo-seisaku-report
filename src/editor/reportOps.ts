@@ -226,14 +226,18 @@ export function setCourse(report: Report, courseId: string): Report {
 
 // ---- 段落の分割・結合・貼り付け ----
 
-/** Enter：段落を2つに分ける。見出しで Enter を押した場合は、その後ろに空の段落を作る */
-export function split(report: Report, id: string, before: string, after: string): { report: Report; newId: string } {
+/**
+ * Enter：段落を2つに分ける。見出しで Enter を押した場合は、その後ろに空の段落を作る。
+ * period：分けた前の段落の終わりに「。」を付ける（ひな形を作る画面では付けない。ひな形の説明は、先生が書いたままにする：mockups/v44）
+ */
+export function split(report: Report, id: string, before: string, after: string, { period = true }: { period?: boolean } = {}): { report: Report; newId: string } {
   const created = newId('p')
+  const ended = (text: string) => (period ? withPeriod(text) : text)
   const abstract = report.abstract.paragraphs
   const ai = abstract.findIndex((p) => p.id === id)
   if (ai >= 0) {
     const paragraphs = [...abstract]
-    paragraphs.splice(ai, 1, paragraph(id, withPeriod(before), undefined, abstract[ai].hint), paragraph(created, after))
+    paragraphs.splice(ai, 1, paragraph(id, ended(before), undefined, abstract[ai].hint), paragraph(created, after))
     return { report: { ...report, abstract: { ...report.abstract, paragraphs } }, newId: created }
   }
   const num = numbering(report)
@@ -258,7 +262,7 @@ export function split(report: Report, id: string, before: string, after: string)
     const keepWithBefore = attached.length > 0 && !labels.some((l) => after.includes(l))
     const blocks = [...chapter.blocks]
     // 分けた前の段落の終わりに「。」がなければ付ける（ひな形の説明は、前の段落に残す）
-    const first = paragraph(b.id, withPeriod(before), num, b.hint)
+    const first = paragraph(b.id, ended(before), num, b.hint)
     if (keepWithBefore) blocks.splice(i, end - i, first, ...attached, paragraph(created, after, num))
     else blocks.splice(i, 1, first, paragraph(created, after, num))
     return { report: { ...report, body: report.body.map((c) => (c === chapter ? { ...c, blocks } : c)) }, newId: created }

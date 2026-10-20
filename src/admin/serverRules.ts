@@ -8,7 +8,7 @@ import type { TemplateSet } from './server'
  * 関数の名前は Code.js の名前から末尾の _ を取ったもの
  */
 
-const BLOCK_TYPES = ['chapter', 'subheading', 'paragraph', 'figure', 'materialTable']
+const BLOCK_TYPES = ['chapter', 'subheading', 'paragraph', 'figure', 'materialTable', 'pageBreak', 'table']
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object'
 
 /** 文字の項目を確かめる（文字でない・長すぎるときはエラー） */
@@ -26,15 +26,52 @@ export function cleanTemplate(template: unknown, courseName: string): TemplateBl
   const cleaned = template.map((block: unknown, i) => {
     if (!isObj(block) || BLOCK_TYPES.indexOf(block.type as string) < 0) throw new Error(label + 'の' + (i + 1) + '行目の形が正しくありません')
     const type = block.type as TemplateBlock['type']
+    // 改ページは、種類だけ
+    if (type === 'pageBreak') return { type } as TemplateBlock
     const key = type === 'chapter' || type === 'subheading' ? 'title' : type === 'paragraph' ? 'hint' : 'caption'
     const row = label + 'の' + templateRowName(i, type, block[key])
     const text = checkText(block[key], key === 'hint' ? LIMITS.hint : LIMITS.name, row)
     // 段落の説明は空でもよい（大見出し・小見出し・図・表の名前は空にしない）
     if (key !== 'hint' && !text.trim()) throw new Error(row + 'の名前が空です')
-    return { type, [key]: text } as TemplateBlock
+    const out: Record<string, unknown> = { type, [key]: text }
+    if (type === 'table') cleanTable(block, out, row)
+    return out as unknown as TemplateBlock
   })
   if (cleaned.length && cleaned[0].type !== 'chapter') throw new Error(label + 'は、大見出しから始めてください')
   return cleaned
+}
+
+/**
+ * ひな形のふつうの表の、名前のほかの項目（見出しの行・行の数・列の幅・行の高さ・左端の列）を確かめて out に写す（Code.js の cleanTable_）。
+ * 形が崩れていたらエラー（学生のツールの src/config/validate.ts の templateTableProblem と同じ決まり）
+ */
+function cleanTable(block: Record<string, unknown>, out: Record<string, unknown>, row: string): void {
+  const header = block.header
+  if (!Array.isArray(header) || header.length < 1 || header.length > LIMITS.tableColumns || header.some((h) => typeof h !== 'string')) throw new Error(row + 'の見出しの行の形が正しくありません')
+  header.forEach((h, k) => checkText(h, LIMITS.name, row + 'の見出しの' + (k + 1) + '列目'))
+  out.header = header.slice()
+  const rows = block.rows
+  if (rows !== undefined) {
+    if (!(typeof rows === 'number' && Number.isInteger(rows) && rows >= 1 && rows <= LIMITS.tableRows)) throw new Error(row + 'の行の数が正しくありません')
+    out.rows = rows
+  }
+  if (block.widths !== undefined) {
+    if (['equal', 'auto', 'custom'].indexOf(block.widths as string) < 0) throw new Error(row + 'の列の幅の形が正しくありません')
+    out.widths = block.widths
+  }
+  const ws = block.colWidths
+  if (ws !== undefined) {
+    if (!Array.isArray(ws) || ws.length !== header.length || ws.some((w) => typeof w !== 'number' || !isFinite(w) || w <= 0 || w > 100)) throw new Error(row + 'の列の幅の形が正しくありません')
+    out.colWidths = ws.slice()
+  }
+  if (block.heights !== undefined) {
+    if (block.heights !== 'equal' && block.heights !== 'auto') throw new Error(row + 'の行の高さの形が正しくありません')
+    out.heights = block.heights
+  }
+  if (block.labelColumn !== undefined) {
+    if (typeof block.labelColumn !== 'boolean') throw new Error(row + 'の左端の列の形が正しくありません')
+    out.labelColumn = block.labelColumn
+  }
 }
 
 /** 書き間違えやすい語の一覧を確かめて整える（Code.js の cleanWords_。空の行・同じ語の行は捨てる） */

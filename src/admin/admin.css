@@ -399,3 +399,32 @@ button.busy:disabled { opacity: 1; cursor: progress; }
   .spin { animation: none; }
   .content[inert], .form-resize::after { transition: none; }
 }
+
+/* ==== ひな形を作る画面（mockups/v44 案A。管理ページの上に重ねて開く：TemplateOverlay.tsx）==== */
+/* コースのカードの「ひな形を作る画面を開く」と、予備の「前の作り方で直す」 */
+.tpl-line b .part { white-space: nowrap; }
+.tpl-line .tpl-acts { display: inline-flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; }
+.tpl-line .tpl-old { font-size: 14px; color: var(--muted); text-decoration: underline; text-underline-offset: 3px; }
+.tpl-line .tpl-old:hover { color: var(--accent); }
+/* 重ねた窓（画面いっぱい。中はツールの帯・紙面・右の欄）。「×」はツールの帯の右の端に重ねる */
+.tpl-overlay { position: fixed; inset: 0; z-index: 60; display: grid; padding: 10px; background: rgba(20, 22, 30, 0.55); }
+.tpl-window { position: relative; min-width: 0; min-height: 0; overflow: hidden; border-radius: 12px; background: #ebe8e3; box-shadow: 0 12px 40px rgba(0, 0, 0, 0.35); }
+.tpl-window iframe { display: block; width: 100%; height: 100%; border: 0; }
+.tpl-close { position: absolute; z-index: 3; top: 0; right: 0; width: 52px; height: 46px; padding: 0; border: 0; background: transparent; color: #4d3500; font-size: 26px; line-height: 1; }
+.tpl-close:hover { background: rgba(77, 53, 0, 0.08); }
+.tpl-close:focus-visible { outline: 2px solid var(--accent); outline-offset: -4px; }
+/* 開いている間・開けなかったとき */
+.tpl-opening { position: absolute; z-index: 2; inset: 0; display: grid; place-items: center; padding: 24px; background: #f4f2ee; }
+.tpl-failed { display: grid; justify-items: center; gap: 6px; max-width: 560px; text-align: center; }
+.tpl-failed b { font-size: 17px; }
+.tpl-failed span { color: var(--muted); }
+.tpl-failed .row-buttons { margin-top: 12px; }
+.tpl-error { position: absolute; z-index: 4; top: 58px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 40px); padding: 10px 16px; border: 1px solid #efb8b8; border-radius: 10px; background: var(--error-soft); color: var(--error); font-size: 14.5px; }
+/* 受け取ったあとの短い知らせ（画面の上の真ん中。数秒で消える。保存の帯より上、窓より下） */
+.tpl-toast { position: fixed; z-index: 45; top: 104px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; max-width: calc(100vw - 32px); padding: 10px 18px; border-radius: 10px; background: #2f3640; color: #fff; font-size: 14.5px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2); }
+.tpl-toast svg { flex: none; width: 18px; height: 18px; color: #9fe0b0; }
+/* 前のひな形の窓の、改ページ・ふつうの表の行（新しい画面で作ったもの） */
+.tpl-modal .row.pageBreak, .tpl-modal .row.table { margin-left: 44px; background: #fafbfc; }
+.tpl-modal .row .in-wrap { display: flex; flex-direction: column; min-width: 0; }
+.tpl-modal .row .tbl-head { padding: 0 4px 2px; overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
+.tpl-modal .row .brk { padding: 6px 4px; border-top: 1px dashed #b6bfd8; color: var(--muted); font-size: 14px; }

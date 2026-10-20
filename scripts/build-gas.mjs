@@ -6,7 +6,10 @@ import { execFileSync } from 'node:child_process'
 import { copyFileSync, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from 'node:fs'
 import { loadEnv } from 'vite'
 
-execFileSync(process.execPath, ['node_modules/vite/bin/vite.js', 'build', '--config', 'vite.admin.config.ts'], { stdio: 'inherit' })
+// 学生のツールの場所（管理ページの「ひな形を作る画面を開く」で、上に重ねて開く。mockups/v44 案A）。
+// 環境変数か .env の VITE_TOOL_URL。なければ GitHub Pages（src/template/toolUrl.ts）。管理ページの CSP の frame-src も、この場所だけにする（vite.admin.config.ts）
+const toolUrl = process.env.VITE_TOOL_URL || loadEnv('production', process.cwd(), 'VITE_').VITE_TOOL_URL || ''
+execFileSync(process.execPath, ['node_modules/vite/bin/vite.js', 'build', '--config', 'vite.admin.config.ts'], { stdio: 'inherit', env: { ...process.env, ...(toolUrl ? { VITE_TOOL_URL: toolUrl } : {}) } })
 
 for (const project of ['admin-project', 'api-project']) {
   const out = `gas-dist/${project}`
@@ -45,6 +48,10 @@ console.log(`\n配信の窓口：PDF の控えのフォルダ ${pdfFolderId ? '�
 rmSync('gas-dist/admin-project/admin.html', { force: true })
 renameSync('gas-dist/admin-build/admin.html', 'gas-dist/admin-project/admin.html')
 rmSync('gas-dist/admin-build', { recursive: true, force: true })
+// 管理ページの CSP（中に開いてよい枠は、学生のツールの場所だけ）が入っているかを確かめる
+const csp = /<meta http-equiv="Content-Security-Policy" content="frame-src ([^"]+)"/.exec(readFileSync('gas-dist/admin-project/admin.html', 'utf8'))
+if (!csp) throw new Error('管理ページに CSP（frame-src）が入っていません（vite.admin.config.ts）')
+console.log(`\nひな形を作る画面：学生のツールの場所 ${csp[1]}（管理ページの CSP の frame-src）`)
 
 const size = (f) => `${Math.round(statSync(f).size / 1024)}KB`
 console.log(`\ngas-dist/admin-project: Code.js ${size('gas-dist/admin-project/Code.js')}, admin.html ${size('gas-dist/admin-project/admin.html')}`)

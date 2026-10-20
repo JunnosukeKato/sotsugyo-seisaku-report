@@ -12,9 +12,11 @@ import { useReorder } from './useReorder'
 /**
  * コースの「下書きのひな形」を編集する画面（mockups/v8 案1：コースのカードから開く）。
  * 左で本文の組み立て（大見出し・小見出し・書くことの説明・図の枠・素材表）を並べ、右で学生が最初に見る本文を確かめる。
+ * mockups/v44 からは、学生と同じ紙面で作る画面（TemplateOverlay.tsx）がふつうの作り方で、この窓は「前の作り方で直す」から開く予備。
+ * 改ページ・ふつうの表（新しい画面で作ったもの）も消さずに残し、並べ替え・削除・表のタイトルの直しはできる（表の見出しの行は新しい画面で直す）
  */
 
-const KIND_LABELS: Record<TemplateBlock['type'], string> = { chapter: '大見出し', subheading: '小見出し', paragraph: '説明', figure: '図の枠', materialTable: '素材表' }
+const KIND_LABELS: Record<TemplateBlock['type'], string> = { chapter: '大見出し', subheading: '小見出し', paragraph: '説明', figure: '図の枠', materialTable: '素材表', pageBreak: '改ページ', table: '表' }
 const ROMAN = ['Ⅰ', 'Ⅱ', 'Ⅲ', 'Ⅳ', 'Ⅴ', 'Ⅵ', 'Ⅶ', 'Ⅷ', 'Ⅸ', 'Ⅹ']
 const SMALL = ['ⅰ', 'ⅱ', 'ⅲ', 'ⅳ', 'ⅴ', 'ⅵ', 'ⅶ', 'ⅷ', 'ⅸ', 'ⅹ']
 
@@ -32,7 +34,7 @@ function numbers(blocks: TemplateBlock[]): string[] {
     }
     if (b.type === 'subheading') return `${SMALL[sub++] ?? sub}．`
     if (b.type === 'figure') return `図${++fig}`
-    if (b.type === 'materialTable') return `表${++tab}`
+    if (b.type === 'materialTable' || b.type === 'table') return `表${++tab}`
     return ''
   })
 }
@@ -58,7 +60,7 @@ function problemsOf(blocks: TemplateBlock[], abstractExample: string): Problem[]
   else if (blocks[0].type !== 'chapter') push('いちばん上は大見出しにしてください')
   if (blocks.length > LIMITS.blocks) push(`行が多すぎます（${LIMITS.blocks}行まで。今は${blocks.length}行）`)
   blocks.forEach((b, i) => {
-    const empty = b.type === 'chapter' || b.type === 'subheading' ? !b.title.trim() : b.type === 'figure' || b.type === 'materialTable' ? !b.caption.trim() : false
+    const empty = b.type === 'chapter' || b.type === 'subheading' ? !b.title.trim() : b.type === 'figure' || b.type === 'materialTable' || b.type === 'table' ? !b.caption.trim() : false
     if (empty) push(`${i + 1}行目の${KIND_LABELS[b.type]}の名前が空です`)
     const max = b.type === 'paragraph' ? LIMITS.hint : LIMITS.name
     // 短い文は「3行目の説明が長すぎます（…）」（行の書き出し「…」を外す）
@@ -67,15 +69,17 @@ function problemsOf(blocks: TemplateBlock[], abstractExample: string): Problem[]
   return problems
 }
 
-const textOf = (b: TemplateBlock) => (b.type === 'chapter' || b.type === 'subheading' ? b.title : b.type === 'paragraph' ? b.hint : b.caption)
+const textOf = (b: TemplateBlock) => (b.type === 'chapter' || b.type === 'subheading' ? b.title : b.type === 'paragraph' ? b.hint : b.type === 'pageBreak' ? '' : b.caption)
 const withText = (b: TemplateBlock, text: string): TemplateBlock =>
-  b.type === 'chapter' || b.type === 'subheading' ? { ...b, title: text } : b.type === 'paragraph' ? { ...b, hint: text } : { ...b, caption: text }
+  b.type === 'chapter' || b.type === 'subheading' ? { ...b, title: text } : b.type === 'paragraph' ? { ...b, hint: text } : b.type === 'pageBreak' ? b : { ...b, caption: text }
 const PLACEHOLDERS: Record<TemplateBlock['type'], string> = {
   chapter: '大見出しの名前（例：企画・立案）',
   subheading: '小見出しの名前（例：デザイン説明）',
   paragraph: '学生に薄い字で見せる「ここに何を書くか」（例：デザインの意図を書く）',
   figure: '図のタイトル（例：デザイン画）',
   materialTable: '表のタイトル（例：使用素材表）',
+  pageBreak: '',
+  table: '表のタイトル（例：寸法表）',
 }
 const NEW_BLOCKS: Record<TemplateBlock['type'], TemplateBlock> = {
   chapter: { type: 'chapter', title: '' },
@@ -83,6 +87,8 @@ const NEW_BLOCKS: Record<TemplateBlock['type'], TemplateBlock> = {
   paragraph: { type: 'paragraph', hint: '' },
   figure: { type: 'figure', caption: '' },
   materialTable: { type: 'materialTable', caption: '使用素材表' },
+  pageBreak: { type: 'pageBreak' },
+  table: { type: 'table', caption: '', header: ['', ''] },
 }
 
 const PREVIEW_CSS = `
@@ -93,6 +99,9 @@ p[data-block-id]:empty::before { color: #8a90a0; }
 .figure-slot { margin: 0 auto; outline: 1px dashed #b9b9b9; background: repeating-linear-gradient(45deg, #f6f6f6 0 8px, #efefef 8px 16px); display: grid; place-items: center; }
 .figure-slot::before { content: '（学生が写真を入れる枠）'; color: #9a9a9a; font-family: 'BIZ UDPGothic', sans-serif; font-size: 10pt; }
 h1.chapter:not(:first-child) { margin-top: 2em; }
+.page-break { position: relative; height: 9mm; }
+.page-break::after { content: '改ページ'; position: absolute; left: 0; right: 0; top: 3mm; padding-top: 1mm; border-top: 1px dashed #9aa3c4; color: #7f88ab; font-family: 'BIZ UDPGothic', sans-serif; font-size: 8pt; letter-spacing: 0.2em; text-align: center; }
+td [data-block-id]:empty::before { content: '（学生が書く）'; }
 `
 
 export function TemplatePreview({ blocks }: { blocks: TemplateBlock[] }) {
@@ -133,14 +142,18 @@ interface Props {
 let keyCounter = 0
 const withKeys = (list: TemplateBlock[]) => list.map((block) => ({ key: ++keyCounter, block }))
 
-/** 編集を始めるひな形（ないときは標準のひな形）。崩れたひな形でも画面が止まらないよう、知らない種類の部品は外し、名前や説明は文字にそろえる */
+/**
+ * 編集を始めるひな形（ないときは標準のひな形）。崩れたひな形でも画面が止まらないよう、知らない種類の部品は外し、名前や説明は文字にそろえる。
+ * ふつうの表は、見出しの行などの項目もそのまま残す（この窓では、タイトルだけを直す）
+ */
 function startBlocks(template: unknown): TemplateBlock[] {
   if (!Array.isArray(template) || template.length === 0) return DEFAULT_TEMPLATE
   return template.flatMap((b: unknown) => {
     const type = b && typeof b === 'object' ? (b as { type?: unknown }).type : undefined
     if (typeof type !== 'string' || !Object.prototype.hasOwnProperty.call(NEW_BLOCKS, type)) return []
     const text: unknown = textOf(b as TemplateBlock)
-    return [withText(NEW_BLOCKS[type as TemplateBlock['type']], typeof text === 'string' ? text : '')]
+    const base = type === 'table' ? { ...NEW_BLOCKS.table, ...(b as object) } : NEW_BLOCKS[type as TemplateBlock['type']]
+    return [withText(base as TemplateBlock, typeof text === 'string' ? text : '')]
   })
 }
 
@@ -251,16 +264,25 @@ export function TemplateEditor({ course, config, footNote, onApply, onClose }: P
                     {KIND_LABELS[block.type]}
                     {nums[i] && <b>{nums[i]}</b>}
                   </span>
-                  <input
-                    ref={(el) => {
-                      if (el) inputs.current.set(key, el)
-                      else inputs.current.delete(key)
-                    }}
-                    value={textOf(block)}
-                    placeholder={PLACEHOLDERS[block.type]}
-                    onFocus={() => setSelected(i)}
-                    onChange={(e) => setBlock(i, withText(block, e.target.value))}
-                  />
+                  {block.type === 'pageBreak' ? (
+                    // 改ページは名前がない（この後ろは、学生の原稿でも次のページから始まる）
+                    <span className="brk">ここで次のページへ</span>
+                  ) : (
+                    <span className="in-wrap">
+                      <input
+                        ref={(el) => {
+                          if (el) inputs.current.set(key, el)
+                          else inputs.current.delete(key)
+                        }}
+                        value={textOf(block)}
+                        placeholder={PLACEHOLDERS[block.type]}
+                        onFocus={() => setSelected(i)}
+                        onChange={(e) => setBlock(i, withText(block, e.target.value))}
+                      />
+                      {/* ふつうの表の見出しの行は、紙面で作る画面で直す（ここでは見るだけ） */}
+                      {block.type === 'table' && <small className="tbl-head">見出し：{block.header.map((h) => h.trim() || '（空）').join('・')}</small>}
+                    </span>
+                  )}
                   <span className="acts">
                     <button title="この行を削除" onClick={() => remove(i)}>
                       ✕
@@ -275,7 +297,7 @@ export function TemplateEditor({ course, config, footNote, onApply, onClose }: P
             </div>
             <div className="adds">
               <span className="l">選んでいる行の下に足す：</span>
-              {(['chapter', 'subheading', 'paragraph', 'figure', 'materialTable'] as const).map((type) => (
+              {(['chapter', 'subheading', 'paragraph', 'figure', 'materialTable', 'pageBreak'] as const).map((type) => (
                 <button key={type} onClick={() => add(type)}>
                   ＋ {KIND_LABELS[type]}
                 </button>

@@ -128,6 +128,8 @@ export class ReportRenderer {
   private readonly settled = new Map<string, LayoutState>()
   /** 前に開いたときに覚えた組み方（layout/memory.ts）を、もう見たか（開いてはじめて組むときだけ使う） */
   private memoryTried = false
+  /** 組み方をこの端末に覚える（layout/memory.ts）。ひな形を作る画面（mockups/v44）では覚えない・読まない（学生の原稿の組み方を変えないように） */
+  private readonly keepMemory: boolean
   /** 組み終えた裏側の紙面が、表の表示枠から借りている部分（裏側の部分の番号 → 表の部分）。表と裏を入れ替えるときに、裏へ移す（swap） */
   private borrow: { back: Buffer; lender: Buffer; parts: Map<number, PartView> } | null = null
   /** めくっている途中の動きを、すぐ終える（hurryTurn。めくっていなければ null） */
@@ -138,7 +140,9 @@ export class ReportRenderer {
    */
   spread = false
 
-  constructor(container: HTMLElement) {
+  constructor(container: HTMLElement, options: { remember?: boolean } = {}) {
+    this.keepMemory = options.remember !== false
+    this.memoryTried = !this.keepMemory
     const make = (): Buffer => {
       const element = document.createElement('div')
       element.className = 'page-viewport'
@@ -349,7 +353,7 @@ export class ReportRenderer {
             back.layout = layout
             this.remember(key, back.state)
             // 次に開いたときのために、この端末に覚えておく（layout/memory.ts）
-            saveLayoutMemory({
+            if (this.keepMemory) saveLayoutMemory({
               v: 1,
               state: { toc: back.state.toc, deferred: [...deferred], subtitle: { line: documentHash(line), pt: subtitlePt }, split, tables },
               parts: assembly().map((part, i) => ({ hash: documentHash(docs[i]), kinds: part.pageKinds() })),

@@ -156,4 +156,17 @@ export const Icon = {
       <path d="M9 12h6M9 15.5h4" />
     </>,
   ),
+  // ひな形を作る画面（mockups/v44 案A）：ひな形の紙・管理ページに戻す
+  template: svg(
+    <>
+      <rect x="5" y="3.5" width="14" height="17" rx="2" />
+      <path d="M8.5 8h7M8.5 11.5h7M8.5 15h4" />
+    </>,
+  ),
+  back: svg(
+    <>
+      <path d="M10 7l-5 5 5 5" />
+      <path d="M5 12h9.5a4.5 4.5 0 010 9H12" />
+    </>,
+  ),
 }

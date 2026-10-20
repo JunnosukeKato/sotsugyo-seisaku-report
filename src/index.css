@@ -1721,3 +1721,85 @@ p.busy-line { display: flex; }
   .app:not(.phone) :is(.page-scroller, #overlay-layer) viv-ts-close.sel-hang > viv-ts-inner::before { content: ''; position: absolute; z-index: -1; left: 0; top: 50%; width: 1em; height: 1lh; transform: translateY(-50%); background: #3367d1; pointer-events: none; }
   .app:not(.phone) :is(.page-scroller, #overlay-layer) viv-ts-close.sel-hang.viv-hang-hw > viv-ts-inner::before { width: 0.5em; }
 }
+
+/* ==== ひな形を作る画面（mockups/v44 案A。src/template/TemplateApp.tsx）==== */
+/* 管理ページの上に重ねた窓の中で、学生のツールを ?template=1 で開いたもの。紙面・道具は学生と同じで、帯・右の欄・薄い字・札だけが違う */
+.tpl-mode { height: 100%; display: flex; flex-direction: column; }
+.tpl-mode .app { flex: 1; min-height: 0; height: auto; }
+/* いちばん上の帯（学生の画面ではないと、ひと目で分かるように）。右の端は、管理ページの窓の「×」の分を空ける */
+.tpl-banner { flex: none; height: 46px; display: flex; align-items: center; gap: 10px; padding: 0 64px 0 18px; background: #fbe6b0; border-bottom: 2px solid #d9a634; color: #4d3500; font-size: 15.5px; white-space: nowrap; overflow: hidden; }
+.tpl-banner svg { flex: none; width: 22px; height: 22px; color: #9a6a00; }
+.tpl-banner b { min-width: 0; overflow: hidden; text-overflow: ellipsis; font-weight: 700; letter-spacing: 0.02em; }
+.tpl-banner span { flex: none; color: #6b4d0c; }
+/* 受け取るまで・パソコンで使うことの知らせ */
+.tpl-wait { flex: 1; display: grid; place-content: center; justify-items: center; gap: 18px; padding: 24px 16px; background: var(--stage-bg); color: var(--ink); text-align: center; word-break: auto-phrase; text-wrap: pretty; }
+.tpl-wait p { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 6px; font-size: 15px; line-height: 1.7; }
+.tpl-wait p b { font-size: 17px; }
+.tpl-wait p.loading-line { flex-direction: row; color: var(--muted); }
+.tpl-wait .tpl-sub { padding: 0 32px; }
+@media (max-width: 999px) {
+  .tpl-banner { padding-right: 56px; font-size: 14px; }
+  .tpl-banner span { display: none; }
+}
+
+/* 本文・抄録の段落の字＝学生に薄い字で見せる「ここに書くこと」（学生の画面の薄い字と同じ色） */
+@media screen {
+  .tpl-mode .page-viewport :is(section.body, section.abstract .body) p[data-block-id] { position: relative; color: #5f6b95; }
+  .tpl-mode :is(.overlay-editor, .overlay-ghost, .overlay-frozen > div)[data-kind='paragraph'] { color: #5f6b95 !important; caret-color: var(--ink); }
+  /* 左の余白の札（画面の上で同じ大きさに見えるよう、紙面の倍率 --s で割る）。書いている段落の札は TemplateApp.tsx の EditingTag */
+  .tpl-mode .page-viewport :is(section.body, section.abstract .body) p[data-block-id]:not(:empty)::before {
+    content: 'ここに書くこと'; position: absolute; right: calc(100% + 8px / var(--s)); top: calc(2px / var(--s)); text-indent: 0; letter-spacing: 0.02em;
+    padding: 0 calc(6px / var(--s)); border: calc(1px / var(--s)) solid #e7c46e; border-radius: calc(5px / var(--s)); background: #fcefcb; color: #7a5600;
+    font: 700 calc(10px / var(--s)) / 1.55 'BIZ UDPGothic', sans-serif; white-space: nowrap; pointer-events: none;
+  }
+  .tpl-mode .page-viewport section.abstract .body p[data-block-id]:not(:empty)::before { content: '書き出しの例'; }
+  /* 何も書いていない段落（学生には説明なしの空の段落になる） */
+  .tpl-mode .page-viewport section.body p[data-block-id]:empty::before { content: '（クリックして、ここに書くことを入力）'; }
+  /* 図の枠・表の中身の行は、学生が入れる所 */
+  .tpl-mode .page-viewport .figure-slot { cursor: default; }
+  .tpl-mode .page-viewport .figure-slot::before { content: '（学生が写真を入れる枠）'; color: #8a90a0; }
+  .tpl-mode .page-viewport td { cursor: default; }
+  .tpl-mode .page-viewport td [data-block-id]:empty::before { content: '（学生が書く）'; color: #9aa1ad; }
+  .tpl-mode .page-viewport th [data-block-id]:empty::before { content: '（見出しを入力）'; }
+  /* 抄録の上の欄（年度・コース・学籍番号など）は、自動か学生が入れる所なので薄く */
+  .tpl-mode .page-viewport section.abstract .head { opacity: 0.45; }
+  /* 表紙・作品写真のページ（ひな形に入らない）：紙面を薄くし、真ん中に札 */
+  .tpl-mode .stage.tpl-off .page-viewport.front [data-vivliostyle-page-container].is-current { opacity: 0.55; }
+}
+.tpl-editing-tag { position: fixed; z-index: 40; margin-top: 2px; padding: 0 6px; border: 1px solid #e7c46e; border-radius: 5px; background: #fcefcb; color: #7a5600; font: 700 10px/1.55 'BIZ UDPGothic', sans-serif; letter-spacing: 0.02em; white-space: nowrap; transform: translateX(calc(-100% - 8px)); pointer-events: none; }
+.tpl-off-note { position: absolute; z-index: 12; left: 50%; bottom: 22%; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 22px; border-radius: 12px; border: 1.5px solid #e2c47a; background: rgba(255, 255, 255, 0.96); box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12); color: #4d3500; font-size: 15px; white-space: nowrap; pointer-events: none; }
+.tpl-off-note span { font-size: 13px; color: #6b5a33; }
+
+/* ページの一覧：ひな形に入らないページ（表紙・作品写真）は薄くし、札を付ける */
+.thumb-list .t.excluded { color: #8d9099; }
+.thumb-list .t.excluded .mini { opacity: 0.35; }
+.thumb-list .t .mini-tag { position: absolute; z-index: 2; left: 50%; top: 38%; transform: translate(-50%, -50%); padding: 3px 7px; border: 1px solid #d8d4cc; border-radius: 6px; background: #fff; color: #6d6a64; font-size: 11.5px; font-weight: 700; line-height: 1.45; text-align: center; white-space: nowrap; }
+
+/* 右の欄：セルフチェック・PDF の代わりに「このコースのひな形」 */
+.tpl-side .side-head { padding-bottom: 8px; }
+.tpl-panel { flex: 1; min-height: 0; display: flex; flex-direction: column; padding: 10px 22px 18px; overflow-y: auto; color: var(--ink); word-break: auto-phrase; text-wrap: pretty; }
+.tpl-panel h2 { display: flex; align-items: center; gap: 8px; margin: 0; font-size: 18px; letter-spacing: 0.02em; }
+.tpl-panel h2 svg { flex: none; width: 22px; height: 22px; color: #9a6a00; }
+.tpl-course { margin: 4px 0 14px 30px; font-size: 14.5px; color: var(--muted); }
+.tpl-points { margin: 0; padding: 12px 14px 12px 30px; border-radius: 10px; background: #f6f4ef; color: #4a4d55; font-size: 14px; line-height: 1.9; }
+.tpl-points li::marker { color: #b9a26a; }
+.tpl-issues { margin-top: 14px; padding: 10px 12px 10px 14px; border: 1px solid #e7c2bd; border-radius: 10px; background: var(--error-soft); color: var(--error); font-size: 14px; line-height: 1.6; }
+.tpl-issues b { display: block; margin-bottom: 4px; }
+.tpl-issues ul { margin: 0; padding-left: 18px; }
+.tpl-issues li + li { margin-top: 2px; }
+.tpl-issues button { padding: 0; border: 0; background: none; color: inherit; font: inherit; text-align: left; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.tpl-panel .spacer { flex: 1; min-height: 14px; }
+.tpl-foot { display: flex; flex-direction: column; gap: 10px; }
+.tpl-primary { display: flex; align-items: center; justify-content: center; gap: 8px; height: 52px; border: 0; border-radius: 10px; background: var(--accent); color: #fff; font-size: 16.5px; font-weight: 700; letter-spacing: 0.03em; cursor: pointer; }
+.tpl-primary svg { width: 20px; height: 20px; }
+.tpl-primary:disabled { opacity: 0.7; cursor: default; }
+.tpl-primary .busy-spin { border-color: rgba(255, 255, 255, 0.4); border-right-color: #fff; }
+.tpl-sub { height: 42px; border: 1px solid #cfd3dc; border-radius: 10px; background: #fff; color: var(--ink); font-size: 15px; cursor: pointer; }
+.tpl-sub:hover, .tpl-sub:focus-visible { border-color: var(--accent); color: var(--accent); }
+.tpl-sub.sm, .tpl-danger.sm { height: 34px; padding: 0 14px; font-size: 14px; }
+.tpl-danger { border: 1px solid var(--error); border-radius: 10px; background: var(--error); color: #fff; font-weight: 700; cursor: pointer; }
+.tpl-note { margin: 0; color: var(--muted); font-size: 13px; line-height: 1.6; text-align: center; }
+.tpl-note span { display: block; }
+.tpl-link { align-self: center; margin-top: 2px; padding: 0; border: 0; background: none; color: var(--accent); font-size: 13px; text-decoration: underline; text-underline-offset: 3px; cursor: pointer; }
+.tpl-reset-ask { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid #e7c46e; border-radius: 10px; background: #fff8e6; color: #4d3500; font-size: 13.5px; line-height: 1.6; }
+.tpl-reset-ask .btns { display: flex; justify-content: flex-end; gap: 8px; }

@@ -89,8 +89,11 @@ export function DeadlineChip({ deadline }: { deadline: string }) {
 /** ページの一覧の名前。目次は、本文の見出しから自動で作ることが分かるように「目次（自動）」（mockups/v41） */
 const SHORT_NAMES: Record<PageKind, string> = { cover: '表紙', abstract: '抄録', toc: '目次（自動）', body: '本文', references: '参考文献', photos: '作品写真', unknown: '' }
 
-/** 画面の左端の、ページの一覧の欄（PC。PowerPoint と同じ形） */
-export function PageColumn({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
+/**
+ * 画面の左端の、ページの一覧の欄（PC。PowerPoint と同じ形）。
+ * excluded：ひな形を作る画面（mockups/v44）で、ひな形に入らないページ（表紙・作品写真）。見本を薄くし「ひな形に入らない」の札を付ける
+ */
+export function PageColumn({ editor, snap, excluded }: { editor: ReportEditor; snap: EditorSnapshot; excluded?: (kind: PageKind) => boolean }) {
   return (
     <aside className="thumbs-col" aria-label="ページの一覧">
       <div className="sec-h">
@@ -101,7 +104,7 @@ export function PageColumn({ editor, snap }: { editor: ReportEditor; snap: Edito
           </span>
         )}
       </div>
-      <PageThumbs editor={editor} snap={snap} />
+      <PageThumbs editor={editor} snap={snap} excluded={excluded} />
     </aside>
   )
 }
@@ -144,7 +147,7 @@ function copyInherited(from: HTMLElement, to: HTMLElement): void {
 }
 
 /** ページ一覧。紙面を縮小した本物の見た目を出し、エラーのあるページに赤い点を付ける */
-export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; snap: EditorSnapshot; onPick?: () => void }) {
+export function PageThumbs({ editor, snap, onPick, excluded }: { editor: ReportEditor; snap: EditorSnapshot; onPick?: () => void; excluded?: (kind: PageKind) => boolean }) {
   const ref = useRef<HTMLDivElement>(null)
   const kinds = snap.layout?.kinds ?? []
   let body = 0
@@ -201,10 +204,10 @@ export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; sna
       {names.map((name, i) => (
         <button
           key={i}
-          className={`t${shown.has(i) ? ' on' : ''}${errorPages.has(i) ? ' has-error' : ''}`}
-          title={`${name}（${i + 1}ページ目）${errorPages.has(i) ? '：エラーがあります' : ''}`}
+          className={`t${shown.has(i) ? ' on' : ''}${errorPages.has(i) ? ' has-error' : ''}${excluded?.(kinds[i]) ? ' excluded' : ''}`}
+          title={`${name}（${i + 1}ページ目）${errorPages.has(i) ? '：エラーがあります' : excluded?.(kinds[i]) ? '：ひな形に入りません' : ''}`}
           // 読み上げの名前（縮小した紙面の中の文字まで読まないように、短い名前を付ける）
-          aria-label={`${name}（${i + 1}ページ目）${errorPages.has(i) ? 'エラーあり' : ''}`}
+          aria-label={`${name}（${i + 1}ページ目）${errorPages.has(i) ? 'エラーあり' : excluded?.(kinds[i]) ? 'ひな形に入らない' : ''}`}
           aria-current={i === snap.page ? 'page' : undefined}
           // スマホの「ページ一覧」の欄を開いたときは、見ているページに移る（useDialogFocus）
           data-autofocus={onPick && i === snap.page ? true : undefined}
@@ -214,6 +217,14 @@ export function PageThumbs({ editor, snap, onPick }: { editor: ReportEditor; sna
           }}>
           {/* 縮小した紙面は見た目だけ（読み上げない・中のボタンにも移らない） */}
           <span className="mini" aria-hidden="true" inert />
+          {/* ひな形を作る画面：ひな形に入らないページの札（言葉の切れ目で2行に） */}
+          {excluded?.(kinds[i]) && (
+            <span className="mini-tag" aria-hidden="true">
+              ひな形に
+              <br />
+              入らない
+            </span>
+          )}
           {name}
         </button>
       ))}
