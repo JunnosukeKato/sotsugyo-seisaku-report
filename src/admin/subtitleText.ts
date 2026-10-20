@@ -31,7 +31,7 @@ export function joinSubtitle(before: string, after: string): string {
 }
 
 /** 「例：」に出すサブタイトル（保存されている形式に、例の言葉を当てはめる。表紙と同じく前後の線も出る） */
-export function subtitleExample(template: string, input = 'シンドバッド'): string {
+export function subtitleExample(template: string, input = '〇〇'): string {
   return template.replace('{input}', input)
 }
 

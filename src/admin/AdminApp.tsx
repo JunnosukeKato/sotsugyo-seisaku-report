@@ -610,10 +610,12 @@ export function AdminApp() {
     }
   }
 
-  /** 左の見出しの区切りを選ぶ（区切りの中で、まだ反映していない入力があれば確かめる） */
-  const go = (s: Section) => {
+  /** 左の見出しの区切りを選ぶ（区切りの中で、まだ反映していない入力があれば確かめる）。keepMessage：いまの知らせを残す（作った年度の知らせなど） */
+  const go = (s: Section, keepMessage = false) => {
     if (s === section) return true
     if (!confirmLeave()) return false
+    // 前の区切りの知らせは消す（「保存しました（学生に届くのは…）」が先生の登録に残るなど、その区切りに合わない知らせが残っていた）
+    if (!keepMessage) setMessage(null)
     setSectionState(s)
     saveSection(s)
     return true
@@ -622,6 +624,8 @@ export function AdminApp() {
   const switchYear = (s: AdminState, y: number) => {
     if (dirty && !confirm('保存していない変更があります。破棄して年度を切り替えますか？')) return
     if (!confirmLeave()) return
+    // 前の年度の知らせは消す（「この時点の内容を読み込みました」が、ほかの年度に残っていた：先生の試し 2026-10-21）
+    setMessage(null)
     select(s, y)
   }
 
@@ -687,7 +691,10 @@ export function AdminApp() {
   const publish = () => {
     if (errors.length) return setMessage({ kind: 'ng', text: 'エラーを直してから公開してください' })
     const current = state.years.find((y) => y.status === '公開中')
-    if (!confirm(publishConfirmText(draft, current?.year ?? null, dirty))) return
+    // 新年度の準備で、まだのところがあれば、公開の確かめの前に並べる（前は確かめに出ず、前の年度の言葉が残ったまま公開できた：先生の試し 2026-10-21）
+    const pending = (steps ?? []).filter((x) => !x.done)
+    const before = pending.length ? `新年度の準備で、まだのところがあります。\n${pending.map((x) => `・${x.name}（${x.text}）`).join('\n')}\n\n` : ''
+    if (!confirm(before + publishConfirmText(draft, current?.year ?? null, dirty))) return
     // 画面を開いたあとにほかの人が保存していたら、見ていない内容を公開しないよう、公開せずに知らせる
     void run(
       'publish',
@@ -719,6 +726,8 @@ export function AdminApp() {
     )
   }
   const nextYearNumber = Math.max(...state.years.map((y) => y.year)) + 1
+  /** この年度のすぐ後の年度（もう作ってあれば） */
+  const laterYear = state.years.filter((y) => y.year > row.year).sort((p, q) => p.year - q.year)[0] ?? null
   const openNewYear = () => {
     // 新年度は保存されている内容からコピーするので、保存していない変更は入らない（年度を切り替えるときと同じく確かめる）
     if (dirty && !confirm('保存していない変更があります。新年度は保存されている内容からコピーして作るため、この変更は入りません。破棄して新年度を作成しますか？')) return
@@ -771,6 +780,8 @@ export function AdminApp() {
         steps={steps}
         onStep={onStep}
         nextYear={nextYearNumber}
+        later={laterYear ? { year: laterYear.year, status: laterYear.status } : null}
+        onLater={laterYear ? () => switchYear(state, laterYear.year) : undefined}
         onNewYear={openNewYear}
         canDelete={canDelete}
         onDelete={removeYear}
@@ -832,7 +843,8 @@ export function AdminApp() {
         onRestore={(h) => {
           if (dirty && !confirm('保存していない変更があります。破棄して、この時点の内容を読み込みますか？')) return
           setDraft(clone(h.config))
-          setMessage({ kind: 'ok', text: 'この時点の内容を読み込みました。確認して保存すると元に戻ります' })
+          // いまの内容と同じ時点（いちばん新しい履歴など）なら、変わる所はない
+          setMessage({ kind: 'ok', text: sameConfig(row.config, h.config) ? 'この時点の内容は、いまの内容と同じです（変わる所はありません）' : 'この時点の内容を読み込みました。確認して保存すると元に戻ります' })
         }}
       />
     )
@@ -927,7 +939,10 @@ export function AdminApp() {
                 // 前の年度のままの項目（題目・締切・お知らせなど）を知らせ、「年度の設定」（新年度の手順）を開く（できなかったときも閉じて、理由を知らせる）
                 void run('create', newYearNotice(row.config, n), () => server.createYear(row.year, n), { nextYear: n }).then((ok) => {
                   setDialog(null)
-                  if (ok) go('year')
+                  if (!ok) return
+                  go('year', true)
+                  // 作った年度の「新年度の準備」と知らせが見えるよう、上まで戻す（前は下の「この年度を削除」のあたりのままだった：先生の試し 2026-10-21）
+                  requestAnimationFrame(() => document.querySelectorAll('.admin .content, .admin-main').forEach((el) => el.scrollTo({ top: 0 })))
                 })
               }}
             >

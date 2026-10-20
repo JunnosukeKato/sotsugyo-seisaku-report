@@ -240,7 +240,7 @@ function TopicList({ topics, who, guides, onOpen }: { topics: HelpTopic[]; who: 
         </div>
       ))}
       <div className="help-foot">
-        <p>{who === 'admin' ? 'それでも困ったら、ほかの管理者に相談するか、docs/引き継ぎ手順.md を見てください。' : `それでも困ったら、${who === 'teacher' ? '管理者' : '担当の先生'}に相談してください。`}</p>
+        <p>{who === 'admin' ? 'それでも困ったら、ほかの管理者に相談してください。' : `それでも困ったら、${who === 'teacher' ? '管理者' : '担当の先生'}に相談してください。`}</p>
         {guides.length === 1 ? (
           <a className="help-pdf" href={guides[0].href} target="_blank" rel="noreferrer">
             印刷用の手引き（PDF）

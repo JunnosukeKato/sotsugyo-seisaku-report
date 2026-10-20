@@ -153,6 +153,8 @@ body.resizing iframe { pointer-events: none; }
 .in::placeholder { color: #8a909c; }
 .in:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 textarea.in { display: block; resize: vertical; line-height: 1.65; }
+/* お知らせの欄は、書いた行の数に合わせて高くする（前は2行のままで、3行目から隠れていた：先生の試し 2026-10-21。field-sizing を使えないブラウザは rows のまま） */
+textarea.in.notice { field-sizing: content; min-height: calc(2lh + 14px); max-height: 14lh; }
 .in.num { width: 84px; }
 .in.date { width: 220px; max-width: 100%; }
 .range { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }

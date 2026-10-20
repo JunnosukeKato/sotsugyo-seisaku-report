@@ -193,6 +193,27 @@ export async function trialFixesPc(browser, check) {
     title?.length >= 1 && note?.length >= 1 && onPhrase(title, starts.title) && onPhrase(note, starts.note),
     JSON.stringify({ title, note }),
   )
+
+  // ---- 6. 低い画面（1280×586）でも、「表を入れる」の大きさを選ぶメニューが画面に入り、「素材表」まで押せる ----
+  await page.setViewport({ width: 1280, height: 586 })
+  await wait(400)
+  await ready()
+  await openCell(page, ready, 'p7')
+  await clickTool(page, '表を入れる')
+  await page.waitForSelector('.table-menu')
+  await wait(200)
+  const menu = await page.evaluate(() => {
+    const m = document.querySelector('.table-menu').getBoundingClientRect()
+    const material = [...document.querySelectorAll('.table-menu > button')].find((b) => b.textContent.includes('素材表'))?.getBoundingClientRect()
+    return { top: Math.round(m.top), bottom: Math.round(m.bottom), h: innerHeight, material: material ? Math.round(material.bottom) : null }
+  })
+  await page.screenshot({ path: `${OUT}/pc-6-table-menu-1280x586.png` })
+  await page.keyboard.press('Escape')
+  check(
+    'パソコン（1280×586）：「表を入れる」の大きさを選ぶメニューは画面の中に収まり、下の「素材表」まで見えて押せる（前は下が切れていた）',
+    menu.top >= 0 && menu.bottom <= menu.h && menu.material !== null && menu.material <= menu.h,
+    JSON.stringify(menu),
+  )
   await context.close()
 }
 

@@ -177,6 +177,9 @@ body.resizing .page-viewport { pointer-events: none; }
 /* 拡大：紙面を大きくするため左右の余白を狭め、道具は台の左端、ページ送りの矢印は下に置く（道具は紙面の左の余白に少し重なってもよい） */
 .stage.zoomed { --inset-side: 110px; }
 .stage.zoomed .palette { left: 12px; }
+/* 拡大・見開き：左のページ送りの矢印（左下）と左の道具が重なる低い画面（1366×634・1280×586）では、道具を上に重ねる
+   （前は矢印が上で、道具の「元に戻す」を押すとページがめくれた：はじめて使う学生の試し 2026-10-21。矢印の置き場所は見本 v47 で決める） */
+.stage.zoomed .palette, .stage.spread .palette { z-index: 11; }
 .stage.zoomed .arrow.prev { left: 31px; top: auto; bottom: 20px; translate: none; }
 .stage.zoomed .arrow.next { left: auto; right: 31px; top: auto; bottom: 68px; translate: none; }
 .palette .group { display: flex; flex-direction: column; gap: 1px; }

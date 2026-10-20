@@ -40,6 +40,12 @@ describe('言葉で探す：項目を探す', () => {
     expect(ids(searchTopics(STUDENT_TOPICS, 'ｐｄｆ').hits)).toEqual(ids(searchTopics(STUDENT_TOPICS, 'PDF').hits))
   })
 
+  it('「先生を追加」「締切を変える」のように空白なしで打っても、助詞で区切って探し直す（先生の試し 2026-10-21）', () => {
+    expect(searchTopics(TEACHER_TOPICS, '先生を追加').hits.length).toBeGreaterThan(0)
+    expect(searchTopics(TEACHER_TOPICS, '先生を追加').hits.length).toBe(searchTopics(TEACHER_TOPICS, '先生 追加').hits.length)
+    expect(searchTopics(TEACHER_TOPICS, '締切を変える').hits.length).toBeGreaterThan(0)
+  })
+
   it('道具のボタンの言葉（改ページ・行を足す・生地見本・字数）でも見つかる（はじめて使う学生の試し 2026-10-21：0件だった）', () => {
     expect(ids(searchTopics(STUDENT_TOPICS, '改ページ').hits)[0]).toBe('write')
     for (const q of ['行を足す', '列を消す', '生地見本', '表の幅']) expect(ids(searchTopics(STUDENT_TOPICS, q).hits), q).toContain('figure')

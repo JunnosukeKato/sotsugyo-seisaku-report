@@ -11,6 +11,7 @@ import { withEdge } from '../poc/edge.mjs'
 import { busyResult, clickBusy, setSlow, slowDown, startBusy, throttle, watchBusy } from './busyWatch.mjs'
 import { stubConfig } from './configStub.mjs'
 import { png } from './fixtures/docx.mjs'
+import { trialFixesCheck } from './trialFixesAdmin.mjs'
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const FIX = 'scripts/e2e/fixtures'
@@ -510,6 +511,8 @@ await withEdge(async (browser) => {
     done()
     await context.close()
   }
+  // 先生の試し（2026-10-21）の直し：読めない Word で入れ替えない・ファイル名の拡張子・移す窓の「やめる」（scripts/e2e/trialFixesAdmin.mjs）
+  await trialFixesCheck(browser, check)
 })
 
 const failed = results.filter((r) => !r.ok)

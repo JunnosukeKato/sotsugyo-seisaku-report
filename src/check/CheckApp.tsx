@@ -148,7 +148,17 @@ const scrollBehavior = (): ScrollBehavior => (matchMedia('(prefers-reduced-motio
 
 /** ファイル名（行を分けるときは「_」のあとで分ける。oneLine：1行に収め、入りきらなければ「…」にする（パートの見出しの下。高さがそろわなくなるため）） */
 function FileName({ name, oneLine = false }: { name: string; oneLine?: boolean }) {
-  if (oneLine) return <span className="fn">{name}</span>
+  // 1行のとき：長い名前は前の方を「…」で縮め、拡張子（.docx・.pdf）はいつも見せる（Word と PDF を見分けられるように。先生の試し 2026-10-21）
+  if (oneLine) {
+    const dot = name.lastIndexOf('.')
+    const [base, ext] = dot > 0 && name.length - dot <= 6 ? [name.slice(0, dot), name.slice(dot)] : [name, '']
+    return (
+      <span className="fn one">
+        <span className="base">{base}</span>
+        {ext && <span className="ext">{ext}</span>}
+      </span>
+    )
+  }
   const parts = name.split('_')
   return (
     <span className="fn">
@@ -294,8 +304,18 @@ export function CheckApp() {
         } else if (kind === 'word') {
           // 名前で分かるときも、中身を見る（名前と中身が違えば知らせる）
           const looks = await (await loadWord()).wordLooksLike(file)
-          if (!forced && !partFromName(file.name)) sniffed = looks?.guess ?? null
-          entry.looksLike = looks?.sure ?? null
+          // 読めない Word（壊れている・Word のファイルでない）は入れない。前に入れたファイルがあれば、そのまま使う
+          // （前は入れ替えてしまい、本文の指摘が消えて、エラーの数が減ったように見えた：先生の試し 2026-10-21）
+          if (!looks) {
+            const at = forced && forced.slot === 'word' ? forced : placeFor(kind, file.name, null)
+            const kept = slotsRef.current[keyOf(at.part, at.slot)]
+            warn(`「${file.name}」：Word のファイルとして読めませんでした。Word で開いて保存し直してから、もう一度入れてください。${kept ? `（${spaced(slotLabel(at.part, at.slot))}は、前に入れた「${kept.file.name}」のままです）` : ''}`)
+            refused++
+            setReading({ done: i + 1, total: list.length })
+            continue
+          }
+          if (!forced && !partFromName(file.name)) sniffed = looks.guess
+          entry.looksLike = looks.sure
         } else {
           const { preparePhoto } = await loadPhoto()
           try {
@@ -777,7 +797,7 @@ export function CheckApp() {
         <span key={slot} className={`pf${slot === 'pdf' && stale ? ' stale' : ''}${ng ? ' ng' : ''}`}>
           {slot === 'pdf' && stale && <Wn />}
           {ng && <i className="st no-ng" aria-hidden="true" />}
-          <button type="button" className="fname" aria-haspopup="dialog" aria-label={`${e.file.name}（${slotLabel(p.id, slot)}）：移す・外す`} onClick={(ev) => setMenu({ key, rect: ev.currentTarget.getBoundingClientRect() })}>
+          <button type="button" className="fname" title={e.file.name} aria-haspopup="dialog" aria-label={`${e.file.name}（${slotLabel(p.id, slot)}）：移す・外す`} onClick={(ev) => setMenu({ key, rect: ev.currentTarget.getBoundingClientRect() })}>
             <FileName name={e.file.name} oneLine />
           </button>
           <button type="button" className="x" aria-label={`「${e.file.name}」を外す`} onClick={() => removeEntry(key)}>
@@ -1775,6 +1795,10 @@ function MoveMenu({ entry, from, rect, onMove, onRemove, onClose }: { entry: Ent
           }}
         >
           外す
+        </button>
+        {/* 何もせずに閉じる（スマホでは、窓の外を押して閉じることに気づきにくい：先生の試し 2026-10-21） */}
+        <button type="button" className="cancel" onClick={onClose}>
+          やめる
         </button>
       </div>
     </div>

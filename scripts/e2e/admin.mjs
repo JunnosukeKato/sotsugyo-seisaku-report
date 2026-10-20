@@ -4,6 +4,7 @@
 import { mkdirSync } from 'node:fs'
 import { withEdge } from '../poc/edge.mjs'
 import { templateModeAdmin } from './templateMode.mjs'
+import { trialFixesAdmin } from './trialFixesAdmin.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -818,7 +819,7 @@ await withEdge(async (browser) => {
   const savedRole = await page.evaluate(() => JSON.parse(localStorage.getItem('sotsugyo-admin-mock')).members.find((m) => m.email === 'tester@example.ac.jp').role)
   check('キャンセルした役割の変更は保存されない', savedRole === '管理者', savedRole)
   const membersLead = await page.evaluate(() => document.querySelector('.members .sec-lead').textContent)
-  check('先生ができることの説明に、お知らせも入っている', membersLead.includes('「下書きのひな形」「お知らせ」と「書き間違えやすい語」を編集できます'), membersLead)
+  check('先生ができることの説明に、お知らせも入っている', membersLead.includes('すべてのコースの「下書きのひな形」「お知らせ」と、「書き間違えやすい語」を編集できます'), membersLead)
 
   // 変更履歴（左の見出しの区切り）
   await nav(page, '変更履歴')
@@ -1003,7 +1004,7 @@ await withEdge(async (browser) => {
   const row0 = await subtitleRow()
   check(
     'サブタイトルの形式は「―」［前］〔学生が入力〕［後ろ］「―」の並び。今の形式（―{input}の衣装制作―）は、欄に「―」を入れずに出る（例・見本にも「―」）',
-    row0.parts === '―[]〔学生が入力〕[の衣装制作]―' && row0.hint === '例：―シンドバッドの衣装制作―' && row0.cover === '―の衣装制作―',
+    row0.parts === '―[]〔学生が入力〕[の衣装制作]―' && row0.hint === '例：―〇〇の衣装制作―' && row0.cover === '―の衣装制作―',
     JSON.stringify(row0),
   )
   const [beforeIn, afterIn] = await fx.$$(`${openCard} .template input`)
@@ -1023,7 +1024,7 @@ await withEdge(async (browser) => {
   const savedTemplate = (await fxSaved()).courses[0].subtitleTemplate
   check(
     '後ろの欄を「の衣装デザイン」にすると、例・見本は「―…の衣装デザイン―」になり、「―{input}の衣装デザイン―」で保存される（確認にサブタイトルの形式が出る）',
-    row1.parts === '―[]〔学生が入力〕[の衣装デザイン]―' && row1.hint === '例：―シンドバッドの衣装デザイン―' && row1.cover === '―の衣装デザイン―' && savedTemplate === '―{input}の衣装デザイン―' && fxDialogs.last().includes('・映画・舞台衣装デザイナー コースのサブタイトルの形式'),
+    row1.parts === '―[]〔学生が入力〕[の衣装デザイン]―' && row1.hint === '例：―〇〇の衣装デザイン―' && row1.cover === '―の衣装デザイン―' && savedTemplate === '―{input}の衣装デザイン―' && fxDialogs.last().includes('・映画・舞台衣装デザイナー コースのサブタイトルの形式'),
     `${JSON.stringify(row1)} / ${savedTemplate}`,
   )
   // 前に保存した形式（線を「—」で書いていた）も、線を外して欄に出る。開いただけでは変更にならない
@@ -1776,6 +1777,8 @@ await withEdge(async (browser) => {
 
   // 下書きのひな形を、学生と同じ紙面で作る画面（mockups/v44 案A。scripts/e2e/templateMode.mjs）
   await templateModeAdmin(browser, check)
+  // 先生の試し（2026-10-21）の直し：新年度を作ったあと上へ・次の年度があるときの言葉・年度を替えたら知らせを消す・公開の確かめ・お知らせの欄の高さ（scripts/e2e/trialFixesAdmin.mjs）
+  await trialFixesAdmin(browser, check)
 })
 
 const failed = results.filter((r) => !r.ok)

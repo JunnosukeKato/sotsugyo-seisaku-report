@@ -17,6 +17,8 @@ export function YearSection({
   steps,
   onStep,
   nextYear,
+  later,
+  onLater,
   onNewYear,
   canDelete,
   onDelete,
@@ -32,6 +34,10 @@ export function YearSection({
   onStep: (step: NewYearStep) => void
   /** 新年度を作ると、何年度になるか */
   nextYear: number
+  /** この年度より後の年度がもうあるとき：その年度と状態（この年度のページからは作らない。いちばん新しい年度のページで作る） */
+  later?: { year: number; status: string } | null
+  /** later の年度のページへ移る */
+  onLater?: () => void
   onNewYear: () => void
   canDelete: boolean
   onDelete: () => void
@@ -87,10 +93,26 @@ export function YearSection({
       </div>
       <div className="card next-year">
         <h2 className="card-h">{AdminIcon.sprout}次の年度</h2>
-        <p className="card-lead">この年度の設定をコピーして、{nextYear}年度を作ります。公開するまで、学生には見えません。</p>
-        <button className="btn sub" disabled={disabled} onClick={onNewYear}>
-          {AdminIcon.plus}新年度を作成
-        </button>
+        {later ? (
+          // 次の年度がもうある：ここから作ると年度を1つ飛ばし、古い設定をコピーしてしまう（先生の試し 2026-10-21：2026年度のページに「2028年度を作ります」と出ていた）
+          <>
+            <p className="card-lead">
+              {later.year}年度は、作成済みです（{later.status}）。新しい年度は、いちばん新しい年度のページで作ります。
+            </p>
+            {onLater && (
+              <button className="btn sub" disabled={disabled} onClick={onLater}>
+                {later.year}年度を開く
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <p className="card-lead">この年度の設定をコピーして、{nextYear}年度を作ります。公開するまで、学生には見えません。</p>
+            <button className="btn sub" disabled={disabled} onClick={onNewYear}>
+              {AdminIcon.plus}新年度を作成
+            </button>
+          </>
+        )}
       </div>
       {canDelete && (
         <div className="card delete-year">

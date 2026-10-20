@@ -27,7 +27,7 @@ export interface HistoryRow {
   config: YearConfig
 }
 
-/** 管理者：年度の設定をすべて変更・公開できる。先生：どのコースの下書きのひな形・お知らせと、書き間違えやすい語を編集できる */
+/** 管理者：年度の設定をすべて変更・公開できる。先生：すべてのコースの下書きのひな形・お知らせと、書き間違えやすい語を編集できる */
 export type Role = 'admin' | 'teacher' | null
 
 export interface AdminState {

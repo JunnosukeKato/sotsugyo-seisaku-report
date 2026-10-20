@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { clampTableSize, TABLE_SIZE } from '../model/table'
 import { Icon } from './icons'
 import { useDialogFocus } from './useDialogFocus'
@@ -72,6 +72,22 @@ export function TableSizeMenu({ onPick, onMaterial, onClose }: { onPick: (size: 
     return () => {
       document.removeEventListener('keydown', onKey, true)
       document.removeEventListener('pointerdown', onDown, true)
+    }
+  }, [])
+
+  // 画面の下からはみ出すときは、はみ出す分だけ上に出す（低い画面・ひな形を作る窓の中で、下の「素材表」が切れて押せなかった：
+  // 先生の試し 2026-10-21）。それでも入らなければ、メニューの中を上下に動かす
+  useLayoutEffect(() => {
+    const el = ref.current
+    if (!el) return
+    const r = el.getBoundingClientRect()
+    const over = r.bottom - (window.innerHeight - 8)
+    if (over <= 0) return
+    const up = Math.min(over, Math.max(0, r.top - 8))
+    el.style.top = `${-up}px`
+    if (over > up) {
+      el.style.maxHeight = `${window.innerHeight - 16}px`
+      el.style.overflowY = 'auto'
     }
   }, [])
 
