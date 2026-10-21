@@ -4,7 +4,7 @@ import { AdminIcon } from './adminIcons'
 import { courseChanged, courseName } from './changes'
 import { endsWithCourse, joinSubtitle, splitSubtitle, subtitleExample } from './subtitleText'
 import { templateSummary } from './templateText'
-import { Chip, Row, SectionHead } from './ui'
+import { Chip, FieldProblems, Row, SectionHead } from './ui'
 import { useReorder } from './useReorder'
 
 /**
@@ -67,6 +67,7 @@ export function CourseSection({ draft, base, teacher = false, openId, onOpen, on
             onRemove={() => onRemove?.(i)}
             onOpenTemplate={() => onOpenTemplate(i)}
             onEditTemplate={() => onEditTemplate(i)}
+            field={`courses.${i}`}
           />
         ))}
         {order.drag?.line != null && <div className="drop-line" style={{ top: order.drag.line }} />}
@@ -89,6 +90,7 @@ function CourseItem({
   draft,
   teacher,
   open,
+  field,
   onToggle,
   onFocus,
   onChange,
@@ -104,6 +106,8 @@ function CourseItem({
   draft: YearConfig
   teacher: boolean
   open: boolean
+  /** このコースの誤り・確認の field（validateConfig。courses.n） */
+  field: string
   onToggle: () => void
   onFocus: () => void
   onChange: (c: Course) => void
@@ -158,7 +162,7 @@ function CourseItem({
         <div className="cbody" id={bodyId}>
           <div className="grid">
             {teacher ? (
-              <Row label="指導教員">
+              <Row label="指導教員" hint="変えるときは、管理者に頼んでください">
                 <div className="plain">{advisors.join('、') || 'まだいません'}</div>
               </Row>
             ) : (
@@ -197,6 +201,8 @@ function CourseItem({
             </Row>
             {!teacher && <SubtitleRow course={course} changed={changed('subtitleTemplate')} onChange={onChange} />}
           </div>
+          {/* このコースの誤り・確認（指導教員がいない・4名以上など）は、コースの欄の下に（上の枠に出すと、打っている間に欄がずれた：mockups/v49 G） */}
+          <FieldProblems field={field} />
           {!teacher && (
             <div className="cfoot">
               {published ? (

@@ -1060,6 +1060,8 @@ export function CheckApp() {
           onManual={setManual}
           onMerge={startMerge}
           placeholder={mergedFileName(config, '学籍番号', '氏名')}
+          // スマホでは、結果がページの絵の下（かなり下）にある。帯の「エラーが n件」を押すと、結果へ移る（mockups/v49 L）
+          onShowResults={narrow ? () => sideRef.current?.scrollIntoView({ block: 'start', behavior: scrollBehavior() }) : undefined}
         />
       )}
 
@@ -1448,9 +1450,11 @@ interface MergeBarProps {
   manual: { studentId: string; name: string }
   onManual: (v: { studentId: string; name: string }) => void
   onMerge: () => void
+  /** 結果へ移る（スマホだけ。帯の「エラーが n件」を押せるようにする） */
+  onShowResults?: () => void
 }
 
-function MergeBar({ fileName, placeholder, ready, empty, anyPdf, totalPages, missing, errors, hasWord, merging, failure, ask, manual, onManual, onMerge }: MergeBarProps) {
+function MergeBar({ fileName, placeholder, ready, empty, anyPdf, totalPages, missing, errors, hasWord, merging, failure, ask, manual, onManual, onMerge, onShowResults }: MergeBarProps) {
   const mergeSlow = useSlow(merging)
   let small: ReactNode = `${totalPages}ページ${missing.length ? `（${missing.join('・')}はまだ）` : ''}`
   let note: ReactNode = null
@@ -1462,7 +1466,14 @@ function MergeBar({ fileName, placeholder, ready, empty, anyPdf, totalPages, mis
     note = <p className="m-note">PDF は、Word の「名前を付けて保存」で作って、ここに入れます</p>
   } else if (failure) note = <p className="m-note ng">{failure}</p>
   else if (errors > 0)
-    note = (
+    note = onShowResults ? (
+      <button type="button" className="m-note m-go" onClick={onShowResults}>
+        <span>
+          <b>エラーが{errors}件</b>残っています
+        </span>
+        <span className="go">結果を見る ▼</span>
+      </button>
+    ) : (
       <p className="m-note">
         <b>エラーが{errors}件</b>残っています
       </p>

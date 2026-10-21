@@ -71,6 +71,10 @@ button:disabled { opacity: 0.45; cursor: default; }
 .side-nav .nt { min-width: 0; }
 .side-nav .nt b { display: block; font-size: 15.5px; line-height: 1.45; }
 .side-nav .nt small { display: block; font-size: 13px; color: var(--muted); line-height: 1.45; }
+/* 先生の画面：先生ができること（mockups/v49 K） */
+.side-nav .can-do { margin: 12px 4px 0; padding: 8px 10px; border-radius: 10px; background: #f4f6fa; font-size: 13px; line-height: 1.6; color: var(--muted); }
+.side-nav .can-do b { display: block; color: var(--ink); font-size: 13.5px; }
+.side-nav .can-do span { display: inline-block; }
 .side-nav button.on { background: var(--accent-soft); }
 .side-nav button.on::before { content: ''; position: absolute; left: -10px; top: 8px; bottom: 8px; width: 4px; border-radius: 0 4px 4px 0; background: var(--accent); }
 .side-nav button.on > svg, .side-nav button.on .nt b { color: var(--accent); }
@@ -126,9 +130,19 @@ body.resizing iframe { pointer-events: none; }
 .message.list li::marker { color: var(--ok); }
 .message.list small { display: block; color: #4f6b59; font-size: 13.5px; line-height: 1.6; }
 .problems { display: grid; gap: 4px; padding: 10px 14px; border-radius: 10px; background: #fff; border: 1px solid var(--line); font-size: 14px; line-height: 1.65; }
-.problems:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
+.problems:focus, .field-problems:focus { outline: 2px solid var(--accent); outline-offset: 2px; }
 .problems .error { color: var(--error); }
 .problems .warning { color: var(--warn); }
+/* 欄のすぐ下の誤り・確認と、確認の「確かめた」（mockups/v49 G・H） */
+.problems > div, .field-problems > div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 2px 10px; }
+.problems > div > span, .field-problems > div > span { flex: 1 1 16em; min-width: 0; word-break: auto-phrase; }
+.field-problems { display: grid; gap: 4px; margin-top: 6px; font-size: 13.5px; line-height: 1.6; }
+.field-problems .error { color: var(--error); }
+.field-problems .warning { color: var(--warn); }
+.problems .acked, .field-problems .acked { color: var(--muted); }
+.ack { flex: none; padding: 1px 10px; font: inherit; font-size: 13px; font-weight: 700; color: var(--warn); background: #fff; border: 1px solid currentColor; border-radius: 999px; cursor: pointer; }
+.ack:hover { background: #fff8ec; }
+.ack.on { color: var(--ok); border-color: transparent; background: var(--ok-soft); font-weight: 400; }
 
 /* ---- まとまり（カード）と、ラベルの列・欄の列 ---- */
 .card { min-width: 0; padding: 16px 20px 18px; background: #fff; border: 1px solid var(--line); border-radius: 12px; }
@@ -318,7 +332,16 @@ body.reordering iframe { pointer-events: none; }
 .f { display: grid; gap: 4px; margin-bottom: 12px; }
 .f .l { font-size: 14px; color: var(--muted); }
 .row-buttons { display: flex; align-items: center; gap: 8px; margin-top: 16px; }
-.change-list { margin: 4px 0 0; padding-left: 1.3em; line-height: 1.9; }
+/* 「変更を見る」：1件ずつの枠。変更前 → 変更後と「この欄へ」（mockups/v49 I） */
+.change-list { display: grid; gap: 6px; margin: 4px 0 0; padding: 0; list-style: none; }
+.change-go { display: flex; align-items: flex-start; gap: 12px; width: 100%; padding: 8px 12px; font: inherit; text-align: left; color: var(--ink); background: #fff; border: 1px solid var(--line); border-radius: 10px; cursor: pointer; }
+.change-go:hover { border-color: var(--accent); background: var(--accent-soft); }
+.change-text { flex: 1; min-width: 0; line-height: 1.6; word-break: auto-phrase; }
+.change-text b { display: block; font-size: 15px; }
+.change-values { display: block; font-size: 13.5px; }
+.change-values .was { color: var(--muted); text-decoration: line-through; text-decoration-color: #b9b3aa; }
+.change-values .arrow { margin: 0 6px; color: var(--accent); }
+.change-go .go { flex: none; padding-top: 2px; font-size: 13px; color: var(--accent); white-space: nowrap; }
 
 /* ---- 下書きのひな形（mockups/v8 案1。窓のまま。v44 で作り直す） ---- */
 .modal.tpl-modal { display: grid; grid-template-rows: auto 1fr auto; width: min(1240px, calc(100vw - 32px)); height: min(820px, calc(100vh - 32px)); max-height: none; padding: 0; overflow: hidden; }
@@ -422,9 +445,6 @@ button.busy:disabled { opacity: 1; cursor: progress; }
 .tpl-failed span { color: var(--muted); }
 .tpl-failed .row-buttons { margin-top: 12px; }
 .tpl-error { position: absolute; z-index: 4; top: 58px; left: 50%; transform: translateX(-50%); max-width: calc(100% - 40px); padding: 10px 16px; border: 1px solid #efb8b8; border-radius: 10px; background: var(--error-soft); color: var(--error); font-size: 14.5px; }
-/* 受け取ったあとの短い知らせ（画面の上の真ん中。数秒で消える。保存の帯より上、窓より下） */
-.tpl-toast { position: fixed; z-index: 45; top: 104px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 8px; max-width: calc(100vw - 32px); padding: 10px 18px; border-radius: 10px; background: #2f3640; color: #fff; font-size: 14.5px; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.2); }
-.tpl-toast svg { flex: none; width: 18px; height: 18px; color: #9fe0b0; }
 /* 前のひな形の窓の、改ページ・ふつうの表の行（新しい画面で作ったもの） */
 .tpl-modal .row.pageBreak, .tpl-modal .row.table { margin-left: 44px; background: #fafbfc; }
 .tpl-modal .row .in-wrap { display: flex; flex-direction: column; min-width: 0; }

@@ -145,24 +145,99 @@ export type ChangeSection = 'year' | 'course' | 'words' | 'details' | 'other'
 export interface Change {
   label: string
   section: ChangeSection
+  /** 変更前と変更後（短い文字や数の項目だけ。ひな形・語の一覧などは出さない：mockups/v49 I） */
+  before?: string
+  after?: string
+  /** 「この欄へ」で開くコースと、入る欄（id） */
+  courseId?: string
+  target?: string
+}
+
+/** 「この欄へ」で入る欄の id（年度の項目） */
+const TOP_TARGETS: Record<string, string> = {
+  commonTitle: 'y-commonTitle',
+  deadline: 'y-deadline',
+  handbookUrl: 'y-handbook',
+  reportName: 'd-reportName',
+  'cover.heading': 'd-coverHeading',
+  'cover.titleLabel': 'd-titleLabel',
+  'abstract.heading': 'd-abstractHeading',
+  'abstract.openingExample': 'd-openingExample',
+  university: 'd-university',
+  faculty: 'd-faculty',
+  department: 'd-department',
+  'abstract.minChars': 'd-minChars',
+  'abstract.maxChars': 'd-minChars',
+  'abstract.minLines': 'd-minLines',
+  'abstract.maxLines': 'd-minLines',
+  'body.minPages': 'd-minPages',
+  'body.imagesPerPageGuide': 'd-images',
+  'workPhotos.maxPages': 'd-photoPages',
+  studentIdPattern: 'd-studentId',
+}
+/** 「この欄へ」で入る欄の id（コースの項目） */
+const COURSE_TARGETS: Record<string, string> = { name: 'name', advisors: 'advisor', subtitleTemplate: 'before', notice: 'notice' }
+
+/** 変更前・変更後に出す、短い文字（長い文は縮める。空は「（なし）」） */
+function brief(v: unknown): string | undefined {
+  if (v === undefined || v === null || v === '') return '（なし）'
+  if (typeof v === 'number') return String(v)
+  if (typeof v === 'string') {
+    const one = v.replace(/\s+/g, ' ').trim()
+    return one ? (one.length > 40 ? `${one.slice(0, 40)}…` : one) : '（なし）'
+  }
+  if (Array.isArray(v) && v.every((x) => typeof x === 'string')) return v.length ? v.join('・') : '（なし）'
+  return undefined
+}
+/** 年度の項目の、変更前・変更後に出す文字（字数・行数は「最少〜最多」を一緒に） */
+function topValue(config: unknown, path: string): string | undefined {
+  const range = (a: string, b: string, unit: string) => `${brief(get(config, ['abstract', a]))}〜${brief(get(config, ['abstract', b]))}${unit}`
+  if (path === 'abstract.minChars' || path === 'abstract.maxChars') return range('minChars', 'maxChars', '字')
+  if (path === 'abstract.minLines' || path === 'abstract.maxLines') return range('minLines', 'maxLines', '行')
+  if (path === 'workPhotos.maxPages') {
+    const v = get(config, ['workPhotos', 'maxPages'])
+    return v === undefined || v === null ? '上限なし' : `${v}ページ`
+  }
+  if (!(path in TOP_TARGETS)) return undefined
+  const [a, b] = path.split('.')
+  return brief(get(config, b === undefined ? [a] : [a, b]))
+}
+/** コースの項目の、変更前・変更後に出す文字 */
+function courseValue(course: Course, key: string): string | undefined {
+  if (key === 'hidden') return course.hidden ? '表示しない' : '表示する'
+  if (key === 'name' || key === 'advisors' || key === 'subtitleTemplate' || key === 'notice') return brief(course[key as keyof Course])
+  return undefined
 }
 
 /** before から after への変更を、項目の名前と区切りで返す（画面の並び順。同じ名前は1つにまとめる） */
 export function listChanges(before: YearConfig, after: YearConfig): Change[] {
   const out: Change[] = []
-  const push = (label: string, section: ChangeSection) => {
-    if (!out.some((c) => c.label === label)) out.push({ label, section })
+  const push = (label: string, section: ChangeSection, more: Omit<Change, 'label' | 'section'> = {}) => {
+    if (!out.some((c) => c.label === label)) out.push({ label, section, ...more })
   }
   const paths = topPaths([before, after]).filter((p) => !sameTop(p, before, after))
-  const inGroup = (labels: [string, string][], section: ChangeSection) => labels.forEach(([p, label]) => paths.some((x) => x.join('.') === p) && push(label, section))
+  const values = (p: string) => {
+    const b = topValue(before, p)
+    const a = topValue(after, p)
+    return b !== undefined && a !== undefined && b !== a ? { before: b, after: a } : {}
+  }
+  const inGroup = (labels: [string, string][], section: ChangeSection) =>
+    labels.forEach(([p, label]) => paths.some((x) => x.join('.') === p) && push(label, section, { ...values(p), target: TOP_TARGETS[p] }))
   inGroup(TOP_LABELS, 'year')
   // コース（追加・削除・順番・中の項目）
   const b = courseList(before)
   const a = courseList(after)
   for (const course of a) {
     const old = b.find((x) => x.id === course.id)
-    if (!old) push(`${courseName(course)} コース（追加）`, 'course')
-    else courseKeys(old, course).forEach((k) => !sameCourseKey(k, old, course) && push(k === 'name' ? `${courseName(course)} コースの名前（元は「${courseName(old)}」）` : courseLabel(course, k), 'course'))
+    if (!old) push(`${courseName(course)} コース（追加）`, 'course', { courseId: course.id })
+    else
+      courseKeys(old, course).forEach((k) => {
+        if (sameCourseKey(k, old, course)) return
+        const b = courseValue(old, k)
+        const a = courseValue(course, k)
+        const more = { courseId: course.id, target: k in COURSE_TARGETS ? `c-${course.id}-${COURSE_TARGETS[k]}` : undefined, ...(b !== undefined && a !== undefined && b !== a ? { before: b, after: a } : {}) }
+        push(k === 'name' ? `${courseName(course)} コースの名前（元は「${courseName(old)}」）` : courseLabel(course, k), 'course', more)
+      })
   }
   for (const old of b) if (!a.some((x) => x.id === old.id)) push(`${courseName(old)} コース（削除）`, 'course')
   const kept = (list: Course[], other: Course[]) => order(list.filter((c) => other.some((x) => x.id === c.id)))

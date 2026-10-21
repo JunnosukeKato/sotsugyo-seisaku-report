@@ -387,7 +387,7 @@ export async function templateModeAdmin(browser, check) {
     const ctl = document.querySelector('.course.open .tpl-line').closest('.ctl')
     const label = ctl.previousElementSibling.textContent
     return {
-      toast: document.querySelector('.tpl-toast')?.textContent ?? '',
+      toast: document.querySelector('.message.ok')?.textContent ?? '',
       summary: document.querySelector('.course.open .tpl-line b').textContent,
       chg: ctl.classList.contains('chg') && label.startsWith('ひな形') && label.includes('変更あり'),
       bar: document.querySelector('.dirty-bar .tx')?.textContent ?? '',
@@ -399,13 +399,13 @@ export async function templateModeAdmin(browser, check) {
   await shot('4-back-with-changes')
   check(
     '「管理ページに戻して反映」：窓が閉じ、知らせ「ひな形を受け取りました（まだ学生に届いていません）」、カードに「変更あり」と新しい要約、画面の下に保存の帯（ひな形と抄録の書き出し例の2か所）',
-    back.toast === 'ひな形を受け取りました（まだ学生に届いていません）' &&
+    back.toast.startsWith('ひな形を受け取りました（まだ学生に届いていません）') &&
       back.summary === '大見出し3・小見出し4・説明6・図の枠1・素材表1・改ページ1・表1' &&
       back.chg &&
       back.bar.includes('まだ学生に届いていない変更が2か所あります') &&
       back.bar.includes('映画・舞台衣装デザイナー コースの下書きのひな形') &&
       back.bar.includes('映画・舞台衣装デザイナー コースの抄録の書き出し例') &&
-      back.message === 'ひな形を反映しました。「保存して学生に反映」を押すと、学生のツールに届きます',
+      back.message === 'ひな形を受け取りました（まだ学生に届いていません）。「保存して学生に反映」を押すと、学生のツールに届きます',
     JSON.stringify(back),
   )
   // 前の作り方の窓でも、改ページと表が見える（消えない）
@@ -569,8 +569,8 @@ export async function templateModeAdmin(browser, check) {
   await tframe.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !s.turning }, { timeout: 60000 })
   await tframe.evaluate(() => document.querySelector('.tpl-primary').click())
   await teacher.waitForFunction(() => !document.querySelector('.tpl-overlay'), { timeout: 10000 })
-  const tback = await teacher.evaluate(() => ({ toast: document.querySelector('.tpl-toast')?.textContent ?? '', summary: document.querySelector('.course.open .tpl-line b').textContent, bar: !!document.querySelector('.dirty-bar') }))
-  check('先生の画面でも、ひな形を作る画面で直して戻せる（知らせ・保存の帯）', tback.toast === 'ひな形を受け取りました（まだ学生に届いていません）' && tback.summary.startsWith('大見出し4') && tback.bar, JSON.stringify(tback))
+  const tback = await teacher.evaluate(() => ({ toast: document.querySelector('.message.ok')?.textContent ?? '', summary: document.querySelector('.course.open .tpl-line b').textContent, bar: !!document.querySelector('.dirty-bar') }))
+  check('先生の画面でも、ひな形を作る画面で直して戻せる（知らせ・保存の帯）', tback.toast.startsWith('ひな形を受け取りました（まだ学生に届いていません）') && tback.summary.startsWith('大見出し4') && tback.bar, JSON.stringify(tback))
   // 使い方の「コースの下書きのひな形」は、新しい作り方の言葉（1366×768 で1字だけの行がない）
   await teacher.evaluate(() => document.querySelector('.help-open').click())
   await teacher.waitForSelector('.help-dock [data-topic="t-template"]')

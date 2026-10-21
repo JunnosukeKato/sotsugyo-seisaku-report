@@ -3,7 +3,7 @@ import { Icon } from '../app/icons'
 import { useDialogFocus } from '../app/useDialogFocus'
 import { DEFAULT_WORD_CHECKS } from '../checker/textRules'
 import type { Course, WordCheck, YearConfig } from '../config'
-import { LIMITS, tooLong, validateConfig } from '../config/validate'
+import { LIMITS, tooLong, validateConfig, type ConfigProblem } from '../config/validate'
 import { HelpView } from '../help/HelpView'
 import { TEACHER_TOPICS } from '../help/helpTopics'
 import { ADMIN_GUIDE_URL, TEACHER_GUIDE_URL, TEACHER_HELP_IMAGES } from '../help/links'
@@ -19,8 +19,10 @@ import { newYearSteps, type NewYearStep } from './newYearSteps'
 import { Preview } from './Preview'
 import { isMockServer, roleOf, server, type AdminState, type HistoryRow, type Member, type TemplateSet, type YearRow } from './server'
 import { TemplateEditor, TemplatePreview } from './TemplateEditor'
-import { TemplateOverlay, TemplateToast } from './TemplateOverlay'
+import { TemplateOverlay } from './TemplateOverlay'
 import { TEMPLATE_RECEIVED } from './templateText'
+import { ProblemsContext } from './problemsContext'
+import { ProblemLine } from './ui'
 import { useFormWidth } from './useFormWidth'
 import { useLeaveGuard } from './useLeaveGuard'
 import { useDone, useSlow } from './useWait'
@@ -145,12 +147,35 @@ function Problems({ problems }: { problems: ReturnType<typeof validateConfig> })
   return (
     <div className="problems" tabIndex={-1}>
       {problems.map((p, i) => (
-        <div key={i} className={p.severity}>
-          {p.severity === 'error' ? 'エラー' : '確認'}：{p.message}
-        </div>
+        <ProblemLine key={i} problem={p} />
       ))}
     </div>
   )
+}
+
+/** 「変更を見る」から、その欄に入る（区切り・コースを開いたあと、描かれるのを待つ） */
+function focusField(id: string | undefined) {
+  if (!id) return
+  let tries = 0
+  const tick = () => {
+    const el = document.getElementById(id)
+    if (el) {
+      el.scrollIntoView({ block: 'center' })
+      el.focus({ preventScroll: true })
+    } else if (++tries < 20) requestAnimationFrame(tick)
+  }
+  requestAnimationFrame(tick)
+}
+
+/** 「確かめた」にした確認（この端末に、年度ごとに覚える。確認の文が変わったら、覚えていないことになる：mockups/v49 H） */
+const ACK_KEY = 'sotsugyo-admin-acked'
+const ackKey = (p: ConfigProblem) => `${p.field}\u0001${p.message}`
+function loadAcked(): Record<string, string[]> {
+  try {
+    return JSON.parse(localStorage.getItem(ACK_KEY) ?? '{}') as Record<string, string[]>
+  } catch {
+    return {}
+  }
 }
 
 /** ソースコードの場所（AGPL-3.0。管理者・先生・登録されていない人のどの画面にも出す） */
@@ -215,13 +240,32 @@ function Modal({ title, children, onClose, className = '' }: { title: string; ch
   )
 }
 
-/** 「変更を見る」：まだ保存していない変更の一覧（保存の確認と同じ言葉） */
-function ChangesDialog({ changes, onClose }: { changes: string[]; onClose: () => void }) {
+/**
+ * 「変更を見る」：まだ保存していない変更の一覧（保存の確認と同じ言葉）。
+ * 短い項目は「変更前 → 変更後」も出す。押すと、その区切り（コース）を開いて、その欄に入る（mockups/v49 I）
+ */
+function ChangesDialog({ changes, onClose, onGo }: { changes: Change[]; onClose: () => void; onGo: (change: Change) => void }) {
   return (
     <Modal title="まだ保存していない変更" onClose={onClose} className="changes-modal">
       <ul className="change-list">
         {changes.map((c) => (
-          <li key={c}>{c}</li>
+          <li key={c.label}>
+            <button type="button" className="change-go" onClick={() => onGo(c)}>
+              <span className="change-text">
+                <b>{c.label}</b>
+                {c.before !== undefined && (
+                  <span className="change-values">
+                    <span className="was">{c.before}</span>
+                    <span className="arrow" aria-label="から">
+                      →
+                    </span>
+                    <span className="now">{c.after}</span>
+                  </span>
+                )}
+              </span>
+              <span className="go">この欄へ ›</span>
+            </button>
+          </li>
         ))}
       </ul>
       <div className="row-buttons">
@@ -334,6 +378,14 @@ function SideNav({ items, active, onSelect, user, teacher }: { items: NavItem[];
           </li>
         ))}
       </ul>
+      {/* 先生ができることを一言（指導教員・コース名などは管理者が変える：mockups/v49 K） */}
+      {teacher && (
+        <p className="can-do">
+          <b>先生ができること</b>
+          <span>ひな形・お知らせ・</span>
+          <span>書き方のチェック</span>
+        </p>
+      )}
       <div className="me">
         <span>ログイン中</span>
         {/* 長いアドレスは「@」の前で折り返す（途中の字で切らない） */}
@@ -460,6 +512,8 @@ export function AdminApp() {
   /** 終わったときの短い知らせ（「保存しました」など。数秒で消える） */
   const [doneText, showDone] = useDone()
   const [message, setMessage] = useState<Notice | null>(null)
+  /** 「確かめた」にした確認（年度ごと） */
+  const [acked, setAcked] = useState<Record<string, string[]>>(loadAcked)
   const [section, setSectionState] = useState<Section>(() => loadSection(SECTIONS))
   /** 区切りの中で、まだ反映していない入力（ほかの区切りに移る前に確かめる言葉。なければ null） */
   const pending = useRef<string | null>(null)
@@ -481,7 +535,6 @@ export function AdminApp() {
   /** ひな形を作る画面（学生と同じ紙面。管理ページの上に重ねて開く：mockups/v44 案A）を開いているコース */
   const [templateScreen, setTemplateScreen] = useState<number | null>(null)
   /** ひな形を受け取ったときの短い知らせ（数秒で消える） */
-  const [toast, showToast] = useDone()
   const [newYear, setNewYear] = useState('')
   /** 「？ 使い方」の欄を開いている */
   const [help, setHelp] = useState(false)
@@ -737,7 +790,25 @@ export function AdminApp() {
 
   // 新年度の手順（準備中の年度だけ）。比べるのは、前の年度（なければ公開中の年度）
   const prevRow = state.years.find((y) => y.year === row.year - 1) ?? state.years.find((y) => y.status === '公開中' && y.year !== row.year)
-  const steps = row.status === '準備中' ? newYearSteps(draft, prevRow?.config, problems) : null
+  const yearAcked = new Set(acked[String(row.year)] ?? [])
+  const isAcked = (pr: ConfigProblem) => yearAcked.has(ackKey(pr))
+  const ack = (pr: ConfigProblem, on: boolean) =>
+    setAcked((all) => {
+      const set = new Set(all[String(row.year)] ?? [])
+      if (on) set.add(ackKey(pr))
+      else set.delete(ackKey(pr))
+      // 今の確認にない（文が変わった・直した）ものは覚えておかない
+      const now = new Set(problems.map(ackKey))
+      const next = { ...all, [String(row.year)]: [...set].filter((k) => now.has(k)) }
+      try {
+        localStorage.setItem(ACK_KEY, JSON.stringify(next))
+      } catch {
+        // 覚えられなくても動く（また確かめるだけ）
+      }
+      return next
+    })
+  const problemsValue = { list: problems, isAcked, ack }
+  const steps = row.status === '準備中' ? newYearSteps(draft, prevRow?.config, problems, isAcked) : null
   /** 手順を押した：直す所へ移る */
   const onStep = (step: NewYearStep) => {
     if (step.key === 'title' || step.key === 'deadline') {
@@ -750,7 +821,8 @@ export function AdminApp() {
       setPreviewCourse(id)
       focusLater(step.text.startsWith('指導教員') ? `#c-${id}-advisor` : step.text.startsWith('抄録') ? `[data-course-id="${id}"] .tpl-line button` : `#c-${id}-notice`)
     } else if (step.key === 'check') {
-      if (go('year')) focusLater(problems.length ? '.content .problems' : '.stage')
+      // 確認は、上の枠か、欄のすぐ下（題目・締切）にある。ページの上から先に見つかった方へ
+      if (go('year')) focusLater(problems.length ? '.content :is(.problems, .field-problems)' : '.stage')
     } else focusLater('#publish-btn')
   }
 
@@ -763,11 +835,15 @@ export function AdminApp() {
     { key: 'details', icon: AdminIcon.gear, title: '詳細設定', sub: 'ふだんは変えません', count: (counts.details ?? 0) + (counts.other ?? 0) },
   ]
 
+  /** 欄のすぐ下に出している誤り・確認（上の枠には出さない：mockups/v49 G）：年度の設定の題目・締切、コースの開いているコース */
+  const openIndex = draft.courses.findIndex((c) => c.id === openId)
+  const shownAtField = (pr: ConfigProblem) =>
+    (section === 'year' && (pr.field === 'commonTitle' || pr.field === 'deadline')) || (section === 'course' && openIndex >= 0 && pr.field === `courses.${openIndex}`)
   // 知らせと入力の誤りは、区切りの見出しのすぐ下に（準備中の年度は、新年度の手順の下に）
   const notices = (
     <>
       {message && <MessageBox message={message} />}
-      {['year', 'course', 'words', 'details'].includes(section) && <Problems problems={problems} />}
+      {['year', 'course', 'words', 'details'].includes(section) && <Problems problems={problems.filter((pr) => !shownAtField(pr))} />}
     </>
   )
   let content: ReactNode
@@ -866,6 +942,7 @@ export function AdminApp() {
         onSave={save}
         onPublish={publish}
       />
+      <ProblemsContext.Provider value={problemsValue}>
       <main className="admin-main">
         <SideNav items={navItems} active={section} onSelect={go} user={state.user} teacher={false} />
         <Work
@@ -875,6 +952,7 @@ export function AdminApp() {
           stage={WITH_PREVIEW.includes(section) ? <CoverStage config={draft} course={shownCourse} /> : null}
         />
       </main>
+      </ProblemsContext.Provider>
       {dirty && <DirtyBar changes={labels} row={row} teacher={false} busy={busy} onSave={save} onShow={() => setDialog('changes')} />}
       {help && <AdminHelp admin onClose={() => setHelp(false)} />}
 
@@ -892,12 +970,11 @@ export function AdminApp() {
             // 前の窓の「反映する」と同じ（まだ保存していない変更になる。カードに「変更あり」、画面の下に保存の帯）
             setCourse(templateScreen, { ...draft.courses[templateScreen], template, abstractExample })
             setTemplateScreen(null)
-            setMessage({ kind: 'ok', text: `ひな形を反映しました。${deliveryNote(row.status, 'admin')}` })
-            showToast(TEMPLATE_RECEIVED)
+            // 受け取った知らせは、ほかの知らせと同じ見出しの下の緑の枠に（前は上の真ん中に浮かせていて、コースの「閉じる」に重なった：mockups/v49 J）
+            setMessage({ kind: 'ok', text: `${TEMPLATE_RECEIVED}。${deliveryNote(row.status, 'admin')}` })
           }}
         />
       )}
-      {toast && <TemplateToast text={toast} />}
       {editingTemplate !== null && draft.courses[editingTemplate] && (
         <TemplateEditor
           course={draft.courses[editingTemplate]}
@@ -912,7 +989,18 @@ export function AdminApp() {
         />
       )}
 
-      {dialog === 'changes' && <ChangesDialog changes={labels} onClose={() => setDialog(null)} />}
+      {dialog === 'changes' && (
+        <ChangesDialog
+          changes={changes}
+          onClose={() => setDialog(null)}
+          onGo={(c) => {
+            setDialog(null)
+            if (!go(c.section === 'other' ? 'details' : c.section)) return
+            if (c.courseId) setOpenCourse(c.courseId)
+            focusField(c.target)
+          }}
+        />
+      )}
 
       {dialog === 'newYear' && (
         <Modal title="新年度を作成" onClose={() => busy !== 'create' && setDialog(null)}>
@@ -1000,7 +1088,6 @@ function TeacherView({
   /** ひな形を作る画面（学生と同じ紙面。管理ページの上に重ねて開く：mockups/v44 案A）を開いているコース */
   const [templateScreen, setTemplateScreen] = useState<number | null>(null)
   /** ひな形を受け取ったときの短い知らせ（数秒で消える） */
-  const [toast, showToast] = useDone()
   const [openCourse, setOpenCourse] = useState<string | null | undefined>(undefined)
   const [previewCourse, setPreviewCourse] = useState<string | null>(null)
   const [showChanges, setShowChanges] = useState(false)
@@ -1103,7 +1190,18 @@ function TeacherView({
       </main>
       {dirty && <DirtyBar changes={labels} row={row} teacher busy={busy} onSave={save} onShow={() => setShowChanges(true)} />}
       {help && <AdminHelp onClose={() => setHelp(false)} />}
-      {showChanges && <ChangesDialog changes={labels} onClose={() => setShowChanges(false)} />}
+      {showChanges && (
+        <ChangesDialog
+          changes={changes}
+          onClose={() => setShowChanges(false)}
+          onGo={(c) => {
+            setShowChanges(false)
+            if (c.section === 'course' || c.section === 'words') go(c.section)
+            if (c.courseId) setOpenCourse(c.courseId)
+            focusField(c.target)
+          }}
+        />
+      )}
       {templateScreen !== null && draft.courses[templateScreen] && (
         <TemplateOverlay
           course={draft.courses[templateScreen]}
@@ -1117,12 +1215,10 @@ function TeacherView({
           onApply={(template, abstractExample) => {
             setDraft({ ...draft, courses: draft.courses.map((c, j) => (j === templateScreen ? { ...c, template, abstractExample } : c)) })
             setTemplateScreen(null)
-            onMessage({ kind: 'ok', text: `ひな形を反映しました。${deliveryNote(row.status, 'teacher')}` })
-            showToast(TEMPLATE_RECEIVED)
+            onMessage({ kind: 'ok', text: `${TEMPLATE_RECEIVED}。${deliveryNote(row.status, 'teacher')}` })
           }}
         />
       )}
-      {toast && <TemplateToast text={toast} />}
       {editing !== null && editingCourse && (
         <TemplateEditor
           course={editingCourse}

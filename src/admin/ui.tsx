@@ -1,5 +1,45 @@
-import { useState, type ReactNode } from 'react'
+import { useContext, useState, type ReactNode } from 'react'
 import { Icon } from '../app/icons'
+import type { ConfigProblem } from '../config/validate'
+import { ProblemsContext } from './problemsContext'
+
+/** 誤り・確認の1行（確認には「確かめた」） */
+export function ProblemLine({ problem }: { problem: ConfigProblem }) {
+  const { isAcked, ack } = useContext(ProblemsContext)
+  const warning = problem.severity === 'warning'
+  const acked = warning && isAcked(problem)
+  return (
+    <div className={`${problem.severity}${acked ? ' acked' : ''}`}>
+      <span>
+        {warning ? '確認' : 'エラー'}：{problem.message}
+      </span>
+      {warning &&
+        (acked ? (
+          <button type="button" className="ack on" title="押すと、確かめる前に戻します" onClick={() => ack(problem, false)}>
+            ✓ 確かめました
+          </button>
+        ) : (
+          <button type="button" className="ack" onClick={() => ack(problem, true)}>
+            確かめた
+          </button>
+        ))}
+    </div>
+  )
+}
+
+/** その欄（field）の誤り・確認を、欄のすぐ下に出す（打っている欄より上の物を動かさない：mockups/v49 G） */
+export function FieldProblems({ field }: { field: string }) {
+  const { list } = useContext(ProblemsContext)
+  const mine = list.filter((p) => p.field === field)
+  if (!mine.length) return null
+  return (
+    <div className="field-problems" tabIndex={-1}>
+      {mine.map((p, i) => (
+        <ProblemLine key={i} problem={p} />
+      ))}
+    </div>
+  )
+}
 
 /**
  * 管理ページの区切りの中で使う部品（mockups/v43 案B）。
@@ -16,6 +56,7 @@ export function Row({
   changed = false,
   htmlFor,
   className = '',
+  field,
   children,
 }: {
   label: string
@@ -29,6 +70,8 @@ export function Row({
   changed?: boolean
   htmlFor?: string
   className?: string
+  /** この欄の誤り・確認（validateConfig の field）を、欄のすぐ下に出す */
+  field?: string
   children: ReactNode
 }) {
   const inner = (
@@ -49,6 +92,7 @@ export function Row({
       )}
       <div className={`ctl${changed ? ' chg' : ''} ${className}`}>
         {children}
+        {field && <FieldProblems field={field} />}
         {warn && (
           <div className="warn-line">
             {Icon.warn}

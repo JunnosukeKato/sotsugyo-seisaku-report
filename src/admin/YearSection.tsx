@@ -79,10 +79,10 @@ export function YearSection({
       {notices}
       <div className="card">
         <div className="grid">
-          <Row label="共通の題目" htmlFor="y-commonTitle" hint="学生は変えられません" changed={changed('commonTitle')}>
+          <Row label="共通の題目" htmlFor="y-commonTitle" hint="学生は変えられません" changed={changed('commonTitle')} field="commonTitle">
             <TextInput id="y-commonTitle" value={draft.commonTitle} onChange={(v) => set({ commonTitle: v })} placeholder="例：卒業イベント「シンドバッド」について" />
           </Row>
-          <Row label="最終締切" htmlFor="y-deadline" changed={changed('deadline')}>
+          <Row label="最終締切" htmlFor="y-deadline" changed={changed('deadline')} field="deadline">
             {/* max を付けると、年の欄に5桁以上を打てなくなる（「2028」と打つと月の欄に移る。付けないと「202801」のような年になる） */}
             <TextInput id="y-deadline" className="date" type="date" max="9999-12-31" value={draft.deadline} onChange={(v) => set({ deadline: v })} />
           </Row>

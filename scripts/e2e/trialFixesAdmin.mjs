@@ -124,6 +124,76 @@ export async function trialFixesAdmin(browser, check) {
     notice = await area.evaluate((el) => ({ client: el.clientHeight, scroll: el.scrollHeight }))
   }
   check('管理ページ：コースのお知らせの欄は、4行書いても全部見える（欄が高くなる）', !!notice && notice.scroll <= notice.client + 2, JSON.stringify(notice))
+
+  // ---- 6. 確認は、その欄のすぐ下に出る（打っている欄は動かない：mockups/v49 G） ----
+  await nav(page, '年度の設定')
+  await page.$eval('#y-commonTitle', (el) => {
+    el.scrollIntoView({ block: 'center' })
+    el.focus()
+    el.select()
+  })
+  const titleTop0 = await page.$eval('#y-commonTitle', (el) => el.getBoundingClientRect().top)
+  await page.keyboard.type('卒業イベント「モダン・クラシック」ファッションショーについての報告')
+  await sleep(300)
+  const g = await page.evaluate(() => ({
+    inline: document.querySelector('#y-commonTitle').closest('.ctl')?.querySelector('.field-problems')?.textContent ?? '',
+    top: [...document.querySelectorAll('.problems')].map((x) => x.textContent).join('|'),
+    titleTop: document.querySelector('#y-commonTitle').getBoundingClientRect().top,
+  }))
+  await page.screenshot({ path: `${OUT}/admin-6-field-problem.png` })
+  check(
+    '管理ページ：共通の題目が長いという確認は、題目の欄のすぐ下に出て、上の枠には出ない（打っている欄の位置は変わらない）',
+    g.inline.includes('共通の題目が長いため') && !g.top.includes('共通の題目が長いため') && Math.abs(g.titleTop - titleTop0) < 1,
+    JSON.stringify({ inline: g.inline.slice(0, 30), top: g.top.slice(0, 60), moved: g.titleTop - titleTop0 }),
+  )
+
+  // ---- 7. 確認を「確かめた」にすると、新年度の手順4で数えない（mockups/v49 H） ----
+  const stepText = () => page.evaluate(() => [...document.querySelectorAll('.steps li')].find((li) => li.querySelector('b').textContent === '確かめる')?.querySelector('.st').textContent ?? '')
+  const step0 = await stepText()
+  await page.evaluate(() => document.querySelector('#y-commonTitle').closest('.ctl').querySelector('.field-problems .ack').click())
+  await sleep(200)
+  const step1 = await stepText()
+  const ackOn = await page.evaluate(() => document.querySelector('#y-commonTitle').closest('.ctl').querySelector('.field-problems .ack.on')?.textContent ?? '')
+  const n0 = Number(step0.match(/確認が(\d+)件/)?.[1] ?? NaN)
+  check(
+    '管理ページ：確認の「確かめた」を押すと「✓ 確かめました」になり、新年度の手順4の「確認が○件」から外れる',
+    ackOn === '✓ 確かめました' && (n0 > 1 ? step1 === `確認が${n0 - 1}件あります` : step1 === '確認はすべて確かめました'),
+    JSON.stringify({ step0, step1, ackOn }),
+  )
+
+  // ---- 8. 「変更を見る」：変更前 → 変更後。押すと、その欄に入る（mockups/v49 I） ----
+  await nav(page, 'コース')
+  await page.evaluate(() => [...document.querySelectorAll('.dirty-bar button')].find((b) => b.textContent === '変更を見る').click())
+  await page.waitForSelector('.changes-modal')
+  const item = await page.evaluate(() => {
+    const li = [...document.querySelectorAll('.changes-modal li')].find((x) => x.querySelector('b')?.textContent === '共通の題目')
+    return li ? { now: li.querySelector('.now')?.textContent ?? '', was: li.querySelector('.was')?.textContent ?? '', go: li.querySelector('.go')?.textContent ?? '' } : null
+  })
+  await page.screenshot({ path: `${OUT}/admin-8-changes.png` })
+  await page.evaluate(() => [...document.querySelectorAll('.changes-modal li')].find((x) => x.querySelector('b')?.textContent === '共通の題目').querySelector('button').click())
+  await sleep(400)
+  const went = await page.evaluate(() => ({ modal: !!document.querySelector('.changes-modal'), section: document.querySelector('.side-nav button.on .nt b')?.firstChild.textContent.trim(), focus: document.activeElement?.id }))
+  check(
+    '管理ページ：「変更を見る」に、共通の題目の変更前 → 変更後が出て、押すと年度の設定の題目の欄に入る',
+    !!item && item.now.startsWith('卒業イベント「モダン・クラシック」') && item.was !== '' && item.was !== item.now && item.go.startsWith('この欄へ') && !went.modal && went.section === '年度の設定' && went.focus === 'y-commonTitle',
+    JSON.stringify({ item, went }),
+  )
+
+  // ---- 9. 先生の画面：先生ができることと、指導教員を変えるときは管理者に頼むこと（mockups/v49 K） ----
+  const tp = await context.newPage()
+  tp.on('dialog', (d) => d.accept())
+  await tp.setViewport({ width: 1366, height: 768 })
+  await tp.goto(`${APP}/admin.html?as=teacher`, { waitUntil: 'networkidle0' })
+  await tp.waitForSelector('.admin .content')
+  await nav(tp, 'コース')
+  await sleep(300)
+  const k = await tp.evaluate(() => ({ can: document.querySelector('.side-nav .can-do')?.textContent ?? '', course: document.querySelector('.course.open')?.textContent ?? '' }))
+  await tp.screenshot({ path: `${OUT}/admin-9-teacher.png` })
+  check(
+    '先生の画面：左に「先生ができること　ひな形・お知らせ・書き方のチェック」、開いたコースの指導教員の下に「変えるときは、管理者に頼んでください」',
+    k.can === '先生ができることひな形・お知らせ・書き方のチェック' && k.course.includes('変えるときは、管理者に頼んでください'),
+    JSON.stringify({ can: k.can, course: k.course.slice(0, 80) }),
+  )
   await context.close()
 }
 
@@ -180,6 +250,34 @@ export async function trialFixesCheck(browser, check) {
     '提出前チェック：長いファイル名でも拡張子（.docx）が見え、名前全体はマウスを乗せると出る。移す・外す の窓に「やめる」があり、押すと閉じる',
     name.ext === '.docx' && name.visible && name.title === body.name && cancel.at(-1) === 'やめる' && closed,
     JSON.stringify({ name, cancel, closed }),
+  )
+
+  // スマホ：下の帯の「エラーが n件残っています・結果を見る ▼」を押すと、結果（ページの絵の下）へ移る（mockups/v49 L）
+  const phone = await context.newPage()
+  await stubConfig(phone)
+  await phone.setViewport({ width: 390, height: 844, deviceScaleFactor: 1, isMobile: true, hasTouch: true })
+  await phone.goto(`${APP}/check.html`, { waitUntil: 'networkidle0' })
+  await phone.waitForSelector('.c2-side')
+  const parts = [
+    ['cover', '01_表紙'],
+    ['abstract', '02_抄録'],
+    ['toc', '03_目次'],
+    ['body', '04_本文'],
+  ]
+  await drop(phone, parts.flatMap(([src, name]) => [fixture(`word-sample-${src}.docx`, `${name}.docx`), fixture(`word-sample-${src}.pdf`, `${name}.pdf`)]))
+  await phone.waitForFunction(() => document.querySelectorAll('.pf .fname').length >= 8, { timeout: 120000 })
+  await settled(phone)
+  await sleep(500)
+  const bar = await phone.evaluate(() => ({ text: document.querySelector('.merge .m-go')?.textContent ?? '', top: Math.round(document.querySelector('.c2-side').getBoundingClientRect().top) }))
+  await phone.screenshot({ path: `${OUT}/check-2-phone-bar.png` })
+  await phone.evaluate(() => document.querySelector('.merge .m-go')?.click())
+  await sleep(1200)
+  const moved = await phone.evaluate(() => Math.round(document.querySelector('.c2-side').getBoundingClientRect().top))
+  await phone.screenshot({ path: `${OUT}/check-3-phone-results.png` })
+  check(
+    '提出前チェック（スマホ）：エラーがあると、下の帯に「エラーが n件残っています　結果を見る ▼」。押すと、結果が画面の上に来る',
+    /^エラーが\d+件残っています結果を見る ▼$/.test(bar.text) && bar.top > 844 && moved >= 0 && moved < 60,
+    JSON.stringify({ bar, moved }),
   )
   await context.close()
 }

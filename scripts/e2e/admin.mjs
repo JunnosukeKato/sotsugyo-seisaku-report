@@ -703,7 +703,8 @@ await withEdge(async (browser) => {
   check('新年度（2027年度）が準備中で作られる', await page.evaluate(() => document.querySelector('.sel').value === '2027'))
   check('新年度は前の年度の内容を引き継ぐ（保存していない変更は入らない）', (await previewText()).includes('卒業イベント「試験」について') && !(await previewText()).includes('保存しない') && (await previewText()).includes('２０２７年度'))
   const createdNotice = await messageText()
-  const problemsText = await page.evaluate(() => document.querySelector('.problems')?.textContent ?? '')
+  // 確認は、上の枠と、欄のすぐ下（題目・締切。mockups/v49 G）
+  const problemsText = await page.evaluate(() => [...document.querySelectorAll('.problems, .field-problems')].map((x) => x.textContent).join('|'))
   await page.screenshot({ path: `${SHOTS}/5-new-year-notice.png` })
   check(
     '新年度を作ると、前の年度のままの項目（題目・締切・お知らせ）を知らせる',
@@ -1605,7 +1606,7 @@ await withEdge(async (browser) => {
   )
   await vb.evaluate(() => [...document.querySelectorAll('.dirty-bar button')].find((b) => b.textContent === '変更を見る').click())
   await vb.waitForSelector('.changes-modal')
-  const changeList = await vb.evaluate(() => [...document.querySelectorAll('.changes-modal li')].map((li) => li.textContent))
+  const changeList = await vb.evaluate(() => [...document.querySelectorAll('.changes-modal li b')].map((b) => b.textContent))
   await vb.screenshot({ path: `${V43}/4-changes-list-1366.png` })
   await vb.keyboard.press('Escape')
   await sleep(150)

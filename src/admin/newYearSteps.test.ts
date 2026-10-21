@@ -22,6 +22,16 @@ describe('新年度の手順（準備中の年度の「年度の設定」）', (
     expect(steps(copy)[2].courseId).toBe(copy.courses[0].id)
   })
 
+  it('確認を「確かめた」にすると、手順4で数えない（全部確かめれば済み：mockups/v49 H）', () => {
+    const problems = validateConfig(copy)
+    expect(newYearSteps(copy, prev, problems, () => true)[3]).toMatchObject({ done: true, text: '確認はすべて確かめました' })
+  })
+
+  it('「変更を見る」：短い項目は変更前 → 変更後と、入る欄（mockups/v49 I）', () => {
+    const changed: YearConfig = { ...copy, commonTitle: '卒業イベント「アラジン」について' }
+    expect(listChanges(copy, changed)[0]).toMatchObject({ label: '共通の題目', before: copy.commonTitle, after: '卒業イベント「アラジン」について', target: 'y-commonTitle' })
+  })
+
   it('題目・締切・お知らせを直すと、それぞれ済みになる（締切は日付を出す）', () => {
     const fixed: YearConfig = { ...copy, commonTitle: '卒業イベント「アラジン」について', deadline: '2028-01-19', courses: copy.courses.map((c) => ({ ...c, notice: undefined, abstractExample: undefined })) }
     expect(summary(fixed)).toEqual([

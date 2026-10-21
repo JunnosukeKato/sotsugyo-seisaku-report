@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Icon } from '../app/icons'
 import { useDialogFocus } from '../app/useDialogFocus'
 import type { Course, TemplateBlock, YearConfig } from '../config'
 import { DEFAULT_TOOL_URL, FROM_ADMIN, FROM_TOOL, newNonce, receivedProblems, templateToolUrls, type InitMessage, type InitPayload, type TemplateYearStatus } from '../template/protocol'
@@ -154,16 +153,6 @@ export function TemplateOverlay({ course, config, status, onApply, onClose, onFa
           ×
         </button>
       </div>
-    </div>
-  )
-}
-
-/** 画面の上の真ん中に、数秒だけ出す知らせ（mockups/v44 案A の「管理ページに戻ったあと」） */
-export function TemplateToast({ text }: { text: string }) {
-  return (
-    <div className="tpl-toast" role="status">
-      {Icon.check}
-      {text}
     </div>
   )
 }

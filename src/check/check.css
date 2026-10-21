@@ -326,6 +326,10 @@ button.pg { cursor: pointer; }
   .merge-in .spacer { display: none; }
   .m-note { max-width: none; font-size: 13px; text-align: left; }
   .merge .btn.big { width: 100%; padding: 13px 0; }
+  /* 「エラーが n件残っています　結果を見る ▼」（押すと結果へ：mockups/v49 L） */
+  .m-note.m-go { display: flex; align-items: center; gap: 10px; width: 100%; padding: 8px 12px; font: inherit; font-size: 14px; color: var(--error); background: #fdf1ef; border: 1.5px solid #e9b8b0; border-radius: 10px; cursor: pointer; }
+  .m-go .go { flex: none; margin-left: auto; padding: 4px 12px; border-radius: 999px; background: var(--error); color: #fff; font-size: 13px; font-weight: 700; }
+  .c2-side { scroll-margin-top: 12px; }
 
   .c2 { display: block; padding: 12px 12px 210px; }
   .c2.nobar { padding-bottom: 20px; }

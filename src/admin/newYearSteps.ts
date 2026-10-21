@@ -23,7 +23,7 @@ export interface NewYearStep {
 
 const STEP_NAMES: Record<StepKey, string> = { title: '題目', deadline: '締切', course: 'コース', check: '確かめる', publish: '公開' }
 
-export function newYearSteps(config: YearConfig, prev: YearConfig | undefined, problems: ConfigProblem[]): NewYearStep[] {
+export function newYearSteps(config: YearConfig, prev: YearConfig | undefined, problems: ConfigProblem[], isAcked: (p: ConfigProblem) => boolean = () => false): NewYearStep[] {
   const year = config.fiscalYear
   const step = (key: StepKey, done: boolean, text: string, courseId?: string): NewYearStep => ({ key, name: STEP_NAMES[key], done, text, ...(courseId ? { courseId } : {}) })
 
@@ -61,9 +61,15 @@ export function newYearSteps(config: YearConfig, prev: YearConfig | undefined, p
           : step('course', true, `${shown.length}コース。直す所はありません`)
 
   // 確かめる：エラーも確認もない
+  // 確認は「確かめた」にしたものを数えない（指導教員4名のように、確かめたうえでそのままにする確認があるため：mockups/v49 H）
   const errors = problems.filter((p) => p.severity === 'error').length
-  const warnings = problems.length - errors
-  const checkStep = errors ? step('check', false, `エラーが${errors}件あります`) : warnings ? step('check', false, `確認が${warnings}件あります`) : step('check', true, 'エラーも確認もありません')
+  const warningList = problems.filter((p) => p.severity === 'warning')
+  const warnings = warningList.filter((p) => !isAcked(p)).length
+  const checkStep = errors
+    ? step('check', false, `エラーが${errors}件あります`)
+    : warnings
+      ? step('check', false, `確認が${warnings}件あります`)
+      : step('check', true, warningList.length ? '確認はすべて確かめました' : 'エラーも確認もありません')
 
   return [titleStep, deadlineStep, courseStep, checkStep, step('publish', false, '上の「この年度を学生に公開」で公開します')]
 }
