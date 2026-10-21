@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v49：管理ページと提出前チェック</title>
+<style>
+  body { margin: 0; padding: 26px 30px 34px; background: #f4f2ee; color: #2a2622; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; width: 1040px; box-sizing: border-box; }
+  h1 { margin: 0 0 18px; font-size: 24px; }
+  .card { margin-bottom: 22px; padding: 16px 18px 18px; border-radius: 14px; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08); }
+  .card h2 { margin: 0 0 4px; font-size: 19px; }
+  .card .why { margin: 0 0 12px; font-size: 14px; color: #6b655d; line-height: 1.6; word-break: auto-phrase; }
+  .opts { display: flex; gap: 16px; align-items: flex-start; flex-wrap: wrap; }
+  figure { margin: 0; width: 320px; font-size: 13.5px; color: #4a453f; text-align: center; }
+  figure.wide { width: 470px; }
+  figure.phone { width: 220px; }
+  figure img { display: block; width: 100%; border-radius: 10px; box-shadow: 0 0 0 1px #ddd8cf; }
+  figure.rec img, .textopt.rec { box-shadow: 0 0 0 3px #2f3e75; }
+  figcaption { margin-top: 7px; line-height: 1.5; word-break: auto-phrase; }
+  figcaption b { display: block; font-size: 14.5px; color: #2a2622; }
+  .tag { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 99px; background: #2f3e75; color: #fff; font-size: 12px; vertical-align: 1px; }
+  .textopt { width: 470px; padding: 14px 16px; border-radius: 10px; background: #f8f7f4; font-size: 14px; line-height: 1.7; word-break: auto-phrase; }
+  .textopt b { display: block; margin-bottom: 4px; font-size: 14.5px; }
+  .note { display: inline-block; margin-top: 6px; padding: 6px 10px; border-radius: 8px; background: #eaf3ec; color: #2e6b45; font-size: 13px; }
+</style>
+</head>
+<body>
+<h1>管理ページと提出前チェックの直し（先生の試しから）</h1>
+
+<div class="card">
+  <h2>G 打っている間に「確認」の枠が出たり消えたりして、欄の位置がずれる</h2>
+  <p class="why">上の枠に「確認」が増えると、下の欄が押し下げられ、押そうとした欄と違う欄を押してしまうことがありました。</p>
+  <div class="opts">
+    <figure><img src="shots/g-now.png" alt=""><figcaption><b>いま</b>確認は上の枠に出る</figcaption></figure>
+    <figure class="rec"><img src="shots/g-1.png" alt=""><figcaption><b>案 確認は、その欄のすぐ下に<span class="tag">おすすめ</span></b>打っている欄は動かない</figcaption></figure>
+  </div>
+</div>
+
+<div class="card">
+  <h2>H 新年度の手順4「確かめる」が、いつまでも済みにならない</h2>
+  <p class="why">「指導教員が4名以上」のように、確かめたうえでそのままにしたい確認があると、手順4がずっと「まだ」のままでした。</p>
+  <div class="opts">
+    <figure><img src="shots/h-now.png" alt=""><figcaption><b>いま</b>「確認が2件あります」のまま</figcaption></figure>
+    <figure class="rec"><img src="shots/h-1.png" alt=""><figcaption><b>案 確認ごとに「確かめた」<span class="tag">おすすめ</span></b>全部確かめれば手順4は済み（内容が変わったら、また確かめる）</figcaption></figure>
+  </div>
+</div>
+
+<div class="card">
+  <h2>I 「変更を見る」に、何がどう変わったかが出ない</h2>
+  <p class="why">項目の名前だけで、前と後の中身が分かりませんでした。押してもその欄へ移れませんでした。</p>
+  <div class="opts">
+    <figure class="wide"><img src="shots/i-now.png" alt=""><figcaption><b>いま</b>名前だけ</figcaption></figure>
+    <figure class="wide rec"><img src="shots/i-1.png" alt=""><figcaption><b>案 変更前 → 変更後。押すとその欄へ<span class="tag">おすすめ</span></b></figcaption></figure>
+  </div>
+</div>
+
+<div class="card">
+  <h2>J 先生：「ひな形を受け取りました」の知らせが、コースの「閉じる」に重なる</h2>
+  <div class="opts">
+    <figure class="wide"><img src="shots/j-now.png" alt=""><figcaption><b>いま</b>上の真ん中に浮いて、ボタンに重なる</figcaption></figure>
+    <div class="textopt rec"><b>案 ほかの知らせと同じく、見出しの下の緑の枠に出す<span class="tag">おすすめ</span></b>浮かせないので、ボタンに重ならない。<br><span class="note">ひな形を受け取りました（まだ学生に届いていません）。「保存して学生に反映」で届きます</span></div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>K 先生：指導教員は変えられないが、誰に頼めばよいか書いていない</h2>
+  <div class="opts">
+    <figure class="wide"><img src="shots/k-now.png" alt=""><figcaption><b>いま</b></figcaption></figure>
+    <div class="textopt rec"><b>案 指導教員の下に一言<span class="tag">おすすめ</span></b>「変えるときは、管理者に頼んでください」（先生の画面だけ）。<br>あわせて、先生の画面の上に「先生ができること：ひな形・お知らせ・書き方のチェック」と一言</div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>L 提出前チェック（スマホ）：結果が画面のかなり下（1000px ほど）から始まる</h2>
+  <p class="why">ページの絵が先に並ぶため、結果まで長くスクロールします。</p>
+  <div class="opts">
+    <figure class="phone"><img src="shots/l-now.png" alt=""><figcaption><b>いま</b>結果は下の方</figcaption></figure>
+    <figure class="phone rec"><img src="shots/l-1.png" alt=""><figcaption><b>案1 下の帯の「エラーが n件」を押すと結果へ<span class="tag">おすすめ</span></b>並びは今のまま</figcaption></figure>
+    <figure class="phone"><img src="shots/l-2.png" alt=""><figcaption><b>案2 結果を先に</b>ページの絵は結果の下</figcaption></figure>
+  </div>
+</div>
+</body>
+</html>
