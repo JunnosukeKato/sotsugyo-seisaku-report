@@ -2,6 +2,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { Icon } from '../app/icons'
 import { useDialogFocus } from '../app/useDialogFocus'
 import { deviceName } from '../drive/device'
+import { topicVideos } from './videos'
 import type { HelpDevice, HelpTopic } from './helpTopics'
 import { highlightParts, searchTopics, termsOf } from './search'
 import './help.css'
@@ -232,7 +233,7 @@ function TopicList({ topics, who, guides, onOpen }: { topics: HelpTopic[]; who: 
               <li key={t.id}>
                 <button data-topic={t.id} className={t.action?.kind === 'tour' ? 'action' : undefined} onClick={() => onOpen(t.id)}>
                   {t.title}
-                  {t.video && <span className="help-mark" aria-label="動画あり">{Icon.play}</span>}
+                  {!!t.videos?.length && <span className="help-mark" aria-label="動画あり">{Icon.play}</span>}
                 </button>
               </li>
             ))}
@@ -340,12 +341,15 @@ function TopicView({ topic: t, topics, terms, backLabel, imageBase, device, dete
       <h3 tabIndex={-1}>
         <Hl text={t.title} terms={terms} />
       </h3>
-      {t.video && (
-        <figure className="help-video">
-          <video src={`${imageBase}${t.video.src}`} controls muted playsInline preload="metadata" />
-          <figcaption>動画（{t.video.seconds}秒・音なし）</figcaption>
+      {topicVideos(t, detected).map((v) => (
+        <figure key={v.file} className="help-video">
+          {/* 押すまで読み込まない（1本 数MB。スマホの通信を使わない）。はじめは題名の絵を出す */}
+          <video src={`${imageBase}videos/${v.file}.mp4`} poster={`${imageBase}videos/${v.file}.jpg`} controls muted playsInline preload="none" />
+          <figcaption>
+            動画 {v.number}「{v.title}」（{v.seconds}秒・音なし）
+          </figcaption>
         </figure>
-      )}
+      ))}
       {t.lead && (
         <p className="help-lead">
           <Hl text={t.lead} terms={terms} />

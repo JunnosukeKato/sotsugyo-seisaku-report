@@ -293,6 +293,26 @@ export async function trialFixesPc(browser, check) {
   await wait(400)
   const tall = await page.evaluate(() => getComputedStyle(document.querySelector('.palette .p-head span')).display)
   check('パソコン（1440×900）：高い画面では、道具のひとこと（「クリックしてその場で書く」など）を今までどおり出す', tall !== 'none', tall)
+
+  // 使い方の「書き方」に、動画2（本文）と動画6（スマホ）。押すまで読み込まない。はじめの絵と動画のファイルがある
+  if (!(await page.$('.side .head-menu'))) await page.click('.side .menu-btn')
+  await page.waitForSelector('.side .head-menu [role="menuitem"]')
+  await page.evaluate(() => [...document.querySelectorAll('.side .head-menu [role="menuitem"]')].find((b) => b.textContent.includes('使い方')).click())
+  await page.waitForSelector('.help-list [data-topic="write"]')
+  const marked = await page.evaluate(() => [...document.querySelectorAll('.help-list [data-topic]')].filter((b) => b.querySelector('.help-mark')).map((b) => b.dataset.topic))
+  await page.evaluate(() => document.querySelector('.help-list [data-topic="write"]').click())
+  await page.waitForSelector('.help-topic .help-video video')
+  const videos = await page.evaluate(async () => {
+    const list = [...document.querySelectorAll('.help-topic .help-video')].map((f) => ({ src: f.querySelector('video').getAttribute('src'), poster: f.querySelector('video').getAttribute('poster'), preload: f.querySelector('video').preload, cap: f.querySelector('figcaption').textContent }))
+    const ok = async (u) => (await fetch(u, { method: 'HEAD' })).ok
+    return Promise.all(list.map(async (v) => ({ ...v, files: (await ok(v.src)) && (await ok(v.poster)) })))
+  })
+  await page.screenshot({ path: `${OUT}/pc-help-videos.png` })
+  check(
+    '使い方：動画のある項目（はじめ方・書き方・図と表・作品写真・セルフチェック・PDF）に印。「書き方」に動画2と動画6（押すまで読み込まない。動画と、はじめの絵のファイルがある）',
+    marked.join(',') === 'login,write,figure,photos,check,pdf' && videos.length === 2 && videos.every((v) => v.preload === 'none' && v.files) && videos[0].cap === '動画 2「本文を書く・図を入れる」（60秒・音なし）' && videos[1].cap.startsWith('動画 6「スマホで書く」'),
+    JSON.stringify({ marked, videos }),
+  )
   await context.close()
 }
 
