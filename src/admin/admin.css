@@ -450,3 +450,11 @@ button.busy:disabled { opacity: 1; cursor: progress; }
 .tpl-modal .row .in-wrap { display: flex; flex-direction: column; min-width: 0; }
 .tpl-modal .row .tbl-head { padding: 0 4px 2px; overflow: hidden; color: var(--muted); font-size: 13px; text-overflow: ellipsis; white-space: nowrap; }
 .tpl-modal .row .brk { padding: 6px 4px; border-top: 1px dashed #b6bfd8; color: var(--muted); font-size: 14px; }
+
+/* 学生の画面を試す（TrialSection.tsx。依頼者の選択 2026-10-22 案1） */
+.trial-sec { display: grid; gap: 16px; max-width: 760px; }
+.trial-sec .sec-lead { margin: -12px 0 0; }
+.trial-points { margin: 0 0 18px; padding-left: 1.3em; line-height: 1.85; word-break: auto-phrase; }
+.trial-open { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; }
+.trial-open .btn svg { width: 17px; height: 17px; }
+.trial-state { color: var(--muted); font-size: 14px; word-break: auto-phrase; }

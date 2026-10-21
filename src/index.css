@@ -1915,3 +1915,15 @@ p.busy-line { display: flex; }
 .pinch-tip b { grid-column: 1; }
 .pinch-tip span { grid-column: 1; font-size: 13px; opacity: 0.92; }
 .pinch-tip button { grid-row: 1 / span 2; grid-column: 2; align-self: center; width: 44px; height: 44px; border: 0; background: none; color: #fff; font-size: 20px; }
+
+/* お試し（?trial=1：先生が見本の原稿で試す。src/trial/）：画面の上の帯（TrialBanner.tsx。依頼者の選択 2026-10-22 案1）。画面（.app）は帯の下に置く */
+:root { --trial-band: 34px; }
+.app.trial { top: var(--trial-band); height: calc(100% - var(--trial-band)); }
+.trial-band { position: fixed; z-index: 44; left: 0; right: 0; top: 0; height: var(--trial-band); box-sizing: border-box; display: flex; align-items: center; gap: 14px; padding: 0 10px 0 16px; background: var(--warn-soft); border-bottom: 1px solid #e3cf9f; color: var(--warn); font-size: 13px; white-space: nowrap; overflow: hidden; }
+.trial-band b { font-weight: 700; }
+.trial-band .trial-reset { margin-left: auto; flex: none; padding: 3px 14px; border: 1px solid #d8bd7f; border-radius: 999px; background: #fff; color: var(--warn); font-size: 12.5px; }
+.trial-band .trial-reset:hover:not(:disabled) { background: #fffaf0; }
+/* 狭い画面では、説明の文を省く（お試し中であることと、ボタンだけ） */
+@media (max-width: 760px) { .trial-band .trial-note { display: none; } }
+/* 管理ページから開いていない（見本の原稿を受け取れなかった） */
+.loading.trial-missing { padding: 24px; text-align: center; color: var(--ink); word-break: auto-phrase; }

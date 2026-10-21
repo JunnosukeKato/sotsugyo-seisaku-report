@@ -19,7 +19,7 @@ const ATTEMPTS = 2
  * 使える設定にして返す（使えなければ null）。崩れたコースのひな形・お知らせなどは外して使う
  * （1つのコースのひな形が崩れていても、設定全体は捨てない。そのコースは標準のひな形になる）
  */
-function usable(config: unknown): YearConfig | null {
+export function usable(config: unknown): YearConfig | null {
   if (!config || typeof config !== 'object') return null
   try {
     const repaired = repairConfig(config as YearConfig)

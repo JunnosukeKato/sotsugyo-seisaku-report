@@ -7,6 +7,7 @@ import { DriveSync, hasContent, type DriveState, type RemoteCopy, type Resolutio
 import { studentIdFromEmail } from './model/account'
 import { backupFileName, createBackup, readBackup } from './model/backup'
 import { createReport } from './model/newReport'
+import { trialMode } from './model/scope'
 import { allImages, clearAll, listSnapshots, loadReport, keepSnapshot, putImage, saveSnapshot, usedImageIds, type Snapshot } from './model/storage'
 import type { Report } from './model/types'
 import type { WordImportResult } from './import/types'
@@ -45,6 +46,8 @@ import { useWordTodo, wordImportOffered } from './app/useWordTodo'
 import { HelpView } from './help/HelpView'
 import { STUDENT_TOPICS } from './help/helpTopics'
 import { STUDENT_GUIDE_PATH, STUDENT_HELP_IMAGES } from './help/links'
+import { freshSample, openTrial, TrialMissingError } from './trial/openTrial'
+import { TrialBanner } from './trial/TrialBanner'
 
 const noopSubscribe = () => () => {}
 /** スマホの「？ 使い方」の項目（「クリック」を「タップ」に。PC は STUDENT_TOPICS のまま） */
@@ -81,10 +84,11 @@ const firstEmptyCoverStep = (report: Report): GuideStep | null => {
 
 /**
  * 原稿を Google ドライブにも保存する（ログイン必須。mockups/v18 案3・v19 案A）。
- * クライアント ID がなければ、今まで通りこの端末だけに保存する。開発中は ?nodrive で外せる（自動テスト用）
+ * クライアント ID がなければ、今まで通りこの端末だけに保存する。開発中は ?nodrive で外せる（自動テスト用）。
+ * お試し（?trial=1：先生が見本の原稿で試す。src/trial/）は、ドライブにつながない（ログインもしない）
  */
 const DRIVE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
-const DRIVE_ENABLED = !!DRIVE_CLIENT_ID && !(import.meta.env.DEV && new URLSearchParams(location.search).has('nodrive'))
+const DRIVE_ENABLED = !!DRIVE_CLIENT_ID && !trialMode && !(import.meta.env.DEV && new URLSearchParams(location.search).has('nodrive'))
 
 type DriveDialog =
   | { kind: 'conflict'; remote: RemoteCopy; atLogin: boolean }
@@ -189,6 +193,8 @@ export default function App() {
   const [tocPoint, setTocPoint] = useState<{ x: number; y: number } | null>(null)
   const closeTocNotice = useCallback(() => setTocPoint(null), [])
   const [loadError, setLoadError] = useState<string | null>(null)
+  // お試し：管理ページから開いていない（見本の原稿を受け取れなかった）
+  const [trialMissing, setTrialMissing] = useState(false)
   // はじめて使う学生への案内（コース →（今年度だけ）Word で書き始めているか → 学籍番号 → 氏名 → サブタイトル）
   const [guide, setGuide] = useState<GuideStep | null>(null)
   // 使い方（ヘルプ）：PC は右の欄が使い方に替わり、スマホは画面いっぱいの欄（mockups/v27 案A）
@@ -465,8 +471,9 @@ export default function App() {
     if (drive) void preloadGis(DRIVE_CLIENT_ID).catch(() => {})
     void (async () => {
       try {
-        // 設定は窓口から読み始め（返事には1〜数秒かかる）、待つ間に、この端末の原稿を読む
-        const configLoad = startConfigLoad()
+        // 設定は窓口から読み始め（返事には1〜数秒かかる）、待つ間に、この端末の原稿を読む。
+        // お試しは、管理ページから受け取った設定と見本の原稿（このブラウザのお試しの入れ物に置いたもの）で開く
+        const configLoad = trialMode ? await openTrial() : startConfigLoad()
         const saved = await loadReport()
         markOpen('report')
         localAtStart.current = saved
@@ -540,7 +547,8 @@ export default function App() {
         // 紙面の準備より先にログインが済んでいたら、ここで始める（上で始めていれば、何もしない）
         else if (drive.tokenValid) void enter(ed)
       } catch (e) {
-        setLoadError(String(e))
+        if (e instanceof TrialMissingError) setTrialMissing(true)
+        else setLoadError(String(e))
       }
     })()
   }, [autosave, drive, enter, startGuide, refreshConfig, imageWork])
@@ -825,6 +833,22 @@ export default function App() {
     editor.showNotice('Word から読み込む前の原稿に戻しました')
   }, [editor, wordTodo, setWordTodo, matchYear])
 
+  /** お試しの「見本に戻す」：試した内容を消して、最初の見本の原稿にする（確かめてから） */
+  const resetTrial = useCallback(async () => {
+    if (!editor || !confirm('見本の原稿に戻しますか？\n（試した内容は消えます）')) return
+    editor.commitEditing()
+    try {
+      const sample = await freshSample()
+      editor.addImages(await allImages())
+      editor.replace(sample)
+      setWordTodo(null)
+      setDialog(null)
+      editor.showNotice('見本の原稿に戻しました')
+    } catch (e) {
+      alert(errorText(e))
+    }
+  }, [editor, setWordTodo])
+
   /** 使い方の「指差し確認をもう一度見る」：使い方を閉じて、指差し確認を出す */
   const replayTour = useCallback(() => {
     setHelp(false)
@@ -888,7 +912,9 @@ export default function App() {
     ) : null
 
   return (
-    <div className={`app${narrow ? ' phone' : ''}${phoneDirect ? ' phone-direct' : ''}`} style={narrow ? undefined : panels.style}>
+    <div className={`app${narrow ? ' phone' : ''}${phoneDirect ? ' phone-direct' : ''}${trialMode ? ' trial' : ''}`} style={narrow ? undefined : panels.style}>
+      {/* お試し：画面の上の帯（お試し中であることと「見本に戻す」。依頼者の選択 2026-10-22 案1）。画面はその下に置く（index.css の .app.trial） */}
+      {trialMode && <TrialBanner onReset={ready ? () => void resetTrial() : undefined} />}
       {!narrow && (ready ? <PageColumn editor={editor} snap={snap} config={config} /> : <aside className="thumbs-col" />)}
       {/* 左右の欄の境目：つかんで動かすと幅が変わる。ダブルクリックで元の幅 */}
       {!narrow &&
@@ -927,7 +953,7 @@ export default function App() {
           </>
         )}
         {/* 紙面の準備中：残りのページの見込みも出す（スマホで十数秒かかるとき、進んでいるのが分かるように）。原稿を丸ごと入れ替えたときも、前の原稿の紙面を見せない */}
-        {(!snap || (snap.rendering && !snap.layout) || snap.replacing) && !loadError && (
+        {(!snap || (snap.rendering && !snap.layout) || snap.replacing) && !loadError && !trialMissing && (
           <div className="loading" role="status">
             <span className="loading-line">
               <Spinner />
@@ -943,6 +969,7 @@ export default function App() {
         {ready && snap.layout && <ImageWorkToast work={imageWork} editor={editor} />}
         {exportSlowPhone && <WaitToast className="on-stage" text="PDF の前に、紙面を確かめています…" slowMs={0} />}
         {loadError && <div className="loading ng">読み込みに失敗しました：{loadError}</div>}
+        {trialMissing && <div className="loading trial-missing">{new TrialMissingError().message}</div>}
       </main>
 
       {ready && narrow ? (

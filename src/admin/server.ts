@@ -76,6 +76,11 @@ export interface AdminServer {
   /** まとめて登録する（すでに登録されている人は、そのまま） */
   addMembers(entries: { email: string; memo: string }[], role: Member['role']): Promise<Member[]>
   removeMember(email: string): Promise<Member[]>
+  /**
+   * お試し（学生の画面を試す）の見本の原稿（管理者・先生だけ。学生には渡さない）。
+   * 形は src/trial/protocol.ts の TrialSample（学生のツールが受け取るときに確かめる）
+   */
+  getTrialSample(): Promise<unknown>
 }
 
 interface ScriptRun {
@@ -113,6 +118,7 @@ function appsScriptServer(): AdminServer {
     addMember: (email, role, memo) => call('addMember', email, role, memo),
     addMembers: (entries, role) => call('addMembers', entries, role),
     removeMember: (email) => call('removeMember', email),
+    getTrialSample: () => call('getTrialSample'),
   }
 }
 

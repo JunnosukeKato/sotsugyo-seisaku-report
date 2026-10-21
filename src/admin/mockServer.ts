@@ -1,4 +1,5 @@
 import { currentConfig, type YearConfig } from '../config'
+import { DEV_TRIAL_SAMPLE } from '../trial/devSample'
 import type { AdminServer, AdminState, HistoryRow, Member, YearRow } from './server'
 import { applyNotices, applyTemplates, changedMessage, checkConfig, cleanWords } from './serverRules'
 
@@ -247,6 +248,18 @@ export function createMockServer(): AdminServer {
       store.members = list
       save(store)
       return clone(store.members)
+    },
+    async getTrialSample() {
+      await wait()
+      requireTeacher(load())
+      // 開発中は、手元にある本番の見本（git に入れないファイル gas/trial-sample.private.json）を使う。なければ開発用の小さな見本
+      if (import.meta.env.DEV) {
+        const local = await fetch('/gas/trial-sample.private.json')
+          .then((r) => (r.ok ? r.json() : null))
+          .catch(() => null)
+        if (local) return local
+      }
+      return clone(DEV_TRIAL_SAMPLE)
     },
   }
 }

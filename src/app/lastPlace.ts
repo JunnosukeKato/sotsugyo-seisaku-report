@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
+import { scoped } from '../model/scope'
 
 /**
  * 最後に見ていたページを、この端末（ブラウザ）に覚えておき、次に開いたときに、表紙ではなくそのページを見せる
@@ -10,7 +11,7 @@ import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
  * PC では、表示の仕方（「全体」「見開き」「拡大」）も覚えておき、開いたときに戻す（useRememberZoom）
  */
 
-const PLACE_KEY = 'sotsugyo-seisaku-report-place'
+const PLACE_KEY = scoped('sotsugyo-seisaku-report-place')
 
 export interface LastPlace {
   /** 見ていたページ（0 から） */

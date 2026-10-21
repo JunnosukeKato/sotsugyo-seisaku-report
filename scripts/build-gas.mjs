@@ -23,8 +23,14 @@ for (const project of ['admin-project', 'api-project']) {
 }
 
 const initial = readFileSync('src/config/2026.json', 'utf8').trim()
-const code = readFileSync('gas/admin-project/Code.js', 'utf8').replace('/*INITIAL_CONFIG*/ null', initial)
+// お試し（学生の画面を試す）の見本の原稿：git に入れないファイル gas/trial-sample.private.json（公開しない。サーバーが先生と管理者にだけ渡す）
+const trialSample = existsSync('gas/trial-sample.private.json') ? JSON.stringify(JSON.parse(readFileSync('gas/trial-sample.private.json', 'utf8'))) : 'null'
+const adminCode = readFileSync('gas/admin-project/Code.js', 'utf8')
+if (!adminCode.includes('/*TRIAL_SAMPLE*/ null')) throw new Error('gas/admin-project/Code.js に /*TRIAL_SAMPLE*/ null がありません')
+// 置き換える文字の中の「$」を、置き換えの印として読ませない（関数で渡す）
+const code = adminCode.replace('/*INITIAL_CONFIG*/ null', () => initial).replace('/*TRIAL_SAMPLE*/ null', () => trialSample)
 writeFileSync('gas-dist/admin-project/Code.js', code)
+console.log(`\nお試しの見本の原稿：${trialSample === 'null' ? 'なし（gas/trial-sample.private.json がない。管理ページの「学生の画面を試す」は開けない）' : `あり（${Math.round(trialSample.length / 1024)}KB）`}`)
 // 配信用のプロジェクトに、管理用スプレッドシートの ID を入れる（clasp で作ったときの .clasp.json の parentId）
 const adminClasp = existsSync('gas/admin-project/.clasp.json') ? JSON.parse(readFileSync('gas/admin-project/.clasp.json', 'utf8')) : {}
 // clasp の版によって、parentId は文字列のことも配列のこともある

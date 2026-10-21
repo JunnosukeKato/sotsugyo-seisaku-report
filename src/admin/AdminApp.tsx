@@ -20,6 +20,7 @@ import { Preview } from './Preview'
 import { isMockServer, roleOf, server, type AdminState, type HistoryRow, type Member, type TemplateSet, type YearRow } from './server'
 import { TemplateEditor, TemplatePreview } from './TemplateEditor'
 import { TemplateOverlay } from './TemplateOverlay'
+import { TrialSection } from './TrialSection'
 import { TEMPLATE_RECEIVED } from './templateText'
 import { ProblemsContext } from './problemsContext'
 import { ProblemLine } from './ui'
@@ -57,9 +58,9 @@ const WAIT_TEXT: Record<Busy, string> = { save: '保存しています…', publ
 const DONE_TEXT: Record<Busy, string> = { save: '保存しました', publish: '公開しました', create: '作成しました', delete: '削除しました' }
 
 /** 左の見出しの区切り */
-type Section = 'year' | 'course' | 'words' | 'members' | 'history' | 'details'
-const SECTIONS: Section[] = ['year', 'course', 'words', 'members', 'history', 'details']
-const TEACHER_SECTIONS: Section[] = ['course', 'words']
+type Section = 'year' | 'course' | 'words' | 'trial' | 'members' | 'history' | 'details'
+const SECTIONS: Section[] = ['year', 'course', 'words', 'trial', 'members', 'history', 'details']
+const TEACHER_SECTIONS: Section[] = ['course', 'words', 'trial']
 /** 表紙と抄録の見本を右に出す区切り（ほかは、区切りを画面の幅いっぱいに出す） */
 const WITH_PREVIEW: Section[] = ['year', 'course', 'details']
 
@@ -352,6 +353,12 @@ interface NavItem {
   /** この前に区切りの線を引く */
   sep?: boolean
 }
+
+/** 「学生の画面を試す」（管理者・先生とも。依頼者の選択 2026-10-22 案1） */
+const TRIAL_NAV: NavItem = { key: 'trial', icon: AdminIcon.trial, title: '学生の画面を試す', sub: '見本の原稿で' }
+
+/** お試しで学生のツールに渡す、公開中の年度の設定（学生が見ているもの。公開中の年度がなければ、開いている年度の保存した設定） */
+const publishedConfig = (state: AdminState, row: YearRow): YearConfig => state.years.find((y) => y.status === '公開中')?.config ?? row.config
 
 /** 左の見出し（ボタンの一覧。選んでいる区切りに aria-current）。下に、ログイン中の人 */
 function SideNav({ items, active, onSelect, user, teacher }: { items: NavItem[]; active: Section; onSelect: (s: Section) => void; user: string; teacher: boolean }) {
@@ -830,6 +837,7 @@ export function AdminApp() {
     { key: 'year', icon: AdminIcon.calendar, title: '年度の設定', sub: '題目・締切・新年度', count: counts.year },
     { key: 'course', icon: AdminIcon.course, title: 'コース', sub: 'お知らせ・ひな形', count: counts.course },
     { key: 'words', icon: AdminIcon.words, title: '書き方のチェック', sub: wordSummary(draft.wordChecks ?? DEFAULT_WORD_CHECKS), count: counts.words },
+    TRIAL_NAV,
     { key: 'members', icon: AdminIcon.people, title: '先生の登録', sub: members ? `${members.length}人` : membersError ? '読み込めません' : '読み込んでいます…', sep: true },
     { key: 'history', icon: AdminIcon.history, title: '変更履歴', sub: lastSaved(row.updatedAt) },
     { key: 'details', icon: AdminIcon.gear, title: '詳細設定', sub: 'ふだんは変えません', count: (counts.details ?? 0) + (counts.other ?? 0) },
@@ -907,6 +915,7 @@ export function AdminApp() {
       />
     )
   else if (section === 'words') content = <WordsSection key={row.year} words={draft.wordChecks ?? DEFAULT_WORD_CHECKS} onChange={(wordChecks) => set({ wordChecks })} onPending={setPending} notices={notices} />
+  else if (section === 'trial') content = <TrialSection config={publishedConfig(state, row)} />
   else if (section === 'members') content = <MembersSection me={state.user} studentIdPattern={draft.studentIdPattern} members={members} loadError={membersError} onMembers={setMembers} onPending={setPending} notices={notices} />
   else if (section === 'history')
     content = (
@@ -1132,6 +1141,7 @@ function TeacherView({
   const navItems: NavItem[] = [
     { key: 'course', icon: AdminIcon.course, title: 'コース', sub: 'お知らせ・ひな形', count: counts.course },
     { key: 'words', icon: AdminIcon.words, title: '書き方のチェック', sub: wordSummary(draft.wordChecks ?? DEFAULT_WORD_CHECKS), count: counts.words },
+    TRIAL_NAV,
   ]
   const editingCourse = editing !== null ? draft.courses[editing] : undefined
   return (
@@ -1171,8 +1181,10 @@ function TeacherView({
                   onEditTemplate={setEditing}
                   notices={message && <MessageBox message={message} />}
                 />
-              ) : (
+              ) : section === 'words' ? (
                 <WordsSection key={row.year} words={draft.wordChecks ?? DEFAULT_WORD_CHECKS} onChange={(wordChecks) => setDraft({ ...draft, wordChecks })} onPending={onPending} notices={message && <MessageBox message={message} />} />
+              ) : (
+                <TrialSection config={publishedConfig(state, row)} />
               )
           }
           stage={

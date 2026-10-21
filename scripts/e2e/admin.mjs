@@ -5,6 +5,7 @@ import { mkdirSync } from 'node:fs'
 import { withEdge } from '../poc/edge.mjs'
 import { templateModeAdmin } from './templateMode.mjs'
 import { trialFixesAdmin } from './trialFixesAdmin.mjs'
+import { trialModeAdmin } from './trialMode.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -241,9 +242,9 @@ await withEdge(async (browser) => {
   const firstNav = await navItems()
   const me = await page.evaluate(() => document.querySelector('.side-nav .me').textContent)
   check(
-    '見出しは1段：題名・使い方・年度・状態の印、右に「変更はありません」と静かな保存のボタン。左の見出しに6つの区切り（はじめは「年度の設定」）。ログイン中の人と試験用サーバーは左の下',
+    '見出しは1段：題名・使い方・年度・状態の印、右に「変更はありません」と静かな保存のボタン。左の見出しに7つの区切り（はじめは「年度の設定」。学生の画面を試すも）。ログイン中の人と試験用サーバーは左の下',
     firstHeader === '卒業制作報告書 管理ページ|使い方|2026年度（公開中）|公開中|spacer|変更はありません|保存して学生に反映' &&
-      firstNav.startsWith('年度の設定／題目・締切・新年度＊|コース／お知らせ・ひな形|書き方のチェック／言葉 13語（エラー7）|先生の登録／2人|変更履歴／最後：') &&
+      firstNav.startsWith('年度の設定／題目・締切・新年度＊|コース／お知らせ・ひな形|書き方のチェック／言葉 13語（エラー7）|学生の画面を試す／見本の原稿で|先生の登録／2人|変更履歴／最後：') &&
       firstNav.endsWith('|詳細設定／ふだんは変えません') &&
       me.includes('admin@example.ac.jp') &&
       me.includes('試験用サーバー'),
@@ -261,8 +262,8 @@ await withEdge(async (browser) => {
     foot: document.querySelector('.help-dock .help-foot p')?.textContent ?? '',
   }))
   check(
-    '見出しの横の「？ 使い方」で、右の端に先生・管理者用の使い方が出る（項目11・相談先はほかの管理者と引き継ぎ手順・いちばん下に印刷用の手引き（先生用・管理者用の PDF）を新しいタブで）',
-    adminHelp.topics === 11 && adminHelp.pressed === 'true' && adminHelp.content && adminHelp.label === '先生・管理者用' && adminHelp.foot.includes('ほかの管理者') &&
+    '見出しの横の「？ 使い方」で、右の端に先生・管理者用の使い方が出る（項目12・相談先はほかの管理者と引き継ぎ手順・いちばん下に印刷用の手引き（先生用・管理者用の PDF）を新しいタブで）',
+    adminHelp.topics === 12 && adminHelp.pressed === 'true' && adminHelp.content && adminHelp.label === '先生・管理者用' && adminHelp.foot.includes('ほかの管理者') &&
       adminHelp.pdf.join('|') === '先生用 https://junnosukekato.github.io/sotsugyo-seisaku-report/guides/teacher-guide.pdf _blank|管理者用 https://junnosukekato.github.io/sotsugyo-seisaku-report/guides/admin-guide.pdf _blank',
     JSON.stringify(adminHelp),
   )
@@ -527,8 +528,8 @@ await withEdge(async (browser) => {
   await teacher.goto(`${APP}/admin.html?as=teacher`, { waitUntil: 'networkidle0' })
   await teacher.waitForSelector('.admin .content')
   check(
-    '先生には、左の見出しが「コース」と「書き方のチェック」の2つだけの画面が出る（年度の設定・先生の登録などは出ない）',
-    (await navItems(teacher)) === 'コース／お知らせ・ひな形＊|書き方のチェック／言葉 14語（エラー8）' && !(await teacher.$('#y-commonTitle')) && (await teacher.$$('.course.open .tpl-line')).length === 1,
+    '先生には、左の見出しが「コース」「書き方のチェック」「学生の画面を試す」の3つだけの画面が出る（年度の設定・先生の登録などは出ない）',
+    (await navItems(teacher)) === 'コース／お知らせ・ひな形＊|書き方のチェック／言葉 14語（エラー8）|学生の画面を試す／見本の原稿で' && !(await teacher.$('#y-commonTitle')) && (await teacher.$$('.course.open .tpl-line')).length === 1,
     await navItems(teacher),
   )
   check('先生の画面にも、ソースコードの場所のリンクが出る（AGPL）', await teacher.evaluate(() => !!document.querySelector('.side-nav .source a')?.href))
@@ -545,7 +546,7 @@ await withEdge(async (browser) => {
   await teacher.click('.admin-header .help-open')
   await teacher.waitForSelector('.help-dock')
   const teacherHelp = await teacher.evaluate(() => ({ topics: document.querySelectorAll('.help-dock .help-list button').length, main: !!document.querySelector('.admin.help-on .content'), label: document.querySelector('.help-dock .help-title small')?.textContent ?? '', foot: document.querySelector('.help-dock .help-foot p')?.textContent ?? '' }))
-  check('先生の画面にも、見出しの横に「？ 使い方」があり、右の端に先生用の使い方が出る（項目11・相談先は管理者。その分、画面を左に寄せる）', teacherHelp.topics === 11 && teacherHelp.main && teacherHelp.label === '先生用' && teacherHelp.foot.includes('管理者に相談'), JSON.stringify(teacherHelp))
+  check('先生の画面にも、見出しの横に「？ 使い方」があり、右の端に先生用の使い方が出る（項目12・相談先は管理者。その分、画面を左に寄せる）', teacherHelp.topics === 12 && teacherHelp.main && teacherHelp.label === '先生用' && teacherHelp.foot.includes('管理者に相談'), JSON.stringify(teacherHelp))
   await teacher.keyboard.press('Escape')
   await teacher.waitForFunction(() => !document.querySelector('.help-dock'), { timeout: 5000 }).catch(() => {})
   check('Esc でも使い方の欄が閉じる', !(await teacher.$('.help-dock')))
@@ -1581,7 +1582,7 @@ await withEdge(async (browser) => {
   check(
     '最終締切を変えると、画面の下に「まだ学生に届いていない変更が1か所あります」と保存のボタン（見出しのボタンも目立つ形に）。直した欄に「変更あり」、左の見出しの「年度の設定」に 1',
     one.head === 'まだ学生に届いていない変更が1か所あります' && one.sub === '最終締切' && one.mark === '1' && one.buttons === '変更を見る|保存して学生に反映＊' && one.header === '保存していない変更 1か所' && one.headerSave === '保存して学生に反映＊' &&
-      one.counts === '年度の設定:1|コース|書き方のチェック|先生の登録|変更履歴|詳細設定' && deadlineMark.label === '変更あり' && deadlineMark.ring && deadlineMark.others === 1,
+      one.counts === '年度の設定:1|コース|書き方のチェック|学生の画面を試す|先生の登録|変更履歴|詳細設定' && deadlineMark.label === '変更あり' && deadlineMark.ring && deadlineMark.others === 1,
     JSON.stringify({ one, deadlineMark }),
   )
   await nav(vb, 'コース')
@@ -1616,7 +1617,7 @@ await withEdge(async (browser) => {
   const afterBarSave = await barState()
   check(
     '帯の「保存して学生に反映」で、今までどおり確かめてから保存する（確かめに2つの変更）。保存すると帯は消える',
-    vbDialogs.last().includes('・最終締切') && vbDialogs.last().includes('・映画・舞台衣装デザイナー コースのお知らせ') && afterBarSave.head === null && afterBarSave.counts === '年度の設定|コース|書き方のチェック|先生の登録|変更履歴|詳細設定',
+    vbDialogs.last().includes('・最終締切') && vbDialogs.last().includes('・映画・舞台衣装デザイナー コースのお知らせ') && afterBarSave.head === null && afterBarSave.counts === '年度の設定|コース|書き方のチェック|学生の画面を試す|先生の登録|変更履歴|詳細設定',
     JSON.stringify(afterBarSave),
   )
 
@@ -1745,8 +1746,8 @@ await withEdge(async (browser) => {
   }
   await tv.setViewport({ width: 1366, height: 768 })
   check(
-    '先生の画面：左の見出しは「コース」と「書き方のチェック」の2つ。はじめのコースが開いていて、指導教員・お知らせ・ひな形（並べ替えのつまみはない）。右に「学生が最初に見る本文」の見本',
-    teacherView.nav === 'コース|書き方のチェック' && teacherView.labels === '指導教員|お知らせ|ひな形' && teacherView.caption.startsWith('見本学生が最初に見る本文（映画・舞台衣装デザイナー コース）') && teacherView.outline && teacherView.grips === 0,
+    '先生の画面：左の見出しは「コース」「書き方のチェック」「学生の画面を試す」の3つ。はじめのコースが開いていて、指導教員・お知らせ・ひな形（並べ替えのつまみはない）。右に「学生が最初に見る本文」の見本',
+    teacherView.nav === 'コース|書き方のチェック|学生の画面を試す' && teacherView.labels === '指導教員|お知らせ|ひな形' && teacherView.caption.startsWith('見本学生が最初に見る本文（映画・舞台衣装デザイナー コース）') && teacherView.outline && teacherView.grips === 0,
     JSON.stringify(teacherView),
   )
   check(
@@ -1780,6 +1781,8 @@ await withEdge(async (browser) => {
   await templateModeAdmin(browser, check)
   // 先生の試し（2026-10-21）の直し：新年度を作ったあと上へ・次の年度があるときの言葉・年度を替えたら知らせを消す・公開の確かめ・お知らせの欄の高さ（scripts/e2e/trialFixesAdmin.mjs）
   await trialFixesAdmin(browser, check)
+  // 学生の画面を試す（お試し。依頼者の選択 2026-10-22 案1。scripts/e2e/trialMode.mjs）
+  await trialModeAdmin(browser, check)
 })
 
 const failed = results.filter((r) => !r.ok)

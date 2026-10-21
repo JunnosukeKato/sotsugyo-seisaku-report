@@ -1,4 +1,5 @@
 import type { LayoutInfo, PageKind } from './measure'
+import { scoped } from '../model/scope'
 import type { TableFit } from './tableFit'
 
 /**
@@ -25,7 +26,7 @@ export interface LayoutMemory {
   layout: LayoutInfo
 }
 
-const KEY = 'sotsugyo-seisaku-report-layout'
+const KEY = scoped('sotsugyo-seisaku-report-layout')
 
 /** 覚えている組み方（なければ・読めなければ・形が違えば null） */
 export function loadLayoutMemory(): LayoutMemory | null {

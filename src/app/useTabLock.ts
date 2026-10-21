@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { scoped } from '../model/scope'
 
 /**
  * 同じパソコンで、ツールを2つのタブ（窓）で開いたときに、書けるタブを1つにする（mockups/v22 ③ 案A）。
@@ -7,7 +8,7 @@ import { useEffect, useRef, useState } from 'react'
  * 「こちらで続ける」を押すと、ロックを取り上げ（もう一方は書けない窓になり、書いた内容を保存する）、読み込み直して続ける。
  */
 
-const LOCK_NAME = 'sotsugyo-seisaku-report-writer'
+const LOCK_NAME = scoped('sotsugyo-seisaku-report-writer')
 
 /** このタブで書けるか。onLost：ほかのタブに取り上げられたとき（送っていない変更を保存する） */
 export function useTabLock(onLost: () => void): { locked: boolean; takeOver: () => void } {

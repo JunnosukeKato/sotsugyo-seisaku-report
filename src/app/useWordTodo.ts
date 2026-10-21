@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { YearConfig } from '../config'
 import type { EditorSnapshot } from '../editor/reportEditor'
+import { scoped } from '../model/scope'
 
 /**
  * 今年度だけ：Word のひな形（01_表紙.docx・04_本文.docx）で書き始めた分を、ツールに写す「Wordから読み込む」（mockups/v24）。
@@ -27,7 +28,7 @@ export interface WordTodo {
   coverChecked: boolean
 }
 
-const TODO_KEY = 'sotsugyo-seisaku-report-word-todo'
+const TODO_KEY = scoped('sotsugyo-seisaku-report-word-todo')
 
 function readTodo(): WordTodo | null {
   try {

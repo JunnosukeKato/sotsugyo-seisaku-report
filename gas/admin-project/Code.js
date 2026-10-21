@@ -33,6 +33,8 @@ const LIMITS = { blocks: 100, name: 100, hint: 300, abstractExample: 500, notice
 
 /** 初期値（2026年度）。ビルド時に app/src/config/2026.json の内容が入る */
 const INITIAL_CONFIG = /*INITIAL_CONFIG*/ null
+// お試しの見本の原稿（scripts/build-gas.mjs が、git に入れないファイル gas/trial-sample.private.json から入れる。なければ null）
+const TRIAL_SAMPLE = /*TRIAL_SAMPLE*/ null
 
 function doGet() {
   return HtmlService.createHtmlOutputFromFile('admin')
@@ -475,6 +477,16 @@ function publishedYears_() {
       if (years.indexOf(Number(r[0])) < 0) years.push(Number(r[0]))
     })
   return years
+}
+
+/**
+ * お試し（学生の画面を試す）の見本の原稿（登録された先生と管理者だけ。学生には渡さない）。
+ * 中身は scripts/build-gas.mjs が、git に入れないファイル gas/trial-sample.private.json から入れる（公開しているソースコードには入れない）
+ */
+function getTrialSample() {
+  requireTeacher_()
+  if (!TRIAL_SAMPLE) throw new Error('見本の原稿が入っていません（管理者にお知らせください）')
+  return TRIAL_SAMPLE
 }
 
 function getHistory(year) {

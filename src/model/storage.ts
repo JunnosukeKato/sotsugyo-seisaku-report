@@ -1,5 +1,6 @@
 import { forgetLayoutMemory } from '../layout/memory'
 import { migrateReport } from './migrate'
+import { scoped } from './scope'
 import type { Report } from './types'
 
 /**
@@ -9,7 +10,7 @@ import type { Report } from './types'
  * - snapshots: 一定時間ごとの控え（最新の数件を残し、誤って消したときに戻せるようにする）
  */
 
-const DB_NAME = 'sotsugyo-seisaku-report'
+const DB_NAME = scoped('sotsugyo-seisaku-report')
 const DB_VERSION = 1
 const REPORT_KEY = 'current'
 const MAX_SNAPSHOTS = 20
@@ -84,7 +85,7 @@ async function store(name: string, mode: IDBTransactionMode): Promise<IDBObjectS
  * 閉じる直前の原稿の写し（localStorage）。書いてすぐ読み込み直す・閉じると、IndexedDB への保存は途中で止まることがあるため、
  * 閉じる直前に、すぐ書き終わる localStorage にも写しておく（useAutosave）。次に開いたとき、保存した原稿より新しければこちらを使う
  */
-const LEAVING_KEY = 'sotsugyo-seisaku-report-leaving'
+const LEAVING_KEY = scoped('sotsugyo-seisaku-report-leaving')
 
 /** 閉じる直前の原稿を写しておく（すぐ書き終わる。写せなければ何もしない） */
 export function keepLeavingCopy(report: Report): void {
@@ -130,6 +131,15 @@ export async function loadReport(): Promise<Report | null> {
 
 export async function saveReport(report: Report): Promise<void> {
   await promisify((await store('report', 'readwrite')).put(report, REPORT_KEY))
+}
+
+/** 原稿の入れ物に、原稿とは別の名前で置いたもの（お試しで、管理ページから受け取った年度の設定と見本の原稿：src/trial/openTrial.ts） */
+export async function loadValue<T>(key: string): Promise<T | undefined> {
+  return (await promisify((await store('report', 'readonly')).get(key))) as T | undefined
+}
+
+export async function saveValue(key: string, value: unknown): Promise<void> {
+  await promisify((await store('report', 'readwrite')).put(value, key))
 }
 
 export async function putImage(image: StoredImage): Promise<void> {

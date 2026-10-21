@@ -133,10 +133,10 @@ let logs: string[]
 
 /**
  * プログラムを読み込む。values：ビルド時に入る値（Code.js の「名前を囲んだコメントと ''」の場所。scripts/build-gas.mjs と同じ）、
- * props：スクリプト プロパティ（SHEET_ID は、いつも sheet-id）
+ * props：スクリプト プロパティ（SHEET_ID は、いつも sheet-id）、trialSample：お試しの見本の原稿（ビルド時に gas/trial-sample.private.json から入るもの）
  */
-function load(project: 'admin-project' | 'api-project', { values = {}, props = {} }: { values?: Record<string, string>; props?: Record<string, string> } = {}) {
-  let source = readFileSync(`gas/${project}/Code.js`, 'utf8').replace('/*INITIAL_CONFIG*/ null', JSON.stringify(initialConfig))
+function load(project: 'admin-project' | 'api-project', { values = {}, props = {}, trialSample = null }: { values?: Record<string, string>; props?: Record<string, string>; trialSample?: unknown } = {}) {
+  let source = readFileSync(`gas/${project}/Code.js`, 'utf8').replace('/*INITIAL_CONFIG*/ null', JSON.stringify(initialConfig)).replace('/*TRIAL_SAMPLE*/ null', () => JSON.stringify(trialSample))
   for (const [name, value] of Object.entries(values)) source = source.replace(`/*${name}*/ ''`, JSON.stringify(value))
   const cache = new Map<string, string>()
   const context = createContext({
@@ -217,6 +217,20 @@ describe('管理ページ（admin-project）', () => {
     expect(state).toMatchObject({ user: 'kato@example.ac.jp', isAdmin: true })
     expect(state.years).toHaveLength(1)
     expect(state.years[0]).toMatchObject({ year: 2026, status: '公開中', config: { commonTitle: initialConfig.commonTitle } })
+  })
+
+  it('お試しの見本の原稿は、登録された先生と管理者にだけ渡す（入っていなければ、そう知らせる）', () => {
+    const sample = { report: { body: [] }, images: [{ id: 'g-photo1', file: 'g-photo1.jpg', maxPx: 1200 }] }
+    const gas = load('admin-project', { trialSample: sample })
+    gas.setup()
+    expect(gas.getTrialSample()).toEqual(sample)
+    gas.addMember('sensei@example.ac.jp', '先生', '')
+    user = 'sensei@example.ac.jp'
+    expect(gas.getTrialSample()).toEqual(sample)
+    user = '00zz0123@example.ac.jp'
+    expect(() => gas.getTrialSample()).toThrow(/登録された先生だけ/)
+    user = 'kato@example.ac.jp'
+    expect(() => load('admin-project').getTrialSample()).toThrow(/見本の原稿が入っていません/)
   })
 
   it('管理者でない人には年度設定を見せず、保存もさせない', () => {

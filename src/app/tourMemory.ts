@@ -1,3 +1,4 @@
+import { scoped } from '../model/scope'
 import type { GuideStep } from './StartGuide'
 
 /**
@@ -8,9 +9,9 @@ import type { GuideStep } from './StartGuide'
  * はじめての案内の、途中の段階もここで覚える（下の rememberGuide）
  */
 
-const TOUR_KEY = 'sotsugyo-seisaku-report-tour'
+const TOUR_KEY = scoped('sotsugyo-seisaku-report-tour')
 /** このタブで、すでにツールを開いたか（読み込み直しても残る。タブを閉じると消える） */
-const OPENED_KEY = 'sotsugyo-seisaku-report-opened'
+const OPENED_KEY = scoped('sotsugyo-seisaku-report-opened')
 /** このページを読み込んだときの firstOpenInTab の答え（2回目からは、同じ答えを返す） */
 let freshOpen: boolean | null = null
 
@@ -64,7 +65,7 @@ export function firstOpenInTab(): boolean {
  * 次に開いたら続きから出すために覚える（前は、「Word で書き始めていますか？」で読み込み直すと、表紙の案内に戻らず、指差し確認が出ていた）。
  * 案内を閉じた（「あとで入力する」）・終えた（「表紙ができました」）ら消す。覚えるのは段階の名前だけ（原稿の文字は入れない）
  */
-const GUIDE_KEY = 'sotsugyo-seisaku-report-guide'
+const GUIDE_KEY = scoped('sotsugyo-seisaku-report-guide')
 
 /** 案内を出している段階を覚える */
 export function rememberGuide(step: GuideStep): void {
