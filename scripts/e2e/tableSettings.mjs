@@ -422,16 +422,16 @@ export async function tableSettingsPhone(browser, check) {
   const custom = await page.evaluate(() => ({
     sheet: !!document.querySelector('.table-shape'),
     knobs: document.querySelectorAll('.col-handles .col-pknob').length,
-    guide: document.querySelector('.direct-bar .db-colw .db-khint')?.textContent ?? null,
-    reset: document.querySelector('.direct-bar .db-colw .db-reset')?.textContent ?? null,
+    third: !!document.querySelector('.direct-bar .db-colw'),
+    hint: document.querySelector('.col-handles .col-hint')?.textContent ?? null,
     percent: /%/.test(document.querySelector('.direct-bar').textContent + document.querySelector('.col-handles').textContent),
     editing: window.__editor.getSnapshot().editingId,
   }))
-  const guideLines = await linesIn(page, '.direct-bar .db-colw .db-khint, .direct-bar .db-colw .db-reset span')
+  const guideLines = await linesIn(page, '.col-handles .col-hint')
   await page.screenshot({ path: `${OUT}/ph-4-custom.png` })
   check(
-    'スマホ：欄で「自分で決める」を押すと、欄が閉じて、書いているマスの列の両側に丸いつまみ。キーボードの上の道具に「丸を左右に動かす」と「同じ幅に戻す」。列の幅の数（%）は出さない。1字だけの行はない',
-    (await modelOf(page)).widths === 'custom' && !custom.sheet && custom.knobs === 2 && custom.guide === '丸を左右に動かす' && custom.reset === '同じ幅に戻す' && !custom.percent && custom.editing === 'm2:feat' && guideLines.every((l) => l.length === 1),
+    'スマホ：欄で「自分で決める」を押すと、欄が閉じて、書いているマスの列の両側に丸いつまみ。キーボードの上の道具は2段のまま、表の上に「丸を左右に動かすと、列の幅が変わります」（mockups/v48 C）。列の幅の数（%）は出さない。1字だけの行はない',
+    (await modelOf(page)).widths === 'custom' && !custom.sheet && custom.knobs === 2 && !custom.third && custom.hint === '丸を左右に動かすと、列の幅が変わります' && !custom.percent && custom.editing === 'm2:feat' && guideLines.every((l) => l.length === 1),
     JSON.stringify({ custom, guideLines }),
   )
 

@@ -1459,7 +1459,8 @@ button.row { cursor: pointer; }
 /* 読み上げだけの言葉（時刻だけを出すときの「自動保存」） */
 .p-top .chip .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 /* 幅の狭いスマホ（360px ほど）：左の「卒」のマークを出さない（保存のようすが切れないように） */
-@media (max-width: 370px) { .app.phone .p-top .mark { display: none; } }
+/* 「卒」のマークは、390px より狭い画面では出さない（保存の時刻に「保存」を付けたため。mockups/v48 D） */
+@media (max-width: 389px) { .app.phone .p-top .mark { display: none; } }
 
 /* ---- 段落に打った見出し（段落に「Ⅲ．まとめ」のように打って Enter・書き終えると見出しになる）の知らせ ---- */
 /* 「大見出し「Ⅲ．まとめ」にしました［戻す］」の終わりの「にしました」は1行にまとめる（「た」だけが次の行に出ないように。app/UndoBar.tsx の NoticeWords） */
@@ -1486,6 +1487,12 @@ button.row { cursor: pointer; }
 }
 /* 目次の行から移った見出しを、少しの間うすく光らせる（書く欄の地） */
 .overlay-editor.toc-arrived { animation: toc-arrived 1.6s ease forwards; }
+/* スマホ：目次の行から移った見出し（紙面の見出し）を、少しの間光らせる（書き始めない。mockups/v48 B） */
+.page-viewport .toc-glow { animation: toc-glow 1.6s ease forwards; border-radius: 2px; }
+@keyframes toc-glow {
+  0%, 55% { background-color: rgba(255, 214, 102, 0.55); box-shadow: 0 0 0 calc(3px / var(--s)) rgba(255, 214, 102, 0.55); }
+  100% { background-color: transparent; box-shadow: 0 0 0 calc(3px / var(--s)) rgba(255, 214, 102, 0); }
+}
 @keyframes toc-arrived {
   0%, 45% { background-color: #dfe4f5; box-shadow: 0 0 0 calc(2px / var(--s)) #dfe4f5; }
   100% { background-color: #fff; box-shadow: 0 0 0 calc(2px / var(--s)) rgba(223, 228, 245, 0); }
@@ -1517,7 +1524,7 @@ button.row { cursor: pointer; }
 .app.phone .toc-notice p { margin: 4px 0 12px 24px; }
 .app.phone .toc-notice .go { min-height: 44px; font-size: 15px; }
 @keyframes toc-notice-in { from { opacity: 0; transform: translateY(-4px); } }
-@media (prefers-reduced-motion: reduce) { .toc-notice, .overlay-editor.toc-arrived { animation: none; } }
+@media (prefers-reduced-motion: reduce) { .toc-notice, .overlay-editor.toc-arrived, .page-viewport .toc-glow { animation: none; } }
 @media print { .toc-notice { display: none !important; } }
 
 /* ---- スマホ：打った字をその場で紙面に ---- */
@@ -1610,6 +1617,8 @@ button.row { cursor: pointer; }
 .col-chip { position: absolute; z-index: 10; display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: 999px; background: #23262b; color: #fff; font-size: 12.5px; font-weight: 700; line-height: 1; white-space: nowrap; pointer-events: none; transform: translateX(-50%); box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); }
 .col-chip.wide { background: var(--accent); }
 .col-chip.above { transform: translate(-50%, -100%); }
+/* スマホ：丸いつまみの使い方の一言（表の上。丸を一度動かすまで：editor/columnHandles.ts） */
+.col-hint { position: absolute; z-index: 10; max-width: calc(100vw - 24px); padding: 6px 12px; border-radius: 10px; background: var(--accent); color: #fff; font-size: 13px; line-height: 1.45; white-space: nowrap; pointer-events: none; transform: translate(-50%, -100%); box-shadow: 0 4px 12px rgba(30, 25, 20, 0.2); }
 /* 線にマウスを乗せたときの一言（2行。線の右・見出しの行のすぐ下） */
 .col-tip { position: absolute; z-index: 9; padding: 5px 10px; border-radius: 7px; background: #23262b; color: #fff; font-size: 12px; line-height: 1.5; white-space: nowrap; pointer-events: none; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2); }
 .col-tip span { display: block; }
@@ -1900,3 +1909,9 @@ p.busy-line { display: flex; }
 @media (max-height: 760px) {
   .app:not(.phone) .palette :is(.p-head span, .ctx-note, .lay-sub) { display: none; }
 }
+
+/* スマホ：紙面で直接書くとき、はじめて1回だけの「字を大きくするには」（app/Phone.tsx の PinchTip。mockups/v48 A） */
+.pinch-tip { position: fixed; z-index: 35; left: 12px; right: 12px; display: grid; grid-template-columns: 1fr auto; gap: 2px 10px; padding: 10px 6px 11px 14px; border-radius: 12px; background: var(--accent); color: #fff; font-size: 14px; line-height: 1.5; box-shadow: 0 8px 24px rgba(30, 25, 20, 0.25); word-break: auto-phrase; }
+.pinch-tip b { grid-column: 1; }
+.pinch-tip span { grid-column: 1; font-size: 13px; opacity: 0.92; }
+.pinch-tip button { grid-row: 1 / span 2; grid-column: 2; align-self: center; width: 44px; height: 44px; border: 0; background: none; color: #fff; font-size: 20px; }

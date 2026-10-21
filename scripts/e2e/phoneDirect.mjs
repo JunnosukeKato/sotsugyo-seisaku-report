@@ -391,8 +391,8 @@ export async function phoneDirectPhone(browser, check) {
   )
   const names = opened.buttons.map((b) => b.name)
   check(
-    'キーボードの上の道具に「戻す」「やり直す」「図を入れる」「表を入れる」「完了」。どれも 44px 四方以上で、名前は1行',
-    JSON.stringify(names) === JSON.stringify(['戻す', 'やり直す', '図を入れる', '表を入れる', '完了']) && opened.buttons.every((b) => b.w >= 44 && b.h >= 44 && b.oneLine),
+    'キーボードの上の道具に「戻す」「やり直す」「図を入れる」「表を入れる」「削除」「完了」（削除は mockups/v48 E）。どれも 44px 四方以上で、名前は1行',
+    JSON.stringify(names) === JSON.stringify(['戻す', 'やり直す', '図を入れる', '表を入れる', '削除', '完了']) && opened.buttons.every((b) => b.w >= 44 && b.h >= 44 && b.oneLine),
     JSON.stringify(opened.buttons),
   )
 

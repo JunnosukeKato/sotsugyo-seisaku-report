@@ -170,6 +170,15 @@ function ShapeOptions({ editor, table, tableId, phone, onCustom }: { editor: Rep
           )
         })}
       </div>
+      {/* スマホ：自分で決めるのときは「同じ幅に戻す」をこの欄の中に（前はキーボードの上の道具の3段目：mockups/v48 C） */}
+      {phone && table.widths === 'custom' && (
+        <div className="so-guide phone">
+          <button type="button" className="so-even" onMouseDown={keepFocus} onClick={() => editor.resetTableColWidths(tableId)}>
+            {Icon.evenColumns}
+            <span>{SHAPE_TEXTS.even}</span>
+          </button>
+        </div>
+      )}
       {/* パソコン：自分で決めるのときは、表の縦の線をドラッグすること（editor/columnHandles.ts）と「同じ幅に戻す」 */}
       {!phone && table.widths === 'custom' && (
         <div className="so-guide">

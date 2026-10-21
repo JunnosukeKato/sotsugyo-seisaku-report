@@ -182,8 +182,8 @@ export async function undoHeaderPhone(browser, check) {
   await page.evaluate(() => document.querySelector('.sheet .sheet-close').click())
   await page.waitForFunction(() => !document.querySelector('.sheet'), { timeout: 10000 })
   check(
-    'スマホ：上の帯の保存のようすは時刻だけ（緑の点。読み上げでは「自動保存」も）。メニューの中は「自動保存 13:05」のまま',
-    /^\d{1,2}:\d{2}$/.test(h0.chip.shown) && h0.chip.text === `自動保存 ${h0.chip.shown}` && menuChip === `自動保存 ${h0.chip.shown}`,
+    'スマホ：上の帯の保存のようすは「保存 13:05」（緑の点。時刻だけだと時計に見えた：mockups/v48 D）。メニューの中は「自動保存 13:05」のまま',
+    /^保存 \d{1,2}:\d{2}$/.test(h0.chip.shown) && menuChip === `自動${h0.chip.shown}`,
     JSON.stringify({ header: h0.chip.shown, read: h0.chip.text, menu: menuChip }),
   )
 
@@ -261,8 +261,8 @@ export async function undoHeaderPhone(browser, check) {
   }
   const ok = (w) => w.problems.length === 0 && !w.longest.cut && !w.longest.overlap && w.longest.dot >= 6.5
   check(
-    'スマホ：上の帯は 390・375・360px のどれでも、保存のようす（いちばん長い「● 保存エラー」でも）が切れず、部品が重ならず、画面からはみ出さない。「卒」のマークは 360px ほどでは出さない',
-    ok(widths['390']) && ok(widths['375']) && ok(widths['360']) && widths['390'].mark && widths['375'].mark && !widths['360'].mark,
+    'スマホ：上の帯は 390・375・360px のどれでも、保存のようす（いちばん長い「● 保存エラー」でも）が切れず、部品が重ならず、画面からはみ出さない。「卒」のマークは 390px より狭いと出さない（「保存 13:05」の分。mockups/v48 D）',
+    ok(widths['390']) && ok(widths['375']) && ok(widths['360']) && widths['390'].mark && !widths['375'].mark && !widths['360'].mark,
     JSON.stringify(widths),
   )
 

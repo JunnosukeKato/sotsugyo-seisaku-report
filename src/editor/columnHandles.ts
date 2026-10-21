@@ -76,6 +76,24 @@ interface Drag {
   above: boolean
 }
 
+/** スマホ：丸いつまみの使い方の一言（丸を一度動かすまで、表の上に出す。mockups/v48 C） */
+export const KNOB_HINT = '丸を左右に動かすと、列の幅が変わります'
+const KNOB_HINT_KEY = 'sotsugyo-seisaku-report-knob-hint'
+function knobHintDone(): boolean {
+  try {
+    return localStorage.getItem(KNOB_HINT_KEY) === 'done'
+  } catch {
+    return false
+  }
+}
+function markKnobHintDone(): void {
+  try {
+    localStorage.setItem(KNOB_HINT_KEY, 'done')
+  } catch {
+    // 覚えられなくても動く（また出るだけ）
+  }
+}
+
 export class ColumnHandles {
   private readonly root: HTMLElement
   private readonly tip: HTMLElement
@@ -204,6 +222,12 @@ export class ColumnHandles {
       Object.assign(knob.style, { left: `${x}px`, top: `${own.head.top + own.head.height / 2 - layer.top}px` })
       this.listen(knob, target, own, b, x, line, knob, layer)
     }
+    // 丸を一度も動かしていなければ、表の上に一言（前はキーボードの上の道具の3段目に出していたが、小さいスマホで紙面が隠れたため：mockups/v48 C）
+    if (borders.length && !knobHintDone()) {
+      const hint = this.el('col-hint')
+      hint.textContent = KNOB_HINT
+      Object.assign(hint.style, { left: `${own.rect.left + own.rect.width / 2 - layer.left}px`, top: `${own.head.top - layer.top - 8}px` })
+    }
   }
 
   /** つまみ・線をつかんで動かす（パソコンはマウス、スマホは指1本） */
@@ -217,6 +241,11 @@ export class ColumnHandles {
     handle.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 || this.drag) return
       stop(e)
+      // 丸を一度動かしたら、表の上の一言はもう出さない
+      if (knob) {
+        markKnobHintDone()
+        this.root.querySelector('.col-hint')?.remove()
+      }
       handle.setPointerCapture(e.pointerId)
       const width = f.cells.reduce((sum, c) => sum + c.getBoundingClientRect().width, 0)
       const top = f.rect.top - layer.top

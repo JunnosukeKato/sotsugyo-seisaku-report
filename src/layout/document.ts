@@ -218,11 +218,13 @@ export const TOC_TARGET_ATTR = 'data-toc-target'
 
 /**
  * 目次のページの言葉（mockups/v41。画面だけ。紙面・PDF には出ない）。
- * jumped：目次の行から見出しへ移ったときの、画面の下の知らせ（案C）。
+ * jumped：目次の行から見出しへ移ったときの、画面の下の知らせ（案C。スマホは jumpedPhone）。
  * note：目次のページの、行のない所を押したときの、押した所の近くの知らせ（案B。app/TocNotice.tsx）
  */
 export const TOC_TEXT = {
   jumped: 'この見出しを直すと、目次も変わります',
+  /** スマホ：見出しへ移って光らせるだけ（書き始めない。mockups/v48 B） */
+  jumpedPhone: '見出しを押すと書き直せます（目次も変わります）',
   noteTitle: '目次は自動です',
   noteBody: '見出しを直すと、ここも変わります',
   noteButton: '本文の見出しへ',

@@ -13,7 +13,7 @@ import type { ReportEditor } from '../editor/reportEditor'
  */
 const BOTTOM_COVERS = '.edit-sheet.open, .undo-toast, .page-band, .pager, .unzoom, .sel-bar > *, .direct-bar'
 /** 上に出していることがあるもの（はじめての案内。書く欄を出している間は、画面の上） */
-const TOP_COVERS = '.guide .g-tip'
+const TOP_COVERS = '.guide .g-tip, .pinch-tip'
 
 /** 欄と横に重なって見えているものの位置 */
 function coversOf(selector: string, field: DOMRect): DOMRect[] {
@@ -54,7 +54,7 @@ export function useKeepWritingVisible(editor: ReportEditor | null, editingId: st
     const resize = new ResizeObserver(check)
     // 案内を隠す・出す（書く欄との間に、欄を見せる高さがないとき。app/StartGuide.tsx の tucked）は、大きさが変わらないので、印の付け外しを見る
     const marks = new MutationObserver(check)
-    for (const el of document.querySelectorAll<HTMLElement>('.edit-sheet, .guide .g-tip, .direct-bar')) {
+    for (const el of document.querySelectorAll<HTMLElement>('.edit-sheet, .guide .g-tip, .direct-bar, .pinch-tip')) {
       resize.observe(el)
       marks.observe(el, { attributes: true, attributeFilter: ['class'] })
     }

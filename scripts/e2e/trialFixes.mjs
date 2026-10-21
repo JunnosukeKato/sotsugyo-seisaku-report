@@ -322,6 +322,20 @@ export async function trialFixesPhone(browser, check) {
   // ---- 1. 薄い「やり直す」を押しても、書き終わりにならない ----
   await goTo('p7')
   await tapPaper('[data-block-id="p7"]')
+  // （mockups/v48 A）はじめて紙面で書くとき1回だけ「字を大きくするには／2本の指で広げます」。書いている行は、その知らせに隠れない。× で閉じる
+  const tip = await page.evaluate(() => {
+    const t = document.querySelector('.pinch-tip')
+    const caret = window.__editor.overlay.caretClientRect?.()
+    const r = t?.getBoundingClientRect()
+    return { text: t?.textContent ?? null, below: !!r && !!caret && caret.top >= r.bottom - 1 }
+  })
+  if (tip.text) await tapButton(page, '.pinch-tip button')
+  const tipClosed = { gone: !(await page.$('.pinch-tip')), editing: (await snap()).editing }
+  check(
+    'スマホ：はじめて紙面で書くとき、上に「字を大きくするには／2本の指で広げます…」が1回だけ出る。書いている行はその下に見え、× で閉じても書き続ける（mockups/v48 A）',
+    !!tip.text && tip.text.includes('2本の指で広げます') && tip.below && tipClosed.gone && tipClosed.editing === 'p7',
+    JSON.stringify({ tip, tipClosed }),
+  )
   const redoOff = await page.evaluate(() => [...document.querySelectorAll('.direct-bar .db-row button')].find((b) => b.textContent.includes('やり直す'))?.getAttribute('aria-disabled'))
   await tapButton(page, '.direct-bar .db-row button', 'やり直す')
   const afterGrey = await snap()
@@ -412,6 +426,48 @@ export async function trialFixesPhone(browser, check) {
   )
   await page.evaluate(() => window.__editor.undo())
   await ready()
+
+  // ---- 4c.（mockups/v48）書き直しても字を大きくする知らせはもう出ない（A）。段落を書いているときの道具に「削除」（E） ----
+  await goTo('p7')
+  await tapPaper('[data-block-id="p7"]')
+  const again = { tip: !!(await page.$('.pinch-tip')), del: await page.evaluate(() => [...document.querySelectorAll('.direct-bar .db-row button')].map((b) => b.textContent.trim())) }
+  const paras = () => page.evaluate(() => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).some((b) => b.id === 'p7'))
+  await tapButton(page, '.direct-bar .db-row button.danger', '削除')
+  await ready()
+  await wait(400)
+  const deleted = { has: await paras(), toast: await page.evaluate(() => document.querySelector('.undo-area')?.textContent ?? '') }
+  await tapButton(page, '.undo-area button', '戻す')
+  await ready()
+  const restored = await paras()
+  check(
+    'スマホ：字を大きくする知らせは2回目からは出ない。段落を書いているときの道具に「削除」があり、押すと段落が消え「段落を削除しました［戻す］」、「戻す」で戻る（mockups/v48 A・E）',
+    !again.tip && again.del.includes('削除') && !deleted.has && deleted.toast.includes('段落を削除しました') && restored,
+    JSON.stringify({ again, deleted, restored }),
+  )
+  await stop()
+
+  // ---- 4d.（mockups/v48 B）目次の行を押すと、その見出しのページへ移って光らせるだけ（書き始めない） ----
+  await page.evaluate(() => window.__editor.goToPage(window.__editor.getSnapshot().layout.kinds.indexOf('toc'), 'none'))
+  await ready()
+  await wait(300)
+  const line = await page.evaluate(() => { const el = document.querySelector('.page-viewport.front [data-toc-target]'); const r = el.getBoundingClientRect(); return { x: r.left + 30, y: r.bottom + 3, target: el.dataset.tocTarget } })
+  await page.touchscreen.tap(line.x, line.y)
+  await wait(900)
+  await ready()
+  const tocJump = await page.evaluate((target) => {
+    const s = window.__editor.getSnapshot()
+    return { editing: s.editingId, page: s.page, headingPage: window.__editor.pageOfBlock(target), glow: !!document.querySelector('.page-viewport.front .toc-glow'), toast: document.querySelector('.undo-area')?.textContent ?? '' }
+  }, line.target)
+  check(
+    'スマホ：目次の行（の少し下）を押すと、その見出しのページへ移って見出しを光らせる。書き始めない（キーボードを出さない）（mockups/v48 B）',
+    tocJump.editing === null && tocJump.page === tocJump.headingPage && tocJump.glow && tocJump.toast.includes('見出しを押すと書き直せます'),
+    JSON.stringify(tocJump),
+  )
+
+  // ---- 4e.（mockups/v48 D）上の帯の保存の時刻は「保存 08:10」の形 ----
+  await page.waitForFunction(() => /保存 \d{1,2}:\d{2}/.test(document.querySelector('.p-top')?.textContent ?? ''), { timeout: 30000 }).catch(() => {})
+  const chip = await page.evaluate(() => document.querySelector('.p-top .chip')?.textContent ?? '')
+  check('スマホ：上の帯の保存の時刻は「保存 08:10」の形（時刻だけだと時計に見えた。mockups/v48 D）', /^保存 (\d{1,2}\/\d{1,2} )?\d{1,2}:\d{2}$/.test(chip.trim()), chip)
 
   // ---- 5. 表紙のサブタイトルを書く間も、後ろの「の衣装制作―」が書く欄の字のすぐ後ろに見える ----
   await page.evaluate(() => window.__editor.goToPage(0, 'none'))

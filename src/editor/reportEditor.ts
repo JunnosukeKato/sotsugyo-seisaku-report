@@ -1089,6 +1089,19 @@ export class ReportEditor {
     const view = this.renderer.pageView
     const fragment = view.fragments(id).find((f) => view.pageIndexOf(f) === this.page)
     if (this.stage.zoomed) fragment?.scrollIntoView({ block: 'center' })
+    // スマホ：見出しのページへ移り、見出しを少しの間光らせるだけ（書き始めない。キーボードを出さない）。書き直すときは、見出しをもう一度押す
+    // （前は押すと書き始めてキーボードが出たが、見出しへ移りたいだけのことが多かった：はじめて使う学生の試し 2026-10-21・mockups/v48 B）
+    if (this.phone) {
+      const heading = fragment?.closest<HTMLElement>('h1, h2') ?? fragment
+      if (heading) {
+        heading.classList.remove('toc-glow')
+        void heading.offsetWidth
+        heading.classList.add('toc-glow')
+        window.setTimeout(() => heading.classList.remove('toc-glow'), TOC_ARRIVE_MS)
+      }
+      this.showNotice(TOC_TEXT.jumpedPhone)
+      return
+    }
     requestAnimationFrame(() => {
       this.openEditor(id, editable.text.length)
       // 移った見出しを少しの間うすく光らせる（どこへ移ったか分かるように。スマホは下の書く欄が開くので光らせない）

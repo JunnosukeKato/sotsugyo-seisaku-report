@@ -54,7 +54,7 @@ export function SaveChip({ state, compact }: { state: SaveState; compact?: boole
   if (state.status === 'saving') return <span className="chip saved" role="status" title={title}><i className="dot busy" />{compact ? '保存中' : '保存しています…'}</span>
   if (state.status === 'error') return <span className="chip saved ng" role="status" title={state.message}><i className="dot ng" />{compact ? '保存エラー' : '保存できません。バックアップを保存してください'}</span>
   const at = state.status === 'saved' ? state.at.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' }) : ''
-  if (compact && at) return <span className="chip saved" role="status" title={`${title}（最後に保存：${at}）`}><i className="dot" /><span className="sr-only">自動保存 </span>{at}</span>
+  if (compact && at) return <span className="chip saved" role="status" title={`${title}（最後に保存：${at}）`}><i className="dot" />{`保存 ${at}`}</span>
   return <span className="chip saved" role="status" title={title}><i className="dot" />自動保存{at ? ` ${at}` : ''}</span>
 }
 

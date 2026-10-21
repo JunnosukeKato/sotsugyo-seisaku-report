@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { flushSync } from 'react-dom'
 import type { YearConfig } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
@@ -9,7 +9,6 @@ import { SelectionTools } from './Palette'
 import { TableSizeSheet } from './TableSize'
 import { ShapeFace, TableShapeSheet } from './tableShape'
 import { SHAPE_TEXTS } from './tableShapeTexts'
-import { cellPosition } from '../model/table'
 import { BackupLabel } from './dialogs'
 import { Spinner } from './Busy'
 import { CheckBody, CourseNotice, DeadlineChip, DriveStoppedNote, ExportNote, HelpButton, PageThumbs, SaveChip, SourceNotice, Tally } from './SidePanel'
@@ -241,19 +240,72 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
  * 2段目は、画面の幅に入る1段（横にずらさない。どれも 44px 以上。mockups/v45 案A）。表の形は、押すと下から出る欄で選ぶ（app/tableShape.tsx）
  * 「完了」は書き終えて、1ページ全体の表示に戻す
  */
+/** 紙面で直接書くとき、字を大きくする方法を、はじめて書くとき1回だけ知らせる（字は 10px ほどで小さい：mockups/v48 A） */
+const PINCH_TIP_KEY = 'sotsugyo-seisaku-report-pinch-tip'
+const pinchTipDone = () => {
+  try {
+    return localStorage.getItem(PINCH_TIP_KEY) === 'done'
+  } catch {
+    return true
+  }
+}
+const markPinchTip = () => {
+  try {
+    localStorage.setItem(PINCH_TIP_KEY, 'done')
+  } catch {
+    // 覚えられなくても動く
+  }
+}
+
+/**
+ * 「字を大きくするには／2本の指で広げます」（上の帯のすぐ下）。× で閉じる。書き終えたら、もう出さない（1回だけ）。
+ * × を押しても書く欄からカーソルを外さない（キーボードを閉じない）
+ */
+function PinchTip() {
+  const [shown, setShown] = useState(() => !pinchTipDone())
+  const ref = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (!shown) return
+    return () => markPinchTip()
+  }, [shown])
+  useLayoutEffect(() => {
+    const el = ref.current
+    const top = document.querySelector('.p-top')?.getBoundingClientRect().bottom ?? 48
+    if (el) el.style.top = `${top + 8}px`
+  })
+  if (!shown) return null
+  return (
+    <div className="pinch-tip" ref={ref} role="note">
+      <b>字を大きくするには</b>
+      <span>2本の指で広げます（次からも、その大きさで書けます）</span>
+      <button
+        type="button"
+        aria-label="閉じる"
+        onMouseDown={keepFocus}
+        onClick={() => {
+          markPinchTip()
+          setShown(false)
+        }}
+      >
+        ×
+      </button>
+    </div>
+  )
+}
+
 function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
   const id = snap.editingId
   const editable = id ? findEditable(snap.report, id) : undefined
   // 空の段落を書き始めるとき：ひな形の「ここに何を書くか」（下の書く欄と同じ）
   const hint = id && editable && !editable.text.trim() ? paragraphHint(snap.report, id) : undefined
   const paragraph = snap.editingKind === 'paragraph'
+  // 段落・見出しを書いているときは「削除」も出す（段落ごと消す。画面の下に「〜を削除しました［戻す］」。mockups/v48 E）
+  const removable = snap.editingKind === 'paragraph' || snap.editingKind === 'abstractParagraph' || snap.editingKind === 'subheading' || snap.editingKind === 'chapter'
   // 表のセル・タイトルを書いているときの表
   const tableId = id && (snap.editingKind === 'tableCell' || snap.editingKind === 'tableCaption') ? editor.tableIdOf(id) : null
   const tableBlock = tableId ? snap.report.body.flatMap((c) => c.blocks).find((b) => b.id === tableId) : undefined
   const table = tableBlock?.type === 'table' ? tableBlock : undefined
   const cellImage = !!tableId && snap.editingKind === 'tableCell' && editor.currentCellHasImage(tableId)
-  // 書いているマスの列（列の幅が「自分で決める」の表で、丸いつまみを出す列）
-  const column = table && id && snap.editingKind === 'tableCell' ? (cellPosition(table, id)?.column ?? null) : null
   const [tableSheet, setTableSheet] = useState(false)
   const [shapeSheet, setShapeSheet] = useState(false)
   // 書く欄の中で戻せなければ、原稿を戻す（書く欄はいったん閉じ、欄が残っていれば、組み直してから開き直す。下の書く欄と同じ）
@@ -265,6 +317,7 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
   }
   return (
     <>
+      <PinchTip />
       <div className="direct-bar" role="toolbar" aria-label="書く道具">
         {hint && (
           <p className="db-hint">
@@ -291,6 +344,19 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
             <button className={tableSheet ? 'on' : undefined} onMouseDown={keepFocus} onClick={() => setTableSheet(true)}>
               {Icon.table}
               <span>表を入れる</span>
+            </button>
+          )}
+          {removable && id && (
+            <button
+              className="danger"
+              onMouseDown={keepFocus}
+              onClick={() => {
+                if (snap.editingKind === 'chapter' && !confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（「元に戻す」で戻せます）')) return
+                editor.removeBlock(id)
+              }}
+            >
+              {Icon.remove}
+              <span>削除</span>
             </button>
           )}
           <button className="db-done" onMouseDown={keepFocus} onClick={() => editor.finishEditing()}>
@@ -345,17 +411,8 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
             </button>
           </div>
         )}
-        {/* 列の幅が「自分で決める」の表（mockups/v42 案D。依頼者の判断で、丸いつまみのまま）：3段目に、一言と「同じ幅に戻す」。
-            幅は、紙面の丸いつまみで変える（editor/columnHandles.ts）。前は書いているマスの列の幅（「この列 35%」）も出していたが、数は出さない（mockups/v45） */}
-        {tableId && table?.widths === 'custom' && (
-          <div className="db-row db-colw" aria-label="列の幅を変える">
-            <span className="db-khint">{column !== null ? SHAPE_TEXTS.knobGuide : SHAPE_TEXTS.pickColumn}</span>
-            <button className="db-reset" onMouseDown={keepFocus} onClick={() => editor.resetTableColWidths(tableId)}>
-              {Icon.evenColumns}
-              <span>{SHAPE_TEXTS.even}</span>
-            </button>
-          </div>
-        )}
+        {/* 列の幅が「自分で決める」の表：前は3段目に「丸を左右に動かす」「同じ幅に戻す」を出していたが、小さいスマホ（360×740）で紙面が 200px ほどしか
+            見えなくなったため、やめた（mockups/v48 C）。使い方の一言は、丸を一度動かすまで表の上に出し（editor/columnHandles.ts）、「同じ幅に戻す」は「表の形」の欄の中 */}
       </div>
       {shapeSheet && table && tableId && <TableShapeSheet editor={editor} table={table} tableId={tableId} onClose={() => setShapeSheet(false)} />}
       {tableSheet && paragraph && (

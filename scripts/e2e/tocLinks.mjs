@@ -153,7 +153,8 @@ async function jumpBy(page, ready, id, press) {
   await press()
   await pause(500)
   await ready()
-  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 8000 }, id).catch(() => {})
+  // パソコンは見出しを書き始め、スマホは見出しのページへ移るだけ（mockups/v48 B）
+  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id || (window.__editor.getSnapshot().page === window.__editor.pageOfBlock(id) && !!document.querySelector('.toc-glow')), { timeout: 8000 }, id).catch(() => {})
   await pause(300)
   return page.evaluate((id) => {
     const ed = window.__editor
@@ -370,10 +371,10 @@ export async function tocLinksPhone(browser, check) {
   // ---- 行をタップ（同じ名前の大見出しの2つ目）・行の少し下をタップ ----
   const p3 = await linePoint(page, 'c3')
   const tap3 = await jumpBy(page, ready, 'c3', () => page.touchscreen.tap(p3.x, p3.y))
-  const sheet = await page.evaluate(() => ({ open: !!document.querySelector('.edit-sheet.open'), text: document.querySelector('.edit-sheet.open .overlay-editor')?.textContent ?? document.querySelector('.overlay-editor')?.textContent }))
+  // スマホ：見出しのページへ移り、見出しを光らせるだけ（書き始めない。キーボードを出さない：mockups/v48 B）
+  const sheet = await page.evaluate(() => ({ open: !!document.querySelector('.edit-sheet.open'), glow: document.querySelector('.page-viewport.front .toc-glow')?.textContent ?? '' }))
   await page.screenshot({ path: `${OUT}/ph-2-jump.png` })
-  const okJump = (j, id) => j.editingId === id && j.page === j.headingPage && j.kind === 'body'
-  check('スマホ：目次の行をタップすると、その見出しのページへ移り、下の書く欄で見出しを書き始める（同じ名前の2つ目の「制作過程」）', okJump(tap3, 'c3') && sheet.open && sheet.text === '制作過程', JSON.stringify({ tap3, sheet }))
+  check('スマホ：目次の行をタップすると、その見出しのページへ移り、見出しを光らせる（書き始めない。同じ名前の2つ目の「制作過程」。mockups/v48 B）', tap3.editingId === null && tap3.page === tap3.headingPage && tap3.kind === 'body' && !sheet.open && sheet.glow.includes('制作過程'), JSON.stringify({ tap3, sheet }))
   // いちばん下の行（引用・参考文献）の少し下（行のない所）をタップ
   await showToc(page, ready)
   const near = await linePoint(page, 'references', 5)

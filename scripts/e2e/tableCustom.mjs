@@ -462,11 +462,8 @@ export async function tableCustomPhone(browser, check) {
   const m0 = await modelOf(page)
   const closed = (await shapeState(page)) === null
   const h0 = await handlesOf(page)
-  const row = await page.evaluate(() => {
-    const r = document.querySelector('.direct-bar .db-colw')
-    return r ? { text: r.textContent, hint: r.querySelector('.db-khint')?.textContent, reset: r.querySelector('.db-reset')?.textContent, h: Math.round(r.querySelector('.db-reset').getBoundingClientRect().height), w: Math.round(r.querySelector('.db-reset').getBoundingClientRect().width) } : null
-  })
-  const rowLines = await linesOf(page, '.direct-bar .db-colw .db-khint, .direct-bar .db-colw .db-reset span')
+  // キーボードの上の道具に3段目は出さない（mockups/v48 C）。丸を一度も動かしていなければ、表の上に一言
+  const row = await page.evaluate(() => ({ third: !!document.querySelector('.direct-bar .db-colw'), hint: document.querySelector('.col-handles .col-hint')?.textContent ?? null, percent: /%/.test(document.querySelector('.direct-bar').textContent) }))
   await page.screenshot({ path: `${OUT}/phone-2-knobs.png` })
   const cellCol = await page.evaluate(() => {
     const r = document.querySelector('.page-viewport.front [data-cell-id="m1:feat"]').getBoundingClientRect()
@@ -480,9 +477,9 @@ export async function tableCustomPhone(browser, check) {
     JSON.stringify({ m0, tints: h0.tints, knobs: h0.knobs, cellCol }),
   )
   check(
-    'スマホ：自分で決めるのとき、キーボードの上の道具の3段目に「丸を左右に動かす」と「同じ幅に戻す」（44px 以上。どの字も1行）。列の幅の数（「この列 35%」）は出さない',
-    row?.hint === '丸を左右に動かす' && row.reset === '同じ幅に戻す' && !/%/.test(row.text) && row.h >= 44 && row.w >= 44 && rowLines.every((l) => l.length === 1),
-    JSON.stringify({ row, rowLines }),
+    'スマホ：自分で決めるのとき、キーボードの上の道具は2段のまま（3段目を出さない）。丸を動かす前は、表の上に「丸を左右に動かすと、列の幅が変わります」。列の幅の数は出さない（mockups/v48 C）',
+    !row.third && row.hint === '丸を左右に動かすと、列の幅が変わります' && !row.percent,
+    JSON.stringify(row),
   )
 
   // ---- 右のつまみを指で右へ 10% 動かす：その線だけが動き、右どなりの列と幅をやりとりする。紙面は動かない・ページは送らない・拡大はそのまま ----

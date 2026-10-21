@@ -233,7 +233,8 @@ export function DriveChip({ drive, compact, onClick }: { drive: DriveControls; c
       return (
         <span className={`chip ok${click}`} {...props}>
           {cloud(true)}
-          {compact ? formatTime(status.at) : `ドライブに保存 ${formatTime(status.at)}`}
+          {/* スマホの上の帯も「保存」を付ける（時刻だけだと、いまの時刻と間違えやすい：mockups/v48 D） */}
+          {compact ? `保存 ${formatTime(status.at)}` : `ドライブに保存 ${formatTime(status.at)}`}
           {onClick && <span className="caret">▾</span>}
         </span>
       )

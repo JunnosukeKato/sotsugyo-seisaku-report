@@ -176,6 +176,6 @@ describe('目次（mockups/v41：目次は本文の見出しから自動で作�
       const { hits } = searchTopics(STUDENT_TOPICS, q)
       expect(hits[0]?.topic.id, q).toBe('write')
     }
-    expect(searchTopics(STUDENT_TOPICS, '目次').hits[0].line.text).toContain('目次は見出しから自動で作ります（行をクリックで、その見出しへ）')
+    expect(searchTopics(STUDENT_TOPICS, '目次').hits[0].line.text).toContain('目次は見出しから自動で作ります（行を押すと、その見出しへ）')
   })
 })
