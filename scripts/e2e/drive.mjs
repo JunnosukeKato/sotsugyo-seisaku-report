@@ -263,6 +263,9 @@ await withEdge(async (browser) => {
   await phone.page.click('.p-top .icon-btn')
   await phone.page.waitForSelector('.sheet .drive-pop')
   check('スマホでは、メニューの中にドライブの操作がある', (await phone.page.$eval('.sheet .drive-pop', (e) => e.textContent)).includes('この端末から原稿を消す'))
+  // ドライブに送り終えているときは「今すぐドライブに保存」を出さず、「自動で保存しています」（依頼者の選択 2026-10-22 案X）
+  const savedMenu = await phone.page.evaluate(() => ({ button: !!document.querySelector('.sheet .drive-pop .drive-save-now'), when: document.querySelector('.sheet .drive-pop .when')?.textContent ?? '' }))
+  check('ドライブに送り終えているときは、メニューに「今すぐドライブに保存」を出さず、「（自動で保存しています）」と出す', !savedMenu.button && savedMenu.when.includes('（自動で保存しています）'), JSON.stringify(savedMenu))
   await phone.page.screenshot({ path: 'poc-output/e2e/drive-phone-menu.png' })
   await phone.page.click('.sheet-close')
 

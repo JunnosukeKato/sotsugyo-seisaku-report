@@ -654,6 +654,7 @@ export default function App() {
           local: autosave.state,
           lastSaved: drive.lastSaved,
           staff: !!driveState.email && !studentIdFromEmail(driveState.email, config.studentIdPattern),
+          unsent: () => drive.unsent,
           // 「今すぐドライブに保存」：送り終えるまで待つ（その間、ボタンに「ドライブに保存しています…」。DriveUi.tsx の DriveMenu）
           onSaveNow: async () => {
             const ed = editorRef.current

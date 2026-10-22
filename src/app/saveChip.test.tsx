@@ -10,7 +10,7 @@ const noop = () => {}
 const shown = (html: string) => html.replace(/<span class="sr-only">[^<]*<\/span>/g, '').replace(/<[^>]+>/g, '')
 const at = new Date()
 const time = at.toLocaleTimeString('ja-JP', { hour: '2-digit', minute: '2-digit' })
-const drive = (status: DriveStatus, local: SaveState = { status: 'idle' }): DriveControls => ({ state: { email: '00zz0123@bunka-wu.ac.jp', status }, local, lastSaved: null, staff: false, onSaveNow: noop, onReload: noop, onWipe: noop, onRelogin: noop })
+const drive = (status: DriveStatus, local: SaveState = { status: 'idle' }): DriveControls => ({ state: { email: '00zz0123@bunka-wu.ac.jp', status }, local, lastSaved: null, staff: false, unsent: () => false, onSaveNow: noop, onReload: noop, onWipe: noop, onRelogin: noop })
 
 describe('スマホの上の帯の保存のようす（mockups/v39 案A：「戻す」「やり直す」を置くので短くする。時刻には「保存」を付ける：mockups/v48 D）', () => {
   it('ドライブに保存するとき：ふだんの言葉はそのまま、保存できないときは「ドライブ未保存」→「未保存」', () => {

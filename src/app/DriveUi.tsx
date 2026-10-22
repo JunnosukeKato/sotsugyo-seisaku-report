@@ -184,6 +184,8 @@ export interface DriveControls {
   lastSaved: Date | null
   /** 教職員のアカウント（学籍番号の形でないアドレス）で試している */
   staff: boolean
+  /** ドライブに送れていない変更があるか（書くのをやめて数秒たつまで・電波なしなど。driveSync.ts の unsent）。欄を出すときに聞く（送り終えた直後の古い値を使わない） */
+  unsent: () => boolean
   /** 「今すぐドライブに保存」：送り終える（送れなかったときも）まで待つ */
   onSaveNow: () => Promise<void> | void
   onReload: () => void
@@ -290,6 +292,11 @@ export function DriveMenu({ drive, inline, onDone }: { drive: DriveControls; inl
       showDone('saved')
     })
   const savedAt = done && status.kind === 'saved' ? formatTime(status.at) : null
+  // 「今すぐドライブに保存」は、ドライブに送れていないときだけ出す（ふだんは自動で保存しているので出さない：依頼者の選択 2026-10-22 案X）。
+  // 送っている途中・送り終えた知らせを出している間も出したまま（押したボタンが消えないように）
+  const unsent = drive.unsent()
+  const behind = unsent || status.kind === 'offline' || status.kind === 'error' || !lastSaved
+  const showSave = behind || !!busy
   const act = (fn: () => void) => () => {
     onDone?.()
     fn()
@@ -304,7 +311,11 @@ export function DriveMenu({ drive, inline, onDone }: { drive: DriveControls; inl
         </div>
       </div>
       <div className="when">
-        {lastSaved ? `最後にドライブに保存：${formatTime(lastSaved)}` : 'まだドライブに保存していません'}
+        {!lastSaved
+          ? 'まだドライブに保存していません'
+          : unsent && status.kind !== 'offline' && status.kind !== 'error'
+            ? 'まだドライブに送っていない変更があります（書くのをやめると、数秒で自動で送ります）'
+            : `最後にドライブに保存：${formatTime(lastSaved)}（自動で保存しています）`}
         <br />
         この端末（ブラウザ）にも保存しています
         {drive.local.status === 'error' && <em>この端末（ブラウザ）に保存できていません。ページを読み込み直してください（ドライブには保存しています）。</em>}
@@ -314,11 +325,13 @@ export function DriveMenu({ drive, inline, onDone }: { drive: DriveControls; inl
       {status.kind === 'expired' ? (
         <button onClick={act(drive.onRelogin)}>ログインし直す</button>
       ) : (
-        <button className="drive-save-now" disabled={!!busy} onClick={saveNow}>
-          <BusyLabel busy={!!busy} text="ドライブに保存しています…">
-            今すぐドライブに保存
-          </BusyLabel>
-        </button>
+        showSave && (
+          <button className="drive-save-now" disabled={!!busy} onClick={saveNow}>
+            <BusyLabel busy={!!busy} text="ドライブに保存しています…">
+              今すぐドライブに保存
+            </BusyLabel>
+          </button>
+        )
       )}
       <SlowNote busy={!!busy} className="drive-note" />
       {savedAt && (
