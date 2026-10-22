@@ -48,7 +48,7 @@ export function templateTableProblem(block: Record<string, unknown>): 'shape' | 
   const long = header.findIndex((h) => h.length > LIMITS.name)
   if (block.rows !== undefined && !(Number.isInteger(block.rows) && (block.rows as number) >= 1 && (block.rows as number) <= LIMITS.tableRows)) return 'shape'
   if (block.widths !== undefined && block.widths !== 'equal' && block.widths !== 'auto' && block.widths !== 'custom') return 'shape'
-  if (block.heights !== undefined && block.heights !== 'equal' && block.heights !== 'auto') return 'shape'
+  if (block.heights !== undefined && block.heights !== 'equal' && block.heights !== 'auto' && block.heights !== 'photo') return 'shape'
   if (block.labelColumn !== undefined && typeof block.labelColumn !== 'boolean') return 'shape'
   const ws = block.colWidths
   if (ws !== undefined && !(Array.isArray(ws) && ws.length === header.length && ws.every((w) => isNumber(w) && w > 0 && w <= 100))) return 'shape'

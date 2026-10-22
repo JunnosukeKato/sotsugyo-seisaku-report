@@ -153,6 +153,19 @@ interface DraftTable {
   rows: DraftCell[][]
   caption: Caption | null
   merged: boolean
+  /** Word で行を高くしてあった表（素材表の、写真を入れる枠など）。ツールの行の高さ「写真が入る高さ」にする */
+  tallRows: boolean
+}
+
+/**
+ * Word の行の高さが、この高さ（twip）以上なら「高い行」（約25mm。映画・舞台衣装デザイナーコースの Word の素材表の行は 1904〜2062twip）。
+ * 1行目（見出しの行）のほかの行の半分以上が高い行の表は、行の高さを「写真が入る高さ」にする（Word の枠のまま移る）
+ */
+const TALL_ROW_TWIP = 1400
+
+function hasTallRows(table: WordTable): boolean {
+  const body = (table.rowHeights ?? []).slice(1)
+  return body.length > 0 && body.filter((h) => h !== null && h >= TALL_ROW_TWIP).length * 2 >= body.length
 }
 
 type Event =
@@ -214,7 +227,7 @@ function draftTable(table: WordTable): DraftTable {
   const used = data.filter((r) => r.some((c) => c.text || c.image))
   rows = head ? [head, ...(used.length ? used : data.slice(0, 1))] : []
   if (rows.length === 1) rows.push(Array.from({ length: columns }, () => ({ text: '', image: null, extraImages: 0 })))
-  return { rows, caption, merged }
+  return { rows, caption, merged, tallRows: hasTallRows(table) }
 }
 
 /** 手で入れた改行（w:br）で分かれた行を、段落にする。改行は続けてつなぐが、文の終わりの後に字下げで始まる行は、新しい段落にする */
@@ -939,7 +952,7 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
             id: newId('tr'),
             cells: r.map((c) => ({ id: newId('tc'), text: c.text, imageId: (c.image && imageIds.get(c.image)) || null })),
           }))
-          const table: TableBlock = { type: 'table', id, caption: b.table.caption?.name ?? '', widths: 'equal', heights: 'auto', rows }
+          const table: TableBlock = { type: 'table', id, caption: b.table.caption?.name ?? '', widths: 'equal', heights: b.table.tallRows ? 'photo' : 'auto', rows }
           tableMetas.push({
             id,
             wordNumber: b.table.caption?.number ?? null,

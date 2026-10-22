@@ -116,13 +116,14 @@ export async function tableSettingsPc(browser, check) {
     JSON.stringify({ title: panel?.title, where }),
   )
   check(
-    'パソコン：窓には、列の幅の3つ（列の幅をそろえる／どの列も同じ幅・字の多い列を広く／字の量に合わせて自動で・自分で決める／線をドラッグ）、項目の列（左端）は字に合わせる／ほかの列は同じ幅、行の高さをそろえる／見出しの行は別、「押すと、すぐ表が変わります」',
+    'パソコン：窓には、列の幅の3つ（列の幅をそろえる／どの列も同じ幅・字の多い列を広く／字の量に合わせて自動で・自分で決める／線をドラッグ）、項目の列（左端）は字に合わせる／ほかの列は同じ幅、行の高さをそろえる／見出しの行は別、写真が入る高さにする／どの行も約3.5cm、「押すと、すぐ表が変わります」',
     JSON.stringify(panel.widths.map((w) => w.text)) === JSON.stringify(['列の幅をそろえるどの列も同じ幅', '字の多い列を広く字の量に合わせて自動で', '自分で決める線をドラッグ']) &&
       panel.widths[0].on &&
       panel.label.text === '項目の列（左端）は字に合わせるほかの列は同じ幅' &&
       panel.heights.text === '行の高さをそろえる見出しの行は別' &&
+      panel.photo?.text === '写真が入る高さにするどの行も約3.5cm' &&
       panel.note === '押すと、すぐ表が変わります' &&
-      (await page.evaluate(() => document.querySelectorAll('.shape-panel svg.pic').length)) === 5,
+      (await page.evaluate(() => document.querySelectorAll('.shape-panel svg.pic').length)) === 6,
     JSON.stringify(panel),
   )
 
@@ -380,11 +381,11 @@ export async function tableSettingsPhone(browser, check) {
   const sheetLines = await linesIn(page, '.table-shape :is(h2, .so-sec, .so-choice b, .so-choice small, .so-check b, .so-check small, .ts-done)')
   await page.screenshot({ path: `${OUT}/ph-2-sheet.png` })
   check(
-    'スマホ：「表の形」を押すと、下から「表の形を整える」の欄（「できた」）。列の幅は絵が上の選びを横に3つ（列の幅をそろえる・字の多い列を広く・自分で決める／丸を左右に動かす）、項目の列（左端）・行の高さのチェック（絵つき）。押す所はどれも 44px 以上。1字だけの行はない',
+    'スマホ：「表の形」を押すと、下から「表の形を整える」の欄（「できた」）。列の幅は絵が上の選びを横に3つ（列の幅をそろえる・字の多い列を広く・自分で決める／丸を左右に動かす）、項目の列（左端）・行の高さ（そろえる・写真が入る高さ）のチェック（絵つき）。押す所はどれも 44px 以上。1字だけの行はない',
     sheet?.kind === 'sheet' &&
       sheet.title === '表の形を整える' &&
       sheetInfo.inside &&
-      sheetInfo.pics === 5 &&
+      sheetInfo.pics === 6 &&
       sheetInfo.cardsInRow &&
       sheetInfo.buttons[0][0] === 'できた' &&
       sheetInfo.buttons.every(([, w, h]) => w >= 44 && h >= 44) &&

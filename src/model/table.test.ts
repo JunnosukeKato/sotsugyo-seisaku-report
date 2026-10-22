@@ -97,11 +97,13 @@ describe('表', () => {
             { type: 'table', id: 'eq', caption: '', widths: 'equal', heights: 'equal', labelColumn: true, rows },
             { type: 'table', id: 'bad', caption: '', widths: 'equal', heights: 'tall', labelColumn: 'yes', rows },
             { type: 'table', id: 'off', caption: '', widths: 'equal', heights: 'auto', labelColumn: false, rows },
+            { type: 'table', id: 'ph', caption: '', widths: 'equal', heights: 'photo', rows },
           ],
         },
       ],
     })
-    const [old, eq, bad, off] = r.body[0].blocks as TableBlock[]
+    const [old, eq, bad, off, ph] = r.body[0].blocks as TableBlock[]
+    expect(ph).toMatchObject({ heights: 'photo' })
     expect(old).toMatchObject({ widths: 'auto', heights: 'auto' })
     expect('labelColumn' in old).toBe(false)
     expect(eq).toMatchObject({ widths: 'equal', heights: 'equal', labelColumn: true })

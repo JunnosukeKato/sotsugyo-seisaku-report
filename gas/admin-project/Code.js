@@ -248,7 +248,7 @@ function cleanTable_(block, out, row) {
     out.colWidths = ws.slice()
   }
   if (block.heights !== undefined) {
-    if (block.heights !== 'equal' && block.heights !== 'auto') throw new Error(row + 'の行の高さの形が正しくありません')
+    if (['equal', 'auto', 'photo'].indexOf(block.heights) < 0) throw new Error(row + 'の行の高さの形が正しくありません')
     out.heights = block.heights
   }
   if (block.labelColumn !== undefined) {

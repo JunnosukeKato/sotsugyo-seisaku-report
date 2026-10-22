@@ -1839,6 +1839,8 @@ p.busy-line { display: flex; }
 /* 画面に入らないとき（とても低い画面）：窓の中を上下に動かす（矢印は出さない） */
 .shape-panel.scroll { overflow-y: auto; }
 .shape-panel.scroll::after { display: none; }
+/* 低い画面で窓が入らないとき（tableShape.tsx が付ける）：選びの下の小さな一言と、いちばん下の一言を出さない。使えない理由（項目の列の「…のときだけ」）は出す */
+.shape-panel.compact :is(.so-choice, .so-check:not(.off)) small, .shape-panel.compact .so-note { display: none; }
 .shape-panel .sp-head { display: flex; align-items: center; justify-content: space-between; padding: 0 0 4px 4px; }
 .shape-panel .sp-head b { font-size: 14.5px; letter-spacing: 0.08em; }
 .shape-panel .sp-close { display: grid; place-items: center; width: 28px; height: 28px; border: 0; border-radius: 8px; background: none; color: var(--muted); }

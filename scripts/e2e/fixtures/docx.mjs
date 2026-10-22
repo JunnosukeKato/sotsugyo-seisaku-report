@@ -102,12 +102,14 @@ function cell(c) {
 }
 
 /** 表。rows は行ごとのセルの並び（1行目は見出しの行） */
-export function table(rows) {
+export function table(rows, { heights = [], hRule } = {}) {
   const columns = Math.max(...rows.map((r) => r.reduce((n, c) => n + (typeof c === 'object' && c.span ? c.span : 1), 0)))
+  // heights：行ごとの高さ（twip。w:trHeight。null・ない行は書かない）。hRule：高さの決め方（ないときは書かない＝「最小値」）
+  const trPr = (i) => (heights[i] ? `<w:trPr><w:trHeight w:val="${heights[i]}"${hRule ? ` w:hRule="${hRule}"` : ''}/></w:trPr>` : '')
   return (
     `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblLook w:val="04A0"/></w:tblPr>` +
     `<w:tblGrid>${'<w:gridCol w:w="2900"/>'.repeat(columns)}</w:tblGrid>` +
-    rows.map((r) => `<w:tr>${r.map(cell).join('')}</w:tr>`).join('') +
+    rows.map((r, i) => `<w:tr>${trPr(i)}${r.map(cell).join('')}</w:tr>`).join('') +
     `</w:tbl>`
   )
 }

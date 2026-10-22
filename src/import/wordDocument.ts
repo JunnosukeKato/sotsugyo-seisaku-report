@@ -64,6 +64,8 @@ export interface WordCell {
 export interface WordTable {
   type: 'table'
   rows: WordCell[][]
+  /** 行ごとの高さ（twip。w:trHeight。決めていない行・「自動」の行は null） */
+  rowHeights?: (number | null)[]
 }
 
 export type WordBlock = WordParagraph | WordTable
@@ -525,6 +527,7 @@ function readParagraph(p: Element, ctx: DocumentContext): WordParagraph {
 
 function readTable(tbl: Element, ctx: DocumentContext): WordTable {
   const rows: WordCell[][] = []
+  const rowHeights: (number | null)[] = []
   const rowElements = (node: Element): Element[] =>
     elements(node).flatMap((e) => {
       if (is(e, 'w', 'tr')) return [e]
@@ -567,8 +570,11 @@ function readTable(tbl: Element, ctx: DocumentContext): WordTable {
       })
     }
     rows.push(cells)
+    const height = child(child(tr, 'w', 'trPr'), 'w', 'trHeight')
+    const twip = Number(attr(height, 'val'))
+    rowHeights.push(height && attr(height, 'hRule') !== 'auto' && Number.isFinite(twip) && twip > 0 ? twip : null)
   }
-  return { type: 'table', rows }
+  return { type: 'table', rows, rowHeights }
 }
 
 /** 本文・セル・文字の枠の中の、段落と表の並びを読む */

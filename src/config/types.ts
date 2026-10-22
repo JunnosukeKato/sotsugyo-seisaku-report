@@ -111,6 +111,6 @@ export interface TemplateTable {
   rows?: number
   widths?: 'equal' | 'auto' | 'custom'
   colWidths?: number[]
-  heights?: 'equal' | 'auto'
+  heights?: 'equal' | 'auto' | 'photo'
   labelColumn?: boolean
 }

@@ -3650,7 +3650,7 @@ export class ReportEditor {
     return { tableId: table.id, widths: colWidthsOf(table) ?? equalColumnWidths(columnCount(table)), cellId: this.phone ? cell : null }
   }
 
-  /** 行の高さ：そろえる（見出しの行のほかを、いちばん高い行に合わせる）／中身に合わせる。列の幅と同じく、元に戻す1回で戻る */
+  /** 行の高さ：そろえる（見出しの行のほかを、いちばん高い行に合わせる）／写真が入る高さ／中身に合わせる。列の幅と同じく、元に戻す1回で戻る */
   setTableHeights(tableId: string, heights: TableBlock['heights']): void {
     if (ops.findTable(this.report, tableId)?.heights === heights) return
     this.changeTable(tableId, (t) => ({ ...t, heights }))

@@ -568,6 +568,9 @@ describe('管理ページ（admin-project）', () => {
     const table = { type: 'table', caption: '寸法表', header: ['部位', '寸法'], rows: 3, widths: 'auto', heights: 'equal', labelColumn: true }
     const withNew = gas.saveTeacherEdits(2026, template([chapter, { type: 'pageBreak', title: 'x' }, { ...table, extra: 1 }]))
     expect(withNew.years[0].config.courses[0].template).toEqual([chapter, { type: 'pageBreak' }, table])
+    // 行の高さ「写真が入る高さ」（映画・舞台衣装デザイナーコースの素材表）も保存できる
+    const photo = { type: 'table', caption: '使用材料表', header: ['名称', '使用箇所', '生地見本'], rows: 6, heights: 'photo' }
+    expect(gas.saveTeacherEdits(2026, template([chapter, photo])).years[0].config.courses[0].template).toEqual([chapter, photo])
     expect(save(template([chapter, { ...table, header: ['a', 1] }]))).toThrow(/2行目の表「寸法表」の見出しの行の形が正しくありません/)
     expect(save(template([chapter, { ...table, rows: 12 }]))).toThrow(/2行目の表「寸法表」の行の数が正しくありません/)
   })

@@ -18,6 +18,7 @@ export const shapeState = (page) =>
       widths: [...box.querySelectorAll('.so-choice[role="radio"]')].map((b) => ({ value: b.dataset.value, on: b.getAttribute('aria-checked') === 'true', text: b.textContent })),
       label: check('label'),
       heights: check('heights'),
+      photo: check('photo'),
       guide: box.querySelector('.so-guide')?.textContent ?? null,
       note: box.querySelector('.so-note')?.textContent ?? null,
     }
@@ -60,7 +61,7 @@ export async function pickWidth(page, value, { phone = false, ready } = {}) {
   await press(page, `.so-choice[data-value="${value}"]`, phone, ready)
 }
 
-/** 項目の列（'label'）・行の高さ（'heights'）のチェックを、on にする（もうその形なら押さない） */
+/** 項目の列（'label'）・行の高さ（'heights'：そろえる、'photo'：写真が入る高さ）のチェックを、on にする（もうその形なら押さない） */
 export async function setCheck(page, key, on, { phone = false, ready } = {}) {
   await openShape(page, phone)
   const now = await page.evaluate((key) => document.querySelector(`:is(.shape-panel, .table-shape) .so-check[data-key="${key}"]`).getAttribute('aria-checked') === 'true', key)

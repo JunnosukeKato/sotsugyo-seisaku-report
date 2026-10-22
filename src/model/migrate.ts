@@ -53,7 +53,7 @@ function migrateBlock(b: Raw): BodyBlock | null {
         // 自分で決めた列の幅（数だけ。列の数と合うか・合計は、使うときに確かめる：model/table.ts の colWidthsOf）
         ...(Array.isArray(b.colWidths) && b.colWidths.length > 0 && b.colWidths.every((v) => typeof v === 'number' && Number.isFinite(v) && v > 0) ? { colWidths: b.colWidths as number[] } : {}),
         // 行の高さ・左端の列：前の版の原稿にはないので、今までどおり（中身に合わせる・ほかの列とそろえる）
-        heights: b.heights === 'equal' ? 'equal' : 'auto',
+        heights: b.heights === 'equal' || b.heights === 'photo' ? b.heights : 'auto',
         ...(b.labelColumn === true ? { labelColumn: true } : {}),
         rows: list(b.rows).map((r) => ({ id: idOf(r, 'r'), cells: list(r.cells).map((c) => ({ id: idOf(c, 'c'), text: str(c.text), imageId: typeof c.imageId === 'string' ? c.imageId : null })) })),
       }

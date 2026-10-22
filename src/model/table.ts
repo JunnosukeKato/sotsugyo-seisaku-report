@@ -54,7 +54,7 @@ export function tableFromTemplate(
     caption: typeof t.caption === 'string' ? t.caption : '',
     widths,
     ...(colWidths ? { colWidths } : {}),
-    heights: t.heights === 'equal' ? 'equal' : 'auto',
+    heights: t.heights === 'equal' || t.heights === 'photo' ? t.heights : 'auto',
     ...(t.labelColumn === true ? { labelColumn: true } : {}),
     rows: [row(newId, header), ...Array.from({ length: count }, () => row(newId, header.map(() => '')))],
   }

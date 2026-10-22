@@ -355,6 +355,48 @@ export async function tableShapePc(browser, check) {
     JSON.stringify(brief(back)),
   )
 
+  // ---- 行の高さ：写真が入る高さ（Word の素材表と同じ 34.5mm。依頼者の選択 2026-10-22 案A）。「そろえる」とはどちらか1つ ----
+  await clickCell(cellId(1, 1))
+  await setCheck(page, 'photo', true, { ready })
+  await showTable(page, ready)
+  const ph = await shapeOf(page)
+  const pdfPh = await pdfShape(page)
+  saveCrop('pc-table-photo-pdf', pdfPh)
+  const tools2 = await shapeState(page)
+  await shotPalette('pc-toggle-photo')
+  // ページの原寸の px（A4 の高さ 1122.52px）で、34.5mm
+  const PHOTO_PX = (34.5 / 297) * 1122.52
+  check(
+    'パソコン：「写真が入る高さにする」に印を付けると、見出しの行のほかの行が、どれも 34.5mm になる（生地見本の画像の行も。画面と PDF の絵で 1px 以内）。見出しの行の高さは変わらない。窓の印は「写真が入る高さ」だけ',
+    (await modelOf(page)).heights === 'photo' &&
+      ph.cls.includes('heights-photo') &&
+      ph.body.every((h) => Math.abs(h - PHOTO_PX) <= 1) &&
+      Math.abs(ph.head - auto0.head) <= 0.01 &&
+      pdfPh.rows.slice(1).every((h) => Math.abs(h - PHOTO_PX) <= 1) &&
+      tools2?.photo?.on === true &&
+      tools2?.heights?.on === false,
+    JSON.stringify({ photo: brief(ph), pdf: pdfPh.rows.map(r2), want: r2(PHOTO_PX), tools: [tools2?.heights, tools2?.photo] }),
+  )
+  await closeShape(page)
+  await clickCell(cellId(1, 1))
+  await setCheck(page, 'heights', true, { ready })
+  const swapped = await shapeState(page)
+  const swappedModel = await modelOf(page)
+  await closeShape(page)
+  await page.evaluate(() => window.__editor.undo())
+  await ready()
+  const undonePhoto = await modelOf(page)
+  await clickCell(cellId(1, 1))
+  await setCheck(page, 'photo', false, { ready })
+  await closeShape(page)
+  await showTable(page, ready)
+  const offPhoto = await shapeOf(page)
+  check(
+    'パソコン：「写真が入る高さ」のときに「行の高さをそろえる」に印を付けると、写真が入る高さの印は外れる。元に戻す1回で「写真が入る高さ」に戻り、印を外すと、もとの高さ',
+    swappedModel.heights === 'equal' && swapped?.heights?.on === true && swapped?.photo?.on === false && undonePhoto.heights === 'photo' && (await modelOf(page)).heights === 'auto' && JSON.stringify(brief(offPhoto)) === JSON.stringify(brief(auto0)),
+    JSON.stringify({ swapped: [swapped?.heights, swapped?.photo], undone: undonePhoto.heights, off: brief(offPhoto) }),
+  )
+
   // ---- 見出しの行がいちばん高くても、ほかの行は見出しの行に合わせない ----
   await page.evaluate(() => window.__editor.finishEditing())
   await ready()

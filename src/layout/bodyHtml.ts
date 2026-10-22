@@ -129,6 +129,7 @@ function renderFigure(f: Figure, size: FigureSize, number: number, options: Body
  * 表：タイトルは表の上。1行目は見出しの行。セルの画像は文字の上に、セルの幅に合わせて縮めて置く。
  * 列の幅は「そろえる（同じ幅）」か「中身に合わせる」。
  * 行の高さを「そろえる」表は、見出しの行のほかの行に、組んだ紙面で測った高さを書く（tableFit.ts。測る前は中身に合わせた高さ）。
+ * 行の高さを「写真が入る高さ」にした表は、印の class（heights-photo）だけ付ける（高さは reportCss.ts。測らない）。
  * 左端の列を「中身に合わせる」表（列の幅が「そろえる」のときだけ）は、左端の列に、組んだ紙面で測った幅を書く（ほかの列は残りを同じ幅で分ける）。
  * どちらも、しない表の HTML は前と同じ（印の class も付けない）。
  * 列の幅を「自分で決める」表は、列ごとの幅（%）を colgroup に書く（table-layout: fixed。紙面・PDF・印刷とも同じ幅）
@@ -149,7 +150,7 @@ function renderTable(block: TableBlock, number: number, options: BodyRenderOptio
   const label = fitsLabel(block)
   // 印の class（測る前の紙面も、「中身に合わせる」の紙面と別の文書になるように）
   const widths = block.widths === 'auto' ? 'auto' : block.widths === 'custom' ? 'custom' : 'equal'
-  const classes = [`widths-${widths}`, ...(rows ? ['heights-equal'] : []), ...(label ? ['label-column'] : [])].join(' ')
+  const classes = [`widths-${widths}`, ...(rows ? ['heights-equal'] : []), ...(block.heights === 'photo' ? ['heights-photo'] : []), ...(label ? ['label-column'] : [])].join(' ')
   const custom = widths === 'custom' ? (colWidthsOf(block) ?? equalColumnWidths(Math.max(1, ...block.rows.map((r) => r.cells.length)))) : null
   const colgroup = custom
     ? `<colgroup>${custom.map((w) => `<col style="width:${w}%">`).join('')}</colgroup>`

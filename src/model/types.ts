@@ -123,9 +123,10 @@ export interface TableBlock {
   colWidths?: number[]
   /**
    * 行の高さ：equal＝そろえる（見出しの行のほかの行を、その中でいちばん高い行と同じ高さにする。見出しの行は中身に合わせたまま）、
-   * auto＝中身に合わせる。前の版の原稿（この項目がない）は auto
+   * auto＝中身に合わせる、photo＝写真が入る高さ（見出しの行のほかの行を、生地見本の写真が入る高さ PHOTO_ROW_MM にする。中身が多い行は、その行だけ高くなる。
+   * 映画・舞台衣装デザイナーコースの Word の素材表と同じ枠：依頼者の選択 2026-10-22 案A）。前の版の原稿（この項目がない）は auto
    */
-  heights: 'equal' | 'auto'
+  heights: 'equal' | 'auto' | 'photo'
   /** 左端の列を中身に合わせる（列の幅が「そろえる」のときだけ効く。ほかの列は、残りを同じ幅で分ける）。ない・false は、ほかの列とそろえる */
   labelColumn?: boolean
   rows: TableRow[]

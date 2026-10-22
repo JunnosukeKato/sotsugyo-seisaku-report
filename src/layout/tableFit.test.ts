@@ -85,6 +85,13 @@ describe('表の行の高さ・左端の列（測って決める寸法）', () =
     expect(html.match(/<tr style="height:40\.25pt">/g)).toHaveLength(2)
   })
 
+  it('行の高さを「写真が入る高さ」にした表：印の class だけ付け、測った高さは書かない（高さは CSS）', () => {
+    const html = bodyContentHtml(chapters(table('t', { heights: 'photo' })), { ...options, tableFits: { t: { row: 40 } } })
+    expect(html).toContain('<table class="widths-equal heights-photo"><thead><tr><th')
+    expect(html).not.toContain('style="height')
+    expect(fitsFor(chapters(table('t', { heights: 'photo' })), { t: { row: 40 } })).toEqual({})
+  })
+
   it('列の幅「中身に合わせる」の表：短い字のセルは折り返さない印（nw）。字数の上限は列の数で決める。「そろえる」の表には付けない', () => {
     expect([1, 2, 3, 4, 5, 6].map(noWrapLimit)).toEqual([37, 18, 11, 8, 6, 5])
     expect(shortText('コットンサテン', 8)).toBe(true)

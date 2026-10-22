@@ -57,6 +57,7 @@ describe('ひな形の形を広げた（改ページ・ふつうの表。mockups
     expect(templateProblems(table({ rows: 1.5 }))).toEqual(shape)
     expect(templateProblems(table({ widths: 'wide' }))).toEqual(shape)
     expect(templateProblems(table({ heights: 'tall' }))).toEqual(shape)
+    expect(templateProblems(table({ heights: 'photo' }))).toEqual([])
     expect(templateProblems(table({ labelColumn: 'yes' }))).toEqual(shape)
     expect(templateProblems(table({ colWidths: [50] }))).toEqual(shape)
     expect(templateProblems(table({ colWidths: [50, -1] }))).toEqual(shape)

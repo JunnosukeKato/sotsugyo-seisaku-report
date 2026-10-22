@@ -219,6 +219,26 @@ describe('ひな形と同じつくりの Word', () => {
     const again = await read(templateLikeBody())
     expect(lostByImport(report, again.body)).toEqual([{ heading: 'Ⅱ．制作過程', title: '制作過程', paragraphs: 3, figures: 0, tables: 0 }])
   })
+
+  it('Word で行を高くしてあった表（素材表の写真の枠）は、行の高さを「写真が入る高さ」にする。ふつうの高さ・「自動」の高さの表は、中身に合わせる', async () => {
+    const rows = [
+      ['名称', '使用箇所', '生地見本'],
+      ['綿ブロード', '上着', ''],
+      ['サテン', '帯', ''],
+    ]
+    const body = (...tbls: string[]) =>
+      makeDocx({ body: [p('Ⅰ．企画・立案'), p('ⅲ．使用素材'), p('表1に使用した素材をまとめる。'), ...tbls.flatMap((t, i) => [p(`表${i + 1}　使用材料表${i + 1}`), t])].join('') })
+    const result = await read(
+      body(
+        // 学科の Word の素材表と同じ高さ（見出しの行 345twip、ほかは 1904〜2062twip）
+        table(rows, { heights: [345, 1904, 2062] }),
+        table(rows, { heights: [345, 400, 400] }),
+        table(rows),
+        table(rows, { heights: [345, 1957, 1957], hRule: 'auto' }),
+      ),
+    )
+    expect(tables(result.body).map((t) => t.heights)).toEqual(['photo', 'auto', 'auto', 'auto'])
+  })
 })
 
 describe('学生の書き方の違い', () => {

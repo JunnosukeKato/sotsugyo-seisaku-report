@@ -8,7 +8,7 @@ import { keepFocus } from './uiShared'
 import { useDialogFocus } from './useDialogFocus'
 
 /**
- * 表の形を整える（mockups/v45 案A。依頼者の判断 2026-10-20）。列の幅（3つから選ぶ）・項目の列（左端）・行の高さを、1か所で、小さな表の絵を見て選ぶ。
+ * 表の形を整える（mockups/v45 案A。依頼者の判断 2026-10-20）。列の幅（3つから選ぶ）・項目の列（左端）・行の高さ（そろえる・写真が入る高さ）を、1か所で、小さな表の絵を見て選ぶ。
  * - パソコン：左の道具の「表の形を整える」を押すと、左の道具のとなりに窓が開く（TableShapeTool）。選ぶと、すぐ紙面の表が変わる（窓は開いたまま）。
  *   閉じるのは「×」・Esc・窓の外を押す
  * - スマホ：道具の「表の形」を押すと、下から欄が出る（TableShapeSheet）。「できた」で閉じる。
@@ -16,7 +16,7 @@ import { useDialogFocus } from './useDialogFocus'
  * どれも、元に戻す1回で戻る（editor/reportEditor.ts の changeTable）。言葉は、押すとどうなるかで書く（「中身に合わせる」「左端の列」は使わない）
  */
 
-type PicKind = 'equal' | 'auto' | 'custom' | 'label' | 'heights'
+type PicKind = 'equal' | 'auto' | 'custom' | 'label' | 'heights' | 'photo'
 
 /** 列の幅の3つ（絵・名前・一言） */
 const WIDTH_CHOICES: { value: TableBlock['widths']; pic: PicKind; name: string[]; sub: string[]; subPhone?: string[] }[] = [
@@ -27,6 +27,8 @@ const WIDTH_CHOICES: { value: TableBlock['widths']; pic: PicKind; name: string[]
 /** 項目の列（左端）：列の幅が「そろえる」のときだけ使える。ほかのときは、うすくして、そのわけを出す */
 const LABEL = { name: ['項目の列', '（左端）は', '字に合わせる'], sub: ['ほかの列は', '同じ幅'], off: ['「列の幅を', 'そろえる」の', 'ときだけ'] }
 const HEIGHTS = { name: ['行の高さを', 'そろえる'], sub: ['見出しの行は別'] }
+/** 行の高さ「写真が入る高さ」（Word の素材表と同じ枠：依頼者の選択 2026-10-22 案A）。「そろえる」とどちらか1つ（両方外すと、中身に合わせる） */
+const PHOTO = { name: ['写真が入る', '高さにする'], sub: ['どの行も', '約3.5cm'] }
 
 /** 言葉の切れ目でだけ折り返す（切れ目の間は折り返さない。index.css の .ph） */
 export function Phrase({ parts }: { parts: string[] }) {
@@ -58,7 +60,8 @@ export function TablePic({ kind }: { kind: PicKind }) {
     custom: { cols: [17, 29, 14], text: [30, 30, 30], hot: 0 },
     label: { cols: [10, 25, 25], text: [30, 30, 30], fit: true },
     heights: { cols: [12, 36, 12], text: [28, 90, 56], equalRows: true },
-  }[kind] as { cols: number[]; text: number[]; hot?: number; fit?: boolean; equalRows?: boolean }
+    photo: { cols: [20, 20, 20], text: [12, 12, 12], rowHeight: 10.5 },
+  }[kind] as { cols: number[]; text: number[]; hot?: number; fit?: boolean; equalRows?: boolean; rowHeight?: number }
   const shortText = 7
   const xs = [X]
   for (const c of conf.cols) xs.push(xs[xs.length - 1] + c)
@@ -68,6 +71,7 @@ export function TablePic({ kind }: { kind: PicKind }) {
   const need = conf.text.map((a) => Math.max(linesOf(a, cw[1]), linesOf(shortText, cw[0])))
   let rows = need.map((n) => n * PITCH + PAD)
   if (conf.equalRows) rows = rows.map(() => Math.max(...rows))
+  if (conf.rowHeight) rows = rows.map(() => conf.rowHeight as number)
   const PH = HEAD + rows.reduce((a, b) => a + b, 0)
   const parts: ReactNode[] = []
   let key = 0
@@ -90,7 +94,7 @@ export function TablePic({ kind }: { kind: PicKind }) {
     }
     bars(0, conf.fit ? cw[0] - 3 : shortText)
     bars(1, conf.text[r])
-    const sq = Math.min(cw[2] - 4, rh - 2, 6)
+    const sq = Math.min(cw[2] - 4, rh - 2, conf.rowHeight ? 8 : 6)
     rect(xs[2] + (cw[2] - sq) / 2, y + (rh - sq) / 2, sq, sq, 0.45, 0.4)
     y += rh
   })
@@ -132,6 +136,7 @@ function ShapeOptions({ editor, table, tableId, phone, onCustom }: { editor: Rep
   const labelOff = table.widths !== 'equal'
   const labelOn = table.labelColumn === true && !labelOff
   const heightsOn = table.heights === 'equal'
+  const photoOn = table.heights === 'photo'
   const choose = (value: TableBlock['widths']) => {
     editor.setTableWidths(tableId, value)
     if (value === 'custom') onCustom?.()
@@ -239,6 +244,28 @@ function ShapeOptions({ editor, table, tableId, phone, onCustom }: { editor: Rep
           </small>
         </span>
       </button>
+      <button
+        type="button"
+        role="checkbox"
+        aria-checked={photoOn}
+        className={`so-check${photoOn ? ' on' : ''}`}
+        data-key="photo"
+        onMouseDown={keepFocus}
+        onClick={() => editor.setTableHeights(tableId, photoOn ? 'auto' : 'photo')}
+      >
+        <i className="box" aria-hidden="true">
+          {photoOn && Icon.check}
+        </i>
+        <TablePic kind="photo" />
+        <span className="tx">
+          <b>
+            <Phrase parts={PHOTO.name} />
+          </b>
+          <small>
+            <Phrase parts={PHOTO.sub} />
+          </small>
+        </span>
+      </button>
     </>
   )
 }
@@ -285,10 +312,15 @@ export function TableShapeTool({ editor, table, tableId }: { editor: ReportEdito
     el.style.width = `${width}px`
     el.style.left = `${left ? p.left - 10 - width : p.right + 10}px`
     el.classList.toggle('right', !left)
-    // とても低い画面で入らなければ、窓の中を上下に動かす（index.css の .shape-panel.scroll）
-    el.classList.remove('scroll')
+    // 低い画面で入らなければ、選びの下の小さな一言（「どの列も同じ幅」など）を出さない（index.css の .shape-panel.compact。左の道具の一言を出さないのと同じ：mockups/v47 案C）。
+    // 行の高さ「写真が入る高さ」を足して、1280×586 の画面の「自分で決める」で入らなくなったため。それでも入らなければ、窓の中を上下に動かす（.shape-panel.scroll）
+    el.classList.remove('scroll', 'compact')
     el.style.maxHeight = ''
     let h = el.offsetHeight
+    if (h > innerHeight - 16) {
+      el.classList.add('compact')
+      h = el.offsetHeight
+    }
     if (h > innerHeight - 16) {
       h = innerHeight - 16
       el.classList.add('scroll')

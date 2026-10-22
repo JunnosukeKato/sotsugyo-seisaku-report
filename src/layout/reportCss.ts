@@ -14,6 +14,13 @@ export const LETTER_SPACING_PT =
   Math.floor(((TEXT_WIDTH_MM * MM_TO_PT - CHARS_PER_LINE * FONT_SIZE_PT) / CHARS_PER_LINE) * 1000) / 1000
 /** Word テンプレートの行送り（368twip） */
 export const LINE_PITCH_PT = 18.4
+/**
+ * 表の行の高さ「写真が入る高さ」の、見出しの行のほかの行の高さ（mm）。映画・舞台衣装デザイナーコースの Word の素材表の行（1957twip）と同じ。
+ * 見出しの行と6行で、ページの大部分を使う枠になる（依頼者の選択 2026-10-22 案A）
+ */
+export const PHOTO_ROW_MM = 34.5
+/** その行のセルの画像の高さの上限（mm）。行の高さから、セルの上下の余白（2pt ずつ）・画像の下の余白（1mm）・枠線の分を引いて、少しゆとりを残す */
+export const PHOTO_IMAGE_MM = 31
 
 export const reportCss = `
 @page {
@@ -220,5 +227,15 @@ figcaption,
   max-height: 40mm;
   margin: 0 auto 1mm;
   object-fit: contain;
+}
+
+/* 行の高さ「写真が入る高さ」：見出しの行のほかの行を、生地見本の写真が入る高さにする（中身が多い行は、その行だけ高くなる）。
+   セルの画像は、その高さの行に入る大きさまで縮める（行の高さが変わらないように） */
+.data-table table.heights-photo > tbody > tr {
+  height: ${PHOTO_ROW_MM}mm;
+}
+
+.data-table table.heights-photo td img {
+  max-height: ${PHOTO_IMAGE_MM}mm;
 }
 `
