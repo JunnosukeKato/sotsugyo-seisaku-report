@@ -48,7 +48,7 @@ const GUIDES = [
  * 試作の手引き（依頼者に見てもらうための版。公開しない：PDF は ../試作/ に置く）。
  * 学生用の「くわしい版」：執筆で操作するときに困らないように、操作ごとに画面と手順を並べる（依頼者の依頼 2026-10-23）
  */
-const DRAFTS = [{ html: 'docs/手引き_学生用_くわしい版.html', pdf: resolve('..', '試作', '手引き_学生用_くわしい版（試作）.pdf'), pages: 4 }]
+const DRAFTS = [{ html: 'docs/手引き_学生用_くわしい版.html', pdf: resolve('..', '試作', '手引き_学生用_くわしい版（試作）.pdf'), pages: 2 }]
 /** 本文の文字の大きさの下限（pt）。柱・ページ番号・英字の飾りの見出し（MIN_EXEMPT）は除く */
 const MIN_PT = 10.5
 const MIN_EXEMPT = '.folio, .edge, .hero-top, .kick2, .year, .shot .mk, .lh .k'
