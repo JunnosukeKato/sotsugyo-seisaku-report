@@ -102,19 +102,38 @@ const WRITING_ZOOM_KEY = 'sotsugyo-seisaku-report-writing-zoom'
 const WRITING_ZOOM_MIN = 0.75
 const WRITING_ZOOM_MAX = 3
 
-/** 覚えている、書くときの大きさ（覚えていなければ 1：本文の幅を画面の幅に合わせる） */
+/**
+ * 覚えている、書くときの大きさ（覚えていなければ 1：本文の幅を画面の幅に合わせる）。
+ * 0 は「拡大しない」（ページ全体のまま書く。書いている間に指でページ全体まで縮めた・メニューで「書くときに拡大する」を外した：依頼者の選択 2026-10-22）
+ */
 export function loadWritingZoom(): number {
   try {
-    const v = Number(localStorage.getItem(WRITING_ZOOM_KEY))
+    const raw = localStorage.getItem(WRITING_ZOOM_KEY)
+    const v = Number(raw)
+    if (raw === '0') return 0
     return Number.isFinite(v) && v > 0 ? Math.max(WRITING_ZOOM_MIN, Math.min(WRITING_ZOOM_MAX, v)) : 1
   } catch {
     return 1
   }
 }
 
-/** 書いている間に指で広げた・縮めた大きさを覚える（次に段落を押して書き始めるときも、この大きさで開く） */
+/** 書くときに拡大するか（メニューの「書くときに拡大する」） */
+export const writingZoomOn = (): boolean => loadWritingZoom() !== 0
+
+/** メニューの「書くときに拡大する」：外すと、ページ全体のまま書く。付けると、本文の幅を画面の幅に合わせる大きさに戻す */
+export function setWritingZoomOn(on: boolean): void {
+  try {
+    if (on) localStorage.removeItem(WRITING_ZOOM_KEY)
+    else localStorage.setItem(WRITING_ZOOM_KEY, '0')
+  } catch {
+    // 覚えておけなくても、いまの表示で書ける
+  }
+}
+
+/** 書いている間に指で広げた・縮めた大きさを覚える（次に段落を押して書き始めるときも、この大きさで開く）。0 は「拡大しない」（ページ全体まで縮めた） */
 export function saveWritingZoom(ratio: number): void {
   try {
+    if (ratio === 0) return void localStorage.setItem(WRITING_ZOOM_KEY, '0')
     localStorage.setItem(WRITING_ZOOM_KEY, String(Math.max(WRITING_ZOOM_MIN, Math.min(WRITING_ZOOM_MAX, Math.round(ratio * 1000) / 1000))))
   } catch {
     // 覚えておけなくても、いまは広げた大きさで書ける

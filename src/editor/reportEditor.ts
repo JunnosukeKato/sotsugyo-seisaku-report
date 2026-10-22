@@ -1359,6 +1359,8 @@ export class ReportEditor {
     this.scroller.scrollTop = 0
     this.scroller.scrollLeft = 0
     const ratio = loadWritingZoom()
+    // 拡大しない（ページ全体の大きさのまま書く）：拡大の表示のまま倍率だけ1ページ全体にする（書いている行は、紙面を送って見せる：revealCaret・scrollPaperTo）
+    if (ratio === 0) return this.stage.setFreeZoom(this.stage.fitScale)
     if (Math.abs(ratio - 1) < 0.04) return this.stage.setZoom(true)
     const page = this.renderer.pageView.pages()[this.page]
     const before = page?.getBoundingClientRect()
@@ -1605,12 +1607,14 @@ export class ReportEditor {
    */
   private applyPinch(scale: number, c: Point, at: Point): void {
     const writing = this.writingOnPaper
-    if (scale <= this.stage.fitScale * 1.03) {
+    const toFit = scale <= this.stage.fitScale * 1.03
+    if (toFit && !writing) {
       if (this.stage.zoomed) this.setZoom(false)
       this.notify()
       return
     }
-    this.stage.setFreeZoom(scale)
+    // 書いている間にページ全体まで縮めた：ページ全体の大きさのまま書き続ける（拡大の表示のまま。書いている行を紙面を送って見せられるように）
+    this.stage.setFreeZoom(toFit ? this.stage.fitScale : scale)
     const page = this.renderer.pageView.pages()[this.page]?.getBoundingClientRect()
     if (page) {
       const s = this.stage.scale
@@ -1618,7 +1622,8 @@ export class ReportEditor {
       else this.scroller.scrollLeft = 0
       this.scrollPaperTo(this.scroller.scrollTop - this.revealTop + (page.top + c.y * s - at.y))
     }
-    if (writing) saveWritingZoom(this.stage.scale / this.stage.textScale)
+    // ページ全体まで縮めたら「拡大しない」を覚える（次からページ全体のまま書く：依頼者の選択 2026-10-22）
+    if (writing) saveWritingZoom(toFit ? 0 : this.stage.scale / this.stage.textScale)
     this.realignOverlay()
     this.realignFrozen()
     this.placeContinueRow()
@@ -3268,7 +3273,15 @@ export class ReportEditor {
   private insertionAnchor(): string | null {
     const view = this.renderer.pageView
     const editing = this.overlay.blockId
-    if (editing && ops.inBody(this.report, editing)) return editing
+    if (editing && ops.inBody(this.report, editing)) {
+      // スマホのキーボードの上の「追加」→「改ページ」で、書いている欄のすぐ後ろに入れた改ページ：続けて足すものは、その後ろ（次のページ）へ（PC で改ページを入れたあとと同じ）
+      const pb = this.breakAfterEditing
+      if (pb?.id === editing) {
+        const blocks = this.report.body.flatMap((c) => c.blocks)
+        if (blocks[blocks.findIndex((b) => b.id === editing) + 1]?.id === pb.pb) return pb.pb
+      }
+      return editing
+    }
     const id = this.currentId
     if (id && ops.inBody(this.report, id)) {
       const fragments = view.fragments(id)
@@ -3336,12 +3349,25 @@ export class ReportEditor {
     return this.removed.size > 0
   }
 
+  /** スマホで書いている間に「追加」→「改ページ」で入れた改ページと、書いていた欄（続けて足すものを、改ページの後ろに入れる：insertionAnchor） */
+  private breakAfterEditing: { id: string; pb: string } | null = null
+
   /** 改ページを入れる（足す位置の後ろ。この後ろは次のページから始まる） */
   addPageBreak(): void {
     if (this.settlingRemoval) return
     const after = this.insertionAnchor()
     const id = ops.newId('pb')
     this.marker.hidden = true
+    // スマホで紙面に直接書いている間（キーボードの上の「追加」）：入れたあとも、同じ欄を同じ所から書き続ける（キーボードを閉じない）
+    const keep = this.writingOnPaper && this.overlay.blockId ? { id: this.overlay.blockId, caret: this.overlay.caret } : null
+    if (keep) {
+      this.breakAfterEditing = { id: keep.id, pb: id }
+      this.commitForChange()
+      this.pushHistory(this.report)
+      this.report = ops.insertAfter(this.report, after, { type: 'pageBreak', id })
+      this.reopenAfterRender(keep.id, keep.caret)
+      return
+    }
     this.update((r) => ops.insertAfter(r, after, { type: 'pageBreak', id }))
     this.currentId = id
   }

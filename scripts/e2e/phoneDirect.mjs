@@ -391,8 +391,8 @@ export async function phoneDirectPhone(browser, check) {
   )
   const names = opened.buttons.map((b) => b.name)
   check(
-    'キーボードの上の道具に「戻す」「やり直す」「図を入れる」「表を入れる」「削除」「完了」（削除は mockups/v48 E）。どれも 44px 四方以上で、名前は1行',
-    JSON.stringify(names) === JSON.stringify(['戻す', 'やり直す', '図を入れる', '表を入れる', '削除', '完了']) && opened.buttons.every((b) => b.w >= 44 && b.h >= 44 && b.oneLine),
+    'キーボードの上の道具に「戻す」「やり直す」「図」「表」「追加」「削除」「完了」（削除は mockups/v48 E。「追加」は依頼者の選択 2026-10-22 案X）。どれも 44px 四方以上で、名前は1行',
+    JSON.stringify(names) === JSON.stringify(['戻す', 'やり直す', '図', '表', '追加', '削除', '完了']) && opened.buttons.every((b) => b.w >= 44 && b.h >= 44 && b.oneLine),
     JSON.stringify(opened.buttons),
   )
 
@@ -662,6 +662,76 @@ export async function phoneDirectPhone(browser, check) {
   )
   await page.tap('.direct-bar .db-done')
   await wait(300)
+  await ready()
+
+  // ---- 14b. 書いている間に、キーボードの上の「追加」から大見出し・小見出し・改ページを入れる（書いている所の後ろ。依頼者の選択 2026-10-22 案X） ----
+  await page.evaluate(() => {
+    window.__savedReport = window.__editor.getSnapshot().report
+    return window.__editor.goToPage(window.__editor.pageOfBlock('p10'), 'none')
+  })
+  await ready()
+  await wait(300)
+  await tapChar(page, 'p10', 2)
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p10', { timeout: 10000 })
+  await keyboard(page, KB)
+  await wait(400)
+  await page.tap('.direct-bar button[aria-expanded]')
+  await wait(400)
+  const addRow = await page.evaluate(() => {
+    const row = document.querySelector('.direct-bar .db-add')
+    const buttons = row ? [...row.querySelectorAll('button')] : []
+    return {
+      ...window.__state(),
+      names: buttons.map((b) => b.querySelector('span').textContent.trim()),
+      sizes: buttons.map((b) => { const q = b.getBoundingClientRect(); return [Math.round(q.width), Math.round(q.height)] }),
+      above: !!row && row.getBoundingClientRect().bottom <= row.nextElementSibling.getBoundingClientRect().top + 1,
+      expanded: document.querySelector('.direct-bar button[aria-expanded]').getAttribute('aria-expanded'),
+    }
+  })
+  await shotWithKeyboard(page, '2b-add-row')
+  check(
+    '書いている間に道具の「追加」を押すと、道具の上の段に「大見出し」「小見出し」「改ページ」が出る（44px 四方以上）。道具はキーボードのすぐ上のまま、書いている行は道具より上で、書き続けられる',
+    JSON.stringify(addRow.names) === JSON.stringify(['大見出し', '小見出し', '改ページ']) && addRow.sizes.every(([w, h]) => w >= 44 && h >= 44) && addRow.above && addRow.expanded === 'true' && addRow.editing === 'p10' && addRow.focused && Math.abs(addRow.bar.bottom - (844 - KB)) < 1 && !!addRow.caretRect && addRow.caretRect.bottom <= addRow.bar.top - 2 && addRow.caretRect.top >= 48,
+    JSON.stringify({ names: addRow.names, sizes: addRow.sizes, above: addRow.above, editing: addRow.editing, focused: addRow.focused, bar: addRow.bar, caret: addRow.caretRect }),
+  )
+  await page.evaluate(() => [...document.querySelectorAll('.direct-bar .db-add button')].find((b) => b.textContent.includes('改ページ')).setAttribute('data-test-pb', ''))
+  await page.tap('.direct-bar .db-add button[data-test-pb]')
+  await wait(800)
+  await page.keyboard.type('続')
+  await wait(300)
+  const afterPb = await page.evaluate(() => {
+    const ed = window.__editor
+    const blocks = ed.getSnapshot().report.body.flatMap((c) => c.blocks)
+    const i = blocks.findIndex((b) => b.id === 'p10')
+    return { ...window.__state(), next: blocks[i + 1]?.type, rowOpen: !!document.querySelector('.direct-bar .db-add') }
+  })
+  check(
+    '「追加」→「改ページ」：書いている段落の後ろに改ページが入り、段は閉じる。同じ段落を書き続けられる（キーボードは閉じない）',
+    afterPb.next === 'pageBreak' && !afterPb.rowOpen && afterPb.editing === 'p10' && afterPb.focused && afterPb.text.includes('続'),
+    JSON.stringify({ next: afterPb.next, rowOpen: afterPb.rowOpen, editing: afterPb.editing, focused: afterPb.focused }),
+  )
+  await page.tap('.direct-bar button[aria-expanded]')
+  await wait(300)
+  await page.evaluate(() => [...document.querySelectorAll('.direct-bar .db-add button')].find((b) => b.textContent.includes('小見出し')).setAttribute('data-test-sub', ''))
+  await page.tap('.direct-bar .db-add button[data-test-sub]')
+  await wait(800)
+  await page.keyboard.type('縫製')
+  await wait(300)
+  const afterSub = await page.evaluate(() => {
+    const ed = window.__editor
+    const blocks = ed.getSnapshot().report.body.flatMap((c) => c.blocks)
+    const i = blocks.findIndex((b) => b.id === 'p10')
+    return { ...window.__state(), after: blocks.slice(i + 1, i + 3).map((b) => b.type), title: blocks[i + 2]?.title }
+  })
+  check(
+    '「追加」→「小見出し」：書いている所の後ろ（いま入れた改ページがあれば、その後ろ。PC と同じ）に小見出しが入り、すぐ紙面の上で書き始める（キーボードは閉じない）',
+    afterSub.kind === 'subheading' && afterSub.onPaper && afterSub.focused && afterSub.text === '縫製' && JSON.stringify(afterSub.after) === JSON.stringify(['pageBreak', 'subheading']),
+    JSON.stringify({ kind: afterSub.kind, onPaper: afterSub.onPaper, focused: afterSub.focused, text: afterSub.text, after: afterSub.after }),
+  )
+  await page.tap('.direct-bar .db-done')
+  await wait(300)
+  await keyboard(page, 0)
+  await page.evaluate(() => window.__editor.update(() => window.__savedReport))
   await ready()
 
   // ---- 15. 抄録の段落も、紙面を拡大して紙面の上で書く ----
@@ -1067,6 +1137,92 @@ export async function phoneDirectPhone(browser, check) {
   await page.tap('.direct-bar .db-done')
   await wait(300)
   await keyboard(page, 0)
+
+  // ---- 23b. 書いている間にページ全体まで縮めると、ページ全体の大きさのまま書き続け、次からも拡大しない。メニューの「書くときに拡大する」で切り替える（依頼者の選択 2026-10-22「両方」） ----
+  await ready()
+  await tapChar(page, 'p10', 4)
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p10', { timeout: 10000 }).catch(() => {})
+  await keyboard(page, KB)
+  await wait(400)
+  const f0 = await page.evaluate(() => window.__state())
+  await pinch(cdp, { x: 195, y: (f0.caretRect.top + f0.caretRect.bottom) / 2 }, 260, 40)
+  await wait(300)
+  const f1 = await page.evaluate((key) => ({ ...window.__state(), saved: localStorage.getItem(key) }), ZOOM_KEY)
+  await page.keyboard.type('全体')
+  await wait(300)
+  const f2 = await page.evaluate(() => window.__state())
+  await shotWithKeyboard(page, '6b-writing-fit')
+  check(
+    '書いている間に2本の指でページ全体まで縮めると、ページ全体の大きさのまま書き続ける（カーソルの行は道具より上）。「拡大しない」をこの端末に覚える',
+    f1.editing === 'p10' && f1.focused && Math.abs(f1.scale - f1.fitScale) < 0.001 && f1.saved === '0' && f2.text.includes('全体') && !!f2.caretRect && f2.caretRect.bottom <= f2.bar.top - 2 && f2.caretRect.top >= 48,
+    JSON.stringify({ editing: f1.editing, focused: f1.focused, scale: [f1.scale, f1.fitScale].map((s) => s.toFixed(3)), saved: f1.saved, caret: f2.caretRect && [f2.caretRect.top, f2.caretRect.bottom].map(Math.round), bar: f2.bar && Math.round(f2.bar.top) }),
+  )
+  await page.tap('.direct-bar .db-done')
+  await wait(300)
+  await keyboard(page, 0)
+  await ready()
+  // ページの下の方の段落（キーボードを出すと隠れる高さ）を押す
+  const low = await page.evaluate(() => {
+    const els = [...document.querySelectorAll('.page-viewport.front [data-block-id]')].filter((e) => /^p\d+$/.test(e.dataset.blockId) && e.textContent.length >= 5)
+    els.sort((a, b) => b.getBoundingClientRect().top - a.getBoundingClientRect().top)
+    return els[0]?.dataset.blockId ?? null
+  })
+  await tapChar(page, low, 2)
+  await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 10000 }, low).catch(() => {})
+  await wait(400)
+  await keyboard(page, KB)
+  await wait(500)
+  const f3 = await page.evaluate(() => window.__state())
+  check(
+    '「拡大しない」を覚えたあとは、段落を押してもページ全体の大きさのまま書き始める。ページの下の方の段落でも、キーボードを出すと、書いている行は道具より上に来る',
+    !!low && f3.editing === low && f3.onPaper && f3.focused && Math.abs(f3.scale - f3.fitScale) < 0.001 && !!f3.caretRect && f3.caretRect.bottom <= f3.bar.top - 2 && f3.caretRect.top >= 48,
+    JSON.stringify({ low, editing: f3.editing, scale: [f3.scale, f3.fitScale].map((s) => s.toFixed(3)), caret: f3.caretRect && [f3.caretRect.top, f3.caretRect.bottom].map(Math.round), bar: f3.bar && Math.round(f3.bar.top) }),
+  )
+  await page.tap('.direct-bar .db-done')
+  await wait(300)
+  await keyboard(page, 0)
+  await ready()
+  await page.tap('.p-top .icon-btn')
+  await page.waitForSelector('.sheet .zoom-toggle input')
+  await wait(300)
+  const m0 = await page.evaluate(() => document.querySelector('.sheet .zoom-toggle input').checked)
+  await page.tap('.sheet .zoom-toggle input')
+  await wait(200)
+  const m1 = await page.evaluate((key) => ({ checked: document.querySelector('.sheet .zoom-toggle input').checked, saved: localStorage.getItem(key) }), ZOOM_KEY)
+  await page.screenshot({ path: `${OUT}/7-menu-zoom-toggle.png` })
+  await page.tap('.sheet .sheet-close')
+  await wait(400)
+  await tapChar(page, 'p10', 4)
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p10', { timeout: 10000 }).catch(() => {})
+  await wait(400)
+  const m2 = await page.evaluate(() => window.__state())
+  check(
+    'メニューの「書くときに拡大する」：ページ全体まで縮めたあとは外れている。付けると覚えを消し、次に段落を押すと本文の幅に合わせて拡大する',
+    !m0 && m1.checked && m1.saved === null && m2.editing === 'p10' && m2.zoomed && Math.abs(m2.scale - m2.textScale) < 0.01,
+    JSON.stringify({ before: m0, after: m1, editing: m2.editing, scale: [m2.scale, m2.textScale].map((s) => s.toFixed(3)) }),
+  )
+  await page.tap('.direct-bar .db-done')
+  await wait(300)
+  await ready()
+  await page.tap('.p-top .icon-btn')
+  await page.waitForSelector('.sheet .zoom-toggle input')
+  await wait(300)
+  await page.tap('.sheet .zoom-toggle input')
+  await wait(200)
+  const m3 = await page.evaluate((key) => ({ checked: document.querySelector('.sheet .zoom-toggle input').checked, saved: localStorage.getItem(key) }), ZOOM_KEY)
+  await page.tap('.sheet .sheet-close')
+  await wait(400)
+  await tapChar(page, 'p10', 4)
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p10', { timeout: 10000 }).catch(() => {})
+  await wait(400)
+  const m4 = await page.evaluate(() => window.__state())
+  check(
+    'メニューの「書くときに拡大する」を外すと、段落を押してもページ全体の大きさのまま書き始める',
+    !m3.checked && m3.saved === '0' && m4.editing === 'p10' && m4.onPaper && Math.abs(m4.scale - m4.fitScale) < 0.001,
+    JSON.stringify({ toggle: m3, editing: m4.editing, scale: [m4.scale, m4.fitScale].map((s) => s.toFixed(3)) }),
+  )
+  await page.tap('.direct-bar .db-done')
+  await wait(300)
   await page.evaluate((key) => localStorage.removeItem(key), ZOOM_KEY)
   await ready()
 

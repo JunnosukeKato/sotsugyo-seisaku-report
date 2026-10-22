@@ -3,6 +3,7 @@ import { flushSync } from 'react-dom'
 import type { YearConfig } from '../config'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
 import { findEditable, type EditableKind } from '../editor/reportOps'
+import { setWritingZoomOn, writingZoomOn } from '../editor/pinchZoom'
 import { BAND_SIDE_QUERY, forTouch, paragraphHint, photoToolsAtSide } from './bandText'
 import { Icon } from './icons'
 import { SelectionTools } from './Palette'
@@ -308,6 +309,15 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
   const cellImage = !!tableId && snap.editingKind === 'tableCell' && editor.currentCellHasImage(tableId)
   const [tableSheet, setTableSheet] = useState(false)
   const [shapeSheet, setShapeSheet] = useState(false)
+  // 「＋追加」：本文の段落・見出しを書いているとき。押すと、道具の上に大見出し・小見出し・改ページ（ほかの欄に移ったら閉じる）
+  const addable = paragraph || snap.editingKind === 'subheading' || snap.editingKind === 'chapter'
+  const [addFor, setAddFor] = useState<string | null>(null)
+  const addOpen = addable && !!id && addFor === id
+  const setAddOpen = (open: boolean) => setAddFor(open ? id : null)
+  const addThen = (run: () => void) => () => {
+    setAddFor(null)
+    run()
+  }
   // 書く欄の中で戻せなければ、原稿を戻す（書く欄はいったん閉じ、欄が残っていれば、組み直してから開き直す。下の書く欄と同じ）
   const undoRedo = (typing: () => boolean, run: () => void) => {
     if (typing()) return
@@ -325,6 +335,23 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
             {hint}
           </p>
         )}
+        {addOpen && (
+          <div className="db-row db-add" role="group" aria-label="書いている所の後ろに入れる">
+            {/* 大きい順（大見出し → 小見出し）。下のタブの「追加」と同じ並び */}
+            <button onMouseDown={keepFocus} onClick={addThen(() => editor.addChapter())}>
+              {Icon.heading1}
+              <span>大見出し</span>
+            </button>
+            <button onMouseDown={keepFocus} onClick={addThen(() => editor.addSubheading())}>
+              {Icon.heading2}
+              <span>小見出し</span>
+            </button>
+            <button onMouseDown={keepFocus} onClick={addThen(() => editor.addPageBreak())}>
+              {Icon.pageBreak}
+              <span>改ページ</span>
+            </button>
+          </div>
+        )}
         <div className="db-row">
           <button onMouseDown={keepFocus} {...offWhen(!snap.typingUndo && !snap.canUndo)} onClick={() => (snap.typingUndo || snap.canUndo) && undoRedo(() => editor.undoTyping(), () => editor.undo())}>
             {Icon.undo}
@@ -334,16 +361,24 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
             {Icon.redo}
             <span>やり直す</span>
           </button>
+          {/* 「図を入れる」「表を入れる」は、「＋追加」を並べるため「図」「表」に短くした（依頼者の選択 2026-10-22 案X） */}
           {paragraph && (
-            <button onMouseDown={keepFocus} onClick={() => void editor.addFigure()}>
+            <button onMouseDown={keepFocus} onClick={() => void editor.addFigure()} aria-label="図を入れる">
               {Icon.figure}
-              <span>図を入れる</span>
+              <span>図</span>
             </button>
           )}
           {paragraph && (
-            <button className={tableSheet ? 'on' : undefined} onMouseDown={keepFocus} onClick={() => setTableSheet(true)}>
+            <button className={tableSheet ? 'on' : undefined} onMouseDown={keepFocus} onClick={() => setTableSheet(true)} aria-label="表を入れる">
               {Icon.table}
-              <span>表を入れる</span>
+              <span>表</span>
+            </button>
+          )}
+          {/* 書いている段落・見出しの後ろに、大見出し・小見出し・改ページを入れる（完了して下のタブの「追加」に行かなくてよい：依頼者の選択 2026-10-22 案X） */}
+          {addable && (
+            <button className={addOpen ? 'on' : undefined} onMouseDown={keepFocus} onClick={() => setAddOpen(!addOpen)} aria-expanded={addOpen} aria-label="追加（大見出し・小見出し・改ページ）">
+              {Icon.plus}
+              <span>追加</span>
             </button>
           )}
           {removable && id && (
@@ -470,7 +505,7 @@ function AddTools({ editor, snap, onDone, direct }: { editor: ReportEditor; snap
         {tool('改ページ', Icon.pageBreak, () => editor.addPageBreak())}
       </div>
       <p className="sheet-hint">
-        図・表は、文中の入れたい位置をタップして、{direct ? 'キーボードの上' : '書く欄'}の「図を入れる」「表を入れる」で入れます（素材表も「表を入れる」から）。
+        図・表は、文中の入れたい位置をタップして、{direct ? 'キーボードの上' : '書く欄'}の{direct ? '「図」「表」' : '「図を入れる」「表を入れる」'}で入れます（素材表も「表を入れる」から）。
       </p>
       {/* 引用・参考文献は、使い方の「引用・参考文献」から入れる（mockups/v35 ①。入れた後は、そのページをタップして直す） */}
     </>
@@ -689,6 +724,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
               }}
             />
           </div>
+          <WritingZoomToggle />
           {onWordImport && (
             <WordImportLink
               onClick={() => {
@@ -701,5 +737,29 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
         </Sheet>
       )}
     </>
+  )
+}
+
+/**
+ * メニューの「書くときに拡大する」（依頼者の選択 2026-10-22「両方」）。
+ * 外すと、段落を押してもページ全体のまま書く。書いている間に指でページ全体まで縮めたときも、ここが外れる
+ */
+function WritingZoomToggle() {
+  const [on, setOn] = useState(writingZoomOn)
+  return (
+    <label className="zoom-toggle">
+      <input
+        type="checkbox"
+        checked={on}
+        onChange={(e) => {
+          setWritingZoomOn(e.target.checked)
+          setOn(e.target.checked)
+        }}
+      />
+      <span>
+        書くときに拡大する
+        <small>外すと、ページ全体のまま書きます</small>
+      </span>
+    </label>
   )
 }

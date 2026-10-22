@@ -762,6 +762,11 @@ body.resizing .page-viewport { pointer-events: none; }
 .word-link svg { width: 16px; height: 16px; flex: none; }
 .word-link::after { content: ''; position: absolute; inset: -9px -6px; }
 .sheet-body .word-link { margin: 0 0 8px; padding: 4px 0; font-size: 13.5px; }
+/* メニューの「書くときに拡大する」（スマホ） */
+.zoom-toggle { display: flex; align-items: flex-start; gap: 10px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-md); background: #fff; font-size: 13.5px; color: var(--ink); cursor: pointer; }
+.zoom-toggle input { flex: none; width: 20px; height: 20px; margin: 0; accent-color: var(--accent); }
+.zoom-toggle span { display: flex; flex-direction: column; gap: 2px; }
+.zoom-toggle small { font-size: 12px; color: var(--muted); word-break: auto-phrase; }
 /* 「？ 使い方」のボタン（右の欄の「バックアップ」の横。スマホはメニューの中。mockups/v27 案A）：藍の字で、ほかのボタンより少し目立たせる */
 .link-btn.help-btn { border-color: #c9cfe6; color: var(--accent); }
 .link-btn.help-btn svg { color: var(--accent); }
@@ -1556,6 +1561,9 @@ button.row { cursor: pointer; }
 .direct-bar .db-row button svg { width: 20px; height: 20px; }
 .direct-bar .db-row button:disabled, .direct-bar .db-row button.off { color: #b5b7bc; }
 .direct-bar .db-row button.on { background: var(--accent-soft); color: var(--accent); }
+/* 「＋追加」で出す行（大見出し・小見出し・改ページ。依頼者の選択 2026-10-22 案X）：道具の上に、細い線で分けて */
+.direct-bar .db-add { padding-bottom: 2px; margin-bottom: 2px; border-bottom: 1px solid var(--line); }
+.direct-bar .db-add button { color: var(--accent); }
 .direct-bar .db-row button.danger { color: var(--error); }
 .direct-bar .db-row .db-done { margin-left: auto; flex-direction: row; padding: 0 18px; background: var(--accent); color: #fff; font-size: 14px; font-weight: 700; border-radius: 10px; }
 /* 表の道具の段（mockups/v45 案A）：画面の幅に入る1段（横にずらさない）。行・列を足す・消す・画像・表の形・表を削除を、同じ幅に並べる（どれも 44px 以上）。
