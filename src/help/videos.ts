@@ -18,7 +18,7 @@ export const HELP_VIDEOS: HelpVideo[] = [
   { number: 3, title: '表・作品写真', file: '3-table-photos', seconds: 68 },
   { number: 4, title: 'セルフチェックで直す', file: '4-check', seconds: 43 },
   { number: 5, title: 'PDF を書き出す', file: '5-pdf', seconds: 56 },
-  { number: 6, title: 'スマホで書く', file: '6-phone', seconds: 60, phone: true },
+  { number: 6, title: 'スマホで書く', file: '6-phone', seconds: 61, phone: true },
 ]
 
 /** 項目に入れた動画（番号の順。使い方のいちばん上の「動画で見る」に並べる：mockups 依頼者の選択 2026-10-22 案1） */

@@ -13,6 +13,7 @@
 //     表（列の幅）・作品写真（2ページ目）・ドライブに保存・バックアップ・別の端末の原稿・もう一度ログイン・2つめのタブ
 //   管理ページ：年度の設定・変更があるときの下の帯・コース・ひな形を作る画面・書き方のチェック・先生の登録・詳細設定・新年度の準備・先生の画面
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { showPhoneKeyboard } from './phoneKeyboard.mjs'
 
 process.env.EDGE_PORT ??= '9403'
 const { withEdge } = await import('./poc/edge.mjs')
@@ -30,8 +31,6 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 const PC = { width: 1440, height: 900, deviceScaleFactor: 2 }
 const PHONE = { width: 390, height: 844, deviceScaleFactor: 3, isMobile: true, hasTouch: true }
 const PHONE_UA = 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Mobile Safari/537.36'
-/** スマホの仮のキーボードの高さ（iPhone の日本語のキーボードほど。scripts/e2e/phoneDirect.mjs と同じ） */
-const KB = 336
 const STUDENT_EMAIL = '00zz0123@bunka-wu.ac.jp'
 const config = JSON.parse(readFileSync('scripts/e2e/config-fixture.json', 'utf8'))
 // 試験用の設定の「（自動テスト用）」のお知らせは写さない
@@ -241,24 +240,8 @@ async function tapChar(page, id, i) {
   await page.touchscreen.tap(pt.x, pt.y)
 }
 
-/** スマホのキーボードを仮に出す（見えている所 visualViewport を低くし、写真のための灰色の板を置く。e2e/phoneDirect.mjs と同じ） */
-const fakeKeyboard = (page, on) =>
-  page.evaluate(
-    (kb, on) => {
-      document.querySelector('#fake-kb')?.remove()
-      if (on) Object.defineProperty(window.visualViewport, 'height', { configurable: true, get: () => window.innerHeight - kb })
-      else delete window.visualViewport.height
-      window.visualViewport.dispatchEvent(new Event('resize'))
-      if (!on) return
-      const k = document.createElement('div')
-      k.id = 'fake-kb'
-      k.textContent = 'キーボード'
-      Object.assign(k.style, { position: 'fixed', left: '0', right: '0', bottom: '0', height: `${kb}px`, zIndex: '200', pointerEvents: 'none', background: '#d3d6dc', color: '#6b6f78', display: 'grid', placeItems: 'center', font: '15px sans-serif' })
-      document.body.append(k)
-    },
-    KB,
-    on,
-  )
+/** スマホのキーボードを仮に出す（iPhone のキーボードの絵を置き、見えている所 visualViewport を低くする。phoneKeyboard.mjs） */
+const fakeKeyboard = (page, on) => showPhoneKeyboard(page, on)
 
 async function studentShots(browser) {
   const drive = fakeDrive(STUDENT_EMAIL)
@@ -481,6 +464,8 @@ async function studentShots(browser) {
     await ready(pp)
     await driveSaved(pp)
     await goToBlock(pp, 'p3')
+    // はじめて書くときの「字を大きくするには」の知らせは写さない（紙面が隠れるため）
+    await pp.evaluate(() => localStorage.setItem('sotsugyo-seisaku-report-pinch-tip', 'done'))
     await tapChar(pp, 'p3', 14)
     await pp.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p3' && window.__editor.getSnapshot().zoomed, { timeout: 30000 })
     await sleep(900)

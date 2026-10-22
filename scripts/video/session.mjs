@@ -2,6 +2,7 @@
 // Google のログインとドライブは偽物（scripts/e2e/fakeGoogle.mjs）に差し替える。本物の Google にはつながない。
 // 見本の原稿は、衣装コースの架空の学生（文化花子・00ZZ0123）。見本の画像は docs/guide-images/sample/ のもの（読むだけ）
 import { readFileSync } from 'node:fs'
+import { showPhoneKeyboard } from '../phoneKeyboard.mjs'
 import { sleep } from './recorder.mjs'
 
 const { fakeDrive, routeGoogle } = await import('../e2e/fakeGoogle.mjs')
@@ -61,25 +62,9 @@ export const endOfBlock = (page, id) =>
 
 /**
  * スマホ：キーボードを仮に出す・しまう（ヘッドレスの Edge では本物のキーボードは出ない）。
- * iPhone と同じく、見えている所（visualViewport）を低くして、画面の下に灰色の「キーボード」の札を置く（押せない。scripts/e2e/phoneDirect.mjs と同じやり方）
+ * iPhone と同じく、見えている所（visualViewport）を低くして、画面の下に iPhone のキーボードの絵を置く（押せない。scripts/phoneKeyboard.mjs）
  */
-export const phoneKeyboard = (page, on, height = 300) =>
-  page.evaluate(
-    (on, height) => {
-      document.querySelector('#video-kb')?.remove()
-      if (on) Object.defineProperty(window.visualViewport, 'height', { configurable: true, get: () => window.innerHeight - height })
-      else delete window.visualViewport.height
-      window.visualViewport.dispatchEvent(new Event('resize'))
-      if (!on) return
-      const k = document.createElement('div')
-      k.id = 'video-kb'
-      k.textContent = 'キーボード'
-      Object.assign(k.style, { position: 'fixed', left: '0', right: '0', bottom: '0', height: `${height}px`, zIndex: '200', pointerEvents: 'none', background: '#d1d4da', color: '#5f636c', display: 'grid', placeItems: 'center', font: '600 17px "BIZ UDPGothic", sans-serif', letterSpacing: '0.1em' })
-      document.body.append(k)
-    },
-    on,
-    height,
-  )
+export const phoneKeyboard = (page, on) => showPhoneKeyboard(page, on, 'video-kb')
 
 /** 現在の紙面のページで、ブロックの中の文字（はじめに見つかったもの）の範囲（CSS px）。クリックで、その文字の後ろから書くのに使う */
 export const textRect = (page, id, text) =>

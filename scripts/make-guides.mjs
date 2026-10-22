@@ -24,6 +24,7 @@ import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import QRCode from 'qrcode'
 import { getDocument } from 'pdfjs-dist/legacy/build/pdf.mjs'
+import { showPhoneKeyboard } from './phoneKeyboard.mjs'
 
 // ほかの確かめと同時に動かしても Edge がぶつからないよう、別のポートを使う（edge.mjs は読み込んだときにポートを決めるので、先に決める）
 process.env.EDGE_PORT ??= '9364'
@@ -557,26 +558,8 @@ async function tapChar(page, id, i) {
   await page.touchscreen.tap(pt.x, pt.y)
 }
 
-/** スマホのキーボードの高さ（iPhone の日本語のキーボードほど。scripts/e2e/phoneDirect.mjs と同じ） */
-const KB = 336
-/** スマホのキーボードを仮に出す（見えている所 visualViewport を低くし、写真のための灰色の板を置く。e2e/phoneDirect.mjs と同じ） */
-const fakeKeyboard = (page, on) =>
-  page.evaluate(
-    (kb, on) => {
-      document.querySelector('#fake-kb')?.remove()
-      if (on) Object.defineProperty(window.visualViewport, 'height', { configurable: true, get: () => window.innerHeight - kb })
-      else delete window.visualViewport.height
-      window.visualViewport.dispatchEvent(new Event('resize'))
-      if (!on) return
-      const k = document.createElement('div')
-      k.id = 'fake-kb'
-      k.textContent = 'キーボード'
-      Object.assign(k.style, { position: 'fixed', left: '0', right: '0', bottom: '0', height: `${kb}px`, zIndex: '200', pointerEvents: 'none', background: '#d3d6dc', color: '#6b6f78', display: 'grid', placeItems: 'center', font: '15px sans-serif' })
-      document.body.append(k)
-    },
-    KB,
-    on,
-  )
+/** スマホのキーボードを仮に出す（iPhone のキーボードの絵を置き、見えている所 visualViewport を低くする。phoneKeyboard.mjs） */
+const fakeKeyboard = (page, on) => showPhoneKeyboard(page, on)
 
 /** 押したボタンなどに残る、選んでいる印（青い枠）を消す */
 const unfocus = (page) => page.evaluate(() => document.activeElement?.blur())

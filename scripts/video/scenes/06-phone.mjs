@@ -1,7 +1,7 @@
 // 動画 6：スマホで書く（スマホ：390×844。動画では縦長の画面を左に置き、右に字幕を出す）
-// 2026-10-20 の画面：段落をタップすると、文字の幅まで大きくなり、紙面の上でそのまま書く。キーボードのすぐ上に
-// 「戻す」「やり直す」「図を入れる」「表を入れる」「完了」。「完了」でページ全体に戻る。ページは上下にはらってめくる。2本の指で拡大。
-// ヘッドレスの Edge では本物のキーボードが出ないので、書いている間は、画面の下に灰色の「キーボード」の札を仮に出す（session.phoneKeyboard）
+// 2026-10-22 の画面：段落をタップすると、文字の幅まで大きくなり、紙面の上でそのまま書く。キーボードのすぐ上に
+// 「戻す」「やり直す」「図」「表」「追加」「削除」「完了」。「完了」でページ全体に戻る。ページは上下にはらってめくる。2本の指で拡大。
+// ヘッドレスの Edge では本物のキーボードが出ないので、書いている間は、画面の下に iPhone のキーボードの絵を仮に出す（session.phoneKeyboard）
 import { resolve } from 'node:path'
 
 export const meta = {
@@ -10,10 +10,10 @@ export const meta = {
   device: 'phone',
   captions: {
     tap: '書きたい段落をタップすると、大きくなって、その場で書けます',
-    bar: 'キーボードの上に、「戻す」「図を入れる」「完了」などが並びます',
+    bar: 'キーボードの上に、「戻す」「図」「表」「追加」「完了」などが並びます',
     type: '文は、紙面の上でそのまま打ちます',
     done: '書き終えたら「完了」。ページ全体の表示に戻ります',
-    figure: '図は、段落をタップして「図を入れる」から入れます',
+    figure: '図は、段落をタップして「図」から入れます',
     caption: '図の下のタイトルを打ちます。番号は自動で付きます',
     swipe: 'ページは、紙面を上下にはらってめくります',
     pinch: '2本の指で広げると、拡大できます',
@@ -24,6 +24,8 @@ export const meta = {
 }
 
 export async function prepare({ page, h }) {
+  // はじめて書くときの「字を大きくするには」の知らせは出さない（紙面が隠れるため。広げ方は動画の後半で見せる）
+  await page.evaluate(() => localStorage.setItem('sotsugyo-seisaku-report-pinch-tip', 'done'))
   await h.goToBlock(page, 'p7')
 }
 
@@ -76,7 +78,7 @@ export async function run({ page, rec, h }) {
   await h.sleep(1500)
   await tapToWrite(page, h, 'p7')
   await h.sleep(1300)
-  const fig = await h.centerOf(page, '.direct-bar button', '図を入れる')
+  const fig = await h.centerOf(page, '.direct-bar button[aria-label="図を入れる"]')
   const [chooser] = await Promise.all([page.waitForFileChooser(), h.tapAt(page, fig.x, fig.y)])
   await h.phoneKeyboard(page, false)
   await h.sleep(900)
