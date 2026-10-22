@@ -34,3 +34,5 @@ gas/pdf-folder.local.json
 
 # 自動テスト用にまとめた版（scripts/e2e/run.mjs が作る。公開しない）
 dist-e2e/
+# 使い方の写真・動画に重ねるキーボードの絵（依頼者が用意した素材。素材そのものは公開しない：scripts/phoneKeyboard.mjs）
+*.private.png
