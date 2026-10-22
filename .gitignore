@@ -31,3 +31,6 @@ poc-output/
 gas-dist/
 # 書き出した PDF の控えを置く、先生のドライブのフォルダの ID（公開しない。scripts/build-gas.mjs が配信の窓口に入れる）
 gas/pdf-folder.local.json
+
+# 自動テスト用にまとめた版（scripts/e2e/run.mjs が作る。公開しない）
+dist-e2e/

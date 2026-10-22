@@ -14,8 +14,8 @@ import { Waiting } from './Wait'
  * お試しの内容は、開いた先生のブラウザにだけ残る（学生・ほかの先生には見えず、提出・ドライブにも届かない）
  */
 
-/** 学生のツールの場所（TemplateOverlay.tsx と同じ。開発中は、この開発サーバー） */
-const TOOL_URL: string = import.meta.env.DEV ? `${location.origin}/` : (import.meta.env.VITE_TOOL_URL as string | undefined) || DEFAULT_TOOL_URL
+/** 学生のツールの場所（TemplateOverlay.tsx と同じ。開発中・自動テスト用にまとめた版は、管理ページと同じ場所） */
+const TOOL_URL: string = import.meta.env.DEV || import.meta.env.MODE === 'e2e' ? `${location.origin}/` : (import.meta.env.VITE_TOOL_URL as string | undefined) || DEFAULT_TOOL_URL
 
 /** 開いたタブの返事を待つ時間（これを過ぎても返事がなければ、開けなかったと知らせる） */
 const OPEN_TIMEOUT_MS = 30000

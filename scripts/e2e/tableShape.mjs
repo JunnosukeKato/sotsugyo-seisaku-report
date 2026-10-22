@@ -130,7 +130,7 @@ const brief = (s) => (s ? { cls: s.cls, head: r2(s.head), body: s.body.map(r2), 
 export const pdfShape = (page, id = TABLE_ID, cell = null) =>
   page.evaluate(
     async (id, cell) => {
-      const { pagesToPdf } = await import('/src/pdf/pagesToPdf.ts')
+      const { pagesToPdf } = await window.__import('pdf/pagesToPdf.ts')
       const t = document.querySelector(`.page-viewport.front .data-table[data-table-id="${id}"] table`)
       const pageEl = t.closest('[data-vivliostyle-page-container]')
       const pr = pageEl.getBoundingClientRect()

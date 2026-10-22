@@ -89,7 +89,7 @@ export async function trialModeAdmin(browser, check) {
   await admin.waitForFunction(() => document.querySelector('.trial-state')?.textContent === '別のタブで開きました', { timeout: 30000 })
   check('管理ページに「別のタブで開きました」', true)
   const view = await trial.evaluate(async () => {
-    const { allImages } = await import('/src/model/storage.ts')
+    const { allImages } = await window.__import('model/storage.ts')
     const r = window.__editor.getSnapshot().report
     return {
       band: document.querySelector('.trial-band')?.textContent,

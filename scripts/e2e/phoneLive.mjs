@@ -273,7 +273,7 @@ export async function phoneLivePhone(browser, check) {
   }))
   const pdfHash = () =>
     page.evaluate(async () => {
-      const { buildPdf } = await import('/src/pdf/exportPdf.ts')
+      const { buildPdf } = await window.__import('pdf/exportPdf.ts')
       const ed = window.__editor
       const pages = ed.pageElements()
       const at = ed.pageOfBlock('p9')

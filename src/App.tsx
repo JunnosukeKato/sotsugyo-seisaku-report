@@ -88,7 +88,7 @@ const firstEmptyCoverStep = (report: Report): GuideStep | null => {
  * お試し（?trial=1：先生が見本の原稿で試す。src/trial/）は、ドライブにつながない（ログインもしない）
  */
 const DRIVE_CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined
-const DRIVE_ENABLED = !!DRIVE_CLIENT_ID && !trialMode && !(import.meta.env.DEV && new URLSearchParams(location.search).has('nodrive'))
+const DRIVE_ENABLED = !!DRIVE_CLIENT_ID && !trialMode && !((import.meta.env.DEV || import.meta.env.MODE === 'e2e') && new URLSearchParams(location.search).has('nodrive'))
 
 type DriveDialog =
   | { kind: 'conflict'; remote: RemoteCopy; atLogin: boolean }
@@ -519,8 +519,8 @@ export default function App() {
         markOpen('images')
         editorRef.current = ed
         setEditor(ed)
-        // 開発中だけ、自動テストから操作できるようにする
-        if (import.meta.env.DEV) Object.assign(window, { __editor: ed })
+        // 自動テストから操作できるようにする（開発サーバーと、自動テスト用にまとめた版 vite build --mode e2e。公開する版では入らない）
+        if (import.meta.env.DEV || import.meta.env.MODE === 'e2e') Object.assign(window, { __editor: ed })
         // 控えの設定で開いたときは、窓口の返事を待って、変わっていれば入れ替える
         if (quick) void refreshConfig(ed, configLoad.remote, published, yearLoad && yearConfig === loaded ? { remote: yearLoad.remote, used: loaded } : null)
         // このタブでログイン済みなら、紙面を組むのと並べて、ドライブの原稿を確かめる（前は、紙面を組み終えてから確かめていた）

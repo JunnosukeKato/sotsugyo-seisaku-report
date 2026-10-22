@@ -125,6 +125,6 @@ function appsScriptServer(): AdminServer {
 export const server: AdminServer = window.google?.script ? appsScriptServer() : createMockServer()
 export const isMockServer = !window.google?.script
 
-// 開発中（試験用サーバー）だけ、自動テスト（scripts/e2e/admin.mjs）から試験用サーバーを直接呼べるようにする
+// 開発中・自動テスト用にまとめた版の試験用サーバーだけ、自動テスト（scripts/e2e/admin.mjs）から試験用サーバーを直接呼べるようにする
 // （画面では押せない操作＝公開した年度の削除が断られることなどを確かめるため）
-if (import.meta.env.DEV && isMockServer) Object.assign(window, { __adminServer: server })
+if ((import.meta.env.DEV || import.meta.env.MODE === 'e2e') && isMockServer) Object.assign(window, { __adminServer: server })

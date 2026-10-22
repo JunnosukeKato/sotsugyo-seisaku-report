@@ -8,7 +8,7 @@
 npm install      # 初回のみ
 npm run dev      # 開発用サーバー（http://localhost:5173）
 npm test         # 単体テスト（セルフチェックのルール、データ操作、保存など）
-npm run e2e      # 通しテスト（Edge を自動で操作。開発用サーバーを起動しておく）
+npm run e2e      # 通しテスト（Edge を自動で操作。自動テスト用にまとめた版で流す。scripts/e2e/run.mjs）
 npm run build    # 配信用ファイルを dist/ に出力
 ```
 

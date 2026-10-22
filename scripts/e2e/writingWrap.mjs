@@ -202,7 +202,7 @@ export async function writingWrapPc(browser, check) {
         } else document.execCommand('insertText', false, pieces[k % pieces.length])
         // 打つ手が止まって、まとめて測り直すのを待つ
         await new Promise((r) => setTimeout(r, 350))
-        const { typesetSpacing } = await import('/src/editor/textSpacing.ts')
+        const { typesetSpacing } = await window.__import('editor/textSpacing.ts')
         const whole = document.createElement('div')
         whole.className = 'overlay-ghost'
         whole.dataset.typeset = ''

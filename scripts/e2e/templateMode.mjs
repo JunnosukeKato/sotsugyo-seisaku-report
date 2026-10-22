@@ -143,7 +143,7 @@ export async function templateModeAdmin(browser, check) {
   const bodyBlocks = (frame) => frame.evaluate(() => window.__editor.getSnapshot().report.body.map((c) => ({ id: c.id, title: c.title, blocks: c.blocks.map((b) => ({ id: b.id, type: b.type, text: b.type === 'paragraph' ? b.content.map((n) => n.text ?? '').join('') : (b.title ?? b.caption ?? '') })) })))
   const templateOf = (frame) =>
     frame.evaluate(async () => {
-      const { templateFromReport } = await import('/src/template/convert.ts')
+      const { templateFromReport } = await window.__import('template/convert.ts')
       return templateFromReport(window.__editor.getSnapshot().report)
     })
   const leaveGuarded = () =>

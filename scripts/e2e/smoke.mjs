@@ -62,9 +62,9 @@ const paperMatchesWhole = (page) =>
   page.evaluate(async () => {
     const ed = window.__editor
     const r = ed.renderer
-    const { buildReportDocument } = await import('/src/layout/document.ts')
-    const { PartView } = await import('/src/editor/pageView.ts')
-    const { fitFigureSize } = await import('/src/model/images.ts')
+    const { buildReportDocument } = await window.__import('layout/document.ts')
+    const { PartView } = await window.__import('editor/pageView.ts')
+    const { fitFigureSize } = await window.__import('model/images.ts')
     const image = (id) => ed.images.get(id)
     const html = buildReportDocument(ed.getSnapshot().report, ed.config, {
       imageSrc: (id) => image(id)?.url ?? ed.placeholderImage,
@@ -2241,7 +2241,7 @@ await withEdge(async (browser) => {
     rmSync(`${DOWNLOADS}/${title}.pdf`, { force: true })
     // 右の欄と同じ分け方（app/checkSummary.ts）での、残っている直すところ・まだのところ
     const left = await page.evaluate(async (keepId) => {
-      const { checkSummary } = await import('/src/app/checkSummary.ts')
+      const { checkSummary } = await window.__import('app/checkSummary.ts')
       const ed = window.__editor
       const { rows, fixes } = checkSummary(ed.getSnapshot(), ed.config)
       const keep = fixes.find((f) => f.ruleId === 'sentence-end' && f.blockId === keepId)
@@ -2542,7 +2542,7 @@ async function photoWholeCheck(browser) {
   /** ツールの中で作る PDF（「PDFを書き出す」と同じ部品）で、作品写真のページの上の枠の左端・真ん中・右端の色 */
   const pdfColors = () =>
     page.evaluate(async () => {
-      const { buildPdf } = await import('/src/pdf/exportPdf.ts')
+      const { buildPdf } = await window.__import('pdf/exportPdf.ts')
       const ed = window.__editor
       const photos = ed.pageElements()[ed.getSnapshot().layout.kinds.indexOf('photos')]
       let colors = null
@@ -2935,7 +2935,7 @@ async function wordImportCheck(browser) {
   await pause(500)
   await ready()
   const after = await page.evaluate(async () => {
-    const { allImages, listSnapshots } = await import('/src/model/storage.ts')
+    const { allImages, listSnapshots } = await window.__import('model/storage.ts')
     const s = window.__editor.getSnapshot()
     const figures = s.report.body.flatMap((c) => c.blocks).flatMap((b) => (b.type === 'figureRow' ? b.figures : []))
     const stored = new Set((await allImages()).map((i) => i.id))

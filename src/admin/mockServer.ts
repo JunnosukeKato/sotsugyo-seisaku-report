@@ -252,8 +252,8 @@ export function createMockServer(): AdminServer {
     async getTrialSample() {
       await wait()
       requireTeacher(load())
-      // 開発中は、手元にある本番の見本（git に入れないファイル gas/trial-sample.private.json）を使う。なければ開発用の小さな見本
-      if (import.meta.env.DEV) {
+      // 開発中・自動テスト用にまとめた版（scripts/e2e/serveBuilt.mjs が返す）は、手元にある本番の見本（git に入れないファイル gas/trial-sample.private.json）を使う。なければ開発用の小さな見本
+      if (import.meta.env.DEV || import.meta.env.MODE === 'e2e') {
         const local = await fetch('/gas/trial-sample.private.json')
           .then((r) => (r.ok ? r.json() : null))
           .catch(() => null)

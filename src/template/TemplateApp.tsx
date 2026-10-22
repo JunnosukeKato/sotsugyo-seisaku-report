@@ -185,8 +185,8 @@ function TemplateScreen({ init }: { init: InitPayload }) {
       { template: true },
     )
     setEditor(ed)
-    // 開発中だけ、自動テストから操作できるようにする
-    if (import.meta.env.DEV) Object.assign(window, { __editor: ed })
+    // 自動テストから操作できるようにする（開発サーバーと、自動テスト用にまとめた版 vite build --mode e2e。公開する版では入らない）
+    if (import.meta.env.DEV || import.meta.env.MODE === 'e2e') Object.assign(window, { __editor: ed })
     void (async () => {
       await ed.renderFirst(0)
       // 本文の最初のページから（表紙・抄録はひな形にほとんど入らないため）。はじめはページ全体を見せる（前は拡大で開いていた。依頼者の希望 2026-10-22）

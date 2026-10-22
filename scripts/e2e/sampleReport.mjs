@@ -2,8 +2,8 @@
 // ページの中で動かす（page.evaluate(setupWriting)）。見本の画像は docs/guide-images/sample/ のもの（読むだけ）。
 // 使い方の画面の写真（make-help-images.mjs）・PDF の保存の確かめ（smoke.mjs）・デザイン案の画像（mockup-shots-v28.mjs）で使う
 export async function setupWriting() {
-  const { fromMaterialTable } = await import('/src/model/table.ts')
-  const { importImage } = await import('/src/model/images.ts')
+  const { fromMaterialTable } = await window.__import('model/table.ts')
+  const { importImage } = await window.__import('model/images.ts')
   const files = [
     ['g-design', 'design', 1200],
     ['g-mood', 'moodboard', 1200],

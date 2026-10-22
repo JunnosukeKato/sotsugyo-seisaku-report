@@ -106,7 +106,7 @@ const ctrl = async (page, key) => {
 /** 原稿のようす（本文の章ごとのブロックの ID・種類、段落の文字） */
 const state = (page) =>
   page.evaluate(async () => {
-    const ops = await import('/src/editor/reportOps.ts')
+    const ops = await window.__import('editor/reportOps.ts')
     const s = window.__editor.getSnapshot()
     const num = ops.numbering(s.report)
     const text = (b) => (b.type === 'paragraph' ? ops.contentToText(b.content, num) : b.type === 'subheading' ? b.title : '')
@@ -1015,7 +1015,7 @@ const PASTE_SHOTS = 'poc-output/abstract-paste'
 /** 抄録の段落（ID と文字）・書いている欄・画面の下の知らせ（行ごとの字の数も。1字だけの行がないか見る） */
 const abstractState = (page) =>
   page.evaluate(async () => {
-    const ops = await import('/src/editor/reportOps.ts')
+    const ops = await window.__import('editor/reportOps.ts')
     const s = window.__editor.getSnapshot()
     const num = ops.numbering(s.report)
     const info = document.querySelector('.undo-toast .undo-info')
@@ -1169,7 +1169,7 @@ export async function abstractPastePc(browser, check) {
 
   // ---- 抄録を書き始める前（「先生の許可が出た」の前）：Ctrl+V では何も入らないので、わけを知らせる。押したあとの空の段落には入る ----
   await page.evaluate(async () => {
-    const { emptyParagraph } = await import('/src/model/template.ts')
+    const { emptyParagraph } = await window.__import('model/template.ts')
     window.__editor.replace({ ...window.__editor.getSnapshot().report, abstract: { started: false, paragraphs: [emptyParagraph('抄録の書き出しの例')] } })
   })
   await wait(300)

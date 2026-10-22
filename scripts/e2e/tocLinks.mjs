@@ -166,7 +166,7 @@ async function jumpBy(page, ready, id, press) {
 /** 目次のページを、PDF と同じ作り方で絵にする（src/pdf/pagesToPdf.ts。data URL） */
 const tocImage = (page) =>
   page.evaluate(async () => {
-    const { pagesToPdf } = await import('/src/pdf/pagesToPdf.ts')
+    const { pagesToPdf } = await window.__import('pdf/pagesToPdf.ts')
     const ed = window.__editor
     const toc = ed.pageElements()[ed.getSnapshot().layout.kinds.indexOf('toc')]
     let url = ''

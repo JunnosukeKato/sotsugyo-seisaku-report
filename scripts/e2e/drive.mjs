@@ -6,6 +6,9 @@ import { withEdge } from '../poc/edge.mjs'
 import { fakeDrive, routeGoogle } from './fakeGoogle.mjs'
 import { waitingDrive } from './waiting.mjs'
 
+// 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる。scripts/e2e/run.mjs はまとめた版の場所を渡す）
+const APP = process.env.APP_URL ?? 'http://localhost:5173'
+
 const results = []
 const check = (name, ok, detail = '') => {
   results.push({ name, ok })
@@ -126,7 +129,7 @@ await withEdge(async (browser) => {
 
   // ---- パソコン：はじめて開く ----
   const pc = await device(browser, drive)
-  await pc.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+  await pc.page.goto(`${APP}/`, { waitUntil: 'networkidle0' })
   await pc.page.waitForSelector('.login-over .login-btn')
   check('開くと、ログインの窓が出る（ログインするまで書けない）', (await pc.page.$eval('.login-over', (e) => e.textContent)).includes('大学のアカウントでログイン'))
   await editorReady(pc.page)
@@ -248,7 +251,7 @@ await withEdge(async (browser) => {
 
   // ---- スマホ：別の端末でログインすると、ドライブの原稿が開く ----
   const phone = await device(browser, drive, { phone: true })
-  await phone.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+  await phone.page.goto(`${APP}/`, { waitUntil: 'networkidle0' })
   await editorReady(phone.page)
   await phone.page.click('.login-btn')
   await gateClosed(phone.page)
@@ -332,7 +335,7 @@ await withEdge(async (browser) => {
   // ---- 先生（学籍番号の形でないアドレス）は、試しに使える ----
   drive.email = 'staff-a@bunka-wu.ac.jp'
   const staff = await device(browser, drive)
-  await staff.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+  await staff.page.goto(`${APP}/`, { waitUntil: 'networkidle0' })
   await editorReady(staff.page)
   await staff.page.click('.login-btn')
   await gateClosed(staff.page)
@@ -344,7 +347,7 @@ await withEdge(async (browser) => {
   // ---- 管理ページでドライブ保存を止めているとき（Google の障害など。mockups/v22 ②） ----
   config.driveSave = 'off'
   const stopped = await device(browser, drive)
-  await stopped.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+  await stopped.page.goto(`${APP}/`, { waitUntil: 'networkidle0' })
   await editorReady(stopped.page)
   await stopped.page.waitForSelector('.drive-stopped', { timeout: 30000 })
   const stoppedInfo = await stopped.page.evaluate(() => ({ gate: !!document.querySelector('.login-over'), guide: !!document.querySelector('.guide .g-opts button'), chip: !!document.querySelector('.drive-chip-wrap') }))
@@ -378,7 +381,7 @@ await withEdge(async (browser) => {
 
   // ---- パソコン：許可が切れる少し前にクリックすると、そのときに許可を延ばす（「もう一度ログイン」を出さない） ----
   const renew = await device(browser, drive)
-  await renew.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+  await renew.page.goto(`${APP}/`, { waitUntil: 'networkidle0' })
   await editorReady(renew.page)
   await renew.page.click('.login-btn')
   await gateClosed(renew.page)
@@ -429,7 +432,7 @@ await withEdge(async (browser) => {
   // ---- スマホでは、クリックで許可を延ばさない（Google の窓がタブの切り替えになるため。切れたら、今まで通り「もう一度ログイン」） ----
   const android = await device(browser, drive, { phone: true })
   await android.page.setUserAgent('Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36')
-  await android.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+  await android.page.goto(`${APP}/`, { waitUntil: 'networkidle0' })
   await editorReady(android.page)
   await android.page.click('.login-btn')
   await gateClosed(android.page)
@@ -453,7 +456,7 @@ await withEdge(async (browser) => {
       } catch {}
     })
     await (await late.page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'deny', browserContextId: late.context.id })
-    await late.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+    await late.page.goto(`${APP}/`, { waitUntil: 'networkidle0' })
     await editorReady(late.page)
     await late.page.click('.login-btn')
     await gateClosed(late.page)
@@ -497,7 +500,7 @@ await withEdge(async (browser) => {
       } catch {}
     })
     await (await local.page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'deny', browserContextId: local.context.id })
-    await local.page.goto('http://localhost:5173/?nodrive', { waitUntil: 'networkidle0' })
+    await local.page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
     await editorReady(local.page)
     await local.page.waitForSelector('.guide.step-course .g-opts button')
     await local.page.evaluate(() => document.querySelector('.g-opts button').click())
@@ -531,7 +534,7 @@ await withEdge(async (browser) => {
       } catch {}
     })
     await (await off.page.createCDPSession()).send('Browser.setDownloadBehavior', { behavior: 'deny', browserContextId: off.context.id })
-    await off.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+    await off.page.goto(`${APP}/`, { waitUntil: 'networkidle0' })
     await editorReady(off.page)
     await off.page.waitForSelector('.drive-stopped', { timeout: 30000 })
     await off.page.waitForSelector('.guide.step-course .g-opts button')
@@ -564,7 +567,7 @@ await withEdge(async (browser) => {
         localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
       } catch {}
     })
-    await iphone.page.goto('http://localhost:5173/', { waitUntil: 'networkidle0' })
+    await iphone.page.goto(`${APP}/`, { waitUntil: 'networkidle0' })
     await editorReady(iphone.page)
     await iphone.page.click('.login-btn')
     await gateClosed(iphone.page)

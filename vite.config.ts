@@ -69,19 +69,20 @@ function cspPlugin(): Plugin {
 }
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => ({
   // GitHub Pages などのサブパスや学内サーバーのどこに置いても動くよう相対パスで出力する
   base: './',
   plugins: [react(), cspPlugin()],
   build: {
     rollupOptions: {
       // 学生用ツールと、提出前チェック（Word のひな形で書いている学生が、確かめて1つの PDF にまとめる）と、
-      // Google ドライブの接続テストのページと、PDF を手元で作る試しのページ
-      input: { main: 'index.html', check: 'check.html', driveTest: 'drive-test.html', pdfTest: 'pdf-test.html' },
+      // Google ドライブの接続テストのページと、PDF を手元で作る試しのページ。
+      // 自動テスト用にまとめる版（vite build --mode e2e。scripts/e2e/run.mjs）には、管理ページの試験版（試験用サーバー）も入れる
+      input: { main: 'index.html', check: 'check.html', driveTest: 'drive-test.html', pdfTest: 'pdf-test.html', ...(mode === 'e2e' ? { admin: 'admin.html' } : {}) },
     },
   },
   test: {
     // 試しや見直しで作ったもの（poc-output、git に入らない）のテストは、単体テストに含めない
     exclude: [...configDefaults.exclude, 'poc-output/**'],
   },
-})
+}))

@@ -17,10 +17,10 @@ import { Waiting } from './Wait'
  */
 
 /**
- * 学生のツールの場所。開発中は、この開発サーバー（管理ページと同じ場所）。
+ * 学生のツールの場所。開発中・自動テスト用にまとめた版は、管理ページと同じ場所（開発サーバー・scripts/e2e/serveBuilt.mjs）。
  * 本番（Apps Script に載せる管理ページ）は、scripts/build-gas.mjs が入れる VITE_TOOL_URL（なければ GitHub Pages）
  */
-const TOOL_URL: string = import.meta.env.DEV ? `${location.origin}/` : (import.meta.env.VITE_TOOL_URL as string | undefined) || DEFAULT_TOOL_URL
+const TOOL_URL: string = import.meta.env.DEV || import.meta.env.MODE === 'e2e' ? `${location.origin}/` : (import.meta.env.VITE_TOOL_URL as string | undefined) || DEFAULT_TOOL_URL
 
 /** 開くのを待つ時間（これを過ぎても返事がなければ、開けなかったと知らせる） */
 const OPEN_TIMEOUT_MS = 25000

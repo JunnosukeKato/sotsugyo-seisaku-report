@@ -60,7 +60,7 @@ function addLongChapters() {
 
 /** ページの中で：写真を、この端末にも保存する（読み込み直しても写真が出るように） */
 async function storeImages() {
-  const { putImage } = await import('/src/model/storage.ts')
+  const { putImage } = await window.__import('model/storage.ts')
   for (const [id, img] of window.__editor.images) {
     const blob = await (await fetch(img.url)).blob()
     await putImage({ id, blob, widthPx: img.widthPx, heightPx: img.heightPx })

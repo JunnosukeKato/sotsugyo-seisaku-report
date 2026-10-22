@@ -213,7 +213,7 @@ function AdminHelp({ onClose, admin = false }: { onClose: () => void; admin?: bo
     <HelpView
       topics={TEACHER_TOPICS}
       who={admin ? 'admin' : 'teacher'}
-      imageBase={import.meta.env.DEV ? '/help/' : TEACHER_HELP_IMAGES}
+      imageBase={import.meta.env.DEV || import.meta.env.MODE === 'e2e' ? '/help/' : TEACHER_HELP_IMAGES}
       guides={[
         { label: '先生用', href: TEACHER_GUIDE_URL },
         { label: '管理者用', href: ADMIN_GUIDE_URL },

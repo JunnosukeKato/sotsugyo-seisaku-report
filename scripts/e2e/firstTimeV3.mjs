@@ -212,7 +212,7 @@ export async function firstTimeV3Pc(browser, check) {
       }
       req.onerror = rej
     })
-    const { saveSnapshot } = await import('/src/model/storage.ts')
+    const { saveSnapshot } = await window.__import('model/storage.ts')
     const r = window.__editor.getSnapshot().report
     for (const at of ['2026-10-17T07:50:00.000Z', '2026-10-18T05:30:00.000Z', '2026-10-18T12:32:53.000Z']) await saveSnapshot(r, at)
   })
@@ -422,7 +422,7 @@ export async function firstTimeV3Pc(browser, check) {
   const errorsNow = warnState.findings.filter((f) => f.severity === 'error')
   // 右の欄と同じ分け方の、直すところ（app/checkSummary.ts）
   const fixesNow = await page.evaluate(async () => {
-    const { checkSummary } = await import('/src/app/checkSummary.ts')
+    const { checkSummary } = await window.__import('app/checkSummary.ts')
     const ed = window.__editor
     return checkSummary(ed.getSnapshot(), ed.config).fixes.filter((f) => f.severity !== 'error').length
   })
