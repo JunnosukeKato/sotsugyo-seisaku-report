@@ -386,7 +386,7 @@ await withEdge(async (browser) => {
     pdf: document.querySelector('.help-foot .help-pdf')?.getAttribute('href'),
     paper: !!document.querySelector('.palette'),
   }))
-  check('「？ 使い方」で、右の欄が使い方に替わる（項目17・見出しに移る・紙面と道具はそのまま・いちばん下に印刷用の手引き（PDF））', helpOpen.topics === 17 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf', JSON.stringify(helpOpen))
+  check('「？ 使い方」で、右の欄が使い方に替わる（項目18・見出しに移る・紙面と道具はそのまま・いちばん下に印刷用の手引き（PDF））', helpOpen.topics === 18 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf', JSON.stringify(helpOpen))
   await page.type('.help-search input', 'PDF 出ない')
   await pause0(300)
   const found = await page.evaluate(() => ({
