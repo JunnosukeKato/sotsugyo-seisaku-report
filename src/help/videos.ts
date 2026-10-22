@@ -14,7 +14,7 @@ export interface HelpVideo {
 
 export const HELP_VIDEOS: HelpVideo[] = [
   { number: 1, title: 'はじめ方（ログイン〜表紙）', file: '1-start', seconds: 63 },
-  { number: 2, title: '本文を書く・図を入れる', file: '2-body', seconds: 60 },
+  { number: 2, title: '本文を書く・図を入れる', file: '2-body', seconds: 65 },
   { number: 3, title: '表・作品写真', file: '3-table-photos', seconds: 68 },
   { number: 4, title: 'セルフチェックで直す', file: '4-check', seconds: 43 },
   { number: 5, title: 'PDF を書き出す', file: '5-pdf', seconds: 56 },

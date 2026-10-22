@@ -310,7 +310,7 @@ export async function trialFixesPc(browser, check) {
   await page.screenshot({ path: `${OUT}/pc-help-videos.png` })
   check(
     '使い方：動画のある項目（はじめ方・書き方・図と表・作品写真・セルフチェック・PDF）に印。「書き方」に動画2と動画6（押すまで読み込まない。動画と、はじめの絵のファイルがある）',
-    marked.join(',') === 'login,write,figure,photos,check,pdf' && videos.length === 2 && videos.every((v) => v.preload === 'none' && v.files) && videos[0].cap === '動画 2「本文を書く・図を入れる」（60秒・音なし）' && videos[1].cap.startsWith('動画 6「スマホで書く」'),
+    marked.join(',') === 'login,write,figure,photos,check,pdf' && videos.length === 2 && videos.every((v) => v.preload === 'none' && v.files) && videos[0].cap === '動画 2「本文を書く・図を入れる」（65秒・音なし）' && videos[1].cap.startsWith('動画 6「スマホで書く」'),
     JSON.stringify({ marked, videos }),
   )
   await context.close()

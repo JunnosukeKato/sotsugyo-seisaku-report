@@ -603,7 +603,7 @@ async function openTemplate(page) {
   const frame = page.frames().find((f) => f.url().includes('template=1') && f.parentFrame() === page.mainFrame())
   await frame.waitForFunction(() => {
     const s = window.__editor?.getSnapshot()
-    return s?.layout && !s.rendering && !s.turning && s.zoomed
+    return s?.layout && !s.rendering && !s.turning
   }, { timeout: 60000 })
   await sleep(900)
   return frame
@@ -662,6 +662,9 @@ async function adminShots(browser) {
 
   // ---- 保存して学生に反映 → 新年度を作成（準備中の年度の「新年度の準備」） ----
   await page.evaluate(() => document.querySelector('.dirty-bar .btn.primary').click())
+  // 画面の中の確認の窓（src/admin/confirm.tsx）で「保存する」
+  await page.waitForSelector('[data-confirm="ok"]')
+  await page.evaluate(() => document.querySelector('[data-confirm="ok"]').click())
   await page.waitForFunction(() => !document.querySelector('.dirty-bar') && !document.querySelector('.admin-header .busy'), { timeout: 30000 })
   await nav(page, '年度の設定')
   await page.evaluate(() => document.querySelector('.next-year button').click())
