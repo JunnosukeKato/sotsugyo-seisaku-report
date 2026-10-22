@@ -6,6 +6,7 @@ import { LIMITS, templateRowName, tooLong } from '../config/validate'
 import { bodyContentHtml } from '../layout/bodyHtml'
 import { reportCss } from '../layout/reportCss'
 import { bodyFromTemplate, DEFAULT_TEMPLATE } from '../model/template'
+import { useConfirm } from './confirm'
 import { useLeaveGuard } from './useLeaveGuard'
 import { useReorder } from './useReorder'
 
@@ -170,9 +171,11 @@ export function TemplateEditor({ course, config, footNote, onApply, onClose }: P
   const changed = JSON.stringify([blocks, abstractExample]) !== initial
   // 直して「反映する」を押していないあいだは、タブを閉じる・読み込み直すときに確かめる
   useLeaveGuard(changed)
+  /** 確認の窓（画面の中に出す：confirm.tsx） */
+  const ask = useConfirm()
   /** 「×」「やめる」・Esc：直していたら、消えてよいか確かめてから閉じる */
-  const close = () => {
-    if (changed && !confirm('直した内容は反映されずに消えます。閉じますか？')) return
+  const close = async () => {
+    if (changed && !(await ask('直した内容は反映されずに消えます。閉じますか？', { ok: '消して閉じる', danger: true }))) return
     onClose()
   }
   const inputs = useRef(new Map<number, HTMLInputElement>())
@@ -244,8 +247,8 @@ export function TemplateEditor({ course, config, footNote, onApply, onClose }: P
               <span className="l">本文の組み立て（上から順に、学生の本文になります）</span>
               <button
                 className="link"
-                onClick={() => {
-                  if (confirm('標準のひな形（企画・立案／制作過程／まとめ）に戻しますか？')) {
+                onClick={async () => {
+                  if (await ask('標準のひな形（企画・立案／制作過程／まとめ）に戻しますか？', { ok: '標準に戻す' })) {
                     setRows(withKeys(DEFAULT_TEMPLATE))
                     setSelected(0)
                   }

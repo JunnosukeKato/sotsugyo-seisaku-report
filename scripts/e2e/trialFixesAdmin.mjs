@@ -12,6 +12,7 @@
 import { mkdirSync, readFileSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { stubConfig } from './configStub.mjs'
+import { answerConfirms } from './confirmUi.mjs'
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'poc-output/trial-fixes-1021'
@@ -20,13 +21,18 @@ mkdirSync(OUT, { recursive: true })
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
 /** 確認の窓を記録して答える（ふだんは OK） */
-function dialogLog(page) {
+async function dialogLog(page) {
   const log = { messages: [], ok: true }
+  const decide = (message) => {
+    log.messages.push(message)
+    return log.ok
+  }
+  // ブラウザの確認（ページを離れるときなど）と、管理ページの画面の中の確認の窓（src/admin/confirm.tsx）
   page.on('dialog', (d) => {
-    log.messages.push(d.message())
-    if (log.ok) d.accept()
+    if (decide(d.message())) d.accept()
     else d.dismiss()
   })
+  await answerConfirms(page, decide)
   return { last: () => log.messages.at(-1) ?? '', answer: (ok) => void (log.ok = ok) }
 }
 /** 左の見出しの区切りを押す */
@@ -40,7 +46,7 @@ export async function trialFixesAdmin(browser, check) {
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
   page.on('pageerror', (e) => console.log('pageerror(trialFixesAdmin):', e.message))
-  const dialogs = dialogLog(page)
+  const dialogs = await dialogLog(page)
   await page.setViewport({ width: 1366, height: 634 })
   await page.goto(`${APP}/admin.html`, { waitUntil: 'networkidle0' })
   await page.evaluate(() => {
@@ -182,6 +188,7 @@ export async function trialFixesAdmin(browser, check) {
   // ---- 9. 先生の画面：先生ができることと、指導教員を変えるときは管理者に頼むこと（mockups/v49 K） ----
   const tp = await context.newPage()
   tp.on('dialog', (d) => d.accept())
+  await answerConfirms(tp, () => true)
   await tp.setViewport({ width: 1366, height: 768 })
   await tp.goto(`${APP}/admin.html?as=teacher`, { waitUntil: 'networkidle0' })
   await tp.waitForSelector('.admin .content')

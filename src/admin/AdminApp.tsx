@@ -11,6 +11,7 @@ import { halfDigits } from '../layout/document'
 import { DEFAULT_TEMPLATE } from '../model/template'
 import { AdminIcon } from './adminIcons'
 import { courseName, fieldChanged, listChanges, mergeEdits, sameConfig, shortChanges, describeChanges, type Change, type ChangeSection } from './changes'
+import { useConfirm } from './confirm'
 import { CourseSection } from './CourseSection'
 import { DetailsSection } from './DetailsSection'
 import { HistorySection } from './HistorySection'
@@ -527,12 +528,14 @@ export function AdminApp() {
   const setPending = useCallback((m: string | null) => {
     pending.current = m
   }, [])
+  /** 確認の窓（画面の中に出す：confirm.tsx） */
+  const ask = useConfirm()
   /** ほかの区切り・年度に移ってよいか（まだ反映していない入力があれば確かめる） */
-  const confirmLeave = useCallback(() => {
-    if (pending.current && !confirm(pending.current)) return false
+  const confirmLeave = useCallback(async () => {
+    if (pending.current && !(await ask(pending.current, { ok: '移る', danger: true }))) return false
     pending.current = null
     return true
-  }, [])
+  }, [ask])
   /** 開いているコース（undefined：まだ選んでいない＝いちばん上のコースを開く。null：どれも閉じている） */
   const [openCourse, setOpenCourse] = useState<string | null | undefined>(undefined)
   /** 見本に出すコース（なければ、開いているコースか、いちばん上のコース） */
@@ -671,9 +674,9 @@ export function AdminApp() {
   }
 
   /** 左の見出しの区切りを選ぶ（区切りの中で、まだ反映していない入力があれば確かめる）。keepMessage：いまの知らせを残す（作った年度の知らせなど） */
-  const go = (s: Section, keepMessage = false) => {
+  const go = async (s: Section, keepMessage = false) => {
     if (s === section) return true
-    if (!confirmLeave()) return false
+    if (!(await confirmLeave())) return false
     // 前の区切りの知らせは消す（「保存しました（学生に届くのは…）」が先生の登録に残るなど、その区切りに合わない知らせが残っていた）
     if (!keepMessage) setMessage(null)
     setSectionState(s)
@@ -681,9 +684,9 @@ export function AdminApp() {
     return true
   }
   /** 年度を切り替える（保存していない変更・まだ反映していない入力があれば確かめる） */
-  const switchYear = (s: AdminState, y: number) => {
-    if (dirty && !confirm('保存していない変更があります。破棄して年度を切り替えますか？')) return
-    if (!confirmLeave()) return
+  const switchYear = async (s: AdminState, y: number) => {
+    if (dirty && !(await ask('保存していない変更があります。破棄して年度を切り替えますか？', { ok: '破棄して切り替える', danger: true }))) return
+    if (!(await confirmLeave())) return
     // 前の年度の知らせは消す（「この時点の内容を読み込みました」が、ほかの年度に残っていた：先生の試し 2026-10-21）
     setMessage(null)
     select(s, y)
@@ -740,21 +743,21 @@ export function AdminApp() {
   const openId = openCourse === undefined ? (draft.courses[0]?.id ?? null) : openCourse
   const shownCourse = draft.courses.find((c) => c.id === (previewCourse ?? openId)) ?? draft.courses[0]
 
-  const save = () => {
+  const save = async () => {
     // 公開中の年度と、終了した年度（その年度に書き始めた学生が今も読む）は、エラーがあると学生のツールで使えないので保存しない
     if (row.status !== '準備中' && errors.length)
       return setMessage({ kind: 'ng', text: isPublished ? '公開中の年度は、エラーを直してから保存してください' : '終了した年度も、この年度に書き始めた学生が使っているため、エラーを直してから保存してください' })
     const text = saveConfirmText(row.status, row.year, labels)
-    if (text && !confirm(text)) return
+    if (text && !(await ask(text, { title: `${saveLabel}しますか？`, ok: saveLabel }))) return
     void run('save', savedMessage(row.status, 'admin'), () => server.saveYear(draft, row.updatedAt), { recover: { verb: '保存', button: saveLabel } })
   }
-  const publish = () => {
+  const publish = async () => {
     if (errors.length) return setMessage({ kind: 'ng', text: 'エラーを直してから公開してください' })
     const current = state.years.find((y) => y.status === '公開中')
     // 新年度の準備で、まだのところがあれば、公開の確かめの前に並べる（前は確かめに出ず、前の年度の言葉が残ったまま公開できた：先生の試し 2026-10-21）
     const pending = (steps ?? []).filter((x) => !x.done)
     const before = pending.length ? `新年度の準備で、まだのところがあります。\n${pending.map((x) => `・${x.name}（${x.text}）`).join('\n')}\n\n` : ''
-    if (!confirm(before + publishConfirmText(draft, current?.year ?? null, dirty))) return
+    if (!(await ask(before + publishConfirmText(draft, current?.year ?? null, dirty), { ok: '公開する' }))) return
     // 画面を開いたあとにほかの人が保存していたら、見ていない内容を公開しないよう、公開せずに知らせる
     void run(
       'publish',
@@ -773,11 +776,11 @@ export function AdminApp() {
   const otherYears = state.years.filter((y) => y.year !== row.year)
   const canDelete = row.deletable === true && otherYears.length > 0
   /** 準備中の年度を削除する（mockups/v35-admin ② 案A）。確かめてから消し、公開中の年度（なければいちばん新しい年度）を開く */
-  const removeYear = () => {
+  const removeYear = async () => {
     // 年度を切り替えるときと同じく、保存していない変更は確かめる（削除すると、その変更も消えるため）
-    if (dirty && !confirm('保存していない変更があります。破棄して、この年度の削除に進みますか？')) return
+    if (dirty && !(await ask('保存していない変更があります。破棄して、この年度の削除に進みますか？', { ok: '破棄して進む', danger: true }))) return
     const next = otherYears.find((y) => y.status === '公開中') ?? otherYears[0]
-    if (!confirm(deleteConfirmText(row.year, next))) return
+    if (!(await ask(deleteConfirmText(row.year, next), { ok: '削除する', danger: true }))) return
     void run(
       'delete',
       (s) => deletedMessage(row.year, s.years.find((y) => y.year === next.year) ?? s.years[0]),
@@ -788,9 +791,9 @@ export function AdminApp() {
   const nextYearNumber = Math.max(...state.years.map((y) => y.year)) + 1
   /** この年度のすぐ後の年度（もう作ってあれば） */
   const laterYear = state.years.filter((y) => y.year > row.year).sort((p, q) => p.year - q.year)[0] ?? null
-  const openNewYear = () => {
+  const openNewYear = async () => {
     // 新年度は保存されている内容からコピーするので、保存していない変更は入らない（年度を切り替えるときと同じく確かめる）
-    if (dirty && !confirm('保存していない変更があります。新年度は保存されている内容からコピーして作るため、この変更は入りません。破棄して新年度を作成しますか？')) return
+    if (dirty && !(await ask('保存していない変更があります。新年度は保存されている内容からコピーして作るため、この変更は入りません。破棄して新年度を作成しますか？', { ok: '破棄して作成する', danger: true }))) return
     setNewYear(String(nextYearNumber))
     setDialog('newYear')
   }
@@ -817,11 +820,11 @@ export function AdminApp() {
   const problemsValue = { list: problems, isAcked, ack }
   const steps = row.status === '準備中' ? newYearSteps(draft, prevRow?.config, problems, isAcked) : null
   /** 手順を押した：直す所へ移る */
-  const onStep = (step: NewYearStep) => {
+  const onStep = async (step: NewYearStep) => {
     if (step.key === 'title' || step.key === 'deadline') {
-      if (go('year')) focusLater(step.key === 'title' ? '#y-commonTitle' : '#y-deadline')
+      if (await go('year')) focusLater(step.key === 'title' ? '#y-commonTitle' : '#y-deadline')
     } else if (step.key === 'course') {
-      if (!go('course')) return
+      if (!(await go('course'))) return
       const id = step.courseId ?? draft.courses[0]?.id
       if (!id) return focusLater('.content .add')
       setOpenCourse(id)
@@ -829,7 +832,7 @@ export function AdminApp() {
       focusLater(step.text.startsWith('指導教員') ? `#c-${id}-advisor` : step.text.startsWith('抄録') ? `[data-course-id="${id}"] .tpl-line button` : `#c-${id}-notice`)
     } else if (step.key === 'check') {
       // 確認は、上の枠か、欄のすぐ下（題目・締切）にある。ページの上から先に見つかった方へ
-      if (go('year')) focusLater(problems.length ? '.content :is(.problems, .field-problems)' : '.stage')
+      if (await go('year')) focusLater(problems.length ? '.content :is(.problems, .field-problems)' : '.stage')
     } else focusLater('#publish-btn')
   }
 
@@ -925,8 +928,8 @@ export function AdminApp() {
         loading={historyLoading}
         slow={historySlow}
         notices={notices}
-        onRestore={(h) => {
-          if (dirty && !confirm('保存していない変更があります。破棄して、この時点の内容を読み込みますか？')) return
+        onRestore={async (h) => {
+          if (dirty && !(await ask('保存していない変更があります。破棄して、この時点の内容を読み込みますか？', { ok: '破棄して読み込む', danger: true }))) return
           setDraft(clone(h.config))
           // いまの内容と同じ時点（いちばん新しい履歴など）なら、変わる所はない
           setMessage({ kind: 'ok', text: sameConfig(row.config, h.config) ? 'この時点の内容は、いまの内容と同じです（変わる所はありません）' : 'この時点の内容を読み込みました。確認して保存すると元に戻ります' })
@@ -1002,9 +1005,9 @@ export function AdminApp() {
         <ChangesDialog
           changes={changes}
           onClose={() => setDialog(null)}
-          onGo={(c) => {
+          onGo={async (c) => {
             setDialog(null)
-            if (!go(c.section === 'other' ? 'details' : c.section)) return
+            if (!(await go(c.section === 'other' ? 'details' : c.section))) return
             if (c.courseId) setOpenCourse(c.courseId)
             focusField(c.target)
           }}
@@ -1037,7 +1040,7 @@ export function AdminApp() {
                 void run('create', newYearNotice(row.config, n), () => server.createYear(row.year, n), { nextYear: n }).then((ok) => {
                   setDialog(null)
                   if (!ok) return
-                  go('year', true)
+                  void go('year', true)
                   // 作った年度の「新年度の準備」と知らせが見えるよう、上まで戻す（前は下の「この年度を削除」のあたりのままだった：先生の試し 2026-10-21）
                   requestAnimationFrame(() => document.querySelectorAll('.admin .content, .admin-main').forEach((el) => el.scrollTo({ top: 0 })))
                 })
@@ -1086,7 +1089,7 @@ function TeacherView({
   onMessage: (message: Notice | null) => void
   onSelectYear: (year: number) => void
   /** ほかの区切りに移ってよいか（まだ反映していない入力があれば確かめる） */
-  confirmLeave: () => boolean
+  confirmLeave: () => Promise<boolean>
   onPending: (message: string | null) => void
   /** words は、書き間違えやすい語を変えたときだけ（変えていなければ null） */
   /** notices は、書き換えたコースのお知らせだけ（コースの ID → お知らせ） */
@@ -1110,13 +1113,14 @@ function TeacherView({
   const openId = openCourse === undefined ? (shown[0]?.id ?? null) : openCourse
   const shownCourse = shown.find((c) => c.id === (previewCourse ?? openId)) ?? shown[0]
 
-  const go = (s: Section) => {
+  const ask = useConfirm()
+  const go = async (s: Section) => {
     if (s === section) return
-    if (!confirmLeave()) return
+    if (!(await confirmLeave())) return
     setSectionState(s)
     saveSection(s)
   }
-  const save = () => {
+  const save = async () => {
     const templates: TemplateSet = {}
     draft.courses.forEach((c) => {
       const before = row.config.courses.find((x) => x.id === c.id)
@@ -1135,7 +1139,7 @@ function TeacherView({
     if (long) return onMessage({ kind: 'ng', text: `「${long.name}」のお知らせ${tooLong(LIMITS.notice, notices[long.id].length)}` })
     // 学生に届く年度（公開中・終了）は、何が変わるかを示して確かめる
     const text = saveConfirmText(row.status, row.year, labels)
-    if (text && !confirm(text)) return
+    if (text && !(await ask(text, { title: `${saveButtonLabel(row.status)}しますか？`, ok: saveButtonLabel(row.status) }))) return
     onSave(templates, words, notices)
   }
   const navItems: NavItem[] = [
@@ -1208,7 +1212,7 @@ function TeacherView({
           onClose={() => setShowChanges(false)}
           onGo={(c) => {
             setShowChanges(false)
-            if (c.section === 'course' || c.section === 'words') go(c.section)
+            if (c.section === 'course' || c.section === 'words') void go(c.section)
             if (c.courseId) setOpenCourse(c.courseId)
             focusField(c.target)
           }}

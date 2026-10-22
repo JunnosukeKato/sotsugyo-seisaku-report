@@ -3,6 +3,7 @@
 // 管理ページは mockups/v43 案B（左の見出し）：左に区切り（年度の設定・コース・書き方のチェック・先生の登録・変更履歴・詳細設定）、右には選んだ区切りだけ
 import { mkdirSync } from 'node:fs'
 import { withEdge } from '../poc/edge.mjs'
+import { answerConfirms } from './confirmUi.mjs'
 import { templateModeAdmin } from './templateMode.mjs'
 import { trialFixesAdmin } from './trialFixesAdmin.mjs'
 import { trialModeAdmin } from './trialMode.mjs'
@@ -28,14 +29,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
  * 確認の窓（confirm・ページを離れるときの確認）を記録し、答える。ふだんは「OK」。
  * answer(false) のあいだは「キャンセル」。answerNext(true, false) は、次の窓から順に「OK」「キャンセル」（使い切ったら、ふだんの答え）
  */
-function dialogLog(page) {
+async function dialogLog(page) {
   const log = { messages: [], ok: true, next: [] }
+  const decide = (message) => {
+    log.messages.push(message)
+    return log.next.length ? log.next.shift() : log.ok
+  }
+  // ブラウザの確認（ページを離れるときなど）と、管理ページの画面の中の確認の窓（src/admin/confirm.tsx）
   page.on('dialog', (d) => {
-    log.messages.push(d.message())
-    const ok = log.next.length ? log.next.shift() : log.ok
-    if (ok) d.accept()
+    if (decide(d.message())) d.accept()
     else d.dismiss()
   })
+  await answerConfirms(page, decide)
   return {
     last: () => log.messages.at(-1) ?? '',
     /** 後ろから n 番目の窓の文（1 で最後） */
@@ -189,7 +194,7 @@ await withEdge(async (browser) => {
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
-  const dialogs = dialogLog(page)
+  const dialogs = await dialogLog(page)
   await page.setViewport({ width: 1440, height: 900 })
   await page.goto(`${APP}/admin.html`, { waitUntil: 'networkidle0' })
   await page.evaluate(() => {
@@ -523,7 +528,7 @@ await withEdge(async (browser) => {
 
   // 先生の画面：コースと書き方のチェックだけ（mockups/v43 案B の先生の画面）
   const teacher = await context.newPage()
-  const teacherDialogs = dialogLog(teacher)
+  const teacherDialogs = await dialogLog(teacher)
   await teacher.setViewport({ width: 1440, height: 900 })
   await teacher.goto(`${APP}/admin.html?as=teacher`, { waitUntil: 'networkidle0' })
   await teacher.waitForSelector('.admin .content')
@@ -622,7 +627,7 @@ await withEdge(async (browser) => {
 
   // 同じ管理者が2つのタブで開いた：もう1つのタブで保存したあと、このタブで保存すると「別のタブかウィンドウで」と伝え、変更を入れ直す
   const second = await context.newPage()
-  dialogLog(second)
+  await dialogLog(second)
   await second.setViewport({ width: 1440, height: 900 })
   await second.goto(`${APP}/admin.html`, { waitUntil: 'networkidle0' })
   await second.waitForSelector('.admin .content')
@@ -653,7 +658,7 @@ await withEdge(async (browser) => {
   check('もう一度押すと、両方の変更が保存される', both.commonTitle === '卒業イベント「試験」について' && both.courses[0].notice === '別のタブで書いたお知らせ')
   // 同じ項目（お知らせ）を両方で別の内容に変えていたら、入れ直さずに読み込み直しを頼む（どちらも消さない）
   const third = await context.newPage()
-  dialogLog(third)
+  await dialogLog(third)
   await third.goto(`${APP}/admin.html`, { waitUntil: 'networkidle0' })
   await third.waitForSelector('.admin .content')
   const thirdNotice = await openNotice(third)
@@ -937,7 +942,7 @@ await withEdge(async (browser) => {
   const fixes = await browser.createBrowserContext()
   const fx = await fixes.newPage()
   fx.on('pageerror', (e) => console.log('pageerror:', e.message))
-  const fxDialogs = dialogLog(fx)
+  const fxDialogs = await dialogLog(fx)
   await fx.setViewport({ width: 1366, height: 768 })
   await fx.goto(`${APP}/admin.html`, { waitUntil: 'networkidle0' })
   await fx.waitForSelector('.admin .content')
@@ -1057,7 +1062,7 @@ await withEdge(async (browser) => {
   await sleep(200)
   await fx.screenshot({ path: `${SHOTS}/14-notice-hint.png` })
   const teacherFx = await fixes.newPage()
-  dialogLog(teacherFx)
+  await dialogLog(teacherFx)
   await teacherFx.setViewport({ width: 1366, height: 768 })
   await teacherFx.goto(`${APP}/admin.html?as=teacher`, { waitUntil: 'networkidle0' })
   await teacherFx.waitForSelector('.admin .content')
@@ -1317,7 +1322,7 @@ await withEdge(async (browser) => {
   const waiting = await browser.createBrowserContext()
   const sw = await waiting.newPage()
   sw.on('pageerror', (e) => console.log('pageerror:', e.message))
-  const swDialogs = dialogLog(sw)
+  const swDialogs = await dialogLog(sw)
   await sw.setViewport({ width: 1366, height: 768 })
   await sw.goto(`${APP}/admin.html?delay=${DELAY}`, { waitUntil: 'domcontentloaded' })
   await sw.waitForSelector('.page-wait')
@@ -1469,7 +1474,7 @@ await withEdge(async (browser) => {
   )
   // 先生の画面の保存（ひな形・お知らせ・書き間違えやすい語）
   const tw = await waiting.newPage()
-  dialogLog(tw)
+  await dialogLog(tw)
   await tw.setViewport({ width: 1366, height: 768 })
   await tw.goto(`${APP}/admin.html?as=teacher&delay=${DELAY}`, { waitUntil: 'domcontentloaded' })
   await tw.waitForSelector('.admin .content', { timeout: 15000 })
@@ -1496,7 +1501,7 @@ await withEdge(async (browser) => {
   const v43 = await browser.createBrowserContext()
   const vb = await v43.newPage()
   vb.on('pageerror', (e) => console.log('pageerror:', e.message))
-  const vbDialogs = dialogLog(vb)
+  const vbDialogs = await dialogLog(vb)
   await vb.setViewport({ width: 1366, height: 768 })
   await vb.goto(`${APP}/admin.html`, { waitUntil: 'networkidle0' })
   await vb.waitForSelector('.admin .content')
@@ -1723,7 +1728,7 @@ await withEdge(async (browser) => {
 
   // 先生の画面（mockups/v43 案B）：左の見出しは2つ。コースを開くと、お知らせとひな形。右に、学生が最初に見る本文の組み立て
   const tv = await v43.newPage()
-  dialogLog(tv)
+  await dialogLog(tv)
   await tv.setViewport({ width: 1366, height: 768 })
   await tv.goto(`${APP}/admin.html?as=teacher`, { waitUntil: 'networkidle0' })
   await tv.waitForSelector('.admin .content')

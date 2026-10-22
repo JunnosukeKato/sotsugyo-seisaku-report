@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
 import { parseAddresses, studentIdFromEmail, UNIVERSITY_DOMAIN } from '../model/account'
+import { useConfirm } from './confirm'
 import { isMockServer, server, type Member } from './server'
 import { SectionHead } from './ui'
 import { useDone, useSlow } from './useWait'
@@ -67,6 +68,8 @@ export function MembersSection({
   const slow = useSlow(busy !== null || (members === null && !loadError))
   /** 終わったときの短い知らせ（「登録しました」など。数秒で消える） */
   const [doneText, showDone] = useDone()
+  /** 確認の窓（画面の中に出す：confirm.tsx） */
+  const ask = useConfirm()
   // 入力したまま、ほかの区切りに移るときは確かめる
   useEffect(() => {
     onPending(text.trim() ? UNSAVED : null)
@@ -90,7 +93,7 @@ export function MembersSection({
 
   /** 変えたあとの管理者の人数 */
   const adminsAfter = (list: Member[]) => list.filter((m) => m.role === '管理者').length
-  const changeRole = (m: Member, next: Member['role']) => {
+  const changeRole = async (m: Member, next: Member['role']) => {
     if (!members) return
     const after = members.map((x) => (x.email === m.email ? { ...x, role: next } : x))
     const lines = [
@@ -98,15 +101,15 @@ export function MembersSection({
       next === '管理者' ? '管理者は、すべての設定の変更と公開、先生の登録ができます。' : '先生は、ひな形・お知らせ・書き間違えやすい語だけを編集できます（年度の設定の変更・公開・先生の登録はできなくなります）。',
     ]
     if (adminsAfter(after) === 1) lines.push('', ONE_ADMIN)
-    // 「キャンセル」なら何もしない（選ぶ欄は、元の役割に戻る）
-    if (!confirm(lines.join('\n'))) return
+    // 「やめる」なら何もしない（選ぶ欄は、元の役割に戻る）
+    if (!(await ask(lines.join('\n'), { ok: `「${next}」にする` }))) return
     void run({ kind: 'role', email: m.email }, () => server.addMember(m.email, next, m.memo), `${m.email} を「${next}」にしました（その人が管理ページを開き直すと、${next}の画面になります）`)
   }
-  const remove = (m: Member) => {
+  const remove = async (m: Member) => {
     if (!members) return
     const lines = [`${m.email} の登録を外しますか？`]
     if (adminsAfter(members.filter((x) => x.email !== m.email)) === 1) lines.push('', ONE_ADMIN)
-    if (!confirm(lines.join('\n'))) return
+    if (!(await ask(lines.join('\n'), { ok: '登録を外す', danger: true }))) return
     void run({ kind: 'remove', email: m.email }, () => server.removeMember(m.email), `${m.email} の登録を外しました`)
   }
 

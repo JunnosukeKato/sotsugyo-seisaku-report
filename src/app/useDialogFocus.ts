@@ -8,7 +8,10 @@ const FOCUSABLE = 'button:not([disabled]), [href], input:not([disabled]), select
  * - Tab で窓の外に出ない（最後の次は最初に戻る）
  * - onEscape を渡すと、Esc で閉じる（書きかけの内容が消える窓や、必ず選んでもらう窓には渡さない）
  * - 閉じたら、開く前に操作していた場所に戻る
+ * - 窓の上に別の窓（確認の窓など）が開いているあいだは、上の窓だけがキーを受け取る（下の窓が Tab で操作の場所を取り戻したり、Esc で一緒に閉じたりしない）
  */
+const openDialogs: HTMLElement[] = []
+
 export function useDialogFocus(ref: RefObject<HTMLElement | null>, onEscape?: () => void): void {
   const escape = useRef(onEscape)
   useEffect(() => {
@@ -21,7 +24,9 @@ export function useDialogFocus(ref: RefObject<HTMLElement | null>, onEscape?: ()
     const focusables = () => [...el.querySelectorAll<HTMLElement>(FOCUSABLE)].filter((x) => x.offsetParent !== null || x === document.activeElement)
     const first = el.querySelector<HTMLElement>('[data-autofocus]') ?? focusables().find((x) => !x.classList.contains('close')) ?? focusables()[0]
     first?.focus()
+    openDialogs.push(el)
     const onKey = (e: KeyboardEvent) => {
+      if (openDialogs[openDialogs.length - 1] !== el) return
       if (e.key === 'Escape' && escape.current) {
         e.preventDefault()
         e.stopPropagation()
@@ -47,6 +52,8 @@ export function useDialogFocus(ref: RefObject<HTMLElement | null>, onEscape?: ()
     document.addEventListener('keydown', onKey, true)
     return () => {
       document.removeEventListener('keydown', onKey, true)
+      const at = openDialogs.indexOf(el)
+      if (at >= 0) openDialogs.splice(at, 1)
       if (previous?.isConnected) previous.focus()
     }
   }, [ref])

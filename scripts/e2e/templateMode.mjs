@@ -5,6 +5,7 @@
 // - ひな形を作る画面は、この端末の保存（localStorage・sessionStorage・IndexedDB）に書かず、ドライブなどの外にもつながない
 // 画面の写真は poc-output/template-mode/ に置く
 import { mkdirSync } from 'node:fs'
+import { answerConfirms } from './confirmUi.mjs'
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'poc-output/template-mode'
@@ -40,13 +41,18 @@ const recordTemplateFrame = (page) =>
   })
 
 /** 確認の窓を記録し、答える（ふだんは「OK」。answer(false) の間は「キャンセル」） */
-function dialogLog(page) {
+async function dialogLog(page) {
   const log = { messages: [], ok: true }
+  const decide = (message) => {
+    log.messages.push(message)
+    return log.ok
+  }
+  // ブラウザの確認（ページを離れるときなど）と、管理ページの画面の中の確認の窓（src/admin/confirm.tsx）
   page.on('dialog', (d) => {
-    log.messages.push(d.message())
-    if (log.ok) d.accept()
+    if (decide(d.message())) d.accept()
     else d.dismiss()
   })
+  await answerConfirms(page, decide)
   return { last: () => log.messages.at(-1) ?? '', count: () => log.messages.length, answer: (ok) => void (log.ok = ok) }
 }
 
@@ -90,7 +96,7 @@ export async function templateModeAdmin(browser, check) {
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
   page.on('pageerror', (e) => console.log('pageerror(template-mode):', e.message))
-  const dialogs = dialogLog(page)
+  const dialogs = await dialogLog(page)
   await recordTemplateFrame(page)
   /** ひな形を作る画面から、開発サーバーのほか（Google のログイン・ドライブ・Apps Script など）への通信 */
   const outside = []
@@ -557,6 +563,7 @@ export async function templateModeAdmin(browser, check) {
   const teacher = await tctx.newPage()
   teacher.on('pageerror', (e) => console.log('pageerror(template-mode teacher):', e.message))
   teacher.on('dialog', (d) => d.accept())
+  await answerConfirms(teacher, () => true)
   await recordTemplateFrame(teacher)
   await teacher.setViewport({ width: 1366, height: 768 })
   await teacher.goto(`${APP}/admin.html?as=teacher`, { waitUntil: 'networkidle0' })

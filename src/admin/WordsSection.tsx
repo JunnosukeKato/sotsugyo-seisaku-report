@@ -3,6 +3,7 @@ import { checkText } from '../checker/textRules'
 import type { WordCheck } from '../config'
 import { AdminIcon } from './adminIcons'
 import { SectionHead } from './ui'
+import { useConfirm } from './confirm'
 import { useLeaveGuard } from './useLeaveGuard'
 import { cleanWords, wordRowProblem } from './wordsText'
 
@@ -22,6 +23,8 @@ export function WordsSection({ words, onChange, onPending, notices }: { words: W
   const [edit, setEdit] = useState<Edit | null>(null)
   const [error, setError] = useState('')
   const [trial, setTrial] = useState(TRIAL)
+  /** 確認の窓（画面の中に出す：confirm.tsx） */
+  const ask = useConfirm()
   const pending = !!edit && (edit.isNew ? !!(edit.row.wrong.trim() || edit.row.right.trim() || edit.row.note?.trim()) : !same(edit.row, words[edit.index]))
   // 直して「反映する」を押していないあいだは、タブを閉じる・ほかの区切りに移るときに確かめる
   useLeaveGuard(pending)
@@ -30,8 +33,8 @@ export function WordsSection({ words, onChange, onPending, notices }: { words: W
     return () => onPending(null)
   }, [pending, onPending])
 
-  const start = (next: Edit) => {
-    if (pending && !confirm(UNSAVED)) return
+  const start = async (next: Edit) => {
+    if (pending && !(await ask(UNSAVED, { ok: '反映せずに閉じる', danger: true }))) return
     setEdit(next)
     setError('')
   }

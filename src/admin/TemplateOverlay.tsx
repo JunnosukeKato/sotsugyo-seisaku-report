@@ -3,6 +3,7 @@ import { useDialogFocus } from '../app/useDialogFocus'
 import type { Course, TemplateBlock, YearConfig } from '../config'
 import { DEFAULT_TOOL_URL, FROM_ADMIN, FROM_TOOL, newNonce, receivedProblems, templateToolUrls, type InitMessage, type InitPayload, type TemplateYearStatus } from '../template/protocol'
 import { courseName } from './changes'
+import { useConfirm } from './confirm'
 import { useLeaveGuard } from './useLeaveGuard'
 import { Waiting } from './Wait'
 
@@ -66,10 +67,12 @@ export function TemplateOverlay({ course, config, status, onApply, onClose, onFa
     )
   })
 
-  const close = useCallback(() => {
-    if (dirty && !confirm('ひな形を作る画面で直した内容は、反映されずに消えます。閉じますか？')) return
+  /** 確認の窓（画面の中に出す：confirm.tsx） */
+  const ask = useConfirm()
+  const close = useCallback(async () => {
+    if (dirty && !(await ask('ひな形を作る画面で直した内容は、反映されずに消えます。閉じますか？', { ok: '消して閉じる', danger: true }))) return
     onClose()
-  }, [dirty, onClose])
+  }, [dirty, onClose, ask])
   // 知らせを受け取る関数からは、いつも新しい関数を呼ぶ
   const latest = useRef({ close, onApply })
   useEffect(() => {
