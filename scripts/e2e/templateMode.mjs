@@ -126,7 +126,7 @@ export async function templateModeAdmin(browser, check) {
     await p.waitForSelector('.tpl-overlay iframe')
     await p.waitForFunction(() => !document.querySelector('.tpl-opening'), { timeout: 30000 })
     const frame = p.frames().find((f) => f.url().includes('template=1') && f.parentFrame() === p.mainFrame())
-    await frame.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !s.turning && s.zoomed }, { timeout: 60000 })
+    await frame.waitForFunction(() => { const s = window.__editor?.getSnapshot(); return s?.layout && !s.rendering && !s.turning && s.page === window.__editor.pageOfArea('body') }, { timeout: 60000 })
     await sleep(700)
     return frame
   }
@@ -171,6 +171,8 @@ export async function templateModeAdmin(browser, check) {
   const frame = await openScreen()
   const src = await page.evaluate(() => document.querySelector('.tpl-overlay iframe').src)
   check('重ねた窓の iframe に、学生のツールが ?template=1 で開く（開発中は同じ開発サーバー）', src === `${new URL(APP).origin}/?template=1` && frame.url() === src, src)
+  const view0 = await frame.evaluate(() => { const s = window.__editor.getSnapshot(); return { zoomed: s.zoomed, spread: s.spread, page: s.page, body: window.__editor.pageOfArea('body') } })
+  check('ひな形を作る画面は、本文の最初のページを「全体」（ページ全体）で開く（拡大ではない：依頼者の希望 2026-10-22）', !view0.zoomed && !view0.spread && view0.page === view0.body, JSON.stringify(view0))
   const screen = await frame.evaluate(() => ({
     banner: document.querySelector('.tpl-banner')?.textContent ?? '',
     title: document.querySelector('.tpl-panel h2')?.textContent ?? '',

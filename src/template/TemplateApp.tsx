@@ -189,8 +189,7 @@ function TemplateScreen({ init }: { init: InitPayload }) {
     if (import.meta.env.DEV) Object.assign(window, { __editor: ed })
     void (async () => {
       await ed.renderFirst(0)
-      // 文字を大きく見せ、本文の最初のページから（表紙・抄録はひな形にほとんど入らないため）
-      ed.setView('zoom')
+      // 本文の最初のページから（表紙・抄録はひな形にほとんど入らないため）。はじめはページ全体を見せる（前は拡大で開いていた。依頼者の希望 2026-10-22）
       const body = ed.pageOfArea('body')
       if (body >= 0) await ed.goToPage(body, 'none')
     })()
