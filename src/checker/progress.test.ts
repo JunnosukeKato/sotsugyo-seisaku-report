@@ -66,6 +66,34 @@ describe('まだのところ・直すところに分ける（mockups/v35 ① 案
     expect(fixes.some((f) => f.ruleId === 'table-unreferenced')).toBe(false)
   })
 
+  it('コースの設定「表の空の行」が「空のままでよい」なら、ひな形で用意した素材表の枠（6行）のまるごと空の行は数えない。書き始めた行の空欄（生地見本の写真など）は、まだのところ。どの行も空なら、まだのところ。設定のないコースは、空の行も数える', () => {
+    const okConfig: YearConfig = { ...currentConfig, courses: currentConfig.courses.map((c) => ({ ...c, blankRowsOk: true })) }
+    const r0 = fresh()
+    const table = blocksOf(r0).find((b) => b.type === 'table')!
+    const cell = (id: string, text = '', imageId: string | null = null) => ({ id, text, imageId })
+    const withRows = (rows: [string, string, string | null][]): Report => ({
+      ...r0,
+      body: r0.body.map((c) => ({
+        ...c,
+        blocks: c.blocks.map((b) =>
+          b.id === table.id && b.type === 'table'
+            ? { ...b, rows: [b.rows[0], ...rows.map(([name, use, img], i) => ({ id: `r${i}`, cells: [cell(`r${i}a`, name), cell(`r${i}b`, use), cell(`r${i}c`, '', img)] }))] }
+            : b,
+        ),
+      })),
+    })
+    const empty: [string, string, string | null] = ['', '', null]
+    const holes = (r: Report, config = okConfig) => findingsOf(r, layout(), config).filter((f) => f.ruleId === 'table-cell-empty' || f.ruleId === 'swatch-image').map((f) => `${f.ruleId}:${f.blockId}`)
+    // 2行を書いて、4行は空：空の4行は数えない
+    expect(holes(withRows([['コットンサテン', 'ブラウス', 'img1'], ['シルクシフォン', '袖', 'img2'], empty, empty, empty, empty]))).toEqual([])
+    // 書き始めた行の、生地見本の写真がない・使用箇所が空：知らせる（空の行は数えない）
+    expect(holes(withRows([['コットンサテン', 'ブラウス', 'img1'], ['シルクシフォン', '', null], empty, empty, empty, empty]))).toEqual(['table-cell-empty:r1b', 'table-cell-empty:r1c', 'swatch-image:r1c'])
+    // どの行も空：今までどおり、空いている所
+    expect(holes(withRows([empty, empty, empty, empty, empty, empty]))).toHaveLength(6 * 3 + 6)
+    // 設定のないコース：空の4行も、空いている所（セル 4×3・生地見本の写真 4）
+    expect(holes(withRows([['コットンサテン', 'ブラウス', 'img1'], ['シルクシフォン', '袖', 'img2'], empty, empty, empty, empty]), currentConfig)).toHaveLength(4 * 3 + 4)
+  })
+
   it('書いた文の間違いは、直すところ（エラー・要確認のまま）', () => {
     const r0 = fresh(plainConfig)
     const r = ops.setText(r0, templateParagraphs(r0)[0], '私が担当したのは、衣装です。')

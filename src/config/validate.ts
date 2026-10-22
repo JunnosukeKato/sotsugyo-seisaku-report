@@ -232,6 +232,10 @@ export function validateConfig(config: YearConfig, options: ValidateOptions = {}
       return
     }
     const course = c as unknown as Course
+    if (course.blankRowsOk !== undefined && typeof course.blankRowsOk !== 'boolean') {
+      error(field, `${i + 1}番目のコースの形が正しくありません`)
+      return
+    }
     if (!course.name.trim()) error(field, `${i + 1}番目のコースの名前を入力してください`)
     names.set(course.name.trim(), (names.get(course.name.trim()) ?? 0) + 1)
     if (!course.subtitleTemplate.includes('{input}')) error(field, `${label}のサブタイトルの形式に、学生が入力する部分（{input}）がありません`)

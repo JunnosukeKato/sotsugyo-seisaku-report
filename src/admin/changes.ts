@@ -49,6 +49,7 @@ const COURSE_LABELS: Record<string, string> = {
   advisors: '指導教員',
   template: '下書きのひな形',
   abstractExample: '抄録の書き出し例',
+  blankRowsOk: '表の空の行',
   notice: 'お知らせ',
 }
 const OTHER = 'そのほかの設定'
@@ -79,7 +80,7 @@ function normTop(key: string, value: unknown): unknown {
 /** コースの項目の、意味の同じ書き方をそろえる（空のお知らせ・書き出し例・ひな形は「ない」と同じ） */
 function normCourse(key: string, value: unknown): unknown {
   if (key === 'notice' || key === 'abstractExample') return value === '' ? undefined : value
-  if (key === 'hidden') return value ? true : undefined
+  if (key === 'hidden' || key === 'blankRowsOk') return value ? true : undefined
   if (key === 'template') return Array.isArray(value) && value.length === 0 ? undefined : value
   return value
 }
@@ -176,7 +177,7 @@ const TOP_TARGETS: Record<string, string> = {
   studentIdPattern: 'd-studentId',
 }
 /** 「この欄へ」で入る欄の id（コースの項目） */
-const COURSE_TARGETS: Record<string, string> = { name: 'name', advisors: 'advisor', subtitleTemplate: 'before', notice: 'notice' }
+const COURSE_TARGETS: Record<string, string> = { name: 'name', advisors: 'advisor', subtitleTemplate: 'before', notice: 'notice', blankRowsOk: 'blankrows' }
 
 /** 変更前・変更後に出す、短い文字（長い文は縮める。空は「（なし）」） */
 function brief(v: unknown): string | undefined {
@@ -205,6 +206,7 @@ function topValue(config: unknown, path: string): string | undefined {
 /** コースの項目の、変更前・変更後に出す文字 */
 function courseValue(course: Course, key: string): string | undefined {
   if (key === 'hidden') return course.hidden ? '表示しない' : '表示する'
+  if (key === 'blankRowsOk') return course.blankRowsOk ? '空のままでよい' : '空いている所に数える'
   if (key === 'name' || key === 'advisors' || key === 'subtitleTemplate' || key === 'notice') return brief(course[key as keyof Course])
   return undefined
 }

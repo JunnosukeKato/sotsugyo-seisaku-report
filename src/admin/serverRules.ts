@@ -139,6 +139,7 @@ export function checkConfig(config: unknown): void {
     if (course.template !== undefined && course.template !== null) cleanTemplate(course.template, name)
     if (course.abstractExample !== undefined && course.abstractExample !== null) checkText(course.abstractExample, LIMITS.abstractExample, '「' + name + '」の抄録の書き出し例')
     if (course.notice !== undefined && course.notice !== null) checkText(course.notice, LIMITS.notice, '「' + name + '」のお知らせ')
+    if (course.blankRowsOk !== undefined && typeof course.blankRowsOk !== 'boolean') throw new Error('「' + name + '」の表の空の行の設定が正しくありません')
   })
   if (config.wordChecks !== undefined && config.wordChecks !== null) cleanWords(config.wordChecks)
   if (JSON.stringify(config).length > 45000) throw new Error('設定が大きすぎます')

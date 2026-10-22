@@ -3,9 +3,9 @@ import { contentToText, editables, numbering, parenthetical, type EditableKind }
 import { COVER_SUBTITLE, OVERFLOW_RATIO, yearDigits } from '../layout/document'
 import type { LayoutInfo } from '../layout/measure'
 import type { HeadingText } from '../model/headingText'
-import type { Report } from '../model/types'
+import type { Report, TableBlock, TableRow } from '../model/types'
 import { pagePhotoCount } from '../model/photos'
-import { swatchColumn } from '../model/table'
+import { swatchColumn, unusedRows } from '../model/table'
 import { charCount, checkText, DEFAULT_WORD_CHECKS, EMOJI_TITLE, findEmoji, type TextFinding } from './textRules'
 import type { Severity } from './types'
 
@@ -383,10 +383,15 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
     }
   }
 
-  // 表のセル：見出しの行の空欄はエラー。ほかの空いているセル（画像もない）は注意
+  // 表のセル：見出しの行の空欄はエラー。ほかの空いているセル（画像もない）は注意。
+  // コースの設定「表の空の行」（使わない行は、空のままでよい）のときは、どこかの行を書いた表の、まるごと空の行は数えない（使わなかった枠：unusedRows）
+  const blankRowsOk = findCourse(config, report.basicInfo.courseId)?.blankRowsOk === true
+  const unusedOf = (table: TableBlock) => (blankRowsOk ? unusedRows(table) : new Set<TableRow>())
   for (const block of report.body.flatMap((c) => c.blocks)) {
     if (block.type !== 'table') continue
+    const unused = unusedOf(block)
     block.rows.forEach((row, i) => {
+      if (unused.has(row)) return
       for (const c of row.cells) {
         if (c.text.trim() || c.imageId) continue
         if (i === 0) findings.push(guide('required-text', 'error', '表の見出しが入力されていない', 'body', { blockId: c.id }))
@@ -479,7 +484,9 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
       // 素材表（見出しに「生地見本」の列がある表）：生地見本に写真を入れる
       const swatch = swatchColumn(block)
       if (swatch >= 0) {
+        const unused = unusedOf(block)
         for (const row of block.rows.slice(1)) {
+          if (unused.has(row)) continue
           const c = row.cells[swatch]
           if (c && !c.imageId) findings.push(guide('swatch-image', 'error', '素材表の生地見本に写真を入れる', 'body', { blockId: c.id }))
         }

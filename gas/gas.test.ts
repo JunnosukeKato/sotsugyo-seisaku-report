@@ -582,6 +582,8 @@ describe('管理ページ（admin-project）', () => {
     expect(() => gas.saveYear({ ...initialConfig, courses: [course] })).toThrow(/ひな形の1行目の説明の形が正しくありません/)
     expect(() => gas.saveYear({ ...initialConfig, courses: [{ ...initialConfig.courses[0], advisors: [1] }] })).toThrow(/形が正しくありません/)
     expect(() => gas.saveYear({ ...initialConfig, fiscalYear: 20260 })).toThrow(/年度が正しくありません/)
+    // コースの「表の空の行」は、true・false（ない）だけ
+    expect(() => gas.saveYear({ ...initialConfig, courses: [{ ...initialConfig.courses[0], blankRowsOk: 'yes' }] })).toThrow(/表の空の行の設定が正しくありません/)
     // 準備中の年度は、題目が空などの途中の状態でも保存できる（細かい確認は画面で行う）
     gas.createYear(2026, 2027)
     expect(gas.saveYear({ ...initialConfig, fiscalYear: 2027, commonTitle: '' }).years[0].config.commonTitle).toBe('')

@@ -1751,8 +1751,8 @@ await withEdge(async (browser) => {
   }
   await tv.setViewport({ width: 1366, height: 768 })
   check(
-    '先生の画面：左の見出しは「コース」「書き方のチェック」「学生の画面を試す」の3つ。はじめのコースが開いていて、指導教員・お知らせ・ひな形（並べ替えのつまみはない）。右に「学生が最初に見る本文」の見本',
-    teacherView.nav === 'コース|書き方のチェック|学生の画面を試す' && teacherView.labels === '指導教員|お知らせ|ひな形' && teacherView.caption.startsWith('見本学生が最初に見る本文（映画・舞台衣装デザイナー コース）') && teacherView.outline && teacherView.grips === 0,
+    '先生の画面：左の見出しは「コース」「書き方のチェック」「学生の画面を試す」の3つ。はじめのコースが開いていて、指導教員・お知らせ・ひな形・表の空の行（並べ替えのつまみはない）。右に「学生が最初に見る本文」の見本',
+    teacherView.nav === 'コース|書き方のチェック|学生の画面を試す' && teacherView.labels === '指導教員|お知らせ|ひな形|表の空の行' && teacherView.caption.startsWith('見本学生が最初に見る本文（映画・舞台衣装デザイナー コース）') && teacherView.outline && teacherView.grips === 0,
     JSON.stringify(teacherView),
   )
   check(

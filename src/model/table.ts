@@ -214,6 +214,17 @@ export function swatchColumn(table: TableBlock): number {
   return table.rows[0]?.cells.findIndex((c) => c.text.trim() === SWATCH_HEADER) ?? -1
 }
 
+/**
+ * 使わなかった枠の行：見出しの行のほかの行のうち、どのセルにも字も画像もない行（どこかの行を書いた表だけ。どの行も空なら、空ではない）。
+ * セルフチェックは、この行の空欄を「空いている所」に数えない（ひな形で枠を用意し、素材が少なければ空欄の行のままでよい：
+ * 映画・舞台衣装デザイナーコースの決まり。依頼者 2026-10-22。表の行を消すのが難しい学生が多いため）
+ */
+export function unusedRows(table: TableBlock): Set<TableRow> {
+  const body = table.rows.slice(1)
+  const blank = (r: TableRow) => r.cells.every((c) => !c.text.trim() && !c.imageId)
+  return body.some((r) => !blank(r)) ? new Set(body.filter(blank)) : new Set()
+}
+
 /** 前の版の素材表（名称・使用箇所・生地見本の決まった3列）を、表にする。セルの ID は前と同じものを使う */
 export function fromMaterialTable(raw: { id: string; caption?: string; rows?: { id: string; name?: string; usage?: string; swatchImageId?: string | null }[] }): TableBlock {
   const header: TableRow = { id: `${raw.id}:h`, cells: MATERIAL_HEADERS.map((text, i) => ({ id: `${raw.id}:h${i}`, text, imageId: null })) }

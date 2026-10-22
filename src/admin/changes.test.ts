@@ -52,6 +52,11 @@ describe('describeChanges（保存の確認・変更履歴に出す変更の一�
     expect(sameConfig(base, { ...base, driveSave: 'off' })).toBe(false)
   })
 
+  it('コースの「表の空の行」：印を付けると変更。印なしと「ない」は同じ', () => {
+    expect(describeChanges(base, withCourse(base, film.id, { blankRowsOk: true }))).toEqual(['映画・舞台衣装デザイナー コースの表の空の行'])
+    expect(sameConfig(base, withCourse(base, film.id, { blankRowsOk: false }))).toBe(true)
+  })
+
   it('知らない項目の変更は「そのほかの設定」', () => {
     expect(describeChanges(base, { ...base, extra: 1 } as YearConfig)).toEqual(['そのほかの設定'])
   })

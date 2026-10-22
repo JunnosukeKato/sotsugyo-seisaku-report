@@ -15,6 +15,8 @@ import { useReorder } from './useReorder'
 
 export const NOTICE_HINT = 'このコースの学生のツールの、セルフチェック欄の上に表示されます。'
 const NOTICE_EXAMPLE = '例：12月4日（金）の中間発表では、本文の下書きを印刷して持ってきてください'
+/** 表の空の行の説明（ひな形で枠を用意し、少なければ空欄の行のままでよいコースのため） */
+const BLANK_ROWS_HINT = '学生がまるごと空のままにした表の行を、セルフチェックで「空いている所」に数えません。ひな形で表の枠を用意するときに使います。'
 
 interface Props {
   draft: YearConfig
@@ -199,6 +201,19 @@ function CourseItem({
                 </span>
               </div>
             </Row>
+            {/* 表の空の行（コースごとに決める：依頼者の選択 2026-10-22 案1）。先生は見るだけ（変えるときは管理者に頼む） */}
+            {teacher ? (
+              <Row label="表の空の行" hint="変えるときは、管理者に頼んでください">
+                <div className="plain">{course.blankRowsOk ? '使わない行は、空のままでよい' : '空の行も、空いている所に数える'}</div>
+              </Row>
+            ) : (
+              <Row label="表の空の行" htmlFor={`c-${course.id}-blankrows`} hint={BLANK_ROWS_HINT} changed={changed('blankRowsOk')}>
+                <label className="toggle-label">
+                  <input id={`c-${course.id}-blankrows`} type="checkbox" checked={course.blankRowsOk === true} onChange={(e) => onChange({ ...course, blankRowsOk: e.target.checked || undefined })} />
+                  使わない行は、空のままでよい
+                </label>
+              </Row>
+            )}
             {!teacher && <SubtitleRow course={course} changed={changed('subtitleTemplate')} onChange={onChange} />}
           </div>
           {/* このコースの誤り・確認（指導教員がいない・4名以上など）は、コースの欄の下に（上の枠に出すと、打っている間に欄がずれた：mockups/v49 G） */}
