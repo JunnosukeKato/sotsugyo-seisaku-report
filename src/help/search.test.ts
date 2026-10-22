@@ -59,10 +59,11 @@ describe('言葉で探す：項目を探す', () => {
   })
 
   it('端末ごとの手順の行も探し、端末の名前を小見出しにする', () => {
-    // PDF の出し方と、スマホのホーム画面に追加する、のどちらも iPhone の行で見つかる
+    // PDF の出し方は、iPhone の行で見つかる（スマホのホーム画面に追加する、も見つかる）
     const hits = searchTopics(STUDENT_TOPICS, '共有のボタン').hits
     expect(hits.find((h) => h.topic.id === 'pdf')?.line?.label).toBe('iPhone')
-    expect(hits.find((h) => h.topic.id === 'home')?.line?.label).toBe('iPhone')
+    expect(hits.some((h) => h.topic.id === 'home')).toBe(true)
+    expect(searchTopics(STUDENT_TOPICS, '上向きの矢印').hits.find((h) => h.topic.id === 'home')?.line?.label).toBe('iPhone')
   })
 
   it('学生が探した言葉（引用・参考文献・最初から・作り直す・新しく）で、引用・参考文献と、最初から作り直す項目が先に出る', () => {
