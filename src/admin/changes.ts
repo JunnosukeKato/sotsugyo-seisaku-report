@@ -28,7 +28,7 @@ const DETAIL_LABELS: [string, string][] = [
   ['cover.heading', '表紙の見出し'],
   ['cover.titleLabel', '表紙の題目の見出し'],
   ['abstract.heading', '抄録の見出し'],
-  ['abstract.openingExample', '抄録の書き出し例（詳細設定）'],
+  ['abstract.openingExample', '抄録の書き出し例（共通）'],
   ['university', '大学名'],
   ['faculty', '学部名'],
   ['department', '学科名'],

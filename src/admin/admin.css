@@ -107,6 +107,15 @@ button:disabled { opacity: 0.45; cursor: default; }
 .legend i.g { background: #fff; border: 1px solid #9aa1ad; }
 .preview, .tpl-preview { min-height: 0; overflow: hidden; }
 .preview iframe, .tpl-preview iframe { width: 100%; height: 100%; border: 0; display: block; }
+/* 見開きで送る見本（Preview.tsx。依頼者の選択 2026-10-22 案A）：見本の絵の下に「‹ 表紙・抄録 1 / 4 ›」 */
+.preview.paged { display: flex; flex-direction: column; overflow: auto; }
+.preview.paged iframe { flex: none; }
+.pv-nav { display: flex; align-items: center; justify-content: center; gap: 12px; padding: 4px 0 14px; }
+.pv-turn { display: grid; place-items: center; width: 36px; height: 32px; padding: 0; border: 1px solid #cfd5de; border-radius: 8px; background: #fff; color: var(--ink); font-size: 20px; line-height: 1; }
+.pv-turn:hover:not(:disabled) { background: var(--accent-soft); }
+.pv-turn:disabled { opacity: 0.35; cursor: default; }
+.pv-label { min-width: 170px; text-align: center; font-size: 14px; color: var(--ink); white-space: nowrap; }
+.pv-label small { margin-left: 8px; font-size: 13px; color: var(--muted); }
 /* 中身と見本の境目（つかんで動かすと、中身の幅が変わる） */
 .form-resize { position: absolute; z-index: 5; top: 0; bottom: 0; left: calc(var(--content-w) - 5px); width: 9px; cursor: col-resize; touch-action: none; }
 .form-resize::after { content: ''; position: absolute; top: 0; bottom: 0; left: 3px; width: 3px; border-radius: 2px; background: transparent; transition: background 0.15s; }

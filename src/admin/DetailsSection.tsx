@@ -6,6 +6,9 @@ import { NumberInput, OptionalNumberInput, Row, SectionHead, TextInput } from '.
  * 「詳細設定」の区切り（ふだんは変えない項目。mockups/v43 案A の詳細設定の分け方を、案B の区切りに入れたもの）。
  * Google の障害のとき・表紙と抄録の言葉・分量の決まり・学籍番号の4つに分けて、1列に並べる
  */
+/** 学籍番号の形式の説明（何に使うか・空のときどうなるか。依頼者から「この欄は何か」と聞かれた 2026-10-22） */
+const STUDENT_ID_HINT = '学籍番号の形の決まりです。学生がログインした大学のアカウント（wu22fa0001@… など）から学籍番号を読み取るとき（学生か先生かの見分けにも使います）と、表紙に打った学籍番号を確かめるときに使います。空なら、ツールに入っている形（数字2桁・英字2〜3字・数字3〜4桁）で読み取り、表紙の学籍番号は確かめません。'
+
 export function DetailsSection({ draft, set, changed, notices }: { draft: YearConfig; set: (patch: Partial<YearConfig>) => void; changed: (path: string) => boolean; notices?: ReactNode }) {
   const off = draft.driveSave === 'off'
   return (
@@ -50,7 +53,7 @@ export function DetailsSection({ draft, set, changed, notices }: { draft: YearCo
           <Row label="抄録の見出し" htmlFor="d-abstractHeading" changed={changed('abstract.heading')}>
             <TextInput id="d-abstractHeading" value={draft.abstract.heading} onChange={(v) => set({ abstract: { ...draft.abstract, heading: v } })} />
           </Row>
-          <Row label="書き出しの例" sub="抄録" htmlFor="d-openingExample" hint="学生の抄録の欄に、薄く出します" changed={changed('abstract.openingExample')}>
+          <Row label="書き出しの例（共通）" sub="抄録" htmlFor="d-openingExample" hint="コースで決めていないときに、学生の抄録の欄に薄く出します（コースの書き出し例は、コースの「ひな形」で決めます）" changed={changed('abstract.openingExample')}>
             <TextInput id="d-openingExample" value={draft.abstract.openingExample} onChange={(v) => set({ abstract: { ...draft.abstract, openingExample: v } })} />
           </Row>
           <Row label="大学名" htmlFor="d-university" changed={changed('university')}>
@@ -93,7 +96,7 @@ export function DetailsSection({ draft, set, changed, notices }: { draft: YearCo
           </Row>
           <Row label="作品写真" htmlFor="d-photoPages" hint="空なら上限なし（1ページに写真4枚まで）" changed={changed('workPhotos.maxPages')}>
             <span className="range">
-              <OptionalNumberInput id="d-photoPages" value={draft.workPhotos?.maxPages ?? null} placeholder="上限なし" onChange={(v) => set({ workPhotos: { maxPages: v } })} />
+              <OptionalNumberInput id="d-photoPages" value={draft.workPhotos?.maxPages ?? null} placeholder="なし" onChange={(v) => set({ workPhotos: { maxPages: v } })} />
               ページまで
             </span>
           </Row>
@@ -102,7 +105,7 @@ export function DetailsSection({ draft, set, changed, notices }: { draft: YearCo
       <div className="card">
         <h2 className="card-h">学籍番号</h2>
         <div className="grid">
-          <Row label="形式" sub="正規表現" htmlFor="d-studentId" hint="空なら確かめません" changed={changed('studentIdPattern')}>
+          <Row label="形式" sub="正規表現" htmlFor="d-studentId" hint={STUDENT_ID_HINT} changed={changed('studentIdPattern')}>
             <TextInput id="d-studentId" value={draft.studentIdPattern ?? ''} onChange={(v) => set({ studentIdPattern: v.trim() ? v : null })} placeholder="例：^\d{2}FA[A-Z]?\d{3,4}$" />
           </Row>
         </div>

@@ -19,7 +19,7 @@ import { MembersSection } from './Members'
 import { newYearSteps, type NewYearStep } from './newYearSteps'
 import { Preview } from './Preview'
 import { isMockServer, roleOf, server, type AdminState, type HistoryRow, type Member, type TemplateSet, type YearRow } from './server'
-import { TemplateEditor, TemplatePreview } from './TemplateEditor'
+import { TemplateEditor } from './TemplateEditor'
 import { TemplateOverlay } from './TemplateOverlay'
 import { TrialSection } from './TrialSection'
 import { TEMPLATE_RECEIVED } from './templateText'
@@ -467,13 +467,13 @@ function Work({ content, stage, locked, formWidth }: { content: ReactNode; stage
   )
 }
 
-/** 表紙と抄録の見本（見出しの行と、見本の絵） */
+/** 表紙・抄録と本文のひな形の見本（見出しの行と、見開きで送る見本の絵：Preview.tsx） */
 function CoverStage({ config, course }: { config: YearConfig; course: Course | undefined }) {
   return (
     <>
       <div className="caption">
         <b>見本</b>
-        <span>表紙と抄録（{course ? `${courseName(course)} コース` : 'コースなし'}）</span>
+        <span>表紙・抄録と本文のひな形（{course ? `${courseName(course)} コース` : 'コースなし'}）</span>
         <span className="spacer" />
         <span className="legend">
           <span>
@@ -486,7 +486,7 @@ function CoverStage({ config, course }: { config: YearConfig; course: Course | u
           </span>
         </span>
       </div>
-      <Preview config={config} courseId={course?.id ?? ''} />
+      <Preview config={config} courseId={course?.id ?? ''} template={course?.template?.length ? course.template : DEFAULT_TEMPLATE} />
     </>
   )
 }
@@ -1198,7 +1198,7 @@ function TeacherView({
                   <b>見本</b>
                   <span>学生が最初に見る本文（{courseName(shownCourse)} コース）</span>
                 </div>
-                <TemplatePreview blocks={shownCourse.template?.length ? shownCourse.template : DEFAULT_TEMPLATE} />
+                <Preview config={draft} courseId={shownCourse.id} template={shownCourse.template?.length ? shownCourse.template : DEFAULT_TEMPLATE} startAtBody />
               </>
             ) : null
           }

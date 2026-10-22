@@ -167,7 +167,8 @@ const countScreen = (p) =>
     const visible = (el) => shown(el.getBoundingClientRect(), clipOf(el))
     const root = document.querySelector('.modal-backdrop .modal') ?? document.body
     const fields = [...root.querySelectorAll('input:not([type=hidden]), select, textarea')].filter(visible)
-    const buttons = [...root.querySelectorAll('button')].filter(visible)
+    // 見本の見開きを送る「‹ ›」（Preview.tsx）は、見本の一部なので数えない
+    const buttons = [...root.querySelectorAll('button')].filter((b) => !b.closest('.pv-nav')).filter(visible)
     let chars = 0
     let small = 0
     const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
@@ -505,7 +506,7 @@ await withEdge(async (browser) => {
   })
   check(
     '詳細設定の「分量の決まり」に「作品写真」：はじめは空（「上限なし」）で「ページまで」、「空なら上限なし（1ページに写真4枚まで）」',
-    pagesField.label === '作品写真' && pagesField.value === '' && pagesField.placeholder === '上限なし' && pagesField.hint === '空なら上限なし（1ページに写真4枚まで）' && pagesField.unit === 'ページまで',
+    pagesField.label === '作品写真' && pagesField.value === '' && pagesField.placeholder === 'なし' && pagesField.hint === '空なら上限なし（1ページに写真4枚まで）' && pagesField.unit === 'ページまで',
     JSON.stringify(pagesField),
   )
   const pagesInput = await page.$('#d-photoPages')
@@ -1738,7 +1739,8 @@ await withEdge(async (browser) => {
     nav: [...document.querySelectorAll('.side-nav button')].map((b) => b.querySelector('.nt b').firstChild.textContent.trim()).join('|'),
     labels: [...document.querySelectorAll('.course.open .lb')].map((l) => l.firstChild.textContent).join('|'),
     caption: document.querySelector('.stage .caption')?.textContent ?? '',
-    outline: !!document.querySelector('.stage .tpl-preview iframe'),
+    outline: !!document.querySelector('.stage .preview.paged iframe'),
+    page: document.querySelector('.stage .pv-label')?.textContent ?? '',
     grips: document.querySelectorAll('.grip').length,
   }))
   for (const [vp, tag] of [
@@ -1751,9 +1753,22 @@ await withEdge(async (browser) => {
   }
   await tv.setViewport({ width: 1366, height: 768 })
   check(
-    '先生の画面：左の見出しは「コース」「書き方のチェック」「学生の画面を試す」の3つ。はじめのコースが開いていて、指導教員・お知らせ・ひな形・表の空の行（並べ替えのつまみはない）。右に「学生が最初に見る本文」の見本',
-    teacherView.nav === 'コース|書き方のチェック|学生の画面を試す' && teacherView.labels === '指導教員|お知らせ|ひな形|表の空の行' && teacherView.caption.startsWith('見本学生が最初に見る本文（映画・舞台衣装デザイナー コース）') && teacherView.outline && teacherView.grips === 0,
+    '先生の画面：左の見出しは「コース」「書き方のチェック」「学生の画面を試す」の3つ。はじめのコースが開いていて、指導教員・お知らせ・ひな形・表の空の行（並べ替えのつまみはない）。右に「学生が最初に見る本文」の見本（見開きで送る見本の、本文のはじめのページから）',
+    teacherView.nav === 'コース|書き方のチェック|学生の画面を試す' && teacherView.labels === '指導教員|お知らせ|ひな形|表の空の行' && teacherView.caption.startsWith('見本学生が最初に見る本文（映画・舞台衣装デザイナー コース）') && teacherView.outline && teacherView.page.startsWith('本文 1') && teacherView.grips === 0,
     JSON.stringify(teacherView),
+  )
+  // 見本は見開きで送る（mockups 案A：依頼者の選択 2026-10-22）。「‹」で表紙・抄録へ、「›」で本文へ。最初・最後の見開きでは押せない
+  const turn = async (label) => {
+    await tv.evaluate((l) => document.querySelector(`.stage .pv-turn[aria-label="${l}"]`).click(), label)
+    await sleep(400)
+    return tv.evaluate(() => ({ page: document.querySelector('.stage .pv-label').textContent, prev: !document.querySelector('.stage .pv-turn[aria-label="前の見開き"]').disabled, next: !document.querySelector('.stage .pv-turn[aria-label="次の見開き"]').disabled }))
+  }
+  const toCover = await turn('前の見開き')
+  const toBody = await turn('次の見開き')
+  check(
+    '見本の「‹」で表紙・抄録（そこでは「‹」は押せない）、「›」でまた本文のひな形のページへ',
+    toCover.page.startsWith('表紙・抄録1 /') && !toCover.prev && toCover.next && toBody.page.startsWith('本文 1') && toBody.prev,
+    JSON.stringify({ toCover, toBody }),
   )
   check(
     '先生の画面のはじめに見えるのは、入力欄2・ボタン7前後・12px以下の字0（mockups/v43 案B：入力欄2・ボタン7）',

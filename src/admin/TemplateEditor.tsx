@@ -7,6 +7,7 @@ import { bodyContentHtml } from '../layout/bodyHtml'
 import { reportCss } from '../layout/reportCss'
 import { bodyFromTemplate, DEFAULT_TEMPLATE } from '../model/template'
 import { useConfirm } from './confirm'
+import { TEMPLATE_CONTENT_CSS } from './Preview'
 import { useLeaveGuard } from './useLeaveGuard'
 import { useReorder } from './useReorder'
 
@@ -95,14 +96,10 @@ const NEW_BLOCKS: Record<TemplateBlock['type'], TemplateBlock> = {
 const PREVIEW_CSS = `
 body { margin: 0; padding: 14px; background: #eef0f3; }
 .page { width: 210mm; min-height: 297mm; box-sizing: border-box; margin: 0 auto; padding: 25mm 25mm 25mm 35mm; background: #fff; box-shadow: 0 2px 10px rgba(0,0,0,.15); }
-[data-block-id]:empty::before { content: attr(data-placeholder); color: #9aa1ad; }
-p[data-block-id]:empty::before { color: #8a90a0; }
-.figure-slot { margin: 0 auto; outline: 1px dashed #b9b9b9; background: repeating-linear-gradient(45deg, #f6f6f6 0 8px, #efefef 8px 16px); display: grid; place-items: center; }
-.figure-slot::before { content: '（学生が写真を入れる枠）'; color: #9a9a9a; font-family: 'BIZ UDPGothic', sans-serif; font-size: 10pt; }
+${TEMPLATE_CONTENT_CSS}
 h1.chapter:not(:first-child) { margin-top: 2em; }
 .page-break { position: relative; height: 9mm; }
 .page-break::after { content: '改ページ'; position: absolute; left: 0; right: 0; top: 3mm; padding-top: 1mm; border-top: 1px dashed #9aa3c4; color: #7f88ab; font-family: 'BIZ UDPGothic', sans-serif; font-size: 8pt; letter-spacing: 0.2em; text-align: center; }
-td [data-block-id]:empty::before { content: '（学生が書く）'; }
 `
 
 export function TemplatePreview({ blocks }: { blocks: TemplateBlock[] }) {
