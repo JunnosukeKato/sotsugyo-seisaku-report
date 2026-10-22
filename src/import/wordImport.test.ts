@@ -2,7 +2,8 @@ import { DOMParser } from '@xmldom/xmldom'
 import { zipSync } from 'fflate'
 import { afterEach, describe, expect, it } from 'vitest'
 import { br, emfHeader, floatingImage, inlineImage, makeDocx, numbered, p, png, rid, styled, tab, table, textBox } from '../../scripts/e2e/fixtures/docx.mjs'
-import { currentConfig, type YearConfig } from '../config'
+import { currentConfig, type TemplateBlock, type YearConfig } from '../config'
+import { templateProblems } from '../config/validate'
 import { contentToText, numbering } from '../editor/reportOps'
 import { createReport } from '../model/newReport'
 import type { Chapter, FigureRowBlock, ParagraphBlock, TableBlock } from '../model/types'
@@ -640,6 +641,42 @@ describe('章の並び（Word で書いた章と、ツールのひな形の章�
     )
     expect(result.body.map((c) => c.title)).toEqual(['企画・立案', '制作過程', 'まとめ'])
     expect(result.problems.map((x) => [x.where, x.message])).toContainEqual(['Ⅱ．制作過程', 'ひな形の「制作の流れ」の章の代わりに、Word の「制作過程」の章を入れます'])
+  })
+
+  it('ひな形に「〇〇〇〇」の小見出し・図があっても（学科の Word のひな形に合わせたもの）、Word の「〇〇〇〇」だけの行を見出しにしない', async () => {
+    // 映画・舞台衣装デザイナーコースのひな形（依頼者の依頼 2026-10-22：学科の Word のひな形に合わせる。Ⅱ の小見出しは2つ）
+    const template: TemplateBlock[] = [
+      { type: 'chapter', title: '企画・立案' },
+      { type: 'subheading', title: '担当衣装のキャラクター' },
+      { type: 'paragraph', hint: '「筆者が担当したのは、」から書き始め、担当したキャラクターの性格や、物語の中での役割を書く' },
+      { type: 'subheading', title: 'デザイン説明' },
+      { type: 'paragraph', hint: 'デザインのもとにした時代・地域の装いと、込めた意図を書く。文中に「（図1）」と書く' },
+      { type: 'figure', caption: 'デザイン画' },
+      { type: 'subheading', title: '使用素材' },
+      { type: 'paragraph', hint: '使った素材と使った場所を表1にまとめ、文中に「表1」と書く' },
+      { type: 'materialTable', caption: '使用材料表' },
+      { type: 'chapter', title: '制作過程' },
+      { type: 'subheading', title: '〇〇〇〇' },
+      { type: 'paragraph', hint: '小見出しの〇〇〇〇を作業の名前に直し、作った順に工夫した点を書く。写真は図として入れ、文中に「（図2）」と書く' },
+      { type: 'figure', caption: '〇〇〇〇' },
+      { type: 'figure', caption: '〇〇〇〇' },
+      { type: 'subheading', title: '〇〇〇〇' },
+      { type: 'paragraph', hint: '次の作業について書く。小見出しが足りなければ、道具の「小見出し」で足す' },
+      { type: 'chapter', title: 'まとめ' },
+      { type: 'paragraph', hint: '完成した衣装を振り返り、できたこと・課題を書く' },
+    ]
+    expect(templateProblems(template)).toEqual([])
+    const config: YearConfig = { ...currentConfig, courses: currentConfig.courses.map((c) => (c.id === COURSE ? { ...c, template } : c)) }
+    const result = await read(
+      makeDocx({ body: [p('Ⅰ．企画・立案'), p('　筆者が担当したのは、主人公である。'), p('〇〇〇〇'), p('　衣装は青を基調にした。'), p('Ⅱ．制作過程'), p('ⅰ．〇〇〇〇'), p(LONG_TILDE)].join('') }),
+      undefined,
+      { config, courseId: COURSE },
+    )
+    expect(result.body.map((c) => c.title)).toEqual(['企画・立案', '制作過程', 'まとめ'])
+    // 「〇〇〇〇」だけの行は見出しにせず、Ⅰ の段落も1つの章のまま
+    expect(kinds(result.body[0]).filter((k) => k.startsWith('s:'))).toEqual([])
+    // Ⅱ は書いていないので、ひな形の Ⅱ（〇〇〇〇 の小見出し2つと、図の枠2つ）が入る（ひな形の図の枠は、1つずつの行になる）
+    expect(kinds(result.body[1])).toEqual(['s:〇〇〇〇', 'paragraph', 'figureRow', 'figureRow', 's:〇〇〇〇', 'paragraph'])
   })
 
   it('名前を入れていない大見出し（〇〇〇〇）の下に書いていれば、同じ番目のひな形の章の名前にする', async () => {

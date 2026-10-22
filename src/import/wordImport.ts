@@ -787,8 +787,10 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
 
   // コースのひな形（まだ書いていない章を続けるのと、見出しの名前を比べるのに使う）
   const template = bodyFromTemplate(courseTemplate(config, courseId))
-  const templateChapters = new Set([...WORD_TEMPLATE_CHAPTERS, ...template.map((c) => c.title)].map(comparable))
-  const templateSubheadings = new Set([...WORD_TEMPLATE_SUBHEADINGS, ...template.flatMap((c) => c.blocks.flatMap((b) => (b.type === 'subheading' ? [b.title] : [])))].map(comparable))
+  // ひな形の仮の名前（「〇〇〇〇」の小見出しなど）は、見出しの名前として使わない（Word の「〇〇〇〇」だけの行を、見出しと取り違えないように）
+  const named = (titles: string[]) => titles.filter((t) => !isPlaceholderOnly(t)).map(comparable)
+  const templateChapters = new Set(named([...WORD_TEMPLATE_CHAPTERS, ...template.map((c) => c.title)]))
+  const templateSubheadings = new Set(named([...WORD_TEMPLATE_SUBHEADINGS, ...template.flatMap((c) => c.blocks.flatMap((b) => (b.type === 'subheading' ? [b.title] : [])))]))
 
   const blocks = readDocument(bodyPkg.document, documentContext(bodyPkg.styles, bodyPkg.numbering))
   const events = classify(blocks, { chapters: templateChapters, subheadings: templateSubheadings })
