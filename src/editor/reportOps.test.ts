@@ -589,3 +589,53 @@ describe('段落に打った見出し（paragraphToHeading・headingLabel）', (
     expect(pasted[0]).toBe('p6')
   })
 })
+
+describe('図の置き場所（「小見出しの終わりへ」「段落の下へ戻す」：依頼者の選択 2026-10-22 案A）', () => {
+  const t = (text: string) => ({ type: 'text' as const, text })
+  const p = (id: string, ref?: string) => ({ type: 'paragraph' as const, id, content: ref ? [t('…'), { type: 'ref' as const, targetId: ref, withParens: true }, t('。')] : [t(id)] })
+  const row = (id: string, ...figs: string[]) => ({ type: 'figureRow' as const, id, figures: figs.map((f) => ({ id: f, imageId: '', caption: f })) })
+  const report = (blocks: Report['body'][number]['blocks']): Report => ({ ...demoReport(), body: [{ id: 'c1', title: '企画・立案', blocks }] })
+  const order = (r: Report) => r.body[0].blocks.map((b) => b.id)
+
+  it('小見出しのまとまりのいちばん下へ動かす（まとまりの終わりの改ページの手前）。動かしたあとは「段落の下へ戻す」で元の所へ', () => {
+    const r0 = report([{ type: 'subheading', id: 's2', title: 'デザイン説明' }, p('p1', 'f1'), row('r1', 'f1'), p('p2'), p('p3'), { type: 'pageBreak', id: 'pb' }, { type: 'subheading', id: 's3', title: '使用素材' }, p('p4')])
+    expect(ops.figurePlacement(r0, 'f1')).toEqual({ toSectionEnd: true, toParagraph: false })
+    const r1 = ops.moveFigureRow(r0, 'f1', 'sectionEnd')
+    expect(order(r1)).toEqual(['s2', 'p1', 'p2', 'p3', 'r1', 'pb', 's3', 'p4'])
+    expect(ops.figurePlacement(r1, 'f1')).toEqual({ toSectionEnd: false, toParagraph: true })
+    const r2 = ops.moveFigureRow(r1, 'f1', 'paragraph')
+    expect(order(r2)).toEqual(order(r0))
+  })
+
+  it('動かす先がいまの所なら、同じ原稿（段落が小見出しのまとまりの最後なら、どちらも出さない）。2枚並べた図は、まとめて動かす', () => {
+    const r0 = report([{ type: 'subheading', id: 's1', title: 'a' }, p('p1'), p('p2', 'f1'), row('r1', 'f1', 'f2'), { type: 'subheading', id: 's2', title: 'b' }])
+    expect(ops.figurePlacement(r0, 'f2')).toEqual({ toSectionEnd: false, toParagraph: false })
+    expect(ops.moveFigureRow(r0, 'f2', 'sectionEnd')).toBe(r0)
+    const r1 = report([{ type: 'subheading', id: 's1', title: 'a' }, p('p1', 'f1'), row('r1', 'f1', 'f2'), p('p2'), { type: 'subheading', id: 's2', title: 'b' }])
+    expect(order(ops.moveFigureRow(r1, 'f2', 'sectionEnd'))).toEqual(['s1', 'p1', 'p2', 'r1', 's2'])
+  })
+
+  it('図の後ろに図・表しか続かないなら、もう終わりにあるとみなす（「段落の下へ戻す」を出す）', () => {
+    const r0 = report([{ type: 'subheading', id: 's1', title: 'a' }, p('p1', 'f1'), p('p2', 'f2'), p('p3'), row('r1', 'f1'), row('r2', 'f2'), { type: 'subheading', id: 's2', title: 'b' }])
+    expect(ops.figurePlacement(r0, 'f1')).toEqual({ toSectionEnd: false, toParagraph: true })
+    expect(ops.moveFigureRow(r0, 'f1', 'sectionEnd')).toBe(r0)
+    expect(order(ops.moveFigureRow(r0, 'f1', 'paragraph'))).toEqual(['s1', 'p1', 'r1', 'p2', 'p3', 'r2', 's2'])
+  })
+
+  it('終わりに、本文で後に出てくる図がすでにあれば、その前に入れる（図の番号が本文で出てくる順のまま）', () => {
+    const r0 = report([{ type: 'subheading', id: 's1', title: 'a' }, p('p1', 'f1'), row('r1', 'f1'), p('p2'), p('p3', 'f2'), row('r2', 'f2'), { type: 'subheading', id: 's2', title: 'b' }])
+    expect(ops.figurePlacement(r0, 'f1')).toEqual({ toSectionEnd: true, toParagraph: false })
+    const r1 = ops.moveFigureRow(r0, 'f1', 'sectionEnd')
+    expect(order(r1)).toEqual(['s1', 'p1', 'p2', 'p3', 'r1', 'r2', 's2'])
+    expect(ops.figurePlacement(r1, 'f1')).toEqual({ toSectionEnd: false, toParagraph: true })
+    expect(ops.figurePlacement(r1, 'f2')).toEqual({ toSectionEnd: false, toParagraph: false })
+    expect(order(ops.moveFigureRow(r1, 'f1', 'paragraph'))).toEqual(order(r0))
+  })
+
+  it('大見出しのはじめの部分（最初の小見出しの前）の図は、最初の小見出しの前まで。小見出しがなければ章の終わりまで', () => {
+    const r0 = report([p('p1', 'f1'), row('r1', 'f1'), p('p2'), { type: 'subheading', id: 's1', title: 'a' }, p('p3')])
+    expect(order(ops.moveFigureRow(r0, 'f1', 'sectionEnd'))).toEqual(['p1', 'p2', 'r1', 's1', 'p3'])
+    const r1 = report([p('p1', 'f1'), row('r1', 'f1'), p('p2'), p('p3')])
+    expect(order(ops.moveFigureRow(r1, 'f1', 'sectionEnd'))).toEqual(['p1', 'p2', 'p3', 'r1'])
+  })
+})

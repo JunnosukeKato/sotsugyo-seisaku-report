@@ -1057,6 +1057,59 @@ await withEdge(async (browser) => {
     const afterUndo = (await snap()).report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow')?.figures.length
     check('図を押して選び、Delete キーで消せる（元に戻すで戻る）', !afterDelete && afterUndo === 1, JSON.stringify({ afterDelete, afterUndo }))
   }
+  // 図を選んで「小見出しの終わりへ」：小見出しのまとまりのいちばん下へ動く。そこでは「段落の下へ戻す」になり、押すと参照している段落のすぐ下に戻る（依頼者の選択 2026-10-22 案A）
+  {
+    // 図の後ろに段落を1つ足して、動かせる所を作る（あとで元に戻す）
+    const figId = await page.evaluate(() => {
+      window.__beforeMove = window.__editor.getSnapshot().report
+      window.__editor.update((r) => ({
+        ...r,
+        body: r.body.map((c) => {
+          const i = c.blocks.findIndex((b) => b.type === 'figureRow')
+          if (i < 0) return c
+          const blocks = [...c.blocks]
+          blocks.splice(i + 1, 0, { type: 'paragraph', id: 'p-e2e-after', content: [{ type: 'text', text: '図の後ろの段落。' }] })
+          return { ...c, blocks }
+        }),
+      }))
+      return window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.type === 'figureRow').figures[0].id
+    })
+    await ready()
+    await page.evaluate((id) => window.__editor.select({ kind: 'figure', id }), figId)
+    await new Promise((r) => setTimeout(r, 300))
+    const order = (pid) =>
+      page.evaluate((pid) => {
+        const s = window.__editor.getSnapshot()
+        const ch = s.report.body.find((c) => c.blocks.some((b) => b.id === pid))
+        return {
+          ids: ch.blocks.map((b) => (b.type === 'figureRow' ? 'FIG' : b.type === 'subheading' ? 'SUB' : b.type === 'pageBreak' ? 'PB' : b.id)),
+          selected: s.selection?.kind === 'figure' ? s.selection.id : null,
+          tools: [...document.querySelectorAll('.palette .tb')].map((b) => b.textContent.trim()),
+        }
+      }, pid)
+    const m0 = await order(firstParagraph)
+    await clickPaletteButton('小見出しの終わりへ')
+    await ready()
+    const m1 = await order(firstParagraph)
+    await page.screenshot({ path: `${OUT}/2b-figure-section-end.png` })
+    const fig1 = m1.ids.indexOf('FIG')
+    const next1 = m1.ids.slice(fig1 + 1).filter((x) => x !== 'PB')[0]
+    check(
+      '図を選ぶと道具に「小見出しの終わりへ」。押すと、図が小見出しのまとまりのいちばん下へ動き（後ろは次の小見出しか章の終わり）、図は選んだまま。道具は「段落の下へ戻す」になる',
+      m0.tools.includes('小見出しの終わりへ') && !m0.tools.includes('段落の下へ戻す') && fig1 > m1.ids.indexOf('p-e2e-after') && (next1 === undefined || next1 === 'SUB') && m1.selected === figId && m1.tools.includes('段落の下へ戻す') && !m1.tools.includes('小見出しの終わりへ'),
+      JSON.stringify({ before: m0.ids.slice(0, 8), after: m1.ids.slice(0, 12), tools: [m0.tools, m1.tools] }),
+    )
+    await clickPaletteButton('段落の下へ戻す')
+    await ready()
+    const m2 = await order(firstParagraph)
+    check(
+      '「段落の下へ戻す」で、図はその図のことを書いた段落のすぐ下に戻る（道具は「小見出しの終わりへ」に戻る）',
+      m2.ids[m2.ids.indexOf(firstParagraph) + 1] === 'FIG' && m2.selected === figId && m2.tools.includes('小見出しの終わりへ'),
+      JSON.stringify({ after: m2.ids.slice(0, 8), tools: m2.tools }),
+    )
+    await page.evaluate(() => window.__editor.update(() => window.__beforeMove))
+    await ready()
+  }
 
   // ---- 前に入れた図を、もう一度指す：番号を（図1）と書くと、確定したときに図とつながる ----
   await clickBlock(firstParagraph)

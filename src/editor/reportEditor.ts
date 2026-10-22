@@ -3459,6 +3459,25 @@ export class ReportEditor {
     }))
   }
 
+  /**
+   * 選んでいる図（のまとまり）を、その小見出しのまとまりのいちばん下へ（'sectionEnd'）・最初に参照している段落のすぐ下へ（'paragraph'）動かす
+   * （依頼者の選択 2026-10-22 案A）。元に戻す1回で戻る。動かした先のページを見せ、図は選んだまま
+   */
+  async moveFigure(figureId: string, to: 'sectionEnd' | 'paragraph'): Promise<void> {
+    const next = ops.moveFigureRow(this.report, figureId, to)
+    if (next === this.report) return
+    this.update(() => next)
+    this.select({ kind: 'figure', id: figureId })
+    await this.whenLaidOut()
+    const page = this.pageOfBlock(figureId)
+    // 別のページへ動いたら、そのページを見せて、図を選び直す（ページを送ると、選んでいたものは外れるため）
+    if (page >= 0 && page !== this.page) {
+      await this.goToPage(page, 'none')
+      this.select({ kind: 'figure', id: figureId })
+    }
+    this.markSelection()
+  }
+
   /** 選んでいる図の横に、もう1枚並べる（2枚まで） */
   /** 選んでいる図のすぐ後ろに、もう1枚加える。本文のその図への参照のすぐ後ろにも「（図n）」を足す */
   async addFigureBeside(figureId: string): Promise<void> {

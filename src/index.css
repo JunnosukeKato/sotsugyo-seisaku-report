@@ -407,6 +407,8 @@ body.resizing .page-viewport { pointer-events: none; }
 /* スマホの下の道具では、説明の小さな文字は出さない（PC の道具では出す） */
 .sel-bar .ctx-note { display: none; }
 .sel-bar .tb { width: auto; padding: 6px 10px; }
+/* 道具の名前の折り返し（Palette.tsx の Tool）：パソコンの左の道具では、決めた所で改行する */
+.palette .tb-line { display: block; line-height: 1.3; }
 .sel-bar .layouts { display: flex; padding: 0; }
 .sel-bar .lay { padding: 6px 10px; border-color: var(--line); }
 .sel-bar .lay.on { border-color: var(--accent); }

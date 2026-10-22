@@ -664,6 +664,70 @@ function orderByRefs(figures: Figure[], paragraph: ParagraphBlock): Figure[] {
 }
 
 /**
+ * 図のまとまり（figureId の図を含む）の、動かせる先（依頼者の選択 2026-10-22 案A：「小見出しの終わりへ」「段落の下へ戻す」）。
+ * - sectionEnd：その小見出しのまとまり（大見出しのはじめの部分なら、最初の小見出しの前まで）のいちばん下。
+ *   まとまりの終わりに改ページがあれば、その手前（改ページの後ろは、次の小見出しのページ）。いまそこにあれば null
+ * - paragraph：まとまりの図を最初に参照している段落（同じ章の中）のすぐ下。いまそこ（段落のすぐ下に続く図・表の中）にあれば null
+ * 返す値は、まとまりを抜いた章の blocks に入れる位置
+ */
+function figureRowTargets(chapter: Chapter, figureId: string): { from: number; sectionEnd: number | null; paragraph: number | null } | null {
+  const from = chapter.blocks.findIndex((b) => b.type === 'figureRow' && b.figures.some((f) => f.id === figureId))
+  if (from < 0) return null
+  const row = chapter.blocks[from] as Extract<BodyBlock, { type: 'figureRow' }>
+  const rest = chapter.blocks.filter((_, i) => i !== from)
+  // 図・表を最初に参照している段落（抜いたあとの位置で。なければ -1）
+  const refOf = (ids: Set<string>) => rest.findIndex((b) => b.type === 'paragraph' && b.content.some((n) => n.type === 'ref' && ids.has(n.targetId)))
+  const ids = new Set(row.figures.map((f) => f.id))
+  const ref = refOf(ids)
+  // まとまりの終わり（抜いたあとの位置で）：次の小見出しの前、なければ章の終わり。続く改ページの手前まで戻る
+  let end = rest.findIndex((b, i) => i >= from && b.type === 'subheading')
+  if (end < 0) end = rest.length
+  while (end > from && rest[end - 1].type === 'pageBreak') end--
+  // 終わりに図・表が続くときは、本文でこの図より後に出てくるものの前に入れる（図の番号が、本文で出てくる順のままになるように）
+  while (end > from && ref >= 0) {
+    const b = rest[end - 1]
+    if (b.type !== 'figureRow' && b.type !== 'table') break
+    const later = refOf(new Set(b.type === 'figureRow' ? b.figures.map((f) => f.id) : [b.id]))
+    if (later <= ref) break
+    end--
+  }
+  let paragraph: number | null = null
+  if (ref >= 0) {
+    // 段落のすぐ下に続く図・表の中にいまあるなら、戻さない
+    let below = ref + 1
+    while (below < rest.length && isAttachment(rest[below])) below++
+    paragraph = from >= ref + 1 && from <= below ? null : ref + 1
+  }
+  // 図の後ろに図・表しか続かないなら、もう終わりにある（いくつかの図を終わりへ動かしたとき、前の図にも「段落の下へ戻す」を出す）
+  const atEnd = rest.slice(from, end).every(isAttachment)
+  return { from, sectionEnd: atEnd ? null : end, paragraph }
+}
+
+/** 図のまとまりを動かせるか（図を押したときの道具に「小見出しの終わりへ」「段落の下へ戻す」を出すか） */
+export function figurePlacement(report: Report, figureId: string): { toSectionEnd: boolean; toParagraph: boolean } {
+  for (const chapter of report.body) {
+    const t = figureRowTargets(chapter, figureId)
+    if (t) return { toSectionEnd: t.sectionEnd !== null, toParagraph: t.paragraph !== null }
+  }
+  return { toSectionEnd: false, toParagraph: false }
+}
+
+/** 図のまとまりを、その小見出しのまとまりのいちばん下へ（to: 'sectionEnd'）・最初に参照している段落のすぐ下へ（to: 'paragraph'）動かす。動かせなければ同じ原稿 */
+export function moveFigureRow(report: Report, figureId: string, to: 'sectionEnd' | 'paragraph'): Report {
+  let moved = false
+  const body = report.body.map((chapter) => {
+    const t = figureRowTargets(chapter, figureId)
+    const at = t && (to === 'sectionEnd' ? t.sectionEnd : t.paragraph)
+    if (!t || at === null) return chapter
+    moved = true
+    const rest = chapter.blocks.filter((_, i) => i !== t.from)
+    rest.splice(at, 0, chapter.blocks[t.from])
+    return { ...chapter, blocks: rest }
+  })
+  return moved ? { ...report, body } : report
+}
+
+/**
  * 図を消す。本文のその図への参照は、文末などの「（図n）」なら一緒に消す。
  * 文の中で使っている参照（「図1に示す」など）は「図?」の文字にして残す（消すと「〜をに示す」と文が崩れるため。チェックで指摘される）
  */

@@ -62,6 +62,9 @@ export const Icon = {
       <rect x="13" y="6" width="7.5" height="11" rx="1.2" strokeDasharray="2 2" />
     </>,
   ),
+  // 図を小見出しの終わりへ（四角と下向きの矢印と線）・段落の下へ戻す（上向きの矢印）。依頼者の選択 2026-10-22 案A
+  toSectionEnd: svg(<path d="M6 4.5h12v6H6zM12 13v5M9.5 15.5L12 18l2.5-2.5M5 20.5h14" />),
+  toParagraph: svg(<path d="M5 4.5h14M12 18v-8M9.5 12.5L12 10l2.5 2.5M6 13.5h0M6 20h12" />),
   rowAdd: svg(
     <>
       <rect x="4" y="5" width="16" height="10" rx="1.5" />

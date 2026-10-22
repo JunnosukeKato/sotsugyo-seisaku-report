@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
+import { figurePlacement } from '../editor/reportOps'
 import type { TableBlock } from '../model/types'
 import { PHOTO_ARRANGEMENTS, photoGrid, photoPageName } from '../model/photos'
 import { SELECTION_TEXTS } from '../editor/selectionBar'
@@ -59,7 +60,7 @@ function Tool({
   return (
     <button
       className={`tb${danger ? ' danger' : ''}`}
-      title={title ?? label}
+      title={title ?? label.replace(/\n/g, '')}
       disabled={disabled}
       onMouseDown={keepFocus}
       onMouseEnter={() => onPreview?.(true)}
@@ -70,7 +71,8 @@ function Tool({
       }}
     >
       {icon}
-      <span>{label}</span>
+      {/* 名前の \n：パソコンの左の道具（幅が狭い）で、言葉の切れ目で折り返す（1字だけ次の行に残らないように）。スマホの道具の帯では1行 */}
+      <span>{label.includes('\n') ? label.split('\n').map((line, i) => <span key={i} className="tb-line">{line}</span>) : label}</span>
     </button>
   )
 }
@@ -333,12 +335,19 @@ export function SelectionTools({ editor, snap, phone, template }: SelectionTools
 
   const figureId = selection?.kind === 'figure' ? selection.id : editingKind === 'figureCaption' ? editingId : null
   if (figureId) {
+    const place = figurePlacement(report, figureId)
     return (
       <div className="group ctx">
         <div className="ctx-label">この図</div>
         {/* ひな形を作る画面では、写真は選ばない（図は空の枠。写真は学生が入れる） */}
         {!template && <Tool label="差し替え" icon={Icon.replace} title="写真を差し替える" onClick={() => void editor.replaceFigureImage(figureId)} />}
         {!template && <Tool label="もう1枚" icon={Icon.beside} title="この図のすぐ後ろにもう1枚入れる（本文の参照の後ろにも「（図n）」が入ります）" onClick={() => void editor.addFigureBeside(figureId)} />}
+        {/* 図の置き場所（依頼者の選択 2026-10-22 案A）：小見出しのまとまりのいちばん下へ。そこにあれば、参照している段落の下へ戻す */}
+        {place.toSectionEnd ? (
+          <Tool label={'小見出しの\n終わりへ'} icon={Icon.toSectionEnd} title="この図を、小見出しのまとまりのいちばん下へ動かす（図の番号は、紙面の順にそろいます）" onClick={() => void editor.moveFigure(figureId, 'sectionEnd')} />
+        ) : place.toParagraph ? (
+          <Tool label={'段落の下へ\n戻す'} icon={Icon.toParagraph} title="この図を、この図のことを書いた段落のすぐ下へ戻す" onClick={() => void editor.moveFigure(figureId, 'paragraph')} />
+        ) : null}
         <Tool
           label="削除"
           icon={Icon.remove}
