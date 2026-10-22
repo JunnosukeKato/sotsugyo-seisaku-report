@@ -264,7 +264,7 @@ await withEdge(async (browser) => {
   check(
     '見出しの横の「？ 使い方」で、右の端に先生・管理者用の使い方が出る（項目12・相談先はほかの管理者と引き継ぎ手順・いちばん下に印刷用の手引き（先生用・管理者用の PDF）を新しいタブで）',
     adminHelp.topics === 12 && adminHelp.pressed === 'true' && adminHelp.content && adminHelp.label === '先生・管理者用' && adminHelp.foot.includes('ほかの管理者') &&
-      adminHelp.pdf.join('|') === '先生用 https://junnosukekato.github.io/sotsugyo-seisaku-report/guides/teacher-guide.pdf _blank|管理者用 https://junnosukekato.github.io/sotsugyo-seisaku-report/guides/admin-guide.pdf _blank',
+      adminHelp.pdf.join('|') === '先生用 https://kokusai-fashion.github.io/sotsugyo-seisaku-report/guides/teacher-guide.pdf _blank|管理者用 https://kokusai-fashion.github.io/sotsugyo-seisaku-report/guides/admin-guide.pdf _blank',
     JSON.stringify(adminHelp),
   )
   const dockTop = await page.evaluate(() => ({ dock: document.querySelector('.help-dock').getBoundingClientRect().top, header: document.querySelector('.admin-header').getBoundingClientRect().bottom }))

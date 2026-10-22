@@ -32,7 +32,7 @@ const { fakeDrive, routeGoogle } = await import('./e2e/fakeGoogle.mjs')
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 /** 学生に配るツールの URL（QR コードにする。GitHub のリポジトリを移したら、ここと HTML の URL を直す） */
-const TOOL_URL = 'https://junnosukekato.github.io/sotsugyo-seisaku-report/'
+const TOOL_URL = 'https://kokusai-fashion.github.io/sotsugyo-seisaku-report/'
 const IMG = 'docs/guide-images'
 const SAMPLE_OUT = `${IMG}/sample`
 /** 依頼者が作る見本の画像の置き場所（公開のリポジトリの外） */

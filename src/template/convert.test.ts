@@ -238,11 +238,11 @@ describe('管理ページとのやり取り（postMessage）', () => {
     expect(isAllowedParentOrigin('http://localhost:5173', true)).toBe(true)
     expect(isAllowedParentOrigin('http://127.0.0.1:5174', true)).toBe(true)
     expect(isAllowedParentOrigin('http://other.localhost:5173', true)).toBe(false)
-    expect(isAllowedParentOrigin('https://junnosukekato.github.io', true)).toBe(false)
+    expect(isAllowedParentOrigin('https://kokusai-fashion.github.io', true)).toBe(false)
   })
 
   it('iframe に開く URL と場所（?template=1。ほかの印は付けない）', () => {
-    expect(templateToolUrls('https://junnosukekato.github.io/sotsugyo-seisaku-report/')).toEqual({ src: 'https://junnosukekato.github.io/sotsugyo-seisaku-report/?template=1', origin: 'https://junnosukekato.github.io' })
+    expect(templateToolUrls('https://kokusai-fashion.github.io/sotsugyo-seisaku-report/')).toEqual({ src: 'https://kokusai-fashion.github.io/sotsugyo-seisaku-report/?template=1', origin: 'https://kokusai-fashion.github.io' })
     expect(templateToolUrls('http://localhost:5173/?nodrive#x')).toEqual({ src: 'http://localhost:5173/?template=1', origin: 'http://localhost:5173' })
   })
 

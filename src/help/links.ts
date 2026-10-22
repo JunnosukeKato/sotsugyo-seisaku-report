@@ -5,7 +5,7 @@
  */
 
 /** 学生用ツールを公開している場所（GitHub Pages） */
-export const PAGES_URL = 'https://junnosukekato.github.io/sotsugyo-seisaku-report/'
+export const PAGES_URL = 'https://kokusai-fashion.github.io/sotsugyo-seisaku-report/'
 
 /** 学生用ツール：印刷用の手引き（学生用の PDF） */
 export const STUDENT_GUIDE_PATH = './guides/student-guide.pdf'

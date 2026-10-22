@@ -20,7 +20,7 @@ const { stubConfig } = await import('./e2e/configStub.mjs')
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 /** 学生に配るツールの URL（QR コードにする） */
-const TOOL_URL = 'https://junnosukekato.github.io/sotsugyo-seisaku-report/'
+const TOOL_URL = 'https://kokusai-fashion.github.io/sotsugyo-seisaku-report/'
 const HTML = 'docs/案内_Wordからの移り方.html'
 const PDF = 'docs/案内_Wordからの移り方.pdf'
 const IMG = 'docs/guide-images'

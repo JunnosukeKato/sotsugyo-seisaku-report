@@ -3,4 +3,4 @@
  * 管理ページを Apps Script に載せるときに VITE_TOOL_URL で変えられる（vite.admin.config.ts・scripts/build-gas.mjs）。
  * ほかのものを読み込まない（ビルドの設定からも読むため）
  */
-export const DEFAULT_TOOL_URL = 'https://junnosukekato.github.io/sotsugyo-seisaku-report/'
+export const DEFAULT_TOOL_URL = 'https://kokusai-fashion.github.io/sotsugyo-seisaku-report/'
