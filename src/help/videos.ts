@@ -21,6 +21,18 @@ export const HELP_VIDEOS: HelpVideo[] = [
   { number: 6, title: 'スマホで書く', file: '6-phone', seconds: 60, phone: true },
 ]
 
+/** 項目に入れた動画（番号の順。使い方のいちばん上の「動画で見る」に並べる：mockups 依頼者の選択 2026-10-22 案1） */
+export function videosOf(topics: HelpTopic[]): HelpVideo[] {
+  const numbers = new Set(topics.flatMap((t) => t.videos ?? []))
+  return HELP_VIDEOS.filter((v) => numbers.has(v.number))
+}
+
+/** その動画を入れた、いちばん上の項目（動画のくわしい説明） */
+export const topicOfVideo = (topics: HelpTopic[], number: number): HelpTopic | undefined => topics.find((t) => t.videos?.includes(number))
+
+/** 長さ（1:03 の形） */
+export const lengthText = (seconds: number): string => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
+
 /** その項目の動画（スマホで開いたときは、スマホの回を先に） */
 export function topicVideos(topic: HelpTopic, device: string): HelpVideo[] {
   const list = (topic.videos ?? []).map((n) => HELP_VIDEOS.find((v) => v.number === n)).filter((v): v is HelpVideo => !!v)

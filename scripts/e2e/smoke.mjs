@@ -380,13 +380,14 @@ await withEdge(async (browser) => {
   await page.waitForSelector('.side .help-side')
   await pause0(300)
   const helpOpen = await page.evaluate(() => ({
-    topics: document.querySelectorAll('.help-list button').length,
+    topics: document.querySelectorAll('.help-group:not(.help-videos) .help-list button').length,
+    videos: document.querySelectorAll('.help-videos .help-list button').length,
     check: !!document.querySelector('.side .sec.check'),
     focus: document.activeElement?.classList.contains('help-title') ?? false,
     pdf: document.querySelector('.help-foot .help-pdf')?.getAttribute('href'),
     paper: !!document.querySelector('.palette'),
   }))
-  check('「？ 使い方」で、右の欄が使い方に替わる（項目18・見出しに移る・紙面と道具はそのまま・いちばん下に印刷用の手引き（PDF））', helpOpen.topics === 18 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf', JSON.stringify(helpOpen))
+  check('「？ 使い方」で、右の欄が使い方に替わる（いちばん上に動画6本・項目18・見出しに移る・紙面と道具はそのまま・いちばん下に印刷用の手引き（PDF））', helpOpen.topics === 18 && helpOpen.videos === 6 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf', JSON.stringify(helpOpen))
   await page.type('.help-search input', 'PDF 出ない')
   await pause0(300)
   const found = await page.evaluate(() => ({

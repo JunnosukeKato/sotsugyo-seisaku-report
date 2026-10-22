@@ -1,4 +1,5 @@
 import type { HelpTopic } from './helpTopics'
+import { HELP_VIDEOS } from './videos'
 
 /**
  * 使い方の「言葉で探す」。入れた言葉（空白で区切る）が、項目の題・文・よく使われる言い方（words）に
@@ -20,15 +21,19 @@ export interface HelpLine {
   text: string
 }
 
-/** 項目の文を、1行ずつに分ける（題と words は含まない） */
+/** 項目の文を、1行ずつに分ける（題と words は含まない）。動画のある項目は、動画の題も「動画」の行にする（「動画」で探せるように） */
 export function linesOf(topic: HelpTopic): HelpLine[] {
   return [
     ...(topic.lead ? [{ text: topic.lead }] : []),
     ...(topic.steps ?? []).map((text) => ({ text })),
     ...(topic.items ?? []).map((it) => ({ label: it.h, text: it.t })),
     ...(topic.devices ?? []).flatMap((d) => d.lines.map((text) => ({ label: d.label, text }))),
+    ...HELP_VIDEOS.filter((v) => topic.videos?.includes(v.number)).map((v) => ({ label: '動画', text: `${v.number}「${v.title}」` })),
   ]
 }
+
+/** 動画のある項目の、よく使われる言い方（「ビデオ」でも探せるように） */
+const VIDEO_WORDS = '動画 ビデオ'
 
 export interface HelpHit {
   topic: HelpTopic
@@ -68,7 +73,7 @@ function searchWith(topics: HelpTopic[], terms: string[]): { terms: string[]; hi
   topics.forEach((topic, order) => {
     const lines = linesOf(topic)
     const title = normalize(topic.title)
-    const all = normalize([topic.title, ...lines.map((l) => `${l.label ?? ''} ${l.text}`), topic.words ?? ''].join(' '))
+    const all = normalize([topic.title, ...lines.map((l) => `${l.label ?? ''} ${l.text}`), topic.words ?? '', topic.videos?.length ? VIDEO_WORDS : ''].join(' '))
     const found = terms.filter((t) => all.includes(t))
     if (!found.length) return
     const inTitle = found.filter((t) => title.includes(t))

@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type KeyboardEvent } from 'react'
 import { Icon } from '../app/icons'
 import { useDialogFocus } from '../app/useDialogFocus'
 import { deviceName } from '../drive/device'
-import { topicVideos } from './videos'
+import { lengthText, topicOfVideo, topicVideos, videosOf, type HelpVideo } from './videos'
 import type { HelpDevice, HelpTopic } from './helpTopics'
 import { highlightParts, searchTopics, termsOf } from './search'
 import './help.css'
@@ -10,11 +10,12 @@ import './help.css'
 /**
  * 使い方（ヘルプ）の欄（mockups/v27 案A「右の欄が切り替わる」）。
  * 上に「言葉で探す」、下に項目の一覧。項目を押すと中身（ひとこと・手順・画面の写真）、「← 一覧へ」で戻る。
+ * 一覧のいちばん上に「動画で見る」（項目に入れた動画を、題名の絵と題・長さで1行ずつ。押すと、その場で大きく再生。依頼者の選択 2026-10-22 案1）。
  * variant：side（PC の学生用ツール。右の欄がまるごと使い方に替わる）・sheet（スマホ。画面いっぱいの欄）・dock（管理ページ。右の端に重ねる）
  * 「言葉で探す」は、入れた言葉が項目の文に入っているかを調べるだけ（search.ts。どこにも送らない）
  */
 
-type View = { kind: 'list' } | { kind: 'topic'; id: string; from: 'list' | 'search' }
+type View = { kind: 'list' } | { kind: 'topic'; id: string; from: 'list' | 'search' } | { kind: 'video'; number: number }
 
 interface Props {
   topics: HelpTopic[]
@@ -85,7 +86,7 @@ export function HelpView({ topics, who, imageBase, guides, variant, onClose, onT
   // 項目を開いたら、中身のいちばん上から見せ、題に移る。一覧に戻ったら、開いていた項目のボタンに戻る
   useEffect(() => {
     if (bodyRef.current) bodyRef.current.scrollTop = 0
-    if (view.kind === 'topic') bodyRef.current?.querySelector<HTMLElement>('.help-topic h3')?.focus()
+    if (view.kind !== 'list') bodyRef.current?.querySelector<HTMLElement>('.help-topic h3')?.focus()
     else if (lastTopic.current) bodyRef.current?.querySelector<HTMLElement>(`[data-topic="${lastTopic.current}"]`)?.focus()
   }, [view])
 
@@ -93,6 +94,13 @@ export function HelpView({ topics, who, imageBase, guides, variant, onClose, onT
     lastTopic.current = id
     setView({ kind: 'topic', id, from })
   }
+  /** 「動画で見る」の動画を開く（一覧に戻ったら、押した行のボタンに戻る） */
+  const openVideo = (number: number) => {
+    lastTopic.current = `video-${number}`
+    setView({ kind: 'video', number })
+  }
+  const videos = videosOf(topics)
+  const video = view.kind === 'video' ? videos.find((v) => v.number === view.number) : undefined
   const terms = termsOf(query)
   const searching = terms.length > 0
   const topic = view.kind === 'topic' ? topics.find((t) => t.id === view.id) : undefined
@@ -131,7 +139,7 @@ export function HelpView({ topics, who, imageBase, guides, variant, onClose, onT
           onChange={(e) => {
             setQuery(e.target.value)
             // 項目を開いているときに言葉を入れたら、探した結果に戻る
-            if (view.kind === 'topic') setView({ kind: 'list' })
+            if (view.kind !== 'list') setView({ kind: 'list' })
           }}
         />
         {query && (
@@ -146,7 +154,15 @@ export function HelpView({ topics, who, imageBase, guides, variant, onClose, onT
 
   const body = (
     <div className="help-body" ref={bodyRef}>
-      {topic ? (
+      {video ? (
+        <VideoView
+          video={video}
+          imageBase={imageBase}
+          topic={topicOfVideo(topics, video.number)}
+          onBack={() => setView({ kind: 'list' })}
+          onOpen={(id) => open(id, 'list')}
+        />
+      ) : topic ? (
         <TopicView
           topic={topic}
           topics={topics}
@@ -165,7 +181,7 @@ export function HelpView({ topics, who, imageBase, guides, variant, onClose, onT
       ) : searching ? (
         <Results topics={topics} query={query} who={who} onOpen={(id) => open(id, 'search')} />
       ) : (
-        <TopicList topics={topics} who={who} guides={guides} onOpen={(id) => open(id, 'list')} />
+        <TopicList topics={topics} videos={videos} imageBase={imageBase} who={who} guides={guides} onOpen={(id) => open(id, 'list')} onVideo={openVideo} />
       )}
     </div>
   )
@@ -215,8 +231,24 @@ function ZoomClose({ onClose }: { onClose: () => void }) {
   )
 }
 
-/** 項目の一覧（まとまりごと）と、いちばん下の「印刷用の手引き（PDF）」 */
-function TopicList({ topics, who, guides, onOpen }: { topics: HelpTopic[]; who: Props['who']; guides: Props['guides']; onOpen: (id: string) => void }) {
+/** 項目の一覧（まとまりごと）と、いちばん下の「印刷用の手引き（PDF）」。動画があれば、いちばん上に「動画で見る」 */
+function TopicList({
+  topics,
+  videos,
+  imageBase,
+  who,
+  guides,
+  onOpen,
+  onVideo,
+}: {
+  topics: HelpTopic[]
+  videos: HelpVideo[]
+  imageBase: string
+  who: Props['who']
+  guides: Props['guides']
+  onOpen: (id: string) => void
+  onVideo: (number: number) => void
+}) {
   const groups: { name: string; items: HelpTopic[] }[] = []
   for (const t of topics) {
     const g = groups.find((x) => x.name === t.group)
@@ -225,6 +257,27 @@ function TopicList({ topics, who, guides, onOpen }: { topics: HelpTopic[]; who: 
   }
   return (
     <>
+      {videos.length > 0 && (
+        <div className="help-group help-videos">
+          <h3>動画で見る（{videos.length}本・音なし）</h3>
+          <ul className="help-list">
+            {videos.map((v) => (
+              <li key={v.number}>
+                <button data-topic={`video-${v.number}`} onClick={() => onVideo(v.number)}>
+                  <span className="help-thumb">
+                    <img src={`${imageBase}videos/${v.file}.jpg`} alt="" loading="lazy" />
+                    {Icon.play}
+                  </span>
+                  <span className="help-vt">{v.title}</span>
+                  <span className="help-len" aria-label={`${v.seconds}秒`}>
+                    {lengthText(v.seconds)}
+                  </span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {groups.map((g) => (
         <div className="help-group" key={g.name}>
           <h3>{g.name}</h3>
@@ -308,6 +361,34 @@ function Results({ topics, query, who, onOpen }: { topics: HelpTopic[]; query: s
       </ul>
       <p className="help-miss">{hits.length ? `見つからないときは、ほかの言葉で（例：${example}）。` : `ほかの言葉で探してみてください（例：${example}）。`}</p>
     </>
+  )
+}
+
+/** 「動画で見る」から開いた動画：その場で大きく再生し（音なしなので、押したらすぐ始める）、下に、くわしい説明の項目へのボタン */
+function VideoView({ video: v, imageBase, topic, onBack, onOpen }: { video: HelpVideo; imageBase: string; topic: HelpTopic | undefined; onBack: () => void; onOpen: (id: string) => void }) {
+  return (
+    <article className="help-topic">
+      <button className="help-back" onClick={onBack}>
+        {Icon.prev}
+        一覧へ
+      </button>
+      <div className="help-crumb">動画で見る</div>
+      <h3 tabIndex={-1}>
+        動画 {v.number}「{v.title}」
+      </h3>
+      <figure className="help-video">
+        <video src={`${imageBase}videos/${v.file}.mp4`} poster={`${imageBase}videos/${v.file}.jpg`} controls muted playsInline autoPlay />
+        <figcaption>
+          {v.seconds}秒・音なし（字幕つき）
+        </figcaption>
+      </figure>
+      {topic && (
+        <div className="help-rel">
+          くわしい説明：
+          <button onClick={() => onOpen(topic.id)}>{topic.title}</button>
+        </div>
+      )}
+    </article>
   )
 }
 
