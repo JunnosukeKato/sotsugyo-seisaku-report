@@ -562,6 +562,23 @@ await withEdge(async (browser) => {
   const phoneTopic = await page.evaluate(() => ({ device: document.querySelector('.help-dev .tabs .on')?.textContent, here: !!document.querySelector('.help-dev .here'), cut: document.querySelector('.help-sheet .help-body').scrollWidth > document.querySelector('.help-sheet .help-body').clientWidth + 1 }))
   await shot('8b-help-topic')
   check('項目を開くと、使っている端末（Android）の PDF の保存のしかたを先に出し、横にはみ出さない', phoneTopic.device === 'Android' && phoneTopic.here && !phoneTopic.cut, JSON.stringify(phoneTopic))
+  // 下の「探した結果へ戻る」の帯（依頼者の選択 2026-10-22 案A）：下まで読んでも、画面の下に見えていて、押すと戻る
+  await page.evaluate(() => { const b = document.querySelector('.help-sheet .help-body'); b.scrollTop = b.scrollHeight })
+  await wait(300)
+  const backbar = await page.evaluate(() => {
+    const btn = document.querySelector('.help-sheet .help-backbar button')
+    const r = btn?.getBoundingClientRect()
+    return btn ? { text: btn.textContent, bottom: Math.round(innerHeight - r.bottom), height: Math.round(r.height), inside: r.top >= 0 && r.bottom <= innerHeight } : null
+  })
+  await shot('8b2-help-backbar')
+  await page.click('.help-sheet .help-backbar button')
+  await wait(300)
+  const backTo = await page.evaluate(() => ({ results: !!document.querySelector('.help-results'), topic: !!document.querySelector('.help-topic'), bar: !!document.querySelector('.help-backbar') }))
+  check(
+    'スマホの使い方の項目では、下まで読んでも画面の下に「探した結果へ戻る」の帯（押す所は 44px 以上）。押すと探した結果に戻り、帯は消える',
+    backbar?.text === '探した結果へ戻る' && backbar.inside && backbar.bottom <= 40 && backbar.height >= 44 && backTo.results && !backTo.topic && !backTo.bar,
+    JSON.stringify({ backbar, backTo }),
+  )
   await page.click('.help-sheet .help-close')
   await wait(300)
   check('「×」で使い方の欄が閉じる', !(await page.$('.help-sheet')))

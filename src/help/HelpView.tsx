@@ -201,6 +201,15 @@ export function HelpView({ topics, who, imageBase, guides, variant, onClose, onT
           <div className="grab" />
           {head}
           {body}
+          {/* 項目・動画を開いている間は、下にいつも「一覧へ戻る」（下まで読んでも、上まで戻らずに押せる：依頼者の選択 2026-10-22 案A） */}
+          {(video || topic) && (
+            <div className="help-backbar">
+              <button type="button" onClick={() => setView({ kind: 'list' })}>
+                {Icon.prev}
+                {topic && view.kind === 'topic' && view.from === 'search' && searching ? '探した結果へ戻る' : '一覧へ戻る'}
+              </button>
+            </div>
+          )}
           {zoomed}
         </section>
       </>
