@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>使い方の手引き（学生用）</title>
 <!--
-  卒業制作報告書 作成ツール「使い方の手引き」学生用（A4 片面1枚）。見た目は案B「雑誌風」（guide-images/guide.css）に
+  卒業制作報告書 作成ツール「使い方の手引き」学生用（A4 両面1枚：表は「はじめてから提出まで」、裏は「主な使い方」。依頼者の選択 2026-10-23 案A）。見た目は案B「雑誌風」（guide-images/guide.css）に
   guide-images/student.css を重ねたもの（デザイン案 mockups/v26 の案C2）。
   ・学生は長い文を読まないので、紙には「はじめてから提出まで」と困ったとき3つだけを書く。くわしいことは、ツールの「？ 使い方」に任せる。
   ・文は、このファイルに直接書く。直したら node scripts/make-guides.mjs --pdf-only で PDF だけ作り直せる
@@ -81,6 +81,57 @@
       <span class="d">?</span>
       <div><b>それでも困ったら、担当の先生に相談</b></div>
     </div>
+  </div>
+</section>
+
+<!-- 裏面：主な使い方（依頼者の選択 2026-10-23 案A。両面1枚で配る） -->
+<section class="sheet flow back">
+  <header class="band slim">
+    <p class="kick">卒業制作報告書 作成ツール　使い方の手引き（学生用）</p>
+    <h2>主な使い方</h2>
+  </header>
+
+  <ol class="cards">
+    <li class="card">
+      <div class="hd"><b>図を入れる</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-figure" data-badges="" data-hl="1,2" aria-label="本文の（図1）と、図とタイトル" style="width:100%"></figure></div>
+      <p>入れたい位置をクリックして <span class="btn">図を入れる</span>。写真を選び、タイトルを打つ。</p>
+      <p class="sub">「（図1）」と番号は自動で入る。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><b>表を入れる</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-table" data-badges="" data-hl="1" aria-label="紙面の素材表" style="width:100%"></figure></div>
+      <p>入れたい位置をクリックして <span class="btn">表を入れる</span>。行と列の数を選ぶ。</p>
+      <p class="sub">素材表のひな形もある。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><b>見出し・改ページ</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-heading" data-badges="" data-hl="1,2" aria-label="左の道具の大見出し・小見出し・改ページ" style="width:29mm"></figure></div>
+      <p>左の道具の <span class="btn">大見出し</span> <span class="btn">小見出し</span> <span class="btn">改ページ</span> から。</p>
+      <p class="sub">見出しの番号（Ⅰ．ⅰ．）は自動。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><b>自動で入るもの</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-toc" data-badges="" aria-label="自動で作られる目次" style="width:100%"></figure></div>
+      <p>目次・ページ番号・段落の字下げ。表紙の年度・学科・学籍番号。</p>
+      <p class="sub">自分で打たなくてよい。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><b>作品写真</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-photos" data-badges="" aria-label="作品写真のページ" style="width:48mm"></figure></div>
+      <p>作品写真のページの枠をクリックして、写真を選ぶ。</p>
+      <p class="sub">1ページ4枚まで。ページは足せる。</p>
+    </li>
+    <li class="card">
+      <div class="hd"><b>スマホで書く</b></div>
+      <div class="stage"><figure class="shot lift" data-shot="g-phone-write" data-badges="" data-hl="1" aria-label="スマホで書いているところ" style="width:32mm"></figure></div>
+      <p>段落をタップして、そのまま書く。<span class="btn">完了</span> で書き終わる。</p>
+      <p class="sub">図・表・見出しは、キーボードの上の道具から。</p>
+    </li>
+  </ol>
+
+  <div class="bottom-lines">
+    <p class="help"><span class="q">?</span><span>くわしくは（動画も）、ツールの <span class="btn">？ 使い方</span> から。</span></p>
   </div>
 </section>
 

@@ -5,7 +5,7 @@
 //   2. ツールの URL の QR コードを作る（docs/guide-images/qr-guide.svg）
 //      手引きで使っていない画像も撮っている（前の版の手引きで使っていたもの。デザイン案 mockups/v26・v27 が読む）
 //   3. 手引きの HTML（docs/手引き_学生用.html・手引き_先生用.html・手引き_管理者用.html。文は HTML に手で書く）を Edge で PDF にする。
-//      ページ数（1ページ）・用紙からのはみ出し・文字の大きさ（本文 10.5pt 以上）・1ページの文字数（350字まで）・1字だけの行・書体・画像を確かめ、
+//      ページ数（学生用は両面の2ページ、ほかは1ページ）・用紙からのはみ出し・文字の大きさ（本文 10.5pt 以上）・1ページの文字数（350字まで）・1字だけの行・書体・画像を確かめ、
 //      外れていたら失敗にする
 //   4. PDF を public/guides/（student-guide.pdf・teacher-guide.pdf（先生用）・admin-guide.pdf（管理者用））に写す（GitHub Pages で公開される）
 // 使い方: node scripts/make-guides.mjs            … 画面を撮り直して PDF を作る（開発サーバーが http://localhost:5173 で動いていること）
@@ -39,7 +39,8 @@ const SAMPLE_OUT = `${IMG}/sample`
 /** 依頼者が作る見本の画像の置き場所（公開のリポジトリの外） */
 const SAMPLE_IN = resolve('..', '手引き用の画像')
 const GUIDES = [
-  { html: 'docs/手引き_学生用.html', pdf: 'docs/手引き_学生用.pdf', publish: 'public/guides/student-guide.pdf', pages: 1 },
+  // 学生用は両面1枚（表：はじめてから提出まで／裏：主な使い方。依頼者の選択 2026-10-23 案A）
+  { html: 'docs/手引き_学生用.html', pdf: 'docs/手引き_学生用.pdf', publish: 'public/guides/student-guide.pdf', pages: 2 },
   { html: 'docs/手引き_先生用.html', pdf: 'docs/手引き_先生用.pdf', publish: 'public/guides/teacher-guide.pdf', pages: 1 },
   { html: 'docs/手引き_管理者用.html', pdf: 'docs/手引き_管理者用.pdf', publish: 'public/guides/admin-guide.pdf', pages: 1 },
 ]
@@ -757,6 +758,62 @@ async function studentShots(browser, config, images) {
   await sleep(400)
   await ready(page)
 
+  // ---- 裏面「主な使い方」の画像（依頼者の選択 2026-10-23 案A：図・表・見出しと改ページ・自動で入るもの・作品写真・スマホ） ----
+  await page.mouse.move(5, 5)
+  // 図：本文の「（図1）」と、すぐ下の図とタイトル（番号は自動で入る）。字が読めるよう、本文の左から図の右までに絞る
+  {
+    const ref = await page.evaluate(rectFirst, `${CUR} .fig-ref`)
+    const para = await page.evaluate((cur) => {
+      const r = document.querySelector(`${cur} .fig-ref`).closest('[data-block-id]').getBoundingClientRect()
+      return { x: r.left, y: r.top, w: r.width, h: r.height }
+    }, CUR)
+    const img = await page.evaluate(rectFirst, `${CUR} figure[data-figure-id] img`)
+    const caption = await page.evaluate(rectFirst, `${CUR} figure[data-figure-id] figcaption`)
+    const x = para.x - 10
+    const y = ref.y - ref.h - 8
+    await capture(page, 'g-figure', { x, y, w: Math.max(img.x + img.w, caption.x + caption.w) + 18 - x, h: caption.y + caption.h + 10 - y }, [
+      { n: 1, box: ref, at: 'r' },
+      { n: 2, box: caption, at: 'r' },
+    ])
+  }
+  // 見出し・改ページ：左の道具の上の方（大見出し・小見出し・改ページ）
+  {
+    const palette = await page.evaluate(rectOf, '.palette')
+    const tool = (label) => page.evaluate(rectOf, '.palette .tb', label)
+    const pb = await tool('改ページ')
+    await capture(page, 'g-heading', { x: palette.x - 10, y: palette.y - 10, w: palette.w + 20, h: pb.y + pb.h + 12 - (palette.y - 10) }, [
+      { n: 1, box: union(await tool('大見出し'), await tool('小見出し')), at: 'r' },
+      { n: 2, box: pb, at: 'r' },
+    ])
+  }
+  // 表：紙面の素材表（タイトルの番号は自動）
+  {
+    const tableId = await page.evaluate(() => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.type === 'table').id)
+    await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), tableId)
+    await sleep(600)
+    await ready(page)
+    await capture(page, 'g-table', pad(await page.evaluate(rectOf, `${CUR} .data-table`), 12), [{ n: 1, box: await page.evaluate(rectOf, `${CUR} .data-table .table-caption`), at: 'r' }])
+  }
+  // 自動で入るもの：目次（見出しとページ番号から自動で作る）
+  {
+    await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfArea('toc'), 'none'))
+    await sleep(600)
+    await ready(page)
+    // ページを送ると、目次の最初の行に選んだ印（「→ 見出しへ」）が出るので、外してから撮る
+    await page.evaluate(() => document.activeElement?.blur())
+    await page.mouse.move(5, 5)
+    await sleep(300)
+    await capture(page, 'g-toc', pad(await page.evaluate(rectOf, `${CUR} .toc`), 14))
+  }
+  // 作品写真：作品写真のページ
+  {
+    await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfArea('photos'), 'none'))
+    await sleep(600)
+    await ready(page)
+    await capture(page, 'g-photos', await page.evaluate(rectOf, CUR))
+  }
+  await goToBlock(page, 'p3')
+
   // ---- 保存のようす（右の欄の「ドライブに保存」を押したところ） ----
   await page.mouse.move(5, 5)
   await page.click('.side .drive-chip-wrap .chip')
@@ -803,7 +860,9 @@ async function studentShots(browser, config, images) {
   await sleep(800)
   await ready(pp, true)
   await driveSaved(pp)
-  // 紙面の段落をタップすると、紙面が広がって、その場で書ける。キーボード（仮）のすぐ上に細い道具
+  // 紙面の段落をタップすると、紙面が広がって、その場で書ける。キーボードのすぐ上に細い道具
+  // はじめて書くときの「字を大きくするには」の知らせは写さない（紙面が隠れるため。使い方の写真と同じ）
+  await pp.evaluate(() => localStorage.setItem('sotsugyo-seisaku-report-pinch-tip', 'done'))
   await goToBlock(pp, 'p3', true)
   await tapChar(pp, 'p3', 14)
   await pp.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p3' && window.__editor.getSnapshot().zoomed, { timeout: 30000 })
@@ -957,7 +1016,7 @@ async function openTemplate(page) {
   const frame = page.frames().find((f) => f.url().includes('template=1') && f.parentFrame() === page.mainFrame())
   await frame.waitForFunction(() => {
     const s = window.__editor?.getSnapshot()
-    return s?.layout && !s.rendering && !s.turning && s.zoomed
+    return s?.layout && !s.rendering && !s.turning
   }, { timeout: 60000 })
   await sleep(900)
   return frame
@@ -1023,6 +1082,9 @@ async function adminShots(browser) {
   await setValue(await page.$('#y-deadline'), '2027-01-22')
   await page.waitForSelector('.dirty-bar')
   await page.evaluate(() => document.querySelector('.dirty-bar .btn.primary').click())
+  // 画面の中の確認の窓（src/admin/confirm.tsx）で「保存する」
+  await page.waitForSelector('[data-confirm="ok"]')
+  await page.evaluate(() => document.querySelector('[data-confirm="ok"]').click())
   await page.waitForFunction(() => !document.querySelector('.dirty-bar') && !document.querySelector('.admin-header .busy'), { timeout: 30000 })
   await nav(page, '変更履歴')
   await page.waitForSelector('.history li')
@@ -1130,20 +1192,23 @@ async function makePdf(browser, guide) {
     const lonely = []
     const boxes = new Map()
     const range = document.createRange()
-    const walker = document.createTreeWalker(document.querySelector('.sheet'), NodeFilter.SHOW_TEXT)
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      if (!n.textContent.trim() || n.parentElement.closest('svg, style, script')) continue
-      let box = n.parentElement
-      while (box && getComputedStyle(box).display === 'inline') box = box.parentElement
-      if (!box || !box.getClientRects().length) continue
-      if (!boxes.has(box)) boxes.set(box, [])
-      const list = boxes.get(box)
-      for (let i = 0; i < n.length; i++) {
-        if (/\s/.test(n.data[i])) continue
-        range.setStart(n, i)
-        range.setEnd(n, i + 1)
-        const r = range.getBoundingClientRect()
-        if (r.height) list.push({ y: (r.top + r.bottom) / 2, h: r.height, ch: n.data[i] })
+    // どのページも（学生用は両面の2ページ）
+    for (const sheet of document.querySelectorAll('.sheet')) {
+      const walker = document.createTreeWalker(sheet, NodeFilter.SHOW_TEXT)
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (!n.textContent.trim() || n.parentElement.closest('svg, style, script')) continue
+        let box = n.parentElement
+        while (box && getComputedStyle(box).display === 'inline') box = box.parentElement
+        if (!box || !box.getClientRects().length) continue
+        if (!boxes.has(box)) boxes.set(box, [])
+        const list = boxes.get(box)
+        for (let i = 0; i < n.length; i++) {
+          if (/\s/.test(n.data[i])) continue
+          range.setStart(n, i)
+          range.setEnd(n, i + 1)
+          const r = range.getBoundingClientRect()
+          if (r.height) list.push({ y: (r.top + r.bottom) / 2, h: r.height, ch: n.data[i] })
+        }
       }
     }
     for (const list of boxes.values()) {

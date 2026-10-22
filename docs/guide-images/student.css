@@ -1,5 +1,5 @@
 /*
-  使い方の手引き（学生用・片面1枚）の見た目。guide.css（案B「雑誌風」）の上に重ねる（デザイン案 mockups/v26 の案C2）。
+  使い方の手引き（学生用・両面1枚）の見た目。guide.css（案B「雑誌風」）の上に重ねる（デザイン案 mockups/v26 の案C2）。
   上に紺の帯（題・QR）、5つの手順を写真つきのカードで、下に困ったときと「先生に相談」。
   本文の文字は 10.5pt 以上、1ページ 350字まで（scripts/make-guides.mjs が確かめる）。
 */
@@ -53,3 +53,12 @@ body { font-size: 10.5pt; line-height: 1.5; }
 .ask { margin: 3mm 0 0; padding: 3mm 5mm; }
 .ask b { font-size: 15pt; }
 .ask .d { font-size: 26pt; }
+
+/* 裏面：主な使い方（依頼者の選択 2026-10-23 案A。両面1枚で配る）。上は細い紺の帯、6つの使い方を写真つきのカードで */
+.band.slim { padding: 7mm 14mm 6mm; }
+.band.slim .kick { margin-top: 0; font-size: 10.5pt; color: rgba(255, 255, 255, 0.85); }
+.band.slim h2 { margin-top: 1mm; font-size: 26pt; line-height: 1.2; letter-spacing: 0.06em; }
+.back .cards { gap: 6mm 5mm; padding-top: 6mm; }
+.back .card .hd { padding-bottom: 1.6mm; }
+.back .card .hd b { font-size: 14pt; }
+.back .card .stage { height: 76mm; }
