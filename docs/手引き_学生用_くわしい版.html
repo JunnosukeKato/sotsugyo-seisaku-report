@@ -5,190 +5,198 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>使い方の手引き（学生用・くわしい版）</title>
 <!--
-  卒業制作報告書 作成ツール「使い方の手引き」学生用の くわしい版（試作。A4 両面1枚＝2ページ。いまの手引きと同じ紙の形）。
-  依頼者の依頼（2026-10-23）：いまの手引きは意図して簡単にしてある。執筆で操作するときに困らないよう、もう少し具体的に
-  使い方が伝わる版を作ってみる。A4 両面印刷であることは変えない（依頼者）。
-  ・表：はじめてから提出までを1列に縮め、書くときの操作（書き始める・段落と見出し・選ぶと戻す・セルフチェック）を画面つきで。
-  ・裏：図・表・作品写真・スマホを画面つきで。下に困ったとき。
-  ・画面の写真の番号（黄色の四角）と、手順の番号をそろえる。1ページ 350字まで（いまの手引きと同じ決まり）。
+  卒業制作報告書 作成ツール「使い方の手引き」学生用の くわしい版（試作。A4 両面1枚）。
+  依頼者の依頼（2026-10-23）：いまの簡易版に手を加えるのではなく、一から考え直す。執筆で操作するときに困らないように。
+  依頼者の選択：案A「画面の地図＋早見表」
+  ・表：画面の地図（パソコンの画面全体に番号）と、自動で入るもの。上に、はじめてから提出までを1行で。
+  ・裏：「やりたいこと → 押す所」の早見表（書いている途中で引く）と、いちばんつまずく図の入れ方を3コマで。スマホは小さく。
+  ・1ページ 350字まで。画面の番号（黄色の四角）と、説明の番号をそろえる。
   ・画面は node scripts/make-guides.mjs を SHOTS=detail で撮る（guide-images/g-d-*.jpg）。PDF は --draft で ../試作/ に作る。
   ・公開のリポジトリに入るので、先生の名前・連絡先は書かない。
 -->
 <link rel="stylesheet" href="../node_modules/@fontsource/biz-udpgothic/400.css">
 <link rel="stylesheet" href="../node_modules/@fontsource/biz-udpgothic/700.css">
 <link rel="stylesheet" href="guide-images/guide.css">
-<link rel="stylesheet" href="guide-images/student.css">
 <style>
-  /* 表の帯は、いまの手引きより低く（題・QR は同じ） */
-  .band.compact { padding: 7mm 14mm 5mm; }
-  .band.compact .year { font-size: 92pt; }
-  .band.compact h1 { font-size: 28pt; margin-top: 0; }
-  .band.compact .kick { margin-top: 2mm; }
-  .band.compact .for { margin-top: 2mm; }
-  .band.compact .qr-box { bottom: 5mm; grid-template-columns: auto 20mm; }
-  .band.compact .qr-box .qr { width: 20mm; height: 20mm; }
-  /* はじめてから提出まで（1列に5つ） */
-  .flow5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0 3mm; padding: 2mm 14mm 0; }
-  .flow5 li { padding-top: 1.4mm; border-top: 0.7mm solid var(--ink); }
-  .flow5 .n { font: 700 18pt/1 'Bahnschrift', 'Segoe UI', sans-serif; color: var(--navy); }
-  .flow5 b { display: block; margin-top: 0.6mm; font-size: 11pt; line-height: 1.3; }
-  .flow5 span.t { display: block; margin-top: 0.4mm; font-size: 10.5pt; line-height: 1.45; }
-  .save-line { margin: 2.6mm 14mm 0; padding: 1.8mm 3mm; background: var(--ink); color: #fff; font-size: 10.5pt; }
-  .save-line b { color: var(--mustard); margin-right: 2mm; }
-  .save-line .btn { color: var(--ink); }
-  .part-h { margin: 4.5mm 14mm 0; }
-  /* 操作のカード：題・画面・番号つきの手順 */
-  .hw-grid { display: grid; gap: 4mm 5mm; padding: 2mm 14mm 0; }
-  .hw-grid.c2 { grid-template-columns: 1fr 1fr; }
-  .hw-grid.c3 { grid-template-columns: repeat(3, 1fr); padding-top: 5mm; }
-  .hw { display: flex; flex-direction: column; min-width: 0; }
-  .hw h3 { padding-bottom: 1.2mm; border-bottom: 0.6mm solid var(--ink); font-size: 12.5pt; line-height: 1.3; }
-  .hw .stage { margin-top: 2mm; padding: 2.4mm; }
-  .c2 .hw .stage { height: 56mm; }
-  .c3 .hw .stage { height: 62mm; }
-  .hw .lead { margin-top: 1.4mm; font-size: 10.5pt; line-height: 1.5; }
-  .hw ol { margin-top: 0.6mm; }
-  .hw li { display: flex; align-items: baseline; gap: 1.6mm; margin-top: 0.8mm; font-size: 10.5pt; line-height: 1.45; }
-  .hw li .no { flex: none; transform: translateY(0.3mm); }
-  /* 困ったとき（裏の下）：4つを1列に */
-  .qa4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 0 4mm; }
-  .qa4 li { padding-top: 1.4mm; border-top: 0.6mm solid var(--ink); }
-  .qa4 b { display: block; font-size: 10.5pt; line-height: 1.4; }
-  .qa4 span.a { display: block; margin-top: 0.4mm; font-size: 10.5pt; line-height: 1.45; }
+  body { font-size: 10.5pt; line-height: 1.5; }
+  .sheet { display: flex; flex-direction: column; padding: 0 12mm; }
+  .btn { padding: 0 1.4mm; }
+  .no { width: 5.6mm; height: 5.6mm; font-size: 10.5pt; }
+
+  /* 上の帯（表）：題と QR */
+  .kband { margin: 0 -12mm; padding: 7mm 12mm 6mm; display: grid; grid-template-columns: 1fr auto; align-items: end; gap: 6mm; background: var(--navy); color: #fff; }
+  .kband .kick { font-size: 10.5pt; font-weight: 700; color: rgba(255, 255, 255, 0.85); }
+  .kband h1 { margin-top: 1mm; font-size: 27pt; line-height: 1.15; letter-spacing: 0.04em; }
+  .kband .tag { display: inline-block; margin-top: 2.4mm; padding: 0.6mm 3mm; background: var(--mustard); color: var(--ink); font-weight: 700; font-size: 11pt; }
+  .kband .tag small { margin-left: 2.4mm; font-size: 10.5pt; font-weight: 400; }
+  .kband .qr-side { display: grid; grid-template-columns: auto 21mm; gap: 3mm; align-items: end; text-align: right; font-size: 10.5pt; line-height: 1.45; }
+  .kband .qr-side .k { font-weight: 700; color: var(--mustard); }
+  .kband .qr { width: 21mm; height: 21mm; padding: 1.4mm; background: #fff; }
+  .kband .qr img { display: block; width: 100%; height: 100%; }
+  /* 上の帯（裏）：細く */
+  .kband.thin { padding: 5mm 12mm 4.4mm; display: block; }
+  .kband.thin h2 { margin-top: 0.6mm; font-size: 20pt; line-height: 1.2; letter-spacing: 0.04em; }
+
+  /* はじめてから提出まで（1行） */
+  .route { display: flex; align-items: center; flex-wrap: wrap; gap: 1.4mm 2mm; margin-top: 4mm; font-size: 11pt; }
+  .route b { color: var(--navy); }
+  .route .step { display: inline-flex; align-items: center; gap: 1.2mm; }
+  .route .step i { display: inline-grid; place-items: center; width: 5mm; height: 5mm; border-radius: 50%; background: var(--navy); color: #fff; font: 700 10.5pt/1 'Bahnschrift', 'Segoe UI', sans-serif; font-style: normal; }
+  .route .arr { color: var(--muted); }
+  .save { margin-top: 2mm; padding: 1.4mm 3mm; border-left: 1.2mm solid var(--mustard); background: var(--gray); font-size: 10.5pt; }
+
+  .sec-h { margin: 5mm 0 2mm; font-size: 13pt; }
+  .sec-h small { font-size: 10.5pt; }
+
+  /* 画面の地図：大きな画面と、番号の説明（3列） */
+  .screen-map .shot { width: 100%; }
+  .legend { display: grid; grid-template-columns: repeat(3, 1fr); gap: 2.2mm 5mm; margin-top: 4mm; }
+  .legend li { display: grid; grid-template-columns: 5.6mm 1fr; gap: 0 2mm; align-items: start; }
+  .legend b { font-size: 11pt; line-height: 1.35; }
+  .legend span.d2 { grid-column: 2; font-size: 10.5pt; line-height: 1.45; color: var(--muted); }
+
+  /* 自動で入るもの：札を並べる */
+  .autos { display: flex; flex-wrap: wrap; gap: 1.8mm 2mm; }
+  .autos li { display: inline-flex; align-items: center; gap: 1.2mm; padding: 1.2mm 2.8mm; border: 0.35mm solid var(--line); border-radius: 5mm; background: #fff; font-size: 10.5pt; }
+  .autos li::before { content: '✓'; color: var(--navy); font-weight: 700; }
+
+  /* 早見表：やりたいこと → 押す所（2列） */
+  .lookup { display: grid; grid-template-columns: 1fr 1fr; gap: 0 6mm; margin-top: 4mm; }
+  .lookup h3 { padding-bottom: 1mm; border-bottom: 0.7mm solid var(--ink); font-size: 12pt; }
+  .lookup table { width: 100%; border-collapse: collapse; }
+  .lookup td { padding: 1.5mm 1mm; border-bottom: 0.3mm solid var(--line); font-size: 10.5pt; line-height: 1.4; vertical-align: middle; }
+  .lookup td:first-child { width: 33mm; font-weight: 700; }
+  .lookup tr:nth-child(even) td { background: #faf8f4; }
+
+  /* 図の入れ方：3コマ */
+  .koma { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4mm; }
+  .koma li { display: flex; flex-direction: column; }
+  .koma .stage { height: 60mm; }
+  .koma p { display: flex; gap: 1.6mm; margin-top: 1.6mm; font-size: 10.5pt; line-height: 1.45; }
+  .koma p i { flex: none; display: inline-grid; place-items: center; width: 5mm; height: 5mm; border-radius: 50%; background: var(--navy); color: #fff; font: 700 10.5pt/1 'Bahnschrift', 'Segoe UI', sans-serif; font-style: normal; transform: translateY(0.5mm); }
+
+  /* スマホ（小さく）と、使い方 */
+  .phone-row { display: grid; grid-template-columns: 30mm 1fr; gap: 5mm; align-items: center; margin-top: 4mm; padding: 3mm 4mm; background: var(--gray); }
+  .phone-row h3 { font-size: 12pt; }
+  .phone-row ul { margin-top: 1mm; }
+  .phone-row li { margin-top: 0.8mm; font-size: 10.5pt; line-height: 1.45; }
+  .phone-row li::before { content: '・'; }
+  .end { margin-top: auto; padding: 3mm 0 7mm; display: flex; align-items: center; gap: 2.4mm; font-size: 10.5pt; }
+  .end .q { display: inline-grid; place-items: center; width: 6.5mm; height: 6.5mm; border-radius: 50%; background: var(--navy); color: #fff; font-weight: 700; }
 </style>
 </head>
 <body>
 
-<!-- 表：はじめてから提出まで・書く -->
-<section class="sheet flow">
-  <header class="band compact bleed">
-    <div class="year d">2026</div>
-    <p class="kick">卒業制作報告書 作成ツール</p>
-    <h1>使い方の手引き</h1>
-    <p class="for"><b>学生用</b><span class="d">2026年度</span></p>
-    <div class="qr-box">
-      <div><p class="k">スマホは QR コードで</p><p class="url fn">kokusai-fashion.github.io/<br>sotsugyo-seisaku-report/</p></div>
+<!-- 表：画面の地図 -->
+<section class="sheet">
+  <header class="kband">
+    <div>
+      <p class="kick">卒業制作報告書 作成ツール</p>
+      <h1>使い方の手引き</h1>
+      <p class="tag">くわしい版<small>学生用・2026年度</small></p>
+    </div>
+    <div class="qr-side">
+      <div><p class="k">スマホは QR コードで</p><p>kokusai-fashion.github.io/<br>sotsugyo-seisaku-report/</p></div>
       <div class="qr"><img src="guide-images/qr-guide.svg" alt="ツールの URL の QR コード"></div>
     </div>
   </header>
 
-  <h2 class="sec-h part-h">はじめてから提出まで</h2>
-  <ol class="flow5">
-    <li><span class="n">1</span><b>ログイン</b><span class="t">大学のアカウントで。</span></li>
-    <li><span class="n">2</span><b>コースを選ぶ</b><span class="t">画面の案内どおりに。</span></li>
-    <li><span class="n">3</span><b>書く</b><span class="t">下と裏を見ながら。</span></li>
-    <li><span class="n">4</span><b>エラーを0に</b><span class="t">右の欄の × を直す。</span></li>
-    <li><span class="n">5</span><b>PDF にする</b><span class="t"><span class="btn">PDFを書き出す</span></span></li>
-  </ol>
-  <p class="save-line"><b>保存は自動</b>共用のパソコンでは、最後に <span class="btn">この端末から原稿を消す</span></p>
+  <p class="route">
+    <span class="step"><i>1</i><b>ログイン</b></span><span class="arr">→</span>
+    <span class="step"><i>2</i><b>コースを選ぶ</b></span><span class="arr">→</span>
+    <span class="step"><i>3</i><b>書く</b></span><span class="arr">→</span>
+    <span class="step"><i>4</i><b>エラーを0に</b></span><span class="arr">→</span>
+    <span class="step"><i>5</i><b>PDF を書き出す</b></span>
+  </p>
+  <p class="save">保存は自動。共用のパソコンでは、最後に <span class="btn">この端末から原稿を消す</span></p>
 
-  <h2 class="sec-h part-h">書く</h2>
-  <div class="hw-grid c2">
-    <article class="hw">
-      <h3>書き始める</h3>
-      <div class="stage"><figure class="shot lift" data-shot="g-d-hint" data-badges="1" aria-label="薄い字の段落" style="width:100%"></figure></div>
-      <p class="lead">紙面の文をクリックして、そのまま打つ。</p>
-      <ol><li><span class="no">1</span>薄い字は「何を書くか」。書くと消える。</li></ol>
-    </article>
-    <article class="hw">
-      <h3>段落・見出し・改ページ</h3>
-      <div class="stage"><figure class="shot lift" data-shot="g-heading" data-badges="1,2" aria-label="左の道具の大見出し・小見出し・改ページ" style="width:22mm"></figure></div>
-      <p class="lead">Enter で次の段落（「。」は自動）。</p>
-      <ol>
-        <li><span class="no">1</span>見出し（番号は自動）</li>
-        <li><span class="no">2</span>改ページ</li>
-      </ol>
-    </article>
-    <article class="hw">
-      <h3>選ぶ・戻す</h3>
-      <div class="stage"><figure class="shot lift" data-shot="g-d-range" data-badges="1,2" aria-label="紙面をなぞって選んだところ" style="width:80mm"></figure></div>
-      <ol>
-        <li><span class="no">1</span>なぞると、段落をまたいで選べる</li>
-        <li><span class="no">2</span>コピー・切り取り・削除</li>
-      </ol>
-      <p class="lead">戻すときは右下の <span class="btn">元に戻す</span>。</p>
-    </article>
-    <article class="hw">
-      <h3>セルフチェックで直す</h3>
-      <div class="stage"><figure class="shot lift" data-shot="g-check" data-badges="1,3,4" aria-label="右の欄のセルフチェック" style="width:33mm"></figure></div>
-      <ol>
-        <li><span class="no">1</span>エラーは直す</li>
-        <li><span class="no">3</span>押すと、その場所へ</li>
-        <li><span class="no">4</span>要確認は確かめて「このままにする」</li>
-      </ol>
-    </article>
-  </div>
+  <h2 class="sec-h">画面の地図<small>パソコン（段落を書いているところ）</small></h2>
+  <div class="screen-map"><figure class="shot lift" data-shot="g-d-map" aria-label="パソコンの画面全体" style="width:100%"></figure></div>
+  <ol class="legend">
+    <li><span class="no">1</span><b>ページの一覧</b><span class="d2">押すと、そのページへ</span></li>
+    <li><span class="no">2</span><b>道具</b><span class="d2">書いている所に合わせて変わる</span></li>
+    <li><span class="no">3</span><b>紙面</b><span class="d2">クリックして、その場で書く</span></li>
+    <li><span class="no">4</span><b>保存</b><span class="d2">自動。ドライブとこの端末に</span></li>
+    <li><span class="no">5</span><b>セルフチェック</b><span class="d2">直すところの一覧</span></li>
+    <li><span class="no">6</span><b>PDF を書き出す</b><span class="d2">提出用の PDF を作る</span></li>
+    <li><span class="no">7</span><b>元に戻す</b><span class="d2">間違えたら、ここ</span></li>
+    <li><span class="no">8</span><b>全体・見開き・拡大</b><span class="d2">紙面の見え方</span></li>
+    <li><span class="no">9</span><b>メニュー</b><span class="d2">使い方・バックアップ</span></li>
+  </ol>
+
+  <h2 class="sec-h">自動で入るもの<small>自分で打たなくてよい</small></h2>
+  <ul class="autos">
+    <li>表紙の年度・学科・学籍番号</li>
+    <li>目次とページ番号</li>
+    <li>見出しの番号（Ⅰ．ⅰ．）</li>
+    <li>図・表の番号（図1）</li>
+    <li>段落の字下げ</li>
+    <li>文末の「。」（Enter で）</li>
+  </ul>
 </section>
 
-<!-- 裏：図・表・作品写真・スマホ・困ったとき -->
-<section class="sheet flow back">
-  <header class="band slim">
-    <p class="kick">使い方の手引き（学生用）</p>
-    <h2>図・表・写真・スマホ</h2>
+<!-- 裏：やりたいこと → 押す所 -->
+<section class="sheet">
+  <header class="kband thin">
+    <p class="kick">使い方の手引き（くわしい版）</p>
+    <h2>やりたいこと → 押す所</h2>
   </header>
-  <div class="hw-grid c3">
-    <article class="hw">
-      <h3>図を入れる</h3>
-      <div class="stage"><figure class="shot lift" data-shot="g-figure" data-badges="1,2" aria-label="本文の（図1）と、図とタイトル" style="width:52mm"></figure></div>
-      <p class="lead">位置をクリック → <span class="btn">図を入れる</span> → 写真を選び、タイトルを打つ。</p>
-      <ol><li><span class="no">1</span>（図1）と<span class="no">2</span>番号は自動</li></ol>
-    </article>
-    <article class="hw">
-      <h3>図を直す</h3>
-      <div class="stage"><figure class="shot lift" data-shot="g-d-figure-tools" data-badges="1,2,3" aria-label="図を押したときの道具" style="width:52mm"></figure></div>
-      <p class="lead">図を押すと、左に道具。</p>
-      <ol>
-        <li><span class="no">1</span>差し替え</li>
-        <li><span class="no">2</span>もう1枚、横に並べる</li>
-        <li><span class="no">3</span>小見出しの終わりへ</li>
-      </ol>
-    </article>
-    <article class="hw">
-      <h3>表を入れる</h3>
-      <div class="stage"><figure class="shot lift" data-shot="g-d-table-size" data-badges="1,2" aria-label="表の大きさを選ぶ" style="width:44mm"></figure></div>
-      <p class="lead">位置をクリック → <span class="btn">表を入れる</span>。</p>
-      <ol>
-        <li><span class="no">1</span>マス目で大きさを選ぶ</li>
-        <li><span class="no">2</span>素材表のひな形</li>
-      </ol>
-    </article>
-    <article class="hw">
-      <h3>表に書く</h3>
-      <div class="stage"><figure class="shot lift" data-shot="g-d-table-tools" data-badges="1,2,3" aria-label="表のマスを書いているときの道具" style="width:52mm"></figure></div>
-      <p class="lead">マスを押して書く。</p>
-      <ol>
-        <li><span class="no">1</span>生地見本などの画像</li>
-        <li><span class="no">2</span>行・列を足す</li>
-        <li><span class="no">3</span>列の幅・行の高さ</li>
-      </ol>
-    </article>
-    <article class="hw">
-      <h3>作品写真</h3>
-      <div class="stage"><figure class="shot lift" data-shot="g-d-photo-tools" data-badges="1,2" aria-label="作品写真のページと道具" style="width:47mm"></figure></div>
-      <p class="lead">枠をクリックして写真を選ぶ。</p>
-      <ol>
-        <li><span class="no">1</span>並べ方</li>
-        <li><span class="no">2</span>ページを足す（4枚まで）</li>
-      </ol>
-    </article>
-    <article class="hw">
-      <h3>スマホで書く</h3>
-      <div class="stage"><figure class="shot lift" data-shot="g-d-phone-add" data-badges="1" aria-label="スマホで書いているところ" style="width:26mm"></figure></div>
-      <p class="lead">タップして書く。<span class="btn">完了</span> で終わる。</p>
-      <ol><li><span class="no">1</span><span class="btn">追加</span> で見出し・改ページ</li></ol>
-    </article>
+
+  <div class="lookup">
+    <div>
+      <h3>書く</h3>
+      <table>
+        <tr><td>文を書く</td><td>紙面の文をクリック</td></tr>
+        <tr><td>次の段落へ</td><td>Enter（「。」は自動）</td></tr>
+        <tr><td>見出しを入れる</td><td><span class="btn">大見出し</span> <span class="btn">小見出し</span></td></tr>
+        <tr><td>次のページから</td><td><span class="btn">改ページ</span></td></tr>
+        <tr><td>段落を消す</td><td>この段落の <span class="btn">削除</span></td></tr>
+        <tr><td>まとめて移す</td><td>なぞって選ぶ → <span class="btn">切り取り</span></td></tr>
+        <tr><td>間違えた</td><td>右下の <span class="btn">元に戻す</span></td></tr>
+      </table>
+    </div>
+    <div>
+      <h3>図・表・写真・仕上げ</h3>
+      <table>
+        <tr><td>図を2枚並べる</td><td>図を押して <span class="btn">もう1枚</span></td></tr>
+        <tr><td>表を入れる</td><td><span class="btn">表を入れる</span> → マス目</td></tr>
+        <tr><td>生地見本を表に</td><td>マスを押して <span class="btn">画像を入れる</span></td></tr>
+        <tr><td>作品写真</td><td>写真のページの枠をクリック</td></tr>
+        <tr><td>直すところへ</td><td>右の欄の項目を押す</td></tr>
+        <tr><td>PDF にする</td><td><span class="btn">PDFを書き出す</span></td></tr>
+      </table>
+    </div>
   </div>
 
-  <div class="bottom-lines">
-    <h2 class="sec-h">困ったとき</h2>
-    <ol class="qa4">
-      <li><b>勝手に見出しになった</b><span class="a">すぐ <span class="btn">元に戻す</span>。</span></li>
-      <li><b>消してしまった</b><span class="a">「バックアップ」から戻せる。</span></li>
-      <li><b>別の端末で書いた</b><span class="a">どちらで続けるか聞かれる。</span></li>
-      <li><b>ログインが切れた</b><span class="a"><span class="btn">ログインし直す</span> を押す。</span></li>
-    </ol>
-    <p class="help"><span class="q">?</span><span>くわしくは、ツールの <span class="btn">？ 使い方</span> から（動画も）。</span></p>
+  <h2 class="sec-h">図の入れ方</h2>
+  <ol class="koma">
+    <li>
+      <div class="stage"><figure class="shot lift" data-shot="g-d-fig1" data-badges="1,2" aria-label="書いている文と、左の図を入れる" style="width:100%"></figure></div>
+      <p><i>1</i><span>入れたい位置で <span class="btn">図を入れる</span></span></p>
+    </li>
+    <li>
+      <div class="stage"><figure class="shot lift" data-shot="g-d-fig2" data-badges="2" aria-label="図のタイトルを打っているところ" style="width:100%"></figure></div>
+      <p><i>2</i><span>写真を選んで、タイトルを打つ</span></p>
+    </li>
+    <li>
+      <div class="stage"><figure class="shot lift" data-shot="g-d-fig3" data-badges="1,2" aria-label="本文の（図1）と図のタイトル" style="width:100%"></figure></div>
+      <p><i>3</i><span>「（図1）」と番号は自動</span></p>
+    </li>
+  </ol>
+
+  <div class="phone-row">
+    <figure class="shot lift" data-shot="g-d-phone-add" data-badges="1" aria-label="スマホで書いているところ" style="width:30mm"></figure>
+    <div>
+      <h3>スマホで書くとき</h3>
+      <ul>
+        <li>段落をタップして書く。<span class="btn">完了</span> で終わる</li>
+        <li>図・表・見出しは、キーボードの上の道具から</li>
+        <li>2本の指で広げると、字が大きくなる</li>
+      </ul>
+    </div>
   </div>
+
+  <p class="end"><span class="q">?</span><span>くわしくは、ツールの <span class="btn">？ 使い方</span> から（動画も）。困ったら、担当の先生に。</span></p>
 </section>
 
 <script src="guide-images/marks.js"></script>

@@ -991,6 +991,101 @@ async function detailShots(browser, config, images) {
   await driveSaved(page)
   await page.mouse.move(5, 5)
 
+  // ---- 画面の地図（パソコン）：段落を書いているところ（案A 2026-10-23） ----
+  // 1 ページの一覧・2 左の道具・3 紙面（書いている所）・4 保存・5 セルフチェック・6 PDF・7 元に戻す・8 表示の大きさ・9 メニュー
+  await openBlock(page, 'p3', 40)
+  await page.mouse.move(5, 5)
+  await sleep(700)
+  await capture(page, 'g-d-map', { x: 0, y: 0, w: PC.width, h: PC.height }, [
+    { n: 1, box: await page.evaluate(rectOf, '.thumbs-col'), at: 'c' },
+    { n: 2, box: await page.evaluate(rectOf, '.palette'), at: 'r' },
+    { n: 3, box: await page.evaluate(rectOf, '.overlay-clip:not([hidden]) .overlay-editor'), at: 'r' },
+    { n: 4, box: await page.evaluate(rectOf, '.side .drive-chip-wrap .chip'), at: 'b' },
+    { n: 5, box: await page.evaluate(rectOf, '.side .sec.check .sec-h'), at: 'l' },
+    { n: 6, box: await page.evaluate(rectOf, '.side .export'), at: 'l' },
+    { n: 7, box: await page.evaluate(rectOf, '.view-bar .undo-redo'), at: 't' },
+    { n: 8, box: await page.evaluate(rectOf, '.view-bar .zoom'), at: 't' },
+    { n: 9, box: await page.evaluate(rectOf, '.side .menu-btn'), at: 'b' },
+  ])
+  await page.keyboard.press('Escape')
+  await sleep(400)
+  await ready(page)
+
+  // ---- 図の入れ方の3コマ：1 書いている文の、入れたい位置で「図を入れる」 → 2 写真を選んでタイトルを打つ → 3 本文の（図n）と番号は自動 ----
+  {
+    await page.evaluate(() => {
+      window.__beforeFigure = window.__editor.getSnapshot().report
+    })
+    // 本文の最初の段落（ページの上の方。図を入れても、段落と図が同じページに収まる）
+    const pid = await page.evaluate(() => window.__editor.getSnapshot().report.body[0].blocks.find((b) => b.type === 'paragraph').id)
+    await openBlock(page, pid, 999)
+    await page.mouse.move(5, 5)
+    await sleep(500)
+    const caret = await page.evaluate(() => {
+      const c = window.__editor.overlay.caretClientRect()
+      return { x: c.left - 3, y: c.top, w: 6, h: c.bottom - c.top }
+    })
+    const palette = await page.evaluate(rectOf, '.palette')
+    const para = await page.evaluate(rectOf, '.overlay-clip:not([hidden]) .overlay-editor')
+    const figTool = await page.evaluate(rectOf, '.palette .tb', '図を入れる')
+    const top1 = Math.min(figTool.y, para.y) - 60
+    await capture(page, 'g-d-fig1', { x: palette.x - 10, y: top1, w: para.x + para.w + 14 - (palette.x - 10), h: Math.max(figTool.y + figTool.h, para.y + para.h) + 60 - top1 }, [
+      { n: 1, box: caret, at: 'b' },
+      { n: 2, box: figTool, at: 'r' },
+    ])
+    const [chooser] = await Promise.all([page.waitForFileChooser(), page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('図を入れる')).click())])
+    await chooser.accept([resolve('docs/guide-images/sample/process.jpg')])
+    await page.waitForFunction(() => window.__editor.getSnapshot().editingId?.startsWith('f-'), { timeout: 30000 })
+    await sleep(800)
+    await ready(page).catch(() => {})
+    const fid = await page.evaluate(() => window.__editor.getSnapshot().editingId)
+    await page.keyboard.type('二回目の仮縫い')
+    await page.mouse.move(5, 5)
+    await sleep(700)
+    {
+      const img = await page.evaluate(rectOf, `${CUR} figure[data-figure-id="${fid}"] img`)
+      const cap = await page.evaluate(rectOf, '.overlay-clip:not([hidden]) .overlay-editor')
+      await capture(page, 'g-d-fig2', pad(union(img, cap), 14), [
+        { n: 1, box: img, at: 'r', dy: -img.h / 3 },
+        { n: 2, box: cap, at: 'r' },
+      ])
+    }
+    await page.keyboard.press('Escape')
+    await sleep(600)
+    await ready(page)
+    await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), fid)
+    await sleep(500)
+    await ready(page)
+    await page.mouse.move(5, 5)
+    {
+      // 本文の「（図n）」：図のタイトルの番号と同じもの
+      const ref = await page.evaluate(
+        (cur, fid) => {
+          const cap = document.querySelector(`${cur} figure[data-figure-id="${fid}"] figcaption`).textContent
+          const n = cap.match(/図\s*(\d+)/)?.[1]
+          const el = [...document.querySelectorAll(`${cur} .fig-ref`)].find((e) => e.textContent.includes(`図${n}`))
+          if (!el) throw new Error(`本文の（図${n}）が見つかりません：${cap}／${[...document.querySelectorAll(`${cur} .fig-ref`)].map((e) => e.textContent).join(',')}`)
+          const r = el.getBoundingClientRect()
+          return { x: r.left, y: r.top, w: r.width, h: r.height }
+        },
+        CUR,
+        fid,
+      )
+      const img = await page.evaluate(rectOf, `${CUR} figure[data-figure-id="${fid}"] img`)
+      const cap = await page.evaluate(rectOf, `${CUR} figure[data-figure-id="${fid}"] figcaption`)
+      const para = await page.evaluate(rectOf, `${CUR} [data-block-id="${pid}"]`)
+      const x = para.x - 10
+      const y = ref.y - ref.h - 6
+      await capture(page, 'g-d-fig3', { x, y, w: para.x + para.w + 10 - x, h: cap.y + cap.h + 10 - y }, [
+        { n: 1, box: ref, at: 'b' },
+        { n: 2, box: cap, at: 'r' },
+      ])
+    }
+    await page.evaluate(() => window.__editor.update(() => window.__beforeFigure))
+    await sleep(600)
+    await ready(page)
+  }
+
   // ---- 書き始める：薄い字（ひな形の「何を書くか」）の段落 ----
   {
     const saved = await page.evaluate(() => {
