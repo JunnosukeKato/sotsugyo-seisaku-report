@@ -8,8 +8,7 @@
   学生に配る案内「Word で書き始めた人へ：報告書作成ツールへの移り方（今年度だけ）」。A4 縦 1枚。
   ・PDF（案内_Wordからの移り方.pdf）は node scripts/make-guide-word.mjs で作る（画面の画像 guide-images/ も撮り直す）。
   ・文や日付だけを直したときは node scripts/make-guide-word.mjs --pdf-only で PDF だけ作り直せる（1ページに収まっているかも確かめる）。
-  ・日付：「いつまでに」の「11月＿日（＿）」は空欄（class="blank"）。空欄のまま印刷して手で書き入れるか、
-    <span class="date"> の中を「11月12日（木）」のように書き換える。
+  ・「いつまでに」は「11月2週目ごろの途中点検の前まで」。日付は入れない（依頼者 2026-10-23「案内の締切日はいりません」）。
   ・公開のリポジトリに入るので、先生の名前・連絡先などは書かない。
 -->
 <link rel="stylesheet" href="../node_modules/@fontsource/biz-udpgothic/400.css">
@@ -63,8 +62,6 @@
   .due-h { flex: none; padding: 0.8mm 2.6mm; border-radius: 1.6mm; background: var(--accent); color: #fff; font-size: 10pt; letter-spacing: 0.08em; }
   .due p { font-size: 10pt; line-height: 1.6; }
   .due strong { color: var(--accent); font-size: 11pt; }
-  .blank { display: inline-block; width: 9mm; height: 1em; margin: 0 0.6mm; border-bottom: 0.9pt solid var(--ink); vertical-align: -0.15em; }
-  .blank.s { width: 6mm; }
 
   /* ---- 手順 ---- */
   .sec-h { display: flex; align-items: baseline; gap: 3mm; margin-bottom: 1.8mm; font-size: 12pt; color: var(--accent); letter-spacing: 0.06em; }
@@ -113,7 +110,7 @@
 
   <section class="due" aria-label="いつまでに">
     <b class="due-h">いつまでに</b>
-    <p><strong>11月2週目ごろの途中点検の前まで</strong>（<span class="date">11月<span class="blank"></span>日（<span class="blank s"></span>）</span>まで）に、ツールに移してください。</p>
+    <p><strong>11月2週目ごろの途中点検の前まで</strong>に、ツールに移してください。</p>
   </section>
 
   <section class="steps">
