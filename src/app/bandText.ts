@@ -98,11 +98,12 @@ export function forTouch(text: string): string {
 
 /**
  * スマホの「？ 使い方」の項目：題・ひとこと・手順・補足の「クリック」を「タップ」にする（forTouch。PC はそのまま）。
- * 「クリック（スマホはタップ）」は「タップ」だけにする。パソコンのことを書いた補足（「パソコンでは」）と、端末ごとの手順は変えない。
+ * 「クリック（スマホはタップ）」は「タップ」だけにする。「図を入れる」「表を入れる」（スマホは「図」「表」）も、スマホの道具の名前だけにする。
+ * パソコンのことを書いた補足（「パソコンでは」）と、端末ごとの手順は変えない。
  * 「クリック」で探しても見つかるよう、変えた項目は探す言葉に「クリック」を足す
  */
 export function topicsForTouch(topics: HelpTopic[]): HelpTopic[] {
-  const touch = (text: string) => forTouch(text.replace(/クリック[（(]スマホはタップ[）)]/g, 'タップ'))
+  const touch = (text: string) => forTouch(text.replace(/クリック[（(]スマホはタップ[）)]/g, 'タップ').replace('「図を入れる」「表を入れる」（スマホは「図」「表」）', '「図」「表」'))
   return topics.map((t) => {
     const next: HelpTopic = {
       ...t,

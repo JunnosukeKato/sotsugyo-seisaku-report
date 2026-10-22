@@ -59,7 +59,7 @@ describe('スマホの「？ 使い方」の言葉（「クリック」を「タ
   it('題・ひとこと・手順の「クリック」は「タップ」になり、「クリック（スマホはタップ）」は「タップ」だけになる', () => {
     expect(byId('write').title).toBe('書き方（タップして書く）')
     expect(byId('write').lead).toBe('紙面の文をタップすると、その場で書けます。')
-    expect(byId('figure').lead).toBe('文中の入れたい位置をタップしてから、道具の「図を入れる」「表を入れる」。')
+    expect(byId('figure').lead).toBe('文中の入れたい位置をタップしてから、道具の「図」「表」。')
     expect(byId('references').steps?.[1]).toBe('直す・足すときは、そのページをタップ')
     for (const t of touch) expect([t.title, t.lead ?? '', ...(t.steps ?? [])].join('')).not.toContain('クリック')
   })
