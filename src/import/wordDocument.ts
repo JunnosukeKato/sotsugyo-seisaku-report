@@ -133,6 +133,29 @@ export interface DocumentContext {
   numbering: Map<string, { abstractId: string; levels: Map<number, NumLevel> }>
   /** 箇条書きの番号を数える（numId → 段ごとの今の番号） */
   counters: Map<string, number[]>
+  /** 用紙の幅・左の余白・本文の幅（EMU。本文の w:sectPr から。readDocument が入れる）。浮かせた図形の横の位置をそろえるのに使う */
+  frame?: PageFrame | null
+}
+
+/** 用紙の幅・左の余白・本文の幅（EMU） */
+interface PageFrame {
+  pageWidth: number
+  marginLeft: number
+  textWidth: number
+}
+
+/** 1 twip（1/20 pt）は 635 EMU */
+const TWIP = 635
+
+/** 本文（w:body）の最後の w:sectPr から、用紙の幅と余白を読む（なければ null） */
+function pageFrame(body: Element): PageFrame | null {
+  const sect = elements(body).filter((e) => is(e, 'w', 'sectPr')).at(-1)
+  const width = Number(attr(child(sect ?? null, 'w', 'pgSz'), 'w'))
+  const mar = child(sect ?? null, 'w', 'pgMar')
+  const left = Number(attr(mar, 'left') ?? NaN)
+  const right = Number(attr(mar, 'right') ?? NaN)
+  if (![width, left, right].every(Number.isFinite) || width <= left + right) return null
+  return { pageWidth: width * TWIP, marginLeft: left * TWIP, textWidth: (width - left - right) * TWIP }
 }
 
 export function documentContext(styles: Document | null, numbering: Document | null): DocumentContext {
@@ -410,16 +433,38 @@ function readRunContent(node: Element, out: Collector, ctx: DocumentContext, hid
   }
 }
 
-/** 浮かせた図形の、横の中心と基準 */
-function anchorPosition(anchor: Element | null): { centerX: number | null; xFrom: string | null } {
-  if (!anchor) return { centerX: null, xFrom: null }
+/**
+ * 浮かせた図形の、横の中心と基準。2枚並びの図の画像とタイトルを、左右の位置で組にするのに使う（wordImport.ts の pairGroup）。
+ * 同じ行の2枚で、位置の基準が「段（column）」と「余白（margin）」に分かれていたり、タイトルの枠だけ「右寄せ」（wp:align）で
+ * 置いてあったりすると、前は位置で組にできず、書いた順に組にして、左右の画像とタイトルが入れ替わっていた
+ * （過去の卒業生の Word で見つけた：依頼者 2026-10-23）。そのため、次のようにそろえて、余白の左の端からの位置にする。
+ * - 段（column）：段組みのない文書では、余白と同じ
+ * - 用紙（page）：左の余白を引く
+ * - 「左・中央・右」（wp:align）：本文の幅（用紙からなら用紙の幅）から求める
+ */
+function anchorPosition(anchor: Element | null, frame: PageFrame | null | undefined): { centerX: number | null; xFrom: string | null } {
+  const none = { centerX: null, xFrom: null }
+  if (!anchor) return none
   const positionH = child(anchor, 'wp', 'positionH')
+  if (!positionH) return none
+  const from = attr(positionH, 'relativeFrom')
   const offset = child(positionH, 'wp', 'posOffset')
-  const extent = child(anchor, 'wp', 'extent')
-  if (!positionH || !offset) return { centerX: null, xFrom: null }
-  const x = Number(offset.textContent)
-  const cx = Number(attr(extent, 'cx') ?? 0)
-  return Number.isFinite(x) ? { centerX: x + (Number.isFinite(cx) ? cx / 2 : 0), xFrom: attr(positionH, 'relativeFrom') } : { centerX: null, xFrom: null }
+  const align = child(positionH, 'wp', 'align')?.textContent?.trim()
+  const cx = Number(attr(child(anchor, 'wp', 'extent'), 'cx') ?? 0) || 0
+  let left: number | null = null
+  if (offset) left = Number(offset.textContent)
+  else if (align && frame && (from === 'margin' || from === 'column' || from === 'page')) {
+    const width = from === 'page' ? frame.pageWidth : frame.textWidth
+    left = align === 'left' || align === 'inside' ? 0 : align === 'right' || align === 'outside' ? width - cx : align === 'center' ? (width - cx) / 2 : null
+  }
+  if (left === null || !Number.isFinite(left)) return none
+  let xFrom = from
+  if (from === 'column') xFrom = 'margin'
+  if (from === 'page' && frame) {
+    left -= frame.marginLeft
+    xFrom = 'margin'
+  }
+  return { centerX: left + cx / 2, xFrom }
 }
 
 /** 図形（w:drawing・w:pict）の中を読む：画像・文字の枠・グラフ */
@@ -437,7 +482,7 @@ function readGraphic(node: Element, out: Collector, ctx: DocumentContext, anchor
     if (is(el, 'a', 'blip')) {
       const embed = attr(el, 'embed')
       const link = attr(el, 'link')
-      out.images.push({ rid: embed ?? link, linked: !embed && !!link, kind: 'image', ...anchorPosition(here), crop: cropOf(el) })
+      out.images.push({ rid: embed ?? link, linked: !embed && !!link, kind: 'image', ...anchorPosition(here, ctx.frame), crop: cropOf(el) })
       continue
     }
     if (is(el, 'v', 'imagedata')) {
@@ -447,11 +492,11 @@ function readGraphic(node: Element, out: Collector, ctx: DocumentContext, anchor
     if (is(el, 'a', 'graphicData')) {
       const uri = attr(el, 'uri') ?? ''
       if (/\/chart$|chartex/.test(uri)) {
-        out.images.push({ rid: null, linked: false, kind: 'chart', ...anchorPosition(here), crop: null })
+        out.images.push({ rid: null, linked: false, kind: 'chart', ...anchorPosition(here, ctx.frame), crop: null })
         continue
       }
       if (/\/diagram$/.test(uri)) {
-        out.images.push({ rid: null, linked: false, kind: 'smartart', ...anchorPosition(here), crop: null })
+        out.images.push({ rid: null, linked: false, kind: 'smartart', ...anchorPosition(here, ctx.frame), crop: null })
         continue
       }
     }
@@ -490,7 +535,7 @@ function readTextBox(content: Element, ctx: DocumentContext, anchor: Element | n
     }
   }
   collect(blocks)
-  return { lines, images, ...anchorPosition(anchor) }
+  return { lines, images, ...anchorPosition(anchor, ctx.frame) }
 }
 
 function readParagraph(p: Element, ctx: DocumentContext): WordParagraph {
@@ -602,5 +647,7 @@ export function readBlocks(container: Element, ctx: DocumentContext): WordBlock[
 /** 本文（w:body）の段落と表の並び */
 export function readDocument(document: Document, ctx: DocumentContext): WordBlock[] {
   const body = elements(document.documentElement).find((e) => is(e, 'w', 'body'))
-  return body ? readBlocks(body, ctx) : []
+  if (!body) return []
+  ctx.frame = pageFrame(body)
+  return readBlocks(body, ctx)
 }

@@ -62,23 +62,24 @@ export function inlineImage(id, { cx = 1800000, cy = 2400000, crop } = {}) {
   return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:docPr id="${shapeId}" name="図 ${shapeId}"/>${picture(id, cx, cy, crop)}</wp:inline></w:drawing></w:r>`
 }
 
-const anchor = (inner, { x, y, cx, cy, wrap }) =>
+/** 浮かせた図形の枠。from：横の位置の基準（margin・column・page）。align を渡すと、数ではなく「左・中央・右」で置く */
+const anchor = (inner, { x, y, cx, cy, wrap, from = 'margin', align }) =>
   `<wp:anchor distT="0" distB="0" distL="114300" distR="114300" simplePos="0" relativeHeight="${251658240 + shapeId}" behindDoc="0" locked="0" layoutInCell="1" allowOverlap="1">` +
-  `<wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="margin"><wp:posOffset>${x}</wp:posOffset></wp:positionH>` +
+  `<wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="${from}">${align ? `<wp:align>${align}</wp:align>` : `<wp:posOffset>${x}</wp:posOffset>`}</wp:positionH>` +
   `<wp:positionV relativeFrom="paragraph"><wp:posOffset>${y}</wp:posOffset></wp:positionV><wp:extent cx="${cx}" cy="${cy}"/>` +
   `<wp:effectExtent l="0" t="0" r="0" b="0"/>${wrap}<wp:docPr id="${shapeId}" name="図 ${shapeId}"/><wp:cNvGraphicFramePr/>${inner}</wp:anchor>`
 
-/** 浮かせた画像（w:r。文字の前面・四角など）。x は余白からの左の位置（EMU） */
-export function floatingImage(id, { x = 1580000, y = 385000, cx = 2237740, cy = 3162300, crop } = {}) {
+/** 浮かせた画像（w:r。文字の前面・四角など）。x は余白（from）からの左の位置（EMU） */
+export function floatingImage(id, { x = 1580000, y = 385000, cx = 2237740, cy = 3162300, crop, from, align } = {}) {
   shapeId++
-  return `<w:r><w:drawing>${anchor(picture(id, cx, cy, crop), { x, y, cx, cy, wrap: '<wp:wrapSquare wrapText="bothSides"/>' })}</w:drawing></w:r>`
+  return `<w:r><w:drawing>${anchor(picture(id, cx, cy, crop), { x, y, cx, cy, from, align, wrap: '<wp:wrapSquare wrapText="bothSides"/>' })}</w:drawing></w:r>`
 }
 
 /**
  * 文字の枠（w:r）。ひな形の図のタイトル「図1 デザイン画」と同じく、浮かせた図形の中に文字があり、
  * 新旧2通りの書き方（mc:Choice と mc:Fallback）で同じ文字が2回入る。lines は枠の中の段落
  */
-export function textBox(lines, { x = 1324610, y = 3418923, cx = 2749550, cy = 546100 } = {}) {
+export function textBox(lines, { x = 1324610, y = 3418923, cx = 2749550, cy = 546100, from, align } = {}) {
   shapeId++
   const content = `<w:txbxContent>${[].concat(lines).map((l) => p(l)).join('')}</w:txbxContent>`
   const shape =
@@ -86,7 +87,7 @@ export function textBox(lines, { x = 1324610, y = 3418923, cx = 2749550, cy = 54
     `<wps:wsp><wps:cNvSpPr txBox="1"/><wps:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></wps:spPr>` +
     `<wps:txbx>${content}</wps:txbx><wps:bodyPr rot="0" vert="horz" wrap="square"/></wps:wsp></a:graphicData></a:graphic>`
   return (
-    `<w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing>${anchor(shape, { x, y, cx, cy, wrap: '<wp:wrapNone/>' })}</w:drawing></mc:Choice>` +
+    `<w:r><mc:AlternateContent><mc:Choice Requires="wps"><w:drawing>${anchor(shape, { x, y, cx, cy, from, align, wrap: '<wp:wrapNone/>' })}</w:drawing></mc:Choice>` +
     `<mc:Fallback><w:pict><v:shape id="テキスト ボックス ${shapeId}" type="#_x0000_t202" style="position:absolute;margin-left:104pt;margin-top:269pt;width:216pt;height:43pt" filled="f" stroked="f">` +
     `<v:textbox>${content}</v:textbox></v:shape></w:pict></mc:Fallback></mc:AlternateContent></w:r>`
   )

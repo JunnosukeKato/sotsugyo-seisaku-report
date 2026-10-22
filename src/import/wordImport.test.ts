@@ -340,6 +340,44 @@ describe('学生の書き方の違い', () => {
     expect(result.problems).toEqual([])
   })
 
+  it('2枚並びの図：位置の基準が「段」と「余白」に分かれていても、タイトルが「右寄せ」で置いてあっても、左右の位置で組にする（過去の卒業生の Word）', async () => {
+    const FRONT = png(120, 160)
+    const REAR = png(130, 170)
+    const TIE = png(160, 120)
+    const SHIRT = png(110, 150)
+    const result = await read(
+      makeDocx({
+        media: { 'front.png': FRONT, 'rear.png': REAR, 'tie.png': TIE, 'shirt.png': SHIRT },
+        sectPr: '<w:pgSz w:w="11906" w:h="16838" w:code="9"/><w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1985" w:header="851" w:footer="624" w:gutter="0"/>',
+        body: [
+          p('Ⅰ．制作過程'),
+          p('ジャケットの前である（図1）。後ろは図2に示す。'),
+          // 右の画像（後ろ）が先に書いてあり、基準は「段」。左の画像（前）の基準は「余白」
+          p(floatingImage(rid('rear.png'), { x: 3048635, cx: 1442720, from: 'column' }), floatingImage(rid('front.png'), { x: 703580, cx: 1447165 })),
+          p(textBox(['図1　ジャケット前'], { x: 53503 }), textBox(['図2　ジャケット後ろ'], { x: 2365538 })),
+          p('シャツである（図3）。タイは図4に示す。'),
+          // 右の画像（タイ）が先。左のタイトルは位置の数、右のタイトルは「右寄せ」
+          p(floatingImage(rid('tie.png'), { x: 3113405, cx: 1912620 }), floatingImage(rid('shirt.png'), { x: 751205, cx: 1356360 })),
+          p(textBox(['図3　シャツ'], { x: 38100 }), textBox(['図4　アスコットタイ'], { align: 'right' })),
+        ].join(''),
+      }),
+    )
+    // 画像のある図の並び（ひな形の章の、写真を入れる前の枠は除く）
+    const rows = figureRows(result.body)
+      .filter((r) => r.figures.some((f) => f.imageId))
+      .map((r) => r.figures.map((f) => [f.caption, result.images.find((i) => i.id === f.imageId)?.widthPx]))
+    expect(rows).toEqual([
+      [
+        ['ジャケット前', 120],
+        ['ジャケット後ろ', 130],
+      ],
+      [
+        ['シャツ', 110],
+        ['アスコットタイ', 160],
+      ],
+    ])
+  })
+
   it('浮かせた画像とタイトルの枠が、別の段落に付いていても組にする', async () => {
     const result = await read(
       makeDocx({

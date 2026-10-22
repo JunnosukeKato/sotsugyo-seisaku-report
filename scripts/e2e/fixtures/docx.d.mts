@@ -19,8 +19,8 @@ export interface Crop {
 }
 
 export declare function inlineImage(id: string, options?: { cx?: number; cy?: number; crop?: Crop }): string
-export declare function floatingImage(id: string, options?: { x?: number; y?: number; cx?: number; cy?: number; crop?: Crop }): string
-export declare function textBox(lines: string | string[], options?: { x?: number; y?: number; cx?: number; cy?: number }): string
+export declare function floatingImage(id: string, options?: { x?: number; y?: number; cx?: number; cy?: number; crop?: Crop; from?: 'margin' | 'column' | 'page'; align?: 'left' | 'center' | 'right' }): string
+export declare function textBox(lines: string | string[], options?: { x?: number; y?: number; cx?: number; cy?: number; from?: 'margin' | 'column' | 'page'; align?: 'left' | 'center' | 'right' }): string
 
 export type CellSpec = string | { text?: string; images?: string[]; span?: number; vMerge?: 'restart' | 'continue' }
 /** heights：行ごとの高さ（twip。w:trHeight）。hRule：高さの決め方（'auto'・'exact' など。ないときは書かない） */
