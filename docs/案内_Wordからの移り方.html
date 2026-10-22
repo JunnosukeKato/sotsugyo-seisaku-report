@@ -8,7 +8,7 @@
   学生に配る案内「Word で書き始めた人へ：報告書作成ツールへの移り方（今年度だけ）」。A4 縦 1枚。
   ・PDF（案内_Wordからの移り方.pdf）は node scripts/make-guide-word.mjs で作る（画面の画像 guide-images/ も撮り直す）。
   ・文や日付だけを直したときは node scripts/make-guide-word.mjs --pdf-only で PDF だけ作り直せる（1ページに収まっているかも確かめる）。
-  ・「いつまでに」は「11月2週目ごろの途中点検の前まで」。日付は入れない（依頼者 2026-10-23「案内の締切日はいりません」）。
+  ・いつまでに移すか（日付・時期）は書かない（依頼者 2026-10-23「案内の締切日はいりません」「それすらも不要です」）。
   ・公開のリポジトリに入るので、先生の名前・連絡先などは書かない。
 -->
 <link rel="stylesheet" href="../node_modules/@fontsource/biz-udpgothic/400.css">
@@ -57,11 +57,6 @@
   .qr img { width: 27mm; height: 27mm; display: block; }
   .qr b { font-size: 9.5pt; color: var(--accent); }
 
-  /* ---- いつまでに ---- */
-  .due { display: flex; align-items: center; gap: 4mm; padding: 2.4mm 4mm; border-radius: 2.4mm; background: var(--accent-soft); }
-  .due-h { flex: none; padding: 0.8mm 2.6mm; border-radius: 1.6mm; background: var(--accent); color: #fff; font-size: 10pt; letter-spacing: 0.08em; }
-  .due p { font-size: 10pt; line-height: 1.6; }
-  .due strong { color: var(--accent); font-size: 11pt; }
 
   /* ---- 手順 ---- */
   .sec-h { display: flex; align-items: baseline; gap: 3mm; margin-bottom: 1.8mm; font-size: 12pt; color: var(--accent); letter-spacing: 0.06em; }
@@ -107,11 +102,6 @@
       <b>スマホで開く</b>
     </div>
   </header>
-
-  <section class="due" aria-label="いつまでに">
-    <b class="due-h">いつまでに</b>
-    <p><strong>11月2週目ごろの途中点検の前まで</strong>に、ツールに移してください。</p>
-  </section>
 
   <section class="steps">
     <h2 class="sec-h">移り方<small>画像の<i></i>のところを押します</small></h2>
