@@ -747,6 +747,89 @@ export async function phoneDirectPhone(browser, check) {
   await wait(300)
   await ready()
 
+  // ---- 18b. 「（図1）。」の「）」と「。」の間にもカーソルを置ける（依頼者の Android 2026-10-22） ----
+  // スマホのブラウザは、指で押した所の近くの「書ける字の間」にしかカーソルを置かない。まとまりにした「）」と「。」が続く所では、
+  // 「）」のまとまりをやめる（書く欄の中で、すぐ後ろに書ける字がないまとまりだけ。段落の終わりの「。」も）
+  await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfBlock('p3'), 'none'))
+  await ready()
+  await page.evaluate(() => window.__editor.openWhenReady('p3', 0))
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p3', { timeout: 10000 })
+  await wait(600)
+  const gaps = await page.evaluate(() => {
+    const el = window.__editor.overlay.element
+    const ref = el.querySelector('.fig-ref')
+    const locks = ref ? [...ref.querySelectorAll('viv-ts-open, viv-ts-close')].map((w) => `${w.textContent}:${w.getAttribute('contenteditable') === 'false' ? 'まとまり' : '書ける'}`) : []
+    const next = ref?.nextElementSibling
+    return { locks, next: next ? `${next.textContent}:${next.getAttribute('contenteditable') === 'false' ? 'まとまり' : '書ける'}` : null }
+  })
+  // 「）」の右の端を押し（書く欄の中。ブラウザがカーソルを置く）、日本語で打つ
+  const closeAt = await page.evaluate(() => {
+    const ref = window.__editor.overlay.element.querySelector('.fig-ref')
+    const w = document.createTreeWalker(ref, NodeFilter.SHOW_TEXT)
+    let last = null
+    while (w.nextNode()) last = w.currentNode
+    const r = document.createRange()
+    r.setStart(last, 0)
+    r.setEnd(last, 1)
+    const b = [...r.getClientRects()].find((x) => x.height > 0)
+    return { x: b.right - 0.5, y: b.top + b.height / 2 }
+  })
+  await page.touchscreen.tap(closeAt.x, closeAt.y)
+  await wait(400)
+  await cdp.send('Input.imeSetComposition', { text: 'か', selectionStart: 1, selectionEnd: 1 })
+  await wait(150)
+  await cdp.send('Input.insertText', { text: '★' })
+  await wait(900)
+  const afterRef = await page.evaluate(() => { const t = window.__editor.overlay.text; const i = t.indexOf('★'); return i < 0 ? '' : t.slice(i - 6, i + 2) })
+  check(
+    '書いている段落の「（図1）。」：「）」のまとまりはやめ（すぐ後ろの「。」もまとまりのため）、「（」と「。」はまとまりのまま。「）」の右を押して日本語で打つと、「）」と「。」の間に入る',
+    JSON.stringify(gaps.locks) === JSON.stringify(['（:まとまり', '）:書ける']) && gaps.next === '。:まとまり' && afterRef.endsWith('（図1）★。'),
+    JSON.stringify({ gaps, afterRef }),
+  )
+  await page.evaluate(() => {
+    window.__editor.finishEditing()
+    window.__editor.undo()
+  })
+  await wait(300)
+  await ready()
+  // キーボードの右・左でも、「）」と「。」の間に止まり、カーソルは字の中（線が描ける所）にある（前は、右で「）」を飛び越えると線が消えた：依頼者の Android）
+  // 「（図1）」の位置は、書く欄の字で数える（原稿では、図への参照は1つのまとまり）
+  await page.evaluate(() => window.__editor.openWhenReady('p3', 0))
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p3', { timeout: 10000 })
+  await wait(400)
+  const refAt = await page.evaluate(() => window.__editor.overlay.text.indexOf('（図1）'))
+  // 「（図1）」の「1」の後ろ（「）」の前）
+  await page.evaluate((at) => window.__editor.overlay.setCaret(at), refAt + 3)
+  await wait(300)
+  const caretOf = () =>
+    page.evaluate(() => {
+      const s = getSelection()
+      return { at: window.__editor.overlay.selectionOffsets().start, inText: s.anchorNode?.nodeType === Node.TEXT_NODE }
+    })
+  const startKey = await caretOf()
+  // ツールがカーソルを置いたとき（紙面を押して書き始めたときなど）も、「）」と「。」の間は字の中
+  await page.evaluate((at) => window.__editor.overlay.setCaret(at), refAt + 4)
+  await wait(150)
+  const placed = await caretOf()
+  await page.evaluate((at) => window.__editor.overlay.setCaret(at), refAt + 3)
+  await wait(150)
+  await page.keyboard.press('ArrowRight')
+  await wait(200)
+  const right = await caretOf()
+  await page.keyboard.press('ArrowRight')
+  await wait(200)
+  await page.keyboard.press('ArrowLeft')
+  await wait(200)
+  const left = await caretOf()
+  check(
+    'キーボードの右で「1」の後ろから「）」と「。」の間へ、「。」の後ろから左でも同じ所へ。ツールが置いたときも、どれもカーソルは字の中（線が描ける所）',
+    refAt >= 0 && startKey.at === refAt + 3 && placed.at === refAt + 4 && placed.inText && right.at === refAt + 4 && right.inText && left.at === refAt + 4 && left.inText,
+    JSON.stringify({ refAt, startKey, placed, right, left }),
+  )
+  await page.evaluate(() => window.__editor.finishEditing())
+  await wait(300)
+  await ready()
+
   // ---- 19. 図を入れる：写真を選ぶと、タイトルを紙面の上で書き始め、図の写真とタイトルの行が一緒に見える ----
   await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfBlock('p10'), 'none'))
   await ready()
@@ -760,7 +843,12 @@ export async function phoneDirectPhone(browser, check) {
   await wait(800)
   const newFig = await page.evaluate(() => window.__editor.getSnapshot().editingId)
   const ins = await figVisible(newFig)
-  const insLabel = await page.evaluate(() => ({ shown: getComputedStyle(window.__editor.overlay.element, '::before').content, text: window.__editor.overlay.text }))
+  const insLabel = await page.evaluate(() => {
+    const el = window.__editor.overlay.element
+    const sel = getSelection()
+    // 空の欄では、改行の印を1つ入れ、カーソルはその前（番号のすぐ後ろに描かれる。空のままだと、真ん中にそろえた欄の真ん中＝「図|4.」に描かれていた：依頼者の Android 2026-10-22）
+    return { shown: getComputedStyle(el, '::before').content, text: window.__editor.overlay.text, html: el.innerHTML, caret: sel.anchorNode === el ? sel.anchorOffset : -1 }
+  })
   await page.keyboard.type('新しい図')
   await wait(200)
   const insTyped = await page.evaluate(() => window.__state())
@@ -773,8 +861,8 @@ export async function phoneDirectPhone(browser, check) {
   )
   check(
     '入れた図の空のタイトル：書く欄の前に番号（「図4. |」のように番号のすぐ後ろにカーソル）。打った字も番号のすぐ後ろ（1字分以内）で、書いた字に番号は入らない',
-    /^"図\d+\."$/.test(insLabel.shown) && insLabel.text === '' && gapOk(insGap) && insGap.text === '新しい図',
-    `${insLabel.shown} ${gapDetail(insGap)}`,
+    /^"図\d+\."$/.test(insLabel.shown) && insLabel.text === '' && insLabel.html === '<br>' && insLabel.caret === 0 && gapOk(insGap) && insGap.text === '新しい図',
+    `${insLabel.shown} ${insLabel.html} caret:${insLabel.caret} ${gapDetail(insGap)}`,
   )
   await page.tap('.direct-bar .db-done')
   await wait(300)

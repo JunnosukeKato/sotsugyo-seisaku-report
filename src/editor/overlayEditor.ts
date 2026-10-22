@@ -736,6 +736,7 @@ export class OverlayEditor {
     if (old !== text) {
       const [p, q] = sameEnds(old, text)
       if (!this.patchMirror(old, text, p, q, this.element)) return false
+      this.openCaretGaps()
       this.markTyped(old, text, p, q)
     }
     if (selection) this.select(selection.start, selection.end)
@@ -796,6 +797,7 @@ export class OverlayEditor {
         const selection = focused ? this.selectionOffsets() : null
         this.element.replaceChildren(...job.scratch.childNodes)
         reshapeSpacing(this.element)
+        this.openCaretGaps()
         this.plan = step.value
         this.renderedText = job.text
         this.dirtyFrom = null
@@ -893,6 +895,10 @@ export class OverlayEditor {
     const el = this.element
     if (!this.typeset) {
       el.textContent = this.model
+      // 番号（図3.）を前に出す欄が空のとき：改行の印を1つ入れておく。空の欄では、ブラウザが真ん中にそろえた欄の真ん中にカーソルを描き、
+      // 「図|3.」のように番号の途中に見えていた（打った字は番号の後ろに入るが、そこに入るように見える：依頼者の Android 2026-10-22）。
+      // 改行の印があると、カーソルは番号のすぐ後ろに出る。字ではないので、書いた字（domText）には入らない
+      if (!this.model && el.dataset.label) el.replaceChildren(document.createElement('br'))
       // スマホ：紙面の上の写しも、はじめから組む（段落は、紙面の段落の中身を写せるなら写す）
       if (this.sheetHost) this.syncMirror(this.model, { full: true, page: how.page })
       else this.resetTypeset()
@@ -942,6 +948,7 @@ export class OverlayEditor {
       this.pendingFrom = from
       this.typesetTimer = window.setTimeout(() => this.flushTypeset(), TYPESET_DELAY_MS)
     }
+    this.openCaretGaps()
     if (selection) this.select(selection.start, selection.end)
   }
 
@@ -979,6 +986,7 @@ export class OverlayEditor {
       if (box === this.element && (el.localName === 'viv-ts-open' || el.localName === 'viv-ts-close' || el.localName === 'viv-ts-thin-sp')) (el as HTMLElement).contentEditable = 'false'
     }
     box.replaceChildren(...holder.childNodes)
+    if (box === this.element) this.openCaretGaps()
     this.plan = planFromDom(box)
     this.renderedText = text
     this.pendingFrom = null
@@ -1004,8 +1012,37 @@ export class OverlayEditor {
     const selection = focused ? this.selectionOffsets() : null
     this.element.replaceChildren(...this.buildNodes(this.model))
     this.plan = typesetSpacing(this.element, { atomic: true, from: this.pendingFrom, known: this.plan })
+    this.openCaretGaps()
     this.pendingFrom = null
     if (selection) this.select(selection.start, selection.end)
+  }
+
+  /**
+   * スマホで紙面に直接書く：1文字のまとまりにした句読点・括弧（contenteditable="false"）のうち、すぐ後ろに書ける字がないもの
+   * （「（図1）。」の「）」、段落の終わりの「。」など）は、まとまりをやめる。
+   * スマホのブラウザは、指で押した所の近くの「書ける字の間」にしかカーソルを置かないため、まとまりが2つ続く所（「）」と「。」の間）には
+   * カーソルを置けず、手前の「1」と「）」の間に置かれていた（依頼者の Android 2026-10-22）。
+   * まとまりをやめた所で日本語を変換すると、変換中の字が詰めた字間で少し重なって見えることがある（変換を終えると組み直す）
+   */
+  private openCaretGaps(): void {
+    if (!this.direct) return
+    const el = this.element
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+    const texts: Text[] = []
+    while (walker.nextNode()) texts.push(walker.currentNode as Text)
+    const lockOf = (t: Text): HTMLElement | null => {
+      const w = t.parentElement?.closest<HTMLElement>('[contenteditable="false"]')
+      return w && el.contains(w) ? w : null
+    }
+    for (let i = 0; i < texts.length; i++) {
+      const w = lockOf(texts[i])
+      if (!w) continue
+      // このまとまりのすぐ後ろの字（なければ段落の終わり）
+      let j = i + 1
+      while (j < texts.length && w.contains(texts[j])) j++
+      const next = texts[j]
+      if (!next || lockOf(next)) w.removeAttribute('contenteditable')
+    }
   }
 
   private resetTypeset(): void {
@@ -1074,11 +1111,19 @@ export class OverlayEditor {
     for (let i = 0; i < kids.length; i++) {
       const kid = kids[i]
       const len = kid.textContent?.length ?? 0
+      // 空の欄に入れた改行の印（renderText）：字ではない。カーソルはその前に置く
+      if (kid.nodeName === 'BR') {
+        if (offset <= acc) return { node: parent, offset: i }
+        continue
+      }
       if (kid.nodeType === Node.TEXT_NODE) {
         if (offset <= acc + len) return { node: kid, offset: offset - acc }
       } else if (kid instanceof HTMLElement && kid.isContentEditable) {
-        // 図表の参照のまとまり（中の文字は書ける）
-        if (offset < acc + len || (offset === acc + len && i === kids.length - 1 && parent !== this.element)) return this.caretPoint(offset - acc, kid)
+        // 図表の参照のまとまり（中の文字は書ける）。スマホで紙面に直接書くとき、すぐ後ろに書ける字がない（まとまりの句読点が続く・段落の終わり）なら、
+        // 中の終わりに置く（字の中に置かないと、スマホのブラウザがカーソルの線を描かない。「（図1）。」の「）」の後ろ：openCaretGaps）
+        const next = kids[i + 1]
+        const noTextAfter = next ? this.direct && next.nodeType !== Node.TEXT_NODE : parent !== this.element || this.direct
+        if (offset < acc + len || (offset === acc + len && noTextAfter)) return this.caretPoint(offset - acc, kid)
       } else if (offset <= acc) {
         return { node: parent, offset: i }
       } else if (offset < acc + len) {
