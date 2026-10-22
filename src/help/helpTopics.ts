@@ -263,10 +263,10 @@ export const STUDENT_TOPICS: HelpTopic[] = [
   {
     id: 'tour',
     group: 'そのほか',
-    title: '指差し確認をもう一度見る',
+    title: '画面の案内をもう一度見る',
     lead: '画面のどこに何があるかを、もう一度たどります（1分ほど）。',
     action: { kind: 'tour', label: 'いま見る' },
-    words: 'ツアー 案内 画面の見かた',
+    words: 'ツアー 案内 画面の見かた 指差し確認 ボタンの場所',
   },
 ]
 

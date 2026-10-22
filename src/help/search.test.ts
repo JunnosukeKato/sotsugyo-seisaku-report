@@ -167,8 +167,8 @@ describe('使い方の項目', () => {
     for (const t of all) if (t.shot) expect(fs.existsSync(`public/help/${t.shot.file}`), t.shot.file).toBe(true)
   })
 
-  it('「指差し確認をもう一度見る」の項目がある（学生用）', () => {
-    expect(STUDENT_TOPICS.find((t) => t.action?.kind === 'tour')?.title).toBe('指差し確認をもう一度見る')
+  it('「画面の案内をもう一度見る」の項目がある（学生用）', () => {
+    expect(STUDENT_TOPICS.find((t) => t.action?.kind === 'tour')?.title).toBe('画面の案内をもう一度見る')
   })
 })
 

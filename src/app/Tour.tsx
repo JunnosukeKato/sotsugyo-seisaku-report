@@ -54,7 +54,7 @@ const PC_STEPS = (drive: boolean): Step[] => [
   { title: 'セルフチェック', text: '進み具合と、直すところの一覧です。押すと、その場所へ移ります。', targets: first('.side .sec.check'), sides: ['left'] },
   { title: 'PDFを書き出す', text: 'ここから PDF にします。提出の前に、直すところ・まだのところを0にします。', targets: first('.side .export'), sides: ['left', 'above'] },
   // 「？ 使い方」は、右の欄の「メニュー」の中（mockups/v37 案C）。光はメニューのボタンに当てる
-  { title: '？ 使い方', text: '困ったときの「？ 使い方」は、右上の「メニュー」の中です。言葉で探せます。', targets: first('.side .menu-btn'), sides: ['left', 'below'] },
+  { title: '？ 使い方', text: '困ったときの「？ 使い方」は、右上の「メニュー」の中です。使い方の動画（6本）もあり、言葉で探せます。', targets: first('.side .menu-btn'), sides: ['left', 'below'] },
 ]
 const PHONE_STEPS = (drive: boolean, direct: boolean): Step[] => [
   // 紙面で直接書く（スマホのふつう）。予備の ?direct=0 の端末では、下から書く欄が出る（app/phoneDirect.ts）
@@ -71,7 +71,8 @@ const PHONE_STEPS = (drive: boolean, direct: boolean): Step[] => [
     targets: first('.p-top .chip'),
     sides: ['below'],
   },
-  { title: 'メニュー', text: '手順書・「バックアップ・作り直す」・？使い方は、ここです。', targets: first('.p-top .icon-btn'), sides: ['below'] },
+  // 使い方は下のタブから直行できる（依頼者の選択 2026-10-22 案A）。指差し確認の最後は「メニュー」に代えて使い方（案1。4か所のまま）
+  { title: '？ 使い方', text: '困ったときは、ここ。使い方の動画（6本）と、言葉で探せる説明があります。', targets: first('.p-nav .nav-help'), sides: ['above'] },
 ]
 
 /** 要素を囲む範囲（見つからなければ null） */
@@ -210,7 +211,8 @@ function TourSteps({ steps, narrow, onDone }: { steps: Step[]; narrow: boolean; 
       {spot && <div className="tour-spot" style={{ left: spot.left, top: spot.top, width: spot.width, height: spot.height }} />}
       <div className="tour-tip" ref={tipRef} role="dialog" aria-modal="true" aria-labelledby={titleId} style={spot ? undefined : { opacity: 0 }}>
         <div className="tour-k">
-          指差し確認<span>{index + 1} / {steps.length}</span>
+          {/* 前は「指差し確認」（依頼者の選択 2026-10-22：「画面の案内」） */}
+          画面の案内<span>{index + 1} / {steps.length}</span>
           <span className="tour-dots" aria-hidden="true">
             {steps.map((s, i) => (
               <i key={s.title} className={i === index ? 'on' : i < index ? 'past' : ''} />

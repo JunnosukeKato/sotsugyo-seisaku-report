@@ -30,7 +30,7 @@ const offWhen = (off: boolean) => ({ 'aria-disabled': off || undefined, classNam
 /**
  * スマホ版の画面（mockups/v7 案2 から）。
  * 上：細い帯（名前・保存・戻す・やり直す・メニュー）／中：紙面（左右・上下にはらってめくる。上下は拡大していないとき。2本の指で広げる・縮める）／
- * 下：タブ（ページ一覧・追加・チェック・PDF）
+ * 下：タブ（ページ一覧・追加・チェック・PDF・使い方）
  * 紙面の欄をタップすると、紙面を拡大して、紙面の上でそのまま書き、キーボードのすぐ上に細い道具を出す（DirectBar。2026-10-20 から。app/phoneDirect.ts）。
  * 予備の ?direct=0 の端末では、前のとおり、画面の下から大きな文字の書く欄が出る（EditSheet）。「完了」は、どちらも1ページ全体の表示に戻す
  */
@@ -619,6 +619,10 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
         <button className="nav-pdf" onClick={onExport} disabled={exporting}>
           {exporting ? <Spinner /> : Icon.pdf}
           {exporting ? '確認中…' : 'PDF'}
+        </button>
+        {/* 使い方に直行（前はメニューの中だけ：依頼者の選択 2026-10-22 案A）。メニューの中の「使い方」も残す */}
+        <button className="nav-help" onClick={onHelp}>
+          {Icon.help}使い方
         </button>
       </nav>
 

@@ -606,11 +606,12 @@ await withEdge(async (browser) => {
     })
     tourTitles.push(st)
     if (i === 1) await shot('8c-tour')
+    if (i === 3) await shot('8d-tour-help')
     await page.click('.tour-acts .next')
     await wait(300)
     if (st.next === 'おわり') break
   }
-  check('次に開くと指差し確認が出て、4か所（紙面・チェックと PDF・保存のようす・メニュー）を順に見られる（吹き出しは画面の中）', tourTitles.map((x) => x.title).join(',') === '紙面,チェックと PDF,保存のようす,メニュー' && tourTitles.every((x) => x.inside) && !(await page.$('.tour')), JSON.stringify(tourTitles))
+  check('次に開くと指差し確認が出て、4か所（紙面・チェックと PDF・保存のようす・？ 使い方〔下のタブ。動画もある〕）を順に見られる（吹き出しは画面の中）', tourTitles.map((x) => x.title).join(',') === '紙面,チェックと PDF,保存のようす,？ 使い方' && tourTitles.every((x) => x.inside) && !(await page.$('.tour')), JSON.stringify(tourTitles))
   // 使い方の「指差し確認をもう一度見る」から、もう一度。「とばす」で終わる
   await page.click('.p-top .icon-btn')
   await page.waitForSelector('.sheet .help-btn')
