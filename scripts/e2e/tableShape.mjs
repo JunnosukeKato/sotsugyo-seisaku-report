@@ -578,6 +578,43 @@ export async function tableShapePc(browser, check) {
   const loneShape = await loneLines(page, TABLE_ID)
   check('パソコン：列の幅「中身に合わせる」の確かめの表（見出しの長い表・改行のあるセル）でも、1字だけの行はない', loneShape.bad.length === 0, JSON.stringify(loneShape))
   await context.close()
+  await photoTablePage(browser, check)
+}
+
+/**
+ * 映画・舞台衣装デザイナーコースのひな形と同じつくり（改ページ → 小見出し「使用素材」・説明1行・「写真が入る高さ」の6行の素材表で、章が終わる）。
+ * Word のひな形と同じく、1ページに入る。小見出しはページのいちばん上から始まる。表のあとに空のページはできない
+ * （前は、表の下の余白の分だけ章の終わりの目印が次のページへ送られ、空のページができていた：2026-10-22）
+ */
+async function photoTablePage(browser, check) {
+  const { context, page, ready } = await openSample(browser, false)
+  await page.evaluate(() => {
+    const cell = (id, text) => ({ id, text, imageId: null })
+    const rows = [{ id: 'ph', cells: ['名称', '使用箇所', '生地見本'].map((t, i) => cell(`ph${i}`, t)) }, ...Array.from({ length: 6 }, (_, r) => ({ id: `pr${r}`, cells: [0, 1, 2].map((c) => cell(`pc${r}${c}`, '')) }))]
+    const p = (id, text) => ({ type: 'paragraph', id, content: [{ type: 'text', text }] })
+    window.__editor.update((r) => ({
+      ...r,
+      body: [
+        { id: 'pC1', title: '企画・立案', blocks: [{ type: 'subheading', id: 'pS1', title: 'デザイン説明' }, p('pP1', 'デザインのもとにした時代・地域の装いと、込めた意図を書く。'), { type: 'pageBreak', id: 'pPB' }, { type: 'subheading', id: 'pS2', title: '使用素材' }, p('pP2', '使った素材と使った場所を表1にまとめ、文中に「表1」と書く'), { type: 'table', id: 'pT', caption: '使用材料表', widths: 'equal', heights: 'photo', rows }] },
+        { id: 'pC2', title: '制作過程', blocks: [p('pP3', '次の作業について書く。')] },
+      ],
+    }))
+  })
+  await ready()
+  const at = await page.evaluate(() => ({ sub: window.__editor.pageOfBlock('pS2'), last: window.__editor.pageOfBlock('pc50'), next: window.__editor.pageOfBlock('pP3') }))
+  await page.evaluate((p) => window.__editor.goToPage(p, 'none'), at.sub)
+  await ready()
+  const top = await page.evaluate(() => {
+    const h = [...document.querySelectorAll('.page-viewport.front h2.subheading')].find((e) => e.textContent.includes('使用素材'))
+    const pageEl = h.closest('[data-vivliostyle-page-container]').getBoundingClientRect()
+    return Math.round(((h.getBoundingClientRect().top - pageEl.top) / pageEl.height) * 297 * 10) / 10
+  })
+  check(
+    'パソコン：改ページ → 小見出し・説明1行・「写真が入る高さ」の6行の表で章が終わるとき、表は1ページに入り、次の章はすぐ次のページ（空のページができない）。改ページの後の小見出しは、ページのいちばん上（上の余白 25mm）から',
+    at.sub === at.last && at.next === at.sub + 1 && Math.abs(top - 25) <= 0.5,
+    JSON.stringify({ ...at, topMm: top }),
+  )
+  await context.close()
 }
 
 /** 見本の素材表に足す「特徴」の列（mockups/v42 と同じ字） */

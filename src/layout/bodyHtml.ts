@@ -204,8 +204,21 @@ function captionHtml(kind: '図' | '表', number: number, name: string, blockId:
   return labeledHtml(full.slice(0, full.length - name.length), name, blockId, `（${kind}のタイトルを入力）`)
 }
 
+/**
+ * 章の中身の最後の表・図のまとまりに、印の class（chapter-last）を付ける。下の余白をなくす（reportCss.ts）。
+ * 次の章は、いつも新しいページから始まるので、下の余白は要らない。余白があると、ページの下の端の近くで終わる表・図のあとで、
+ * 章の終わりの目印（.flow-end）が余白の分だけ入りきらずに次のページへ送られ、何もない空のページができていた
+ * （映画・舞台衣装デザイナーコースの、1ページを使う素材表のひな形 2026-10-22）
+ */
+function lastBlockHtml(html: string): string {
+  return html.replace(/^<div class="(data-table|figure-group)/, '<div class="$1 chapter-last')
+}
+
 function renderChapter(chapter: Chapter, index: number, numbers: Map<string, number>, tableIds: Set<string>, options: BodyRenderOptions): string {
   let subIndex = 0
+  // 章の中身の最後のブロック（後ろの改ページは数えない）
+  let last = chapter.blocks.length - 1
+  while (last >= 0 && chapter.blocks[last].type === 'pageBreak') last--
   const blocks = chapter.blocks
     .map((block, i) =>
       block.type === 'subheading'
@@ -214,7 +227,9 @@ function renderChapter(chapter: Chapter, index: number, numbers: Map<string, num
           // 前は改ページが2つ重なって、何も書けない空のページができていた（先生の試し 2026-10-21）
           block.type === 'pageBreak' && i === chapter.blocks.length - 1
           ? `<div class="page-break end" data-block-id="${escapeHtml(block.id)}"></div>`
-          : renderBlock(block, numbers, tableIds, options),
+          : i === last
+            ? lastBlockHtml(renderBlock(block, numbers, tableIds, options))
+            : renderBlock(block, numbers, tableIds, options),
     )
     .join('\n')
   // 章の終わりの目印（高さなし）：組版エンジンは、次のページへ切り替わる直前（次の章の前・本文の終わり）の要素が入りきらないとき、

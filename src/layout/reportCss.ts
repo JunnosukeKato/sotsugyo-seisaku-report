@@ -85,6 +85,11 @@ h1.chapter + h2.subheading {
   margin-top: 0;
 }
 
+/* 学生が入れた改ページのすぐ後の小見出しも、ページのいちばん上から始める（Word のひな形と同じ。改ページの後は、上の余白がそのまま残るため） */
+.page-break + h2.subheading {
+  margin-top: 0;
+}
+
 /* 章の終わりの目印（bodyHtml.ts）。高さを持たない */
 .flow-end {
   height: 0;
@@ -158,6 +163,12 @@ figcaption,
 
 .data-table {
   margin: 0 0 ${LINE_PITCH_PT}pt;
+}
+
+/* 章の中身の最後の表・図のまとまり（bodyHtml.ts の lastBlockHtml）：下の余白をなくす（次の章は新しいページから始まる。余白のせいで、章の終わりの目印だけが次のページへ送られ、空のページができないように） */
+.data-table.chapter-last,
+.figure-group.chapter-last {
+  margin-bottom: 0;
 }
 
 /* 表のタイトルは表の上。表と別のページに分かれないようにする */
