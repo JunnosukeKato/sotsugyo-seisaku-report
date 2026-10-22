@@ -18,7 +18,7 @@ export { WordImportError } from './wordPackage'
  * - 写すもの：見出し・段落・図（写真とタイトル）・表、表紙の学籍番号・氏名・サブタイトル
  * - Word の見た目（文字の大きさ・位置・太字・改ページなど）は写さず、ツールの決まった形で組む
  * - Word でまだ書いていない章（「〇〇〇〇」「～～～」のままの章）は写さず、ツールのコースのひな形の章で続ける
- *   （Word で書いた章のあとに、ひな形のうち、書いた章と同じ名前でない章を続ける）
+ *   （Word で書いた章と、ひな形の章を、ひな形の順に1つの並びにする：chapterOrder）
  * - 読み取りは学生のブラウザの中だけで行う（どこにも送らない）
  *
  * 読めないファイル（.doc・Word でないもの・壊れたもの）は WordImportError（message は学生に分かる言葉）。
@@ -718,6 +718,62 @@ function checkBodyFile(blocks: WordBlock[], events: Event[], fileName: string) {
     throw new WordImportError(`${label}は、表紙のファイルのようです。本文は 04_本文.docx を選んでください。`)
 }
 
+/** 読み込んだあとの本文の並びの1つ：Word で書いた章（word：書いた章の番目）か、ツールのひな形の章（template：ひな形の章の番目） */
+export type ChapterSlot = { word: number } | { template: number }
+
+/**
+ * Word で書いた章と、ツールのコースのひな形の章を、1つの並びにする
+ * （依頼者の要望 2026-10-22：Word から移るときに、章が重なったり、順番が入れ替わったりしないように）。
+ * - 同じ名前の章は、組にする（Word の章を使い、ひな形の章は入れない）
+ * - 名前が違っても、Word の中で同じ番目（Ⅱ なら2番目）にあるひな形の章が、まだどの章とも組になっていなければ、組にする
+ *   （先生がひな形の章の名前を変えた・学生が Word で章の名前を変えた。どちらも同じ章として扱う）
+ * - 並びは、ひな形の順（Ⅰ・Ⅲ だけ書いて Ⅱ が空なら、ひな形の Ⅱ は Ⅰ と Ⅲ の間に入る）。
+ *   どれとも組にならなかった Word の章は、Word で前にあった章のすぐ後ろに入れる
+ * word：Word で書いた章の名前と、Word の中の番目（大見出しの順。書いていない章も数える。大見出しより前の部分は -1）。
+ * renamed：名前が違うまま組にした章（読み込む前の確認の窓で知らせる）
+ */
+export function chapterOrder(word: { title: string; position: number }[], template: string[]): { slots: ChapterSlot[]; renamed: { word: number; template: number }[] } {
+  /** Word の章の番目 → 組にしたひな形の章の番目 */
+  const pairs = new Map<number, number>()
+  const taken = new Set<number>()
+  word.forEach((w, i) => {
+    const j = template.findIndex((t, k) => !taken.has(k) && comparable(t) === comparable(w.title))
+    if (j < 0) return
+    pairs.set(i, j)
+    taken.add(j)
+  })
+  const renamed: { word: number; template: number }[] = []
+  word.forEach((w, i) => {
+    const j = w.position
+    if (pairs.has(i) || j < 0 || j >= template.length || taken.has(j)) return
+    pairs.set(i, j)
+    taken.add(j)
+    renamed.push({ word: i, template: j })
+  })
+  const slots: ChapterSlot[] = []
+  const placed = new Set<number>()
+  /** 組にならなかった Word の章のうち、end 番目より前のものを、Word の順に入れる */
+  const placeLoose = (end: number) => {
+    for (let i = 0; i < end; i++) {
+      if (placed.has(i) || pairs.has(i)) continue
+      slots.push({ word: i })
+      placed.add(i)
+    }
+  }
+  template.forEach((_, j) => {
+    const i = [...pairs].find(([, t]) => t === j)?.[0]
+    if (i === undefined) {
+      slots.push({ template: j })
+      return
+    }
+    placeLoose(i)
+    slots.push({ word: i })
+    placed.add(i)
+  })
+  placeLoose(word.length)
+  return { slots, renamed }
+}
+
 /**
  * 学生が選んだ Word（本文は必ず、表紙は書いていれば）を読み取り、ツールの原稿の形にする。
  * 読めないファイルは WordImportError（message は学生に分かる言葉）。
@@ -751,7 +807,11 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
   const isPlaceholderTitle = (t: string | null) => t !== null && isPlaceholderOnly(t)
   let skippedPlaceholders = 0
   const kept: DraftChapter[] = []
+  /** 写す章の、Word の中の番目（大見出しの順。書いていない章も数える。大見出しより前の部分は -1。ひな形の章と組にするため：chapterOrder） */
+  const keptPositions: number[] = []
+  let titled = 0
   for (const chapter of drafts) {
+    const position = chapter.title === null ? -1 : titled++
     const titleWritten = chapter.title !== null && chapter.title.trim() !== '' && !isPlaceholderTitle(chapter.title) && !templateChapters.has(comparable(chapter.title))
     const written = chapter.sections.map((s) => sectionWritten(s, states, templateSubheadings))
     const placeholderLines = chapter.sections.reduce((n, s) => n + s.skipped + (isPlaceholderTitle(s.sub) ? 1 : 0), isPlaceholderTitle(chapter.title) ? 1 : 0)
@@ -764,6 +824,7 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
     // 写す見出し（仮の名前のままでも、下に書いたものがある見出し）は、写さなかった行に数えない
     skippedPlaceholders += placeholderLines - (isPlaceholderTitle(chapter.title) ? 1 : 0) - sections.filter((s) => isPlaceholderTitle(s.sub)).length
     kept.push({ ...chapter, sections })
+    keptPositions.push(position)
   }
 
   // 使う画像を、ツールの画像にする（大きすぎるものは縮める）
@@ -901,10 +962,23 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
     if (blocks.length === 0) blocks.push(emptyParagraph())
     body.push({ id: newId('c'), title: draft.title ?? '', blocks })
   })
-  // Word で書いた章のあとに、ひな形のうち、書いた章と同じ名前でない章を続ける
-  const writtenTitles = new Set(body.map((c) => comparable(c.title)))
-  const continued = template.filter((c) => !writtenTitles.has(comparable(c.title)))
-  body.push(...continued)
+  // Word で書いた章と、ひな形の章を、ひな形の順に1つの並びにする（同じ章が2つにならず、書いていない章も元の位置に入る：chapterOrder）
+  const wordChapters = [...body]
+  const { slots, renamed } = chapterOrder(
+    wordChapters.map((c, ci) => ({ title: c.title, position: keptPositions[ci] })),
+    template.map((c) => c.title),
+  )
+  // 名前を入れていない（「〇〇〇〇」のまま・空の）大見出しは、組にしたひな形の章の名前にする
+  const namedFromTemplate = new Map<number, string>()
+  for (const r of renamed) {
+    const chapter = wordChapters[r.word]
+    if (chapter.title.trim() && !isPlaceholderOnly(chapter.title)) continue
+    namedFromTemplate.set(r.word, chapter.title)
+    chapter.title = template[r.template].title
+  }
+  body.splice(0, body.length, ...slots.map((s) => ('word' in s ? wordChapters[s.word] : template[s.template])))
+  /** Word で書いた章（kept の番目）が、読み込んだあとの並びの何番目か（見出しの番号 Ⅰ．Ⅱ．…を、読み込んだあとの並びで出す） */
+  const placeOf = new Map(slots.flatMap((s, k) => ('word' in s ? [[s.word, k] as const] : [])))
 
   // 本文の「（図1）」「（表1）」を、Word のタイトルの番号のとおりに、図・表へのつながりにする
   // （reportOps.setText と同じ変換。番号の合わないものは文字のまま残り、ツールのセルフチェックが知らせる）
@@ -931,9 +1005,11 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
 
   // 確認の窓に出すもの
   const label = (kind: '図' | '表', id: string) => `${kind}${tool.numbers.get(id) ?? '?'}`
+  /** 書いた章の見出し（読み込んだあとの番号で） */
+  const chapterHead = (ci: number) => `${chapterLabel(placeOf.get(ci) ?? ci)}${wordChapters[ci]?.title || '（名前のない大見出し）'}`
   const where = (ci: number, si: number): string => {
     const chapter = kept[ci]
-    const head = `${chapterLabel(ci)}${chapter.title || '（名前のない大見出し）'}`
+    const head = chapterHead(ci)
     const subs = chapter.sections.slice(0, si + 1).filter((s) => s.sub !== null)
     const sub = chapter.sections[si].sub
     return sub === null ? head : `${head}　${subheadingLabel(subs.length - 1)}${sub}`
@@ -944,7 +1020,7 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
   const addProblem = (ci: number, si: number, problem: Omit<ImportProblem, 'where'>) => {
     const item = { ...problem, where: where(ci, si) }
     problems.push(item)
-    problemOrder.set(item, ci * 10000 + si)
+    problemOrder.set(item, (placeOf.get(ci) ?? ci) * 10000 + si)
     sectionProblems.add(`${ci}:${si}`)
   }
 
@@ -996,6 +1072,21 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
       if (section.notes > 0) addProblem(ci, si, { message: '脚注は写していません', detail: 'ツールには脚注がありません。引用・参考文献は「引用・参考文献」に入れてください。' })
     }),
   )
+  // 名前が違うまま、ひな形の章と組にした章（その章は、ひな形の説明・図や表の枠が入らないことを知らせる）。名前のない大見出しには、ひな形の名前を入れたことを知らせる
+  for (const r of renamed) {
+    const name = template[r.template].title
+    const was = namedFromTemplate.get(r.word)
+    const item: ImportProblem =
+      was !== undefined
+        ? { where: chapterHead(r.word), message: `大見出しの名前を、ひな形の「${name}」にしました`, detail: `Word の大見出しは「${was || '（名前なし）'}」のままでした。ほかの名前にするときは、読み込んだあとツールで直してください。` }
+        : {
+            where: chapterHead(r.word),
+            message: `ひな形の「${name}」の章の代わりに、Word の「${wordChapters[r.word].title}」の章を入れます`,
+            detail: '章の名前がツールのひな形と違うため、同じ番目の章として入れます（その章の、ひな形の説明や図・表の枠は入りません）。',
+          }
+    problems.push(item)
+    problemOrder.set(item, (placeOf.get(r.word) ?? r.word) * 10000 - 1)
+  }
   if (kept.length === 0)
     problems.push({
       message: 'Word に書いた本文が見つかりませんでした',
@@ -1007,12 +1098,17 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
   problems.sort((a, b) => (problemOrder.get(a) ?? 1e9) - (problemOrder.get(b) ?? 1e9))
 
   const outline: OutlineItem[] = []
-  kept.forEach((chapter, ci) => {
+  for (const slot of slots) {
+    if ('template' in slot) {
+      outline.push({ level: 1, title: template[slot.template].title, paragraphs: 0, figures: [], tables: [], fromTemplate: true })
+      continue
+    }
+    const ci = slot.word
     // 章の最初の部分（小見出しより前）は、大見出しの行に数える
-    chapter.sections.forEach((section, si) => {
+    kept[ci].sections.forEach((section, si) => {
       const item: OutlineItem = {
         level: section.sub === null ? 1 : 2,
-        title: section.sub ?? chapter.title ?? '',
+        title: section.sub ?? wordChapters[ci].title,
         paragraphs: sectionStats[ci][si].paragraphs,
         figures: figureMetas.filter((f) => f.chapter === ci && f.section === si).map((f) => label('図', f.id)),
         tables: tableMetas.filter((t) => t.chapter === ci && t.section === si).map((t) => label('表', t.id)),
@@ -1020,8 +1116,7 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
       if (sectionProblems.has(`${ci}:${si}`)) item.problem = true
       outline.push(item)
     })
-  })
-  for (const chapter of continued) outline.push({ level: 1, title: chapter.title, paragraphs: 0, figures: [], tables: [], fromTemplate: true })
+  }
 
   const figures: FigurePreview[] = figureMetas.map((f) => ({ label: label('図', f.id), caption: f.caption, imageId: f.imageId }))
   const tables: TablePreview[] = tableMetas.map((t) => ({ label: label('表', t.id), caption: t.caption, rows: t.rows }))

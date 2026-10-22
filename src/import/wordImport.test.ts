@@ -9,7 +9,7 @@ import type { Chapter, FigureRowBlock, ParagraphBlock, TableBlock } from '../mod
 import type { WordImportResult } from './types'
 import { isPlaceholderOnly, isWriting, parseCaptionLine } from './wordImport'
 import { headingFromText } from '../model/headingText'
-import { applyWordImport, lostByImport, readWordFiles, subtitleFromWord, WordImportError } from './wordImport'
+import { applyWordImport, chapterOrder, lostByImport, readWordFiles, subtitleFromWord, WordImportError } from './wordImport'
 import { imageInfo, prepareImage } from './wordImages'
 
 // 単体テストはブラウザの外で動くので、XML を読む道具（ブラウザの DOMParser）の代わりを置く
@@ -543,14 +543,15 @@ describe.each(CONFIGS)('仮の文字だけの章（%s）', (_, ctx) => {
       undefined,
       ctx,
     )
-    // Ⅲ「考察」は、ひな形にない名前の章なので、書いた章として写す（中の仮の小見出しは写さない）
-    expect(result.body.map((c) => c.title)).toEqual(['考察', '企画・立案', '制作過程', 'まとめ'])
+    // Ⅲ「考察」は、ひな形にない名前の章なので、書いた章として写す（中の仮の小見出しは写さない）。
+    // 同じ3番目のひな形の章（まとめ）の代わりに入れる（前は、いちばん前に入り、まとめも残って章が4つになっていた）
+    expect(result.body.map((c) => c.title)).toEqual(['企画・立案', '制作過程', '考察'])
     expect(result.outline.map((o) => [o.title, !!o.fromTemplate])).toEqual([
-      ['考察', false],
       ['企画・立案', true],
       ['制作過程', true],
-      ['まとめ', true],
+      ['考察', false],
     ])
+    expect(result.problems.map((x) => [x.where, x.message])).toContainEqual(['Ⅲ．考察', 'ひな形の「まとめ」の章の代わりに、Word の「考察」の章を入れます'])
     // 「～～～（図1）。」「ⅰ．〇〇〇〇」「～～～」（Ⅱ）、「ⅰ．〇〇〇〇」「～～～」（Ⅲ）
     expect(result.skippedPlaceholders).toBe(5)
     expect(result.counts).toEqual({ chapters: 1, subheadings: 0, paragraphs: 0, figures: 0, tables: 0 })
@@ -561,6 +562,91 @@ describe.each(CONFIGS)('仮の文字だけの章（%s）', (_, ctx) => {
     expect(result.body.map((c) => c.title)).toEqual(['企画・立案', '制作過程', 'まとめ'])
     expect(result.outline.every((o) => o.fromTemplate)).toBe(true)
     expect(result.problems.map((x) => x.message)).toEqual(['Word に書いた本文が見つかりませんでした'])
+  })
+})
+
+describe('章の並び（Word で書いた章と、ツールのひな形の章）', () => {
+  it('同じ名前・同じ番目で組にし、ひな形の順に並べる。組にならない Word の章は、前の章のすぐ後ろ', () => {
+    const template = ['企画・立案', '制作過程', 'まとめ']
+    const order = (word: [string, number][]) => {
+      const { slots, renamed } = chapterOrder(
+        word.map(([title, position]) => ({ title, position })),
+        template,
+      )
+      return { slots: slots.map((s) => ('word' in s ? word[s.word][0] : `(${template[s.template]})`)), renamed: renamed.map((r) => `${word[r.word][0]}→${template[r.template]}`) }
+    }
+    // Ⅱ を書いていなければ、ひな形の Ⅱ は Ⅰ と Ⅲ の間に（前は、いちばん後ろに回っていた）
+    expect(order([['企画・立案', 0], ['まとめ', 2]])).toEqual({ slots: ['企画・立案', '(制作過程)', 'まとめ'], renamed: [] })
+    // 名前を変えた章は、同じ番目のひな形の章の代わりに
+    expect(order([['企画・立案', 0], ['衣装の制作', 1]])).toEqual({ slots: ['企画・立案', '衣装の制作', '(まとめ)'], renamed: ['衣装の制作→制作過程'] })
+    // 学生が足した章は、組にならず、前の章のすぐ後ろ
+    expect(order([['企画・立案', 0], ['制作過程', 1], ['考察', 2], ['まとめ', 3]])).toEqual({ slots: ['企画・立案', '制作過程', '考察', 'まとめ'], renamed: [] })
+    // 大見出しより前の部分（-1）は、いちばん前
+    expect(order([['', -1], ['企画・立案', 0]])).toEqual({ slots: ['', '企画・立案', '(制作過程)', '(まとめ)'], renamed: [] })
+    // 何も書いていなければ、ひな形のまま
+    expect(order([])).toEqual({ slots: ['(企画・立案)', '(制作過程)', '(まとめ)'], renamed: [] })
+  })
+
+  it('Ⅰ・Ⅲ だけ書いたとき、ひな形の Ⅱ を間に入れ、確認の窓の場所も読み込んだあとの番号で出す', async () => {
+    const result = await read(
+      makeDocx({
+        body: [
+          p('Ⅰ．企画・立案'),
+          p('　筆者が担当したのは、主人公のシンドバッドである。'),
+          p('Ⅱ．制作過程'),
+          p(LONG_TILDE),
+          p('Ⅲ．まとめ'),
+          p('　本制作では、舞台の上での見え方を考えた。'),
+          // タイトルのない表（確認の窓に「表1のタイトルが見つかりませんでした」が出る。その場所の番号を確かめる）
+          table([
+            ['名称', '使用箇所'],
+            ['綿ブロード', '上着'],
+          ]),
+        ].join(''),
+      }),
+    )
+    expect(result.body.map((c) => c.title)).toEqual(['企画・立案', '制作過程', 'まとめ'])
+    expect(result.outline.filter((o) => o.level === 1).map((o) => [o.title, !!o.fromTemplate])).toEqual([
+      ['企画・立案', false],
+      ['制作過程', true],
+      ['まとめ', false],
+    ])
+    expect(result.problems.map((x) => [x.where, x.message])).toContainEqual(['Ⅲ．まとめ', '表1のタイトルが見つかりませんでした'])
+  })
+
+  it('先生がひな形の章の名前を変えていても、同じ番目の章として入れ、章が2つにならない（そのことを知らせる）', async () => {
+    const config: YearConfig = {
+      ...currentConfig,
+      courses: currentConfig.courses.map((c) =>
+        c.id === COURSE
+          ? {
+              ...c,
+              template: [
+                { type: 'chapter', title: '企画・立案' },
+                { type: 'paragraph', hint: '企画を書く' },
+                { type: 'chapter', title: '制作の流れ' },
+                { type: 'paragraph', hint: '流れを書く' },
+                { type: 'chapter', title: 'まとめ' },
+                { type: 'paragraph', hint: 'まとめを書く' },
+              ],
+            }
+          : c,
+      ),
+    }
+    const result = await read(
+      makeDocx({ body: [p('Ⅰ．企画・立案'), p('　筆者が担当したのは、主人公である。'), p('Ⅱ．制作過程'), p('　仮縫いを2回行った。'), p('Ⅲ．まとめ'), p(LONG_TILDE)].join('') }),
+      undefined,
+      { config, courseId: COURSE },
+    )
+    expect(result.body.map((c) => c.title)).toEqual(['企画・立案', '制作過程', 'まとめ'])
+    expect(result.problems.map((x) => [x.where, x.message])).toContainEqual(['Ⅱ．制作過程', 'ひな形の「制作の流れ」の章の代わりに、Word の「制作過程」の章を入れます'])
+  })
+
+  it('名前を入れていない大見出し（〇〇〇〇）の下に書いていれば、同じ番目のひな形の章の名前にする', async () => {
+    const result = await read(makeDocx({ body: [p('Ⅰ．企画・立案'), p('　筆者が担当したのは、主人公である。'), p('Ⅱ．〇〇〇〇'), p('　仮縫いを2回行った。')].join('') }))
+    expect(result.body.map((c) => c.title)).toEqual(['企画・立案', '制作過程', 'まとめ'])
+    expect(paragraphs(result.body, 1)).toEqual(['仮縫いを2回行った。'])
+    expect(result.problems.map((x) => [x.where, x.message])).toContainEqual(['Ⅱ．制作過程', '大見出しの名前を、ひな形の「制作過程」にしました'])
   })
 })
 
