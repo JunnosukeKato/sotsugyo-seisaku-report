@@ -44,6 +44,11 @@ const GUIDES = [
   { html: 'docs/手引き_先生用.html', pdf: 'docs/手引き_先生用.pdf', publish: 'public/guides/teacher-guide.pdf', pages: 1 },
   { html: 'docs/手引き_管理者用.html', pdf: 'docs/手引き_管理者用.pdf', publish: 'public/guides/admin-guide.pdf', pages: 1 },
 ]
+/**
+ * 試作の手引き（依頼者に見てもらうための版。公開しない：PDF は ../試作/ に置く）。
+ * 学生用の「くわしい版」：執筆で操作するときに困らないように、操作ごとに画面と手順を並べる（依頼者の依頼 2026-10-23）
+ */
+const DRAFTS = [{ html: 'docs/手引き_学生用_くわしい版.html', pdf: resolve('..', '試作', '手引き_学生用_くわしい版（試作）.pdf'), pages: 4 }]
 /** 本文の文字の大きさの下限（pt）。柱・ページ番号・英字の飾りの見出し（MIN_EXEMPT）は除く */
 const MIN_PT = 10.5
 const MIN_EXEMPT = '.folio, .edge, .hero-top, .kick2, .year, .shot .mk, .lh .k'
@@ -51,6 +56,8 @@ const MIN_EXEMPT = '.folio, .edge, .hero-top, .kick2, .year, .shot .mk, .lh .k'
 const MAX_CHARS = 350
 const JP = /[\u3000-\u30ff\u4e00-\u9fff\uff00-\uffef]/g
 const pdfOnly = process.argv.includes('--pdf-only')
+/** --draft：試作の手引き（DRAFTS）だけを PDF にする（ふだんの手引きは作らない） */
+const draftOnly = process.argv.includes('--draft')
 const SHOT_ONLY = (process.env.SHOTS ?? '').split(',').filter(Boolean)
 const doShot = (k) => !SHOT_ONLY.length || SHOT_ONLY.includes(k)
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
@@ -932,6 +939,265 @@ async function studentShots(browser, config, images) {
  * 管理ページ（試験版）を開く。as：teacher なら先生の画面（試験版の管理者・先生のアドレスは example.ac.jp）。
  * 管理ページは mockups/v43 案B：左の見出し（年度の設定・コース・書き方のチェック・先生の登録・変更履歴・詳細設定）と、選んだ区切り
  */
+/** 紙面（見ているページ）の欄 id の i 文字目の、画面の上の点（字の真ん中） */
+const charPoint = (page, id, i) =>
+  page.evaluate(
+    (cur, id, i) => {
+      const el = [...document.querySelectorAll(`${cur} [data-block-id="${id}"]`)].find((e) => e.getBoundingClientRect().width > 0)
+      const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT)
+      let acc = 0
+      for (let n = walker.nextNode(); n; n = walker.nextNode()) {
+        if (i < acc + n.length) {
+          const range = document.createRange()
+          range.setStart(n, i - acc)
+          range.setEnd(n, i - acc + 1)
+          const r = [...range.getClientRects()].find((x) => x.height > 0)
+          return { x: (r.left + r.right) / 2, y: (r.top + r.bottom) / 2 }
+        }
+        acc += n.length
+      }
+      throw new Error(`${id} の ${i} 文字目がありません`)
+    },
+    CUR,
+    id,
+    i,
+  )
+
+/**
+ * 学生用の手引きの「くわしい版」（試作。依頼者の依頼 2026-10-23：執筆で操作するときに困らないように）の画面。
+ * SHOTS=detail のときだけ撮る（ふだんの手引きの画像は変えない）。画像の名前は g-d-*
+ */
+async function detailShots(browser, config, images) {
+  const drive = fakeDrive(STUDENT_EMAIL)
+  const { context, page } = await openTool(browser, drive, config)
+  await ready(page)
+  await page.waitForSelector('.login-over .login-btn')
+  await page.click('.login-btn')
+  await page.waitForFunction(() => !document.querySelector('.login-over'), { timeout: 60000 })
+  await page.waitForSelector('.guide.step-course .g-opts button')
+  await clickText(page, '.guide .g-opts button', '映画・舞台衣装')
+  await page.waitForSelector('.guide.step-word .g-word-opt.no')
+  await page.evaluate(() => document.querySelector('.g-word-opt.no').click())
+  await page.waitForFunction(() => window.__editor.getSnapshot().editingId === 'basic:name', { timeout: 30000 })
+  await page.keyboard.type('文化　花子')
+  await page.evaluate(() => document.querySelector('.g-later')?.click())
+  await sleep(600)
+  await ready(page)
+  await page.evaluate(() => document.documentElement.classList.add('no-guide'))
+  await page.evaluate(prepareImages, images)
+  await page.evaluate(setupReport)
+  await sleep(800)
+  await ready(page)
+  await driveSaved(page)
+  await page.mouse.move(5, 5)
+
+  // ---- 書き始める：薄い字（ひな形の「何を書くか」）の段落 ----
+  {
+    const saved = await page.evaluate(() => {
+      window.__beforeHint = window.__editor.getSnapshot().report
+      window.__editor.update((r) => ({
+        ...r,
+        body: r.body.map((c) => {
+          const i = c.blocks.findIndex((b) => b.id === 'p3')
+          if (i < 0) return c
+          const blocks = [...c.blocks]
+          blocks.splice(i + 1, 0, { type: 'paragraph', id: 'p-hint', content: [{ type: 'text', text: '' }], hint: 'デザインのもとにした資料と、そこから取り入れたところを書く' })
+          return { ...c, blocks }
+        }),
+      }))
+      return true
+    })
+    if (!saved) throw new Error('薄い字の段落を足せませんでした')
+    await sleep(600)
+    await ready(page)
+    await goToBlock(page, 'p-hint')
+    await page.mouse.move(5, 5)
+    const prev = await page.evaluate(rectOf, `${CUR} [data-block-id="p3"]`)
+    const hint = await page.evaluate(rectOf, `${CUR} [data-block-id="p-hint"]`)
+    // 字が読めるよう、本文の左から6割ほどに絞る（行の途中で切れてよい）
+    const clip = pad(union(prev, hint), 14)
+    await capture(page, 'g-d-hint', { ...clip, w: Math.round(clip.w * 0.6) }, [{ n: 1, box: { ...hint, w: Math.round(clip.w * 0.6) - 28 }, at: 'r' }])
+    await page.evaluate(() => window.__editor.update(() => window.__beforeHint))
+    await sleep(600)
+    await ready(page)
+  }
+
+  // ---- 書いているときの左の道具（見出し・改ページ・図・表・この段落の削除） ----
+  await openBlock(page, 'p3', 999)
+  {
+    const palette = await page.evaluate(rectOf, '.palette')
+    const tool = (label) => page.evaluate(rectOf, '.palette .tb', label)
+    await capture(page, 'g-d-palette', pad(palette, 10), [
+      { n: 1, box: union(await tool('大見出し'), await tool('小見出し')), at: 'r' },
+      { n: 2, box: await tool('改ページ'), at: 'r' },
+      { n: 3, box: union(await tool('図を入れる'), await tool('表を入れる')), at: 'r' },
+      { n: 4, box: await page.evaluate(rectOf, '.palette .tb.danger'), at: 'r' },
+    ])
+  }
+
+  // ---- 表を入れる：マス目で大きさを選ぶ（素材表のひな形も） ----
+  await page.evaluate(() => [...document.querySelectorAll('.palette .tb')].find((b) => b.textContent.includes('表を入れる')).click())
+  await page.waitForSelector('.table-menu .tgrid')
+  {
+    const cells = await page.evaluate(() => [...document.querySelectorAll('.table-menu .tgrid button')].map((b) => { const r = b.getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } }))
+    // 3列×4行のあたりにマウスを重ねる（色が付く）
+    const cols = await page.evaluate(() => getComputedStyle(document.querySelector('.table-menu .tgrid')).gridTemplateColumns.split(' ').length)
+    const at = cells[3 * cols + 2] ?? cells.at(-1)
+    await page.mouse.move(at.x, at.y)
+    await sleep(400)
+    const menu = await page.evaluate(rectOf, '.table-menu')
+    const palette = await page.evaluate(rectOf, '.palette')
+    await capture(page, 'g-d-table-size', pad(union(menu, { x: palette.x, y: menu.y, w: 1, h: menu.h }), 10), [
+      { n: 1, box: await page.evaluate(rectOf, '.table-menu .tgrid'), at: 'r' },
+      { n: 2, box: await page.evaluate(rectOf, '.table-menu button', '素材表'), at: 'r', optional: true },
+    ])
+  }
+  await page.keyboard.press('Escape')
+  await page.mouse.move(5, 5)
+  await sleep(300)
+  await page.keyboard.press('Escape')
+  await sleep(400)
+  await ready(page)
+
+  // ---- 元に戻す（右下） ----
+  {
+    const bar = await page.evaluate(rectOf, '.view-bar')
+    await capture(page, 'g-d-undo', pad(bar, 8), [{ n: 1, box: await page.evaluate(rectOf, '.view-bar .undo-redo .tb', '元に戻す'), at: 't' }])
+  }
+
+  // ---- 紙面をなぞって選ぶ：コピー・切り取り・削除 ----
+  // 図をはさまない、続いた2つの段落（p4・p5）をなぞる
+  await goToBlock(page, 'p4')
+  {
+    const from = await charPoint(page, 'p4', 20)
+    const to = await charPoint(page, 'p5', 14)
+    await page.mouse.move(from.x, from.y)
+    await page.mouse.down()
+    for (let i = 1; i <= 12; i++) {
+      await page.mouse.move(from.x + ((to.x - from.x) * i) / 12, from.y + ((to.y - from.y) * i) / 12)
+      await sleep(30)
+    }
+    await page.mouse.up()
+    await page.waitForFunction(() => !!document.querySelector('.palette .sel-tools'), { timeout: 10000 })
+    await page.mouse.move(5, 5)
+    await sleep(500)
+    const tools = await page.evaluate(rectOf, '.palette .sel-tools')
+    const p4 = await page.evaluate(rectOf, `${CUR} [data-block-id="p4"]`)
+    const p5 = await page.evaluate(rectOf, `${CUR} [data-block-id="p5"]`)
+    const text = union(p4, p5)
+    const y = Math.min(tools.y, text.y) - 12
+    await capture(page, 'g-d-range', { x: tools.x - 10, y, w: text.x + text.w + 14 - (tools.x - 10), h: Math.max(tools.y + tools.h, text.y + text.h) + 12 - y }, [
+      // 1：選んだ行（なぞり始めの行から終わりの行まで）
+      { n: 1, box: { x: text.x, y: from.y - 9, w: text.w, h: to.y - from.y + 18 }, at: 'r' },
+      { n: 2, box: tools, at: 'r' },
+    ])
+    await page.mouse.click(5, 300)
+    await page.keyboard.press('Escape')
+    await sleep(400)
+  }
+
+  // ---- 図を押したときの道具（差し替え・もう1枚・小見出しの終わりへ・削除） ----
+  {
+    const img = await page.evaluate(rectFirst, `${CUR} figure[data-figure-id] img`)
+    await page.mouse.click(img.x + img.w / 2, img.y + img.h / 2)
+    await page.waitForFunction(() => window.__editor.getSnapshot().selection?.kind === 'figure', { timeout: 10000 })
+    await page.mouse.move(5, 5)
+    await sleep(500)
+    const group = await page.evaluate(rectOf, '.palette .group.ctx')
+    const tool = (label) => page.evaluate(rectOf, '.palette .group.ctx .tb', label)
+    const paper = union(img, await page.evaluate(rectFirst, `${CUR} figure[data-figure-id] figcaption`))
+    const y = Math.min(group.y, paper.y) - 12
+    await capture(page, 'g-d-figure-tools', { x: group.x - 10, y, w: paper.x + paper.w + 16 - (group.x - 10), h: Math.max(group.y + group.h, paper.y + paper.h) + 12 - y }, [
+      { n: 1, box: await tool('差し替え'), at: 'r' },
+      { n: 2, box: await tool('もう1枚'), at: 'r' },
+      { n: 3, box: await tool('小見出しの終わりへ'), at: 'r' },
+    ])
+    await page.keyboard.press('Escape')
+    await sleep(300)
+  }
+
+  // ---- 表のマスを書いているときの道具（画像を入れる・行や列を足す・表の形を整える） ----
+  {
+    const tableId = await page.evaluate(() => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.type === 'table').id)
+    await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), tableId)
+    await sleep(600)
+    await ready(page)
+    const cell = await page.evaluate((cur) => {
+      const td = [...document.querySelectorAll(`${cur} .data-table tbody td`)][0]
+      const r = td.getBoundingClientRect()
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 }
+    }, CUR)
+    await page.mouse.click(cell.x, cell.y)
+    await page.waitForFunction(() => window.__editor.getSnapshot().editingKind === 'tableCell', { timeout: 10000 })
+    await page.mouse.move(5, 5)
+    await sleep(600)
+    const group = await page.evaluate(rectOf, '.palette .group.ctx')
+    const table = await page.evaluate(rectOf, `${CUR} .data-table`)
+    const y = Math.min(group.y, table.y) - 12
+    const tool = (label) => page.evaluate(rectOf, '.palette .group.ctx .tb', label)
+    await capture(page, 'g-d-table-tools', { x: group.x - 10, y, w: table.x + table.w + 14 - (group.x - 10), h: Math.max(group.y + group.h, table.y + table.h) + 12 - y }, [
+      { n: 1, box: await tool('画像を入れる'), at: 'r' },
+      { n: 2, box: union(await tool('行を足す'), await tool('列を足す')), at: 'r' },
+      { n: 3, box: await tool('表の形'), at: 'r' },
+    ])
+    await page.keyboard.press('Escape')
+    await sleep(400)
+    await ready(page)
+  }
+
+  // ---- 作品写真：写真を押したときの道具（並べ方・写真のページを足す） ----
+  {
+    await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfArea('photos'), 'none'))
+    await sleep(600)
+    await ready(page)
+    const slot = await page.evaluate(rectFirst, `${CUR} [data-photo-slot="0"] img`)
+    await page.mouse.click(slot.x + slot.w / 2, slot.y + slot.h / 2)
+    await page.waitForFunction(() => window.__editor.getSnapshot().selection?.kind === 'photos', { timeout: 10000 })
+    await page.mouse.move(5, 5)
+    await sleep(600)
+    const palette = await page.evaluate(rectOf, '.palette')
+    const paper = await page.evaluate(rectOf, CUR)
+    const y = Math.min(palette.y, paper.y) - 10
+    await capture(page, 'g-d-photo-tools', { x: palette.x - 10, y, w: paper.x + paper.w + 12 - (palette.x - 10), h: Math.max(palette.y + palette.h, paper.y + paper.h) + 10 - y }, [
+      { n: 1, box: await page.evaluate(rectOf, '.palette .ctx-label', '並べ方'), at: 'r', optional: true },
+      { n: 2, box: await page.evaluate(rectOf, '.palette .tb', '写真のページを足す'), at: 'r', optional: true },
+    ])
+    await page.keyboard.press('Escape')
+    await sleep(300)
+  }
+
+  // ---- スマホ：書いているときの「追加」（大見出し・小見出し・改ページ） ----
+  {
+    const phone = await openTool(browser, drive, config, { phone: true })
+    const pp = phone.page
+    await ready(pp, true)
+    await pp.waitForSelector('.login-btn')
+    await pp.tap('.login-btn')
+    await pp.waitForFunction(() => !document.querySelector('.login-over'), { timeout: 90000 })
+    await ready(pp, true)
+    await pp.evaluate(() => document.documentElement.classList.add('no-guide'))
+    await pp.evaluate(prepareImages, images)
+    await pp.evaluate(() => window.__editor.update((r) => ({ ...r })))
+    await sleep(800)
+    await ready(pp, true)
+    await pp.evaluate(() => localStorage.setItem('sotsugyo-seisaku-report-pinch-tip', 'done'))
+    await goToBlock(pp, 'p3', true)
+    await tapChar(pp, 'p3', 14)
+    await pp.waitForFunction(() => window.__editor.getSnapshot().editingId === 'p3' && window.__editor.getSnapshot().zoomed, { timeout: 30000 })
+    await sleep(900)
+    await fakeKeyboard(pp, true)
+    await sleep(500)
+    await pp.tap('.direct-bar button[aria-expanded]')
+    await sleep(700)
+    await capture(pp, 'g-d-phone-add', { x: 0, y: 0, w: PHONE.width, h: PHONE.height }, [
+      { n: 1, box: await pp.evaluate(rectOf, '.direct-bar .db-add'), at: 't' },
+    ])
+    await fakeKeyboard(pp, false)
+    await phone.context.close()
+  }
+  await context.close()
+}
+
 async function openAdmin(browser, { as, viewport = PC } = {}) {
   const context = await browser.createBrowserContext()
   const page = await context.newPage()
@@ -1244,8 +1510,10 @@ async function makePdf(browser, guide) {
     process.exitCode = 1
     return false
   }
-  copyFileSync(guide.pdf, guide.publish)
-  console.log(`  ${guide.publish} に写しました`)
+  if (guide.publish) {
+    copyFileSync(guide.pdf, guide.publish)
+    console.log(`  ${guide.publish} に写しました`)
+  }
   return true
 }
 
@@ -1256,7 +1524,8 @@ async function makeQr() {
   console.log(`  ${IMG}/qr-guide.svg  (${TOOL_URL})`)
 }
 
-for (const g of GUIDES) if (!existsSync(g.html)) throw new Error(`${g.html} がありません`)
+const TARGETS = draftOnly ? DRAFTS : GUIDES
+for (const g of TARGETS) if (!existsSync(g.html)) throw new Error(`${g.html} がありません`)
 
 // Edge は1回だけ起動する（続けて起動し直すと、閉じかけの Edge に接続しようとして失敗することがあるため）
 await withEdge(async (browser) => {
@@ -1265,10 +1534,12 @@ await withEdge(async (browser) => {
     const config = JSON.parse(readFileSync('scripts/e2e/config-fixture.json', 'utf8'))
     // 試験用の設定の「（自動テスト用）」のお知らせは写さない
     for (const c of config.courses) delete c.notice
-    if (doShot('student')) await studentShots(browser, config, loadSampleImages())
-    if (doShot('admin')) await adminShots(browser)
+    if (doShot('student') && !draftOnly) await studentShots(browser, config, loadSampleImages())
+    if (doShot('admin') && !draftOnly) await adminShots(browser)
+    // 試作の「くわしい版」の画面は、SHOTS=detail のときだけ撮る
+    if (SHOT_ONLY.includes('detail')) await detailShots(browser, config, loadSampleImages())
     await makeQr()
   }
   console.log('PDF にします')
-  for (const g of GUIDES) await makePdf(browser, g)
+  for (const g of TARGETS) await makePdf(browser, g)
 })
