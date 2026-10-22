@@ -41,7 +41,7 @@ export interface HelpTopic {
   action?: { kind: 'tour' | 'references'; label: string }
 }
 
-/** 学生用（17項目） */
+/** 学生用（18項目） */
 export const STUDENT_TOPICS: HelpTopic[] = [
   // ---------------- はじめる ----------------
   {
@@ -56,6 +56,22 @@ export const STUDENT_TOPICS: HelpTopic[] = [
     shot: { file: 'login.jpg', caption: 'ログインの窓' },
     videos: [1],
     words: 'はじめて 開けない アカウント サインイン',
+  },
+  {
+    id: 'home',
+    group: 'はじめる',
+    title: 'スマホのホーム画面に追加する',
+    lead: 'ホーム画面にアイコンを置くと、次からはそれを押すだけで開けます。Safari・Chrome でツールを開いてから追加します。',
+    devices: [
+      { id: 'iphone', label: 'iPhone', lines: ['共有のボタン（四角に上向きの矢印）を押す', '「ホーム画面に追加」を押す', '「Web アプリとして開く」はオフにして、「追加」'] },
+      { id: 'android', label: 'Android', lines: ['右上の「⋮」を押す', '「ホーム画面に追加」を押す', '「追加」を押す。「ショートカットを作成」と出たら、そちらを選ぶ'] },
+    ],
+    items: [
+      { h: '共有のボタンがないとき（iPhone）', t: '画面の下の「…」を押すと出てきます。' },
+      { h: '書いた原稿は？', t: 'アイコンから開いても、いつものブラウザで開くので、続きから書けます。' },
+      { h: '追加のメニューがないとき', t: 'LINE・Instagram などのアプリの中では追加できません。Safari・Chrome で開き直します。' },
+    ],
+    words: 'ホーム画面 アイコン ショートカット 追加 ブックマーク すぐ開く アプリ インストール',
   },
   {
     id: 'relogin',

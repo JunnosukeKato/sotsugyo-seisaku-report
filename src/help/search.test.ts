@@ -59,9 +59,10 @@ describe('言葉で探す：項目を探す', () => {
   })
 
   it('端末ごとの手順の行も探し、端末の名前を小見出しにする', () => {
-    const hit = searchTopics(STUDENT_TOPICS, '共有のボタン').hits[0]
-    expect(hit.topic.id).toBe('pdf')
-    expect(hit.line.label).toBe('iPhone')
+    // PDF の出し方と、スマホのホーム画面に追加する、のどちらも iPhone の行で見つかる
+    const hits = searchTopics(STUDENT_TOPICS, '共有のボタン').hits
+    expect(hits.find((h) => h.topic.id === 'pdf')?.line?.label).toBe('iPhone')
+    expect(hits.find((h) => h.topic.id === 'home')?.line?.label).toBe('iPhone')
   })
 
   it('学生が探した言葉（引用・参考文献・最初から・作り直す・新しく）で、引用・参考文献と、最初から作り直す項目が先に出る', () => {
@@ -133,8 +134,8 @@ describe('言葉で探す：印を付ける', () => {
 describe('使い方の項目', () => {
   const all = [...STUDENT_TOPICS, ...TEACHER_TOPICS]
 
-  it('学生用は17項目、先生用は12項目。id は重ならない', () => {
-    expect(STUDENT_TOPICS).toHaveLength(17)
+  it('学生用は18項目、先生用は12項目。id は重ならない', () => {
+    expect(STUDENT_TOPICS).toHaveLength(18)
     expect(TEACHER_TOPICS).toHaveLength(12)
     expect(new Set(all.map((t) => t.id)).size).toBe(all.length)
   })
