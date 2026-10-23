@@ -1074,6 +1074,10 @@ body.resizing .page-viewport { pointer-events: none; }
 /* スマホ：指で押す物の大きさ（残り）。選んでいる図・表の道具（「削除」など）は、幅も高さも 44px 以上。
    表の形は「表の形」のボタン1つ（押すと下から欄が出る。app/tableShape.tsx）。下から出る欄（追加・ページ一覧など）の「×」も 44px 四方 */
 .app.phone .sel-bar .tb { min-width: 44px; min-height: 44px; justify-content: center; }
+/* 名前の改行（「小見出しの／終わりへ」など）：スマホの帯でも言葉の切れ目で2行にする（道具が多いと、言葉の途中で折り返していた） */
+.app.phone .sel-bar .tb-line { display: block; line-height: 1.25; white-space: nowrap; }
+/* 図の道具（5つ）：名前は1行（「差し替え」「もう1枚」が言葉の途中で折り返していた） */
+.app.phone .sel-bar .group.ctx:has(.tb-move) :is(.tb span, .ctx-label) { white-space: nowrap; }
 /* 表の道具の名前は、前と同じく2字ずつで折り返す（「行を／足す」。幅が広がって「行を足／す」にならないように） */
 .app.phone .sel-bar .group.ctx:has(.shape-btn) .tb:not(.shape-btn) { max-width: 50px; }
 .app.phone .sel-bar .shape-btn { color: var(--accent); background: var(--accent-soft); font-weight: 700; }

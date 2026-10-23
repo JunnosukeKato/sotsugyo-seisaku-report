@@ -3487,9 +3487,9 @@ export class ReportEditor {
 
   /**
    * 選んでいる図（のまとまり）を、その小見出しのまとまりのいちばん下へ（'sectionEnd'）・最初に参照している段落のすぐ下へ（'paragraph'）動かす
-   * （依頼者の選択 2026-10-22 案A）。元に戻す1回で戻る。動かした先のページを見せ、図は選んだまま
+   * （依頼者の選択 2026-10-22 案A）。1つ上へ（'up'）・1つ下へ（'down'。2026-10-23）も。元に戻す1回で戻る。動かした先のページを見せ、図は選んだまま
    */
-  async moveFigure(figureId: string, to: 'sectionEnd' | 'paragraph'): Promise<void> {
+  async moveFigure(figureId: string, to: ops.FigureMove): Promise<void> {
     const next = ops.moveFigureRow(this.report, figureId, to)
     if (next === this.report) return
     this.update(() => next)

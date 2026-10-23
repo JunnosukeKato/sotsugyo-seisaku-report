@@ -35,6 +35,23 @@ export function headingFromText(raw: string): HeadingText | null {
   return tryLevel(1, UPPER_ROMAN, 'IVXＩＶＸ') ?? tryLevel(2, LOWER_ROMAN, 'ivxｉｖｘ')
 }
 
+/**
+ * 英字のローマ数字に区切り（．）がなく、すぐ後ろが日本語の行（「iiiスカート」「IIIまとめ」）。スマホで「ⅲ」を出せずに英字で打つ学生がいた
+ * （学生の試し：依頼者 2026-10-23）。英字の言葉（iPhone など）と分けるため、すぐ後ろが英数字のものは見出しにしない。短い行だけ。
+ * 大文字1字（「Vネック」「Iライン」「Xライン」）は服の言葉なので、見出しにしない（大文字は「IIまとめ」のように2字から）
+ */
+function romanBeforeJapanese(raw: string): HeadingText | null {
+  const t = raw.replace(/[\n\t]/g, '').trim()
+  const m = /^([ivxIVXｉｖｘＩＶＸ]{1,4})(?![\x00-\x7f！-～])(\S.*)$/u.exec(t)
+  if (!m) return null
+  const numeral = m[1].normalize('NFKC')
+  // 大文字・小文字がまざったもの（「Iv」など）は、ローマ数字とみなさない
+  if (numeral !== numeral.toUpperCase() && numeral !== numeral.toLowerCase()) return null
+  if (numeral === numeral.toUpperCase() && numeral.length < 2) return null
+  if (!ROMAN_WORD.test(numeral.toUpperCase()) || m[2].length > 30 || /[。！？]$/.test(m[2])) return null
+  return { level: numeral === numeral.toUpperCase() ? 1 : 2, title: m[2].trim() }
+}
+
 /** 段落に打った見出しの名前の長さの上限（これより長い行は、文として段落のままにする） */
 const TYPED_TITLE_MAX = 40
 
@@ -45,7 +62,7 @@ const TYPED_TITLE_MAX = 40
  * - 文ではない（「。」「！」「？」で終わらない）。名前は 40字まで
  */
 export function typedHeading(line: string): HeadingText | null {
-  const found = headingFromText(line)
+  const found = headingFromText(line) ?? romanBeforeJapanese(line)
   if (!found) return null
   const title = found.title
   if (!/[\p{L}\p{Nd}]/u.test(title) || title.length > TYPED_TITLE_MAX || /[。！？!?]$/.test(title)) return null

@@ -47,6 +47,7 @@ function Tool({
   disabled,
   title,
   onPreview,
+  className,
 }: {
   label: string
   icon: ReactNode
@@ -56,10 +57,11 @@ function Tool({
   title?: string
   /** マウスを重ねたとき、紙面に入る位置を示す */
   onPreview?: (on: boolean) => void
+  className?: string
 }) {
   return (
     <button
-      className={`tb${danger ? ' danger' : ''}`}
+      className={`tb${danger ? ' danger' : ''}${className ? ` ${className}` : ''}`}
       title={title ?? label.replace(/\n/g, '')}
       disabled={disabled}
       onMouseDown={keepFocus}
@@ -342,8 +344,12 @@ export function SelectionTools({ editor, snap, phone, template }: SelectionTools
         {/* ひな形を作る画面では、写真は選ばない（図は空の枠。写真は学生が入れる） */}
         {!template && <Tool label="差し替え" icon={Icon.replace} title="写真を差し替える" onClick={() => void editor.replaceFigureImage(figureId)} />}
         {!template && <Tool label="もう1枚" icon={Icon.beside} title="この図のすぐ後ろにもう1枚入れる（本文の参照の後ろにも「（図n）」が入ります）" onClick={() => void editor.addFigureBeside(figureId)} />}
-        {/* 図の置き場所（依頼者の選択 2026-10-22 案A）：小見出しのまとまりのいちばん下へ。そこにあれば、参照している段落の下へ戻す */}
-        {place.toSectionEnd ? (
+        {/* 1つ上へ・1つ下へ（段落・見出し・表を1つずつ越える。章の中だけ。依頼者の選択 2026-10-23） */}
+        <Tool label="上へ" className="tb-move" icon={Icon.moveUp} title="この図を、1つ上（前の段落などの上）へ動かす（図の番号は、紙面の順にそろいます）" disabled={!place.up} onClick={() => void editor.moveFigure(figureId, 'up')} />
+        <Tool label="下へ" className="tb-move" icon={Icon.moveDown} title="この図を、1つ下（次の段落などの下）へ動かす（図の番号は、紙面の順にそろいます）" disabled={!place.down} onClick={() => void editor.moveFigure(figureId, 'down')} />
+        {/* 図の置き場所（依頼者の選択 2026-10-22 案A）：小見出しのまとまりのいちばん下へ。そこにあれば、参照している段落の下へ戻す。
+            スマホの帯は、1列に入る5つ（差し替え・もう1枚・上へ・下へ・削除。依頼者の選択 2026-10-23 の見本）にするので出さない */}
+        {phone ? null : place.toSectionEnd ? (
           <Tool label={'小見出しの\n終わりへ'} icon={Icon.toSectionEnd} title="この図を、小見出しのまとまりのいちばん下へ動かす（図の番号は、紙面の順にそろいます）" onClick={() => void editor.moveFigure(figureId, 'sectionEnd')} />
         ) : place.toParagraph ? (
           <Tool label={'段落の下へ\n戻す'} icon={Icon.toParagraph} title="この図を、この図のことを書いた段落のすぐ下へ戻す" onClick={() => void editor.moveFigure(figureId, 'paragraph')} />

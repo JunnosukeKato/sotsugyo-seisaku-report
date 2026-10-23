@@ -39,6 +39,15 @@ describe('段落に打った見出しの形（typedHeading）', () => {
     for (const t of ['I think so.', 'In this report', '筆者が担当したのは、', 'いろいろ試した', 'Vネックにした']) expect(typedHeading(t), t).toBeNull()
   })
 
+  it('英字のローマ数字に「．」がなくても、すぐ後ろが日本語なら見出しにする（「iiiスカート」。学生の試し 2026-10-23）', () => {
+    expect(typedHeading('iiiスカート')).toEqual({ level: 2, title: 'スカート' })
+    expect(typedHeading('ivデザイン画')).toEqual({ level: 2, title: 'デザイン画' })
+    expect(typedHeading('ｉｉｉスカート')).toEqual({ level: 2, title: 'スカート' })
+    expect(typedHeading('IIIまとめ')).toEqual({ level: 1, title: 'まとめ' })
+    // 服の言葉・英字の言葉・文は見出しにしない
+    for (const t of ['Vネックにした', 'Iラインのスカート', 'Xライン', 'iPhoneで撮った', 'XLサイズ', 'iiスカートを縫った。', 'Ivスカート']) expect(typedHeading(t), t).toBeNull()
+  })
+
   it('前後の空白は除く', () => {
     expect(typedHeading('  Ⅲ．まとめ  ')).toEqual({ level: 1, title: 'まとめ' })
   })

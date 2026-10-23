@@ -254,12 +254,14 @@ export function split(report: Report, id: string, before: string, after: string,
     const i = chapter.blocks.findIndex((b) => b.id === id)
     const b = chapter.blocks[i]
     if (b?.type !== 'paragraph') continue
-    // 段落のすぐ下に付いている図・表：分けた後ろの部分がそれを参照していなければ、前の部分に付けたままにする
+    // 段落のすぐ下に付いている図・表：途中で分けたとき、分けた後ろの部分がそれを参照していなければ、前の部分に付けたままにする。
+    // 段落の終わりで Enter を押したとき（後ろが空）は、Word と同じく、すぐ下（図・表の上）に新しい段落を作る。
+    // 図・表の下に書くときは「＋ ここに続きを書く」（依頼者の選択 2026-10-23：学生の試しで、表の上に段落を足せなかった）
     let end = i + 1
     while (end < chapter.blocks.length && isAttachment(chapter.blocks[end])) end++
     const attached = chapter.blocks.slice(i + 1, end)
     const labels = attached.flatMap((a) => (a.type === 'figureRow' ? a.figures.map((f) => `図${num.numbers.get(f.id)}`) : [`表${num.numbers.get(a.id)}`]))
-    const keepWithBefore = attached.length > 0 && !labels.some((l) => after.includes(l))
+    const keepWithBefore = attached.length > 0 && after.length > 0 && !labels.some((l) => after.includes(l))
     const blocks = [...chapter.blocks]
     // 分けた前の段落の終わりに「。」がなければ付ける（ひな形の説明は、前の段落に残す）
     const first = paragraph(b.id, ended(before), num, b.hint)
@@ -670,7 +672,7 @@ function orderByRefs(figures: Figure[], paragraph: ParagraphBlock): Figure[] {
  * - paragraph：まとまりの図を最初に参照している段落（同じ章の中）のすぐ下。いまそこ（段落のすぐ下に続く図・表の中）にあれば null
  * 返す値は、まとまりを抜いた章の blocks に入れる位置
  */
-function figureRowTargets(chapter: Chapter, figureId: string): { from: number; sectionEnd: number | null; paragraph: number | null } | null {
+function figureRowTargets(chapter: Chapter, figureId: string): { from: number; sectionEnd: number | null; paragraph: number | null; up: number | null; down: number | null } | null {
   const from = chapter.blocks.findIndex((b) => b.type === 'figureRow' && b.figures.some((f) => f.id === figureId))
   if (from < 0) return null
   const row = chapter.blocks[from] as Extract<BodyBlock, { type: 'figureRow' }>
@@ -700,24 +702,33 @@ function figureRowTargets(chapter: Chapter, figureId: string): { from: number; s
   }
   // 図の後ろに図・表しか続かないなら、もう終わりにある（いくつかの図を終わりへ動かしたとき、前の図にも「段落の下へ戻す」を出す）
   const atEnd = rest.slice(from, end).every(isAttachment)
-  return { from, sectionEnd: atEnd ? null : end, paragraph }
+  // 「上へ」「下へ」：前・後ろの1つ（段落・見出し・図・表・改ページ）と入れ替える。章の中だけ（依頼者の選択 2026-10-23：学生の試しで、図の枠を動かせなかった）
+  const up = from > 0 ? from - 1 : null
+  const down = from < chapter.blocks.length - 1 ? from + 1 : null
+  return { from, sectionEnd: atEnd ? null : end, paragraph, up, down }
 }
 
-/** 図のまとまりを動かせるか（図を押したときの道具に「小見出しの終わりへ」「段落の下へ戻す」を出すか） */
-export function figurePlacement(report: Report, figureId: string): { toSectionEnd: boolean; toParagraph: boolean } {
+/** 図のまとまりを動かせるか（図を押したときの道具に「上へ」「下へ」「小見出しの終わりへ」「段落の下へ戻す」を出すか） */
+export function figurePlacement(report: Report, figureId: string): { toSectionEnd: boolean; toParagraph: boolean; up: boolean; down: boolean } {
   for (const chapter of report.body) {
     const t = figureRowTargets(chapter, figureId)
-    if (t) return { toSectionEnd: t.sectionEnd !== null, toParagraph: t.paragraph !== null }
+    if (t) return { toSectionEnd: t.sectionEnd !== null, toParagraph: t.paragraph !== null, up: t.up !== null, down: t.down !== null }
   }
-  return { toSectionEnd: false, toParagraph: false }
+  return { toSectionEnd: false, toParagraph: false, up: false, down: false }
 }
 
-/** 図のまとまりを、その小見出しのまとまりのいちばん下へ（to: 'sectionEnd'）・最初に参照している段落のすぐ下へ（to: 'paragraph'）動かす。動かせなければ同じ原稿 */
-export function moveFigureRow(report: Report, figureId: string, to: 'sectionEnd' | 'paragraph'): Report {
+/** 図を動かす先：小見出しのまとまりのいちばん下・最初に参照している段落のすぐ下・1つ上・1つ下 */
+export type FigureMove = 'sectionEnd' | 'paragraph' | 'up' | 'down'
+
+/**
+ * 図のまとまりを、その小見出しのまとまりのいちばん下へ（to: 'sectionEnd'）・最初に参照している段落のすぐ下へ（to: 'paragraph'）・
+ * 1つ上へ（'up'）・1つ下へ（'down'）動かす。動かせなければ同じ原稿
+ */
+export function moveFigureRow(report: Report, figureId: string, to: FigureMove): Report {
   let moved = false
   const body = report.body.map((chapter) => {
     const t = figureRowTargets(chapter, figureId)
-    const at = t && (to === 'sectionEnd' ? t.sectionEnd : t.paragraph)
+    const at = t && t[to === 'sectionEnd' ? 'sectionEnd' : to]
     if (!t || at === null) return chapter
     moved = true
     const rest = chapter.blocks.filter((_, i) => i !== t.from)
