@@ -39,16 +39,17 @@ const SAMPLE_OUT = `${IMG}/sample`
 /** 依頼者が作る見本の画像の置き場所（公開のリポジトリの外） */
 const SAMPLE_IN = resolve('..', '手引き用の画像')
 const GUIDES = [
-  // 学生用は両面1枚（表：はじめてから提出まで／裏：主な使い方。依頼者の選択 2026-10-23 案A）
+  // 学生用は両面1枚の、具体的な使い方の版（表：はじめてから提出まで・画面の地図・自動で入るもの／裏：早見表・図と表の入れ方・スマホ）。
+  // 依頼者の選択 2026-10-23：クラスルームで配る手引きは、この版にする
   { html: 'docs/手引き_学生用.html', pdf: 'docs/手引き_学生用.pdf', publish: 'public/guides/student-guide.pdf', pages: 2 },
   { html: 'docs/手引き_先生用.html', pdf: 'docs/手引き_先生用.pdf', publish: 'public/guides/teacher-guide.pdf', pages: 1 },
   { html: 'docs/手引き_管理者用.html', pdf: 'docs/手引き_管理者用.pdf', publish: 'public/guides/admin-guide.pdf', pages: 1 },
 ]
 /**
- * 試作の手引き（依頼者に見てもらうための版。公開しない：PDF は ../試作/ に置く）。
- * 学生用の「くわしい版」：執筆で操作するときに困らないように、操作ごとに画面と手順を並べる（依頼者の依頼 2026-10-23）
+ * 試作の手引き（依頼者に見てもらうための版。公開しない：PDF は ../試作/ に置く）。いまはない
+ * （学生用の具体的な版は、2026-10-23 に試作から学生用の手引きにした）
  */
-const DRAFTS = [{ html: 'docs/手引き_学生用_くわしい版.html', pdf: resolve('..', '試作', '手引き_学生用_くわしい版（試作）.pdf'), pages: 2 }]
+const DRAFTS = []
 /** 本文の文字の大きさの下限（pt）。柱・ページ番号・英字の飾りの見出し（MIN_EXEMPT）は除く */
 const MIN_PT = 10.5
 const MIN_EXEMPT = '.folio, .edge, .hero-top, .kick2, .year, .shot .mk, .lh .k'
@@ -964,8 +965,8 @@ const charPoint = (page, id, i) =>
   )
 
 /**
- * 学生用の手引きの「くわしい版」（試作。依頼者の依頼 2026-10-23：執筆で操作するときに困らないように）の画面。
- * SHOTS=detail のときだけ撮る（ふだんの手引きの画像は変えない）。画像の名前は g-d-*
+ * 学生用の手引き（具体的な使い方の版。依頼者の依頼 2026-10-23：執筆で操作するときに困らないように）の画面。
+ * 学生用の画面と一緒に撮る（SHOTS=detail なら、これだけ）。画像の名前は g-d-*
  */
 async function detailShots(browser, config, images) {
   const drive = fakeDrive(STUDENT_EMAIL)
@@ -1631,8 +1632,8 @@ await withEdge(async (browser) => {
     for (const c of config.courses) delete c.notice
     if (doShot('student') && !draftOnly) await studentShots(browser, config, loadSampleImages())
     if (doShot('admin') && !draftOnly) await adminShots(browser)
-    // 試作の「くわしい版」の画面は、SHOTS=detail のときだけ撮る
-    if (SHOT_ONLY.includes('detail')) await detailShots(browser, config, loadSampleImages())
+    // 学生用の手引きの画面（画面の地図・図と表の入れ方・スマホ）。SHOTS=detail でこれだけ撮れる
+    if ((doShot('student') && !draftOnly) || SHOT_ONLY.includes('detail')) await detailShots(browser, config, loadSampleImages())
     await makeQr()
   }
   console.log('PDF にします')
