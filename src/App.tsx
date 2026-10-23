@@ -796,7 +796,7 @@ export default function App() {
       editor.addImages(result.images)
       // courseId：確認の窓で、表紙の Word のコースを選んだ（本文は読み込む本文のまま、コースの名前を変える）
       editor.replace(applyWordImport(before, result, courseId ? { courseId, config: configRef.current } : undefined))
-      setWordTodo({ at: new Date().toISOString(), snapshotAt, figuresSeen: 0, coverSeen: false, coverChecked: false })
+      setWordTodo({ at: new Date().toISOString(), snapshotAt, figuresSeen: 0, coverSeen: false, coverChecked: false, pagesSeen: false, pagesChecked: false })
       setDialog(null)
       const next = firstEmptyCoverStep(editor.getSnapshot().report)
       setGuide(next)

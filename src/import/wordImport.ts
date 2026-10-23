@@ -181,6 +181,8 @@ type Event =
   | { k: 'notes'; count: number }
   /** 表が見つからなかった表のタイトル */
   | { k: 'lostTableCaption'; caption: Caption }
+  /** Word の改ページ（依頼者の選択 2026-10-23 案1：Word の改ページを引き継ぐ。大見出しの前・章のはじめ・最後のものは入れない） */
+  | { k: 'pageBreak' }
 
 /** セルの文字：行ごとに前後の空白を除き、空の行を除く */
 function cellText(text: string): string {
@@ -278,6 +280,15 @@ function classify(blocks: WordBlock[], known: KnownHeadings): Event[] {
   let pendingTableCaptions: Caption[] = []
   /** タイトルがまだない表（すぐ後ろにタイトルがあれば、それにする） */
   let awaiting: DraftTable | null = null
+  /**
+   * まだ入れていない改ページ。次に写す文・表・小見出しの前に入れる（図の段落の改ページは、そのあとのタイトルの枠も図にまとめてから入れる）。
+   * 大見出しの前なら入れない（ツールでは、大見出しはいつも新しいページから始まる）。最後まで残ったものも入れない
+   */
+  let pendingBreak = false
+  const flushBreak = () => {
+    if (pendingBreak) events.push({ k: 'pageBreak' })
+    pendingBreak = false
+  }
 
   const openGroup = () => (group ??= { images: [], captions: [] })
   const closeGroup = () => {
@@ -316,6 +327,7 @@ function classify(blocks: WordBlock[], known: KnownHeadings): Event[] {
         continue
       }
       closeGroup()
+      flushBreak()
       const table = draftTable(block)
       if (!table.caption) table.caption = pendingTableCaptions.pop() ?? null
       loseTableCaptions()
@@ -325,6 +337,7 @@ function classify(blocks: WordBlock[], known: KnownHeadings): Event[] {
     }
 
     const p = block
+    if (p.pageBreak === 'before') pendingBreak = true
     const line = p.text.replace(/[\n\t]/g, '').trim()
     const short = line.length <= 40 && !/[。！？]$/.test(line)
     const headingText = headingFromText(p.text) ?? (short && !p.headingLevel ? knownHeading(line, known) : null)
@@ -334,9 +347,12 @@ function classify(blocks: WordBlock[], known: KnownHeadings): Event[] {
       loseTableCaptions()
       awaiting = null
       const title = headingText?.title ?? stripHeadingNumber(p.text)
+      if (level === 1) pendingBreak = false
+      else flushBreak()
       events.push(level === 1 ? { k: 'chapter', title } : { k: 'sub', title })
       addFigures(p.images, p.boxes)
       if (p.notes) events.push({ k: 'notes', count: p.notes })
+      if (p.pageBreak === 'after') pendingBreak = true
       continue
     }
 
@@ -352,6 +368,7 @@ function classify(blocks: WordBlock[], known: KnownHeadings): Event[] {
     if (paragraphs.length > 0) {
       // 文の段落：前の図のまとまりは閉じ、この段落の図は、この段落のすぐ下に置く
       closeGroup()
+      flushBreak()
       for (const text of paragraphs) {
         if (isPlaceholderOnly(text)) events.push({ k: 'skip' })
         else events.push({ k: 'para', text, headingLike: !p.listPrefix && looksLikeHeading(text) })
@@ -361,6 +378,7 @@ function classify(blocks: WordBlock[], known: KnownHeadings): Event[] {
     addFigures(p.images, p.boxes)
     if (paragraphs.length > 0) awaiting = null
     if (p.notes) events.push({ k: 'notes', count: p.notes })
+    if (p.pageBreak === 'after') pendingBreak = true
   }
   closeGroup()
   loseTableCaptions()
@@ -374,7 +392,7 @@ interface DraftFigure {
   caption: Caption | null
 }
 
-type DraftBlock = { t: 'para'; text: string; headingLike: boolean } | { t: 'figs'; figures: DraftFigure[] } | { t: 'table'; table: DraftTable }
+type DraftBlock = { t: 'para'; text: string; headingLike: boolean } | { t: 'figs'; figures: DraftFigure[] } | { t: 'table'; table: DraftTable } | { t: 'break' }
 
 interface Section {
   /** 小見出し（章の最初の、小見出しより前の部分は null） */
@@ -474,6 +492,14 @@ function buildChapters(events: Event[]): DraftChapter[] {
       case 'lostTableCaption':
         current().lostTableCaptions.push(ev.caption)
         break
+      case 'pageBreak': {
+        // 章のはじめ（まだ何も写していない）と、続けての改ページは入れない
+        const chapter = chapters[chapters.length - 1]
+        const blocks = chapter?.sections.flatMap((s) => s.blocks) ?? []
+        const hasContent = !!chapter && (blocks.length > 0 || chapter.sections.some((s) => s.sub !== null))
+        if (hasContent && blocks.at(-1)?.t !== 'break') current().blocks.push({ t: 'break' })
+        break
+      }
     }
   }
   pairFigures(chapters, groups)
@@ -571,6 +597,7 @@ function sectionWritten(section: Section, states: Map<ImageRef, ImageState>, tem
   return section.blocks.some((b) => {
     if (b.t === 'para') return isWriting(b.text)
     if (b.t === 'figs') return b.figures.some((f) => f.image && (states.get(f.image)?.ok || f.image.kind !== 'image'))
+    if (b.t === 'break') return false
     return b.table.rows.slice(1).some((r) => r.some((c) => (c.text && !isPlaceholderOnly(c.text)) || (c.image && states.get(c.image)?.ok)))
   })
 }
@@ -946,6 +973,8 @@ export async function readWordFiles(files: WordFiles, context: { config: YearCon
             return { id, imageId: imageId ?? '', caption: f.caption?.name ?? '' }
           })
           blocks.push({ type: 'figureRow', id: newId('r'), figures })
+        } else if (b.t === 'break') {
+          blocks.push({ type: 'pageBreak', id: newId('pb') })
         } else {
           const id = newId('t')
           const rows: TableRow[] = b.table.rows.map((r) => ({

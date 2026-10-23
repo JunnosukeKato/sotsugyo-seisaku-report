@@ -675,7 +675,7 @@ export async function firstTimeV3Word(browser, check) {
     })
   const opened = await coverItem()
   await page.screenshot({ path: `${OUT}/02-todo-cover-confirm.png` })
-  await page.evaluate(() => [...document.querySelectorAll('.side .word-todo li button')].find((b) => b.textContent === '確かめた').click())
+  await page.evaluate(() => [...document.querySelectorAll('.side .word-todo li')].find((x) => x.textContent.includes('表紙を確かめる')).querySelector('button').click())
   await pause(300)
   const confirmed = await coverItem()
   check(

@@ -140,7 +140,8 @@ describe('ひな形と同じつくりの Word', () => {
     const { body } = result
     // Ⅱ（制作過程）は「〇〇〇〇」「～～～」のままなので写さず、ひな形の「制作過程」「まとめ」で続ける
     expect(body.map((c) => c.title)).toEqual(['企画・立案', '制作過程', 'まとめ'])
-    expect(kinds(body[0])).toEqual(['s:担当衣装のキャラクター', 'paragraph', 's:デザイン説明', 'paragraph', 'figureRow', 's:使用素材', 'paragraph', 'table'])
+    // 図の段落の改ページ（ひな形と同じく、使用素材の前）は、ツールの改ページにする（依頼者の選択 2026-10-23 案1）。大見出し（Ⅱ）の前の改ページは入れない
+    expect(kinds(body[0])).toEqual(['s:担当衣装のキャラクター', 'paragraph', 's:デザイン説明', 'paragraph', 'figureRow', 'pageBreak', 's:使用素材', 'paragraph', 'table'])
     // 段落の頭の空白は除く。（図1）・図2・表1 は、図・表へのつながりになる
     expect(paragraphs(body)).toEqual([
       '筆者が担当したのは、主人公のシンドバッドである。七つの海を旅する船乗りで、明るく好奇心の強い人物である。',
@@ -338,6 +339,37 @@ describe('学生の書き方の違い', () => {
     expect(paragraphs(body)).toEqual(['デザイン画を図1に示す。', 'トワルを組んだ（図2）。'])
     expect((body[0].blocks[2] as ParagraphBlock).content.some((n) => n.type === 'ref')).toBe(true)
     expect(result.problems).toEqual([])
+  })
+
+  it('Word の改ページを、ツールの改ページにする（大見出しの前・章のはじめ・続けての改ページ・最後のものは入れない）', async () => {
+    const pageBreak = '<w:r><w:br w:type="page"/></w:r>'
+    const before = '<w:pPr><w:pageBreakBefore/></w:pPr>'
+    const result = await read(
+      makeDocx({
+        media: { 'a.png': DESIGN },
+        body: [
+          p('Ⅰ．企画・立案'),
+          // 章のはじめ（まだ何も書いていない）の改ページは入れない
+          p(pageBreak),
+          p('ⅰ．担当衣装のキャラクター'),
+          p('デザイン画を示す（図1）。'),
+          // 図の段落の改ページ：次の段落のタイトルの枠まで図にまとめてから、改ページ。続けての改ページは1つ
+          p(floatingImage(rid('a.png')), pageBreak),
+          p(textBox('図1　デザイン画'), pageBreak),
+          `<w:p>${before}<w:r><w:t>ⅱ．使用素材</w:t></w:r></w:p>`,
+          p('素材をまとめる。', pageBreak, '次のページの文である。'),
+          p(pageBreak),
+          p('Ⅱ．制作過程'),
+          p('仮縫いをした。'),
+          p(pageBreak),
+        ].join(''),
+      }),
+    )
+    // 段落の途中の改ページ（前に文がある）は、段落の後ろ。その後ろの、空の段落の改ページとは続けてなので1つ。大見出し（Ⅱ）の前なので、結局入れない
+    expect(kinds(result.body[0])).toEqual(['s:担当衣装のキャラクター', 'paragraph', 'figureRow', 'pageBreak', 's:使用素材', 'paragraph'])
+    expect(figureRows(result.body)[0].figures.map((f) => f.caption)).toEqual(['デザイン画'])
+    // 大見出し（Ⅱ）の前と、最後の改ページは入れない
+    expect(kinds(result.body[1])).toEqual(['paragraph'])
   })
 
   it('2枚並びの図：位置の基準が「段」と「余白」に分かれていても、タイトルが「右寄せ」で置いてあっても、左右の位置で組にする（過去の卒業生の Word）', async () => {

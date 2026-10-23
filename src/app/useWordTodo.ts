@@ -26,6 +26,13 @@ export interface WordTodo {
   coverSeen: boolean
   /** 表紙を見て、学生が「確かめた」を押した */
   coverChecked: boolean
+  /** 「本文へ」を押した（改ページの位置を見始めた。「確かめた」を押すと pagesChecked） */
+  pagesSeen: boolean
+  /**
+   * 本文を最後まで見て、改ページの位置がよいと学生が「確かめた」を押した。
+   * 図の大きさが Word と変わるため、改ページの位置がずれることがある（依頼者 2026-10-23：読み込んだ直後に、必ず確かめて直すように出す）
+   */
+  pagesChecked: boolean
 }
 
 const TODO_KEY = scoped('sotsugyo-seisaku-report-word-todo')
@@ -34,7 +41,7 @@ function readTodo(): WordTodo | null {
   try {
     const raw = localStorage.getItem(TODO_KEY)
     const t = raw ? (JSON.parse(raw) as Partial<WordTodo>) : null
-    return t && typeof t.at === 'string' ? { at: t.at, snapshotAt: t.snapshotAt ?? null, figuresSeen: t.figuresSeen ?? 0, coverSeen: !!t.coverSeen || !!t.coverChecked, coverChecked: !!t.coverChecked } : null
+    return t && typeof t.at === 'string' ? { at: t.at, snapshotAt: t.snapshotAt ?? null, figuresSeen: t.figuresSeen ?? 0, coverSeen: !!t.coverSeen || !!t.coverChecked, coverChecked: !!t.coverChecked, pagesSeen: !!t.pagesSeen || !!t.pagesChecked, pagesChecked: !!t.pagesChecked } : null
   } catch {
     return null
   }

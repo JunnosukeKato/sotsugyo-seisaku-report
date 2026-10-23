@@ -3,7 +3,7 @@ import type { Crop } from './wordImages'
 /**
  * Word の本文（word/document.xml）を、段落と表の並びにする。見た目（文字の大きさ・位置・太字など）は読まない。
  *
- * - 段落の文字は w:t。w:tab はタブ（\t）、手で入れた改行 w:br は \n にする（改ページは読まない）
+ * - 段落の文字は w:t。w:tab はタブ（\t）、手で入れた改行 w:br は \n にする（改ページは、段落の前か後ろに入れたものとして読む：pageBreak）
  * - 図形の中の文字の枠（w:txbxContent。図のタイトルなど）は、段落の文字とは分けて読む
  * - 新旧2通りの書き方が入った図形（mc:AlternateContent）は、同じ中身が2回出るので、片方（Choice。なければ Fallback）だけ読む
  * - 削除した変更履歴（w:del）・隠し文字・ふりがな（ルビ）は読まない
@@ -48,6 +48,12 @@ export interface WordParagraph {
   listPrefix: string
   /** 脚注・文末脚注の数 */
   notes: number
+  /**
+   * 改ページ（w:br の改ページ・段落の「段落の前で改ページ」）。段落の前（before）か後ろ（after）か。
+   * 段落の途中の改ページは、前に文があれば後ろ、前が空で後ろに文があれば前とみなす（文を2つに分けない）。
+   * 図の段落の改ページ（図の後ろで改ページ）は後ろ（過去の卒業生の Word で、使用素材の前の改ページが図1の段落にあった：依頼者 2026-10-23）
+   */
+  pageBreak: 'before' | 'after' | null
 }
 
 export interface WordCell {
@@ -309,11 +315,14 @@ interface Collector {
   images: ImageRef[]
   boxes: TextBox[]
   notes: number
+  /** 最初の改ページの位置（それまでに読んだ文字の数。なければ null） */
+  breakAt: number | null
 }
 
-const emptyCollector = (): Collector => ({ text: '', images: [], boxes: [], notes: 0 })
+const emptyCollector = (): Collector => ({ text: '', images: [], boxes: [], notes: 0, breakAt: null })
 
 function merge(into: Collector, from: Collector) {
+  if (into.breakAt === null && from.breakAt !== null) into.breakAt = into.text.length + from.breakAt
   into.text += from.text
   into.images.push(...from.images)
   into.boxes.push(...from.boxes)
@@ -401,8 +410,9 @@ function readRunContent(node: Element, out: Collector, ctx: DocumentContext, hid
         if (!hidden) out.text += '\t'
         break
       case 'br': {
-        // 改ページ・段区切りは読まない（ツールの決まった形で組む）
+        // 改ページは、位置だけを覚える（段落の前か後ろの改ページにする：readParagraph）。段区切りは読まない
         const type = attr(el, 'type')
+        if (!hidden && type === 'page' && out.breakAt === null) out.breakAt = out.text.length
         if (!hidden && type !== 'page' && type !== 'column') out.text += '\n'
         break
       }
@@ -558,6 +568,11 @@ function readParagraph(p: Element, ctx: DocumentContext): WordParagraph {
     else if (label && label.label && level === null) listPrefix = label.format === 'bullet' ? '・' : `${label.label}　`
   }
   if (level !== null && level > 2) level = 2
+  // 改ページ：「段落の前で改ページ」か、段落の中の改ページ（前が空で後ろに文があれば前、ほかは後ろ）
+  const breakBefore = child(pPr, 'w', 'pageBreakBefore')
+  const val = attr(breakBefore, 'val')
+  let pageBreak: WordParagraph['pageBreak'] = breakBefore && val !== '0' && val !== 'false' ? 'before' : null
+  if (!pageBreak && out.breakAt !== null) pageBreak = !out.text.slice(0, out.breakAt).trim() && out.text.slice(out.breakAt).trim() ? 'before' : 'after'
   return {
     type: 'paragraph',
     text: out.text,
@@ -567,6 +582,7 @@ function readParagraph(p: Element, ctx: DocumentContext): WordParagraph {
     romanLevel,
     listPrefix,
     notes: out.notes,
+    pageBreak,
   }
 }
 

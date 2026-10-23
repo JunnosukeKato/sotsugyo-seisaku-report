@@ -145,9 +145,9 @@ export const STUDENT_TOPICS: HelpTopic[] = [
     group: '書く',
     title: 'Word からの移し方（今年度だけ）',
     lead: '右上の「メニュー」の「Word で書いた分を読み込む」から移します。',
-    steps: ['本文の Word（04_本文.docx）を選ぶ', '中身を確かめて「読み込む」', '「つぎにすること」の3つを確かめる'],
+    steps: ['本文の Word（04_本文.docx）を選ぶ', '中身を確かめて「読み込む」', '「つぎにすること」の4つを確かめる。図の大きさが Word と変わるため、改ページの位置は必ず見直します'],
     shot: { file: 'word.jpg', caption: 'はじめての案内の「Word で書き始めていますか？」' },
-    words: 'docx ワード 読み込み 移す ひな形',
+    words: 'docx ワード 読み込み 移す ひな形 改ページ ずれる 図の大きさ',
   },
   {
     id: 'references',

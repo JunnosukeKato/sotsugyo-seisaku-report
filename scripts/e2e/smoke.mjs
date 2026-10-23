@@ -2982,10 +2982,25 @@ async function wordImportCheck(browser) {
   await ready()
   const coverItem = () => page.evaluate(() => { const li = [...document.querySelectorAll('.side .word-todo li')].find((x) => x.textContent.includes('表紙を確かめる')); return { cls: li?.className, button: li?.querySelector('button')?.textContent ?? '' } })
   const coverOpened = await coverItem()
-  await page.evaluate(() => [...document.querySelectorAll('.side .word-todo li button')].find((b) => b.textContent === '確かめた')?.click())
+  await page.evaluate(() => [...document.querySelectorAll('.side .word-todo li')].find((x) => x.textContent.includes('表紙を確かめる')).querySelector('button')?.click())
   await pause(300)
   const coverDone = await coverItem()
   check('表紙のページを開くと「表紙を確かめる」のボタンが「確かめた」になり、押すと ✓ が付く（開いただけでは付かない）', coverOpened.cls !== 'done' && coverOpened.button === '確かめた' && coverDone.cls === 'done', JSON.stringify({ coverOpened, coverDone }))
+  // 「改ページの位置を確かめる」：図の大きさが Word と変わり改ページがずれることを知らせ、「本文へ」で本文の最初のページへ。「確かめた」で ✓（依頼者 2026-10-23）
+  const pagesItem = () => page.evaluate(() => { const li = [...document.querySelectorAll('.side .word-todo li')].find((x) => x.textContent.includes('改ページの位置を確かめる')); return { cls: li?.className, button: li?.querySelector('button')?.textContent ?? '', note: li?.querySelector('small')?.textContent ?? '' } })
+  const pagesFirst = await pagesItem()
+  await clickButton('.side .word-todo .go', '本文へ')
+  await pause(700)
+  await ready()
+  const pagesOpened = { ...(await pagesItem()), kind: await page.evaluate(() => { const s = window.__editor.getSnapshot(); return s.layout.kinds[s.page] }) }
+  await clickButton('.side .word-todo .go', '確かめた')
+  await pause(300)
+  const pagesDone = await pagesItem()
+  check(
+    '「改ページの位置を確かめる」は、改ページがずれることを知らせ、「本文へ」で本文の最初のページへ移り、「確かめた」で ✓ が付く',
+    /改ページの位置がずれることがあります。必ず全ページを見て/.test(pagesFirst.note) && pagesFirst.button === '本文へ' && pagesOpened.kind === 'body' && pagesOpened.button === '確かめた' && pagesOpened.cls !== 'done' && pagesDone.cls === 'done',
+    JSON.stringify({ pagesFirst, pagesOpened, pagesDone }),
+  )
   check('Word から読み込んだあと（案内を終えていない）は、指差し確認を出さない', !(await page.$('.tour')))
   // 閉じるまで残る（読み込み直しても）。読み込み直すと指差し確認が出るので、見たことにしておく（指差し確認は上の確かめで見る）
   await page.evaluate(() => localStorage.setItem('sotsugyo-seisaku-report-tour', 'done'))
