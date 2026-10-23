@@ -642,17 +642,65 @@ describe('図の置き場所（「小見出しの終わりへ」「段落の下�
     expect(order(ops.moveFigureRow(r0, 'f1', 'paragraph'))).toEqual(['s1', 'p1', 'r1', 'p2', 'p3', 'r2', 's2'])
   })
 
-  it('「上へ」「下へ」：前・後ろの1つと入れ替える。章のはじめ・終わりでは、それ以上動かない（依頼者の選択 2026-10-23）', () => {
+  it('「上へ」「下へ」：前・後ろの1つと入れ替える。章（小見出し）の終わりでは、それ以上動かない（依頼者の選択 2026-10-23）', () => {
     const r0 = report([{ type: 'subheading', id: 's1', title: 'a' }, p('p1', 'f1'), row('r1', 'f1', 'f2'), p('p2'), { type: 'table', id: 't1', caption: '', rows: [] } as never, p('p3')])
-    expect(ops.figurePlacement(r0, 'f2')).toMatchObject({ up: true, down: true })
-    const up = ops.moveFigureRow(r0, 'f2', 'up')
-    expect(order(up)).toEqual(['s1', 'r1', 'p1', 'p2', 't1', 'p3'])
-    expect(order(ops.moveFigureRow(up, 'f1', 'up'))).toEqual(['r1', 's1', 'p1', 'p2', 't1', 'p3'])
+    expect(ops.figurePlacement(r0, 'f2')).toMatchObject({ down: true })
     let down = r0
     for (let i = 0; i < 3; i++) down = ops.moveFigureRow(down, 'f1', 'down')
     expect(order(down)).toEqual(['s1', 'p1', 'p2', 't1', 'p3', 'r1'])
     expect(ops.figurePlacement(down, 'f1')).toMatchObject({ up: true, down: false })
     expect(ops.moveFigureRow(down, 'f1', 'down')).toBe(down)
+    const up = ops.moveFigureRow(down, 'f2', 'up')
+    expect(order(up)).toEqual(['s1', 'p1', 'p2', 't1', 'r1', 'p3'])
+  })
+
+  it('「上へ」は、本文の（図n）がある段落より上には動かない。参照が前の章・ない図は章のはじめまで、後ろの章にしかない図は動かない（2026-10-24）', () => {
+    // 同じ章に参照：その段落のすぐ下まで
+    const r0 = report([{ type: 'subheading', id: 's1', title: 'a' }, p('p1', 'f1'), p('p2'), row('r1', 'f1'), p('p3')])
+    expect(ops.figurePlacement(r0, 'f1')).toMatchObject({ up: true })
+    const r1 = ops.moveFigureRow(r0, 'f1', 'up')
+    expect(order(r1)).toEqual(['s1', 'p1', 'r1', 'p2', 'p3'])
+    expect(ops.figurePlacement(r1, 'f1')).toMatchObject({ up: false, down: true })
+    expect(ops.moveFigureRow(r1, 'f1', 'up')).toBe(r1)
+    // 2枚並びは、どちらかの図を参照している最初の段落より下
+    const two = report([p('pa', 'f2'), p('pb'), row('r2', 'f1', 'f2')])
+    expect(order(ops.moveFigureRow(two, 'f1', 'up'))).toEqual(['pa', 'r2', 'pb'])
+    // 参照が前の章：この章のはじめまで（章はまたがない）
+    const chapters = (c1: Report['body'][number]['blocks'], c2: Report['body'][number]['blocks']): Report => ({ ...demoReport(), body: [{ id: 'c1', title: '企画', blocks: c1 }, { id: 'c2', title: '制作', blocks: c2 }] })
+    const earlier = chapters([p('p1', 'f1')], [p('p2'), row('r1', 'f1')])
+    const e1 = ops.moveFigureRow(earlier, 'f1', 'up')
+    expect(e1.body.map((c) => c.blocks.map((b) => b.id))).toEqual([['p1'], ['r1', 'p2']])
+    expect(ops.figurePlacement(e1, 'f1')).toMatchObject({ up: false })
+    // 参照のない図も、章のはじめまで
+    expect(ops.figurePlacement(chapters([p('p1')], [p('p2'), row('r1', 'f1')]), 'f1')).toMatchObject({ up: true })
+    // 参照が後ろの章にしかない：上へは動かない（下へは動く）
+    const later = chapters([p('p1'), row('r1', 'f1'), p('p2')], [p('p3', 'f1')])
+    expect(ops.figurePlacement(later, 'f1')).toMatchObject({ up: false, down: true })
+  })
+
+  it('「上へ」「下へ」で、本文で出てくる順が入れ替わるようには、ほかの図を越えない（入れ替わりを直す向きには越える。2026-10-24）', () => {
+    // 本文：図A（fa）が先、図B（fb）があと。紙面も A・B の順
+    const r0 = report([p('p1', 'fa'), p('p2', 'fb'), row('ra', 'fa'), row('rb', 'fb'), p('p3')])
+    expect(ops.figurePlacement(r0, 'fa')).toMatchObject({ down: false })
+    expect(ops.figurePlacement(r0, 'fb')).toMatchObject({ up: false, down: true })
+    // 紙面が B・A の順（入れ替わっている）なら、直す向きには動く
+    const r1 = report([p('p1', 'fa'), p('p2', 'fb'), row('rb', 'fb'), row('ra', 'fa'), p('p3')])
+    expect(ops.figurePlacement(r1, 'fa')).toMatchObject({ up: true })
+    expect(order(ops.moveFigureRow(r1, 'fb', 'down'))).toEqual(['p1', 'p2', 'ra', 'rb', 'p3'])
+    // 本文に出てこない図とは、どちらの向きにも越える
+    const r2 = report([p('p1', 'fa'), row('ra', 'fa'), row('rx', 'fx'), p('p2')])
+    expect(ops.figurePlacement(r2, 'fa')).toMatchObject({ down: true })
+  })
+
+  it('「上へ」「下へ」は、小見出しの境を越えない（小見出しの中だけ。依頼者の選択 2026-10-24）', () => {
+    const r0 = report([{ type: 'subheading', id: 's1', title: 'a' }, p('p1', 'f1'), row('r1', 'f1'), p('p2'), { type: 'subheading', id: 's2', title: 'b' }, p('p3')])
+    const r1 = ops.moveFigureRow(r0, 'f1', 'down')
+    expect(order(r1)).toEqual(['s1', 'p1', 'p2', 'r1', 's2', 'p3'])
+    expect(ops.figurePlacement(r1, 'f1')).toMatchObject({ up: true, down: false })
+    expect(ops.moveFigureRow(r1, 'f1', 'down')).toBe(r1)
+    // 参照のない図も、小見出しの上へは動かない
+    const top = report([{ type: 'subheading', id: 's1', title: 'a' }, p('p1'), { type: 'subheading', id: 's2', title: 'b' }, row('r2', 'f2'), p('p2')])
+    expect(ops.figurePlacement(top, 'f2')).toMatchObject({ up: false, down: true })
   })
 
   it('終わりに、本文で後に出てくる図がすでにあれば、その前に入れる（図の番号が本文で出てくる順のまま）', () => {

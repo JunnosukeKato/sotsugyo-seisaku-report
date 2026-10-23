@@ -68,6 +68,19 @@ export function numbering(report: Pick<Report, 'body'>): Numbering {
   return { numbers, tableIds, figureByNumber, tableByNumber }
 }
 
+/**
+ * 本文で、図が最初に出てくる順（図の ID → 何番目に出てくるか。本文の段落の参照「（図n）」を、前から数える。出てこない図はない）。
+ * 図は、本文で出てくる順に並べる（依頼者の要望 2026-10-24。図を動かすとき：figureRowTargets・セルフチェック：checker/reportChecks.ts）
+ */
+export function figureMentionOrder(report: Pick<Report, 'body'>): Map<string, number> {
+  const order = new Map<string, number>()
+  for (const block of report.body.flatMap((c) => c.blocks)) {
+    if (block.type !== 'paragraph') continue
+    for (const node of block.content) if (node.type === 'ref' && !order.has(node.targetId)) order.set(node.targetId, order.size)
+  }
+  return order
+}
+
 /** 段落の中身を、編集・チェック用の文字列にする（参照は「（図1）」などになる） */
 export function contentToText(content: InlineNode[], num: Numbering): string {
   return content
@@ -676,7 +689,10 @@ function orderByRefs(figures: Figure[], paragraph: ParagraphBlock): Figure[] {
  * - paragraph：まとまりの図を最初に参照している段落（同じ章の中）のすぐ下。いまそこ（段落のすぐ下に続く図・表の中）にあれば null
  * 返す値は、まとまりを抜いた章の blocks に入れる位置
  */
-function figureRowTargets(chapter: Chapter, figureId: string): { from: number; sectionEnd: number | null; paragraph: number | null; up: number | null; down: number | null } | null {
+/**
+ * refLater：この図を参照している段落が、この章より後ろの章にしかない（「上へ」では、本文の（図n）から遠ざかるだけなので動かさない）
+ */
+function figureRowTargets(chapter: Chapter, figureId: string, refLater = false, mentions: Map<string, number> = new Map()): { from: number; sectionEnd: number | null; paragraph: number | null; up: number | null; down: number | null } | null {
   const from = chapter.blocks.findIndex((b) => b.type === 'figureRow' && b.figures.some((f) => f.id === figureId))
   if (from < 0) return null
   const row = chapter.blocks[from] as Extract<BodyBlock, { type: 'figureRow' }>
@@ -706,19 +722,43 @@ function figureRowTargets(chapter: Chapter, figureId: string): { from: number; s
   }
   // 図の後ろに図・表しか続かないなら、もう終わりにある（いくつかの図を終わりへ動かしたとき、前の図にも「段落の下へ戻す」を出す）
   const atEnd = rest.slice(from, end).every(isAttachment)
-  // 「上へ」「下へ」：前・後ろの1つ（段落・見出し・図・表・改ページ）と入れ替える。章の中だけ（依頼者の選択 2026-10-23：学生の試しで、図の枠を動かせなかった）
-  const up = from > 0 ? from - 1 : null
-  const down = from < chapter.blocks.length - 1 ? from + 1 : null
+  // 「上へ」「下へ」：前・後ろの1つ（段落・図・表・改ページ）と入れ替える（依頼者の選択 2026-10-23：学生の試しで、図の枠を動かせなかった）。
+  // 「上へ」は、本文の（図n）がある段落より上には動かさない。どちらも、小見出しの境は越えない（依頼者の要望 2026-10-24。図は、本文で出てくる所より下に置く）
+  const refHere = chapter.blocks.findIndex((b) => b.type === 'paragraph' && b.content.some((n) => n.type === 'ref' && ids.has(n.targetId)))
+  const above = chapter.blocks[from - 1]
+  const below = chapter.blocks[from + 1]
+  // ほかの図を越えるときは、本文で出てくる順が入れ替わらないときだけ（図の順番を、本文で出てくる順のままにする。依頼者の要望 2026-10-24）
+  const mentioned = (b: BodyBlock): number | null => {
+    if (b.type !== 'figureRow') return null
+    const at = b.figures.map((f) => mentions.get(f.id)).filter((n): n is number => n !== undefined)
+    return at.length ? Math.min(...at) : null
+  }
+  const self = mentioned(row)
+  const keepsOrder = (other: BodyBlock, otherFirst: boolean) => {
+    const them = mentioned(other)
+    return self === null || them === null || (otherFirst ? them < self : self < them)
+  }
+  const up = above && above.type !== 'subheading' && !(refHere < 0 && refLater) && from - 1 > refHere && keepsOrder(above, false) ? from - 1 : null
+  const down = below && below.type !== 'subheading' && keepsOrder(below, true) ? from + 1 : null
   return { from, sectionEnd: atEnd ? null : end, paragraph, up, down }
 }
 
 /** 図のまとまりを動かせるか（図を押したときの道具に「上へ」「下へ」「小見出しの終わりへ」「段落の下へ戻す」を出すか） */
 export function figurePlacement(report: Report, figureId: string): { toSectionEnd: boolean; toParagraph: boolean; up: boolean; down: boolean } {
   for (const chapter of report.body) {
-    const t = figureRowTargets(chapter, figureId)
+    const t = figureRowTargets(chapter, figureId, refOnlyLater(report, chapter, figureId), figureMentionOrder(report))
     if (t) return { toSectionEnd: t.sectionEnd !== null, toParagraph: t.paragraph !== null, up: t.up !== null, down: t.down !== null }
   }
   return { toSectionEnd: false, toParagraph: false, up: false, down: false }
+}
+
+/** 図（のまとまり）を参照している段落が、その図の章より後ろの章にしかないか（その章や前の章にあれば false） */
+function refOnlyLater(report: Report, chapter: Chapter, figureId: string): boolean {
+  const row = chapter.blocks.find((b): b is Extract<BodyBlock, { type: 'figureRow' }> => b.type === 'figureRow' && b.figures.some((f) => f.id === figureId))
+  if (!row) return false
+  const ids = new Set(row.figures.map((f) => f.id))
+  const at = report.body.findIndex((c) => c.blocks.some((b) => b.type === 'paragraph' && b.content.some((n) => n.type === 'ref' && ids.has(n.targetId))))
+  return at > report.body.indexOf(chapter)
 }
 
 /** 図を動かす先：小見出しのまとまりのいちばん下・最初に参照している段落のすぐ下・1つ上・1つ下 */
@@ -731,7 +771,7 @@ export type FigureMove = 'sectionEnd' | 'paragraph' | 'up' | 'down'
 export function moveFigureRow(report: Report, figureId: string, to: FigureMove): Report {
   let moved = false
   const body = report.body.map((chapter) => {
-    const t = figureRowTargets(chapter, figureId)
+    const t = figureRowTargets(chapter, figureId, refOnlyLater(report, chapter, figureId), figureMentionOrder(report))
     const at = t && t[to === 'sectionEnd' ? 'sectionEnd' : to]
     if (!t || at === null) return chapter
     moved = true

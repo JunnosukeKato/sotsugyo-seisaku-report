@@ -346,9 +346,9 @@ export function SelectionTools({ editor, snap, phone, template }: SelectionTools
         {/* ひな形を作る画面では、写真は選ばない（図は空の枠。写真は学生が入れる） */}
         {!template && <Tool label="差し替え" icon={Icon.replace} title="写真を差し替える" onClick={() => void editor.replaceFigureImage(figureId)} />}
         {!template && <Tool label="もう1枚" icon={Icon.beside} title="この図のすぐ後ろにもう1枚入れる（本文の参照の後ろにも「（図n）」が入ります）" onClick={() => void editor.addFigureBeside(figureId)} />}
-        {/* 1つ上へ・1つ下へ（段落・見出し・表を1つずつ越える。章の中だけ。依頼者の選択 2026-10-23） */}
-        <Tool label="上へ" className="tb-move" icon={Icon.moveUp} title="この図を、1つ上（前の段落などの上）へ動かす（図の番号は、紙面の順にそろいます）" disabled={!place.up} onClick={() => void editor.moveFigure(figureId, 'up')} />
-        <Tool label="下へ" className="tb-move" icon={Icon.moveDown} title="この図を、1つ下（次の段落などの下）へ動かす（図の番号は、紙面の順にそろいます）" disabled={!place.down} onClick={() => void editor.moveFigure(figureId, 'down')} />
+        {/* 1つ上へ・1つ下へ（段落・表を1つずつ越える。小見出しの中だけ。上は本文の（図n）の段落まで。依頼者の選択 2026-10-23・24） */}
+        <Tool label="上へ" className="tb-move" icon={Icon.moveUp} title={place.up ? 'この図を、1つ上（前の段落などの上）へ動かす（図の番号は、紙面の順にそろいます）' : '図は、本文の「（図n）」がある段落より上・小見出しの外には動かせません'} disabled={!place.up} onClick={() => void editor.moveFigure(figureId, 'up')} />
+        <Tool label="下へ" className="tb-move" icon={Icon.moveDown} title={place.down ? 'この図を、1つ下（次の段落などの下）へ動かす（図の番号は、紙面の順にそろいます）' : '図は、小見出しの外には動かせません'} disabled={!place.down} onClick={() => void editor.moveFigure(figureId, 'down')} />
         {/* 図の置き場所（依頼者の選択 2026-10-22 案A）：小見出しのまとまりのいちばん下へ。そこにあれば、参照している段落の下へ戻す。
             スマホの帯は、1列に入る5つ（差し替え・もう1枚・上へ・下へ・削除。依頼者の選択 2026-10-23 の見本）にするので出さない */}
         {phone ? null : place.toSectionEnd ? (

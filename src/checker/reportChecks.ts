@@ -1,5 +1,5 @@
 import { findCourse, subtitleInputOnly, type YearConfig } from '../config'
-import { contentToText, editables, numbering, parenthetical, type EditableKind } from '../editor/reportOps'
+import { contentToText, editables, figureMentionOrder, numbering, parenthetical, type EditableKind } from '../editor/reportOps'
 import { COVER_SUBTITLE, OVERFLOW_RATIO, yearDigits } from '../layout/document'
 import type { LayoutInfo } from '../layout/measure'
 import type { HeadingText } from '../model/headingText'
@@ -492,6 +492,20 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
         }
       }
     }
+  }
+  // 図の順番：本文で出てくる順に並べる（依頼者の要望 2026-10-24）。紙面の順に見て、前の図より先に本文に出てくる図を知らせる
+  // （図の番号は紙面の順に付くので、本文では「（図2）」が「（図1）」より先に出てくる）
+  const mentions = figureMentionOrder(report)
+  let latest: { at: number; n: number } | null = null
+  for (const f of report.body.flatMap((c) => c.blocks).flatMap((b) => (b.type === 'figureRow' ? b.figures : []))) {
+    const at = mentions.get(f.id)
+    const n = num.numbers.get(f.id) ?? 0
+    if (at === undefined) continue
+    if (latest && at < latest.at) {
+      findings.push(guide('figure-order', 'error', `図${latest.n}と図${n}を、本文で出てくる順に並べる`, 'body', { blockId: f.id, detail: `本文では「（図${n}）」が「（図${latest.n}）」より先に出てきます。図${n}を押して「上へ」で前に動かすか、本文の書く順を直します` }))
+      continue
+    }
+    latest = { at, n }
   }
   // 存在しない図表の番号（削除された図への参照「図?」や、手で書いた「（図9）」）
   for (const e of list.filter((x) => x.kind === 'paragraph')) {

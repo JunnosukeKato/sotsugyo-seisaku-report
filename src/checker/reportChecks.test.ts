@@ -139,6 +139,18 @@ describe('checkReport', () => {
     expect(ids(cleanReport())).not.toContain('body-pages')
   })
 
+  it('図が本文で出てくる順に並んでいなければ、エラー（後ろの図を指す。依頼者の要望 2026-10-24）', () => {
+    // 2章に図2（f9）を足し、1章の最初の段落で図2を先に出す
+    let r = ops.insertAfter(cleanReport(), 'p4', { type: 'figureRow', id: 'r9', figures: [{ id: 'f9', imageId: 'img1', caption: '後ろ姿' }] })
+    r = ops.setText(r, 'p4', '前身頃には金のブレードを縫い付けた（図2）。')
+    expect(ids(r, layout())).not.toContain('figure-order')
+    const ref = (id: string) => ({ type: 'ref' as const, targetId: id, withParens: true })
+    r = { ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 'p1' && b.type === 'paragraph' ? { ...b, content: [{ type: 'text' as const, text: '筆者が担当した衣装である' }, ref('f9'), { type: 'text' as const, text: '。' }] } : b)) })) }
+    const found = checkReport(r, currentConfig, layout()).find((f) => f.ruleId === 'figure-order')
+    expect(found).toMatchObject({ severity: 'error', blockId: 'f9', title: '図1と図2を、本文で出てくる順に並べる' })
+    expect(found?.detail).toContain('本文では「（図2）」が「（図1）」より先に出てきます')
+  })
+
   it('本文から参照されていない図表を指摘する', () => {
     const r = ops.setText(cleanReport(), 'p2', 'デザインを考えた。')
     expect(ids(r, layout())).toContain('figure-unreferenced')
