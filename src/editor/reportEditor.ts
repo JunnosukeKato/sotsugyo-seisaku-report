@@ -8,8 +8,8 @@ import { putImage, type StoredImage } from '../model/storage'
 import { skippedPages } from '../pdf/exportPages'
 import { applyCourseTemplate, bodyWritten } from '../model/template'
 import { addPhotoPage, canAddPhotoPage, changeArrangement, clampPercent, movePhoto, pageOfPhotoPage, pagePhotoCount, photoPageAt, photoSlots, placePhotos, putPhoto, removePhotoPage, updatePhotoPage, wholePhoto, type PhotoSlot } from '../model/photos'
-import { addColumn, addRow, blankTable, cellPosition, colWidthsOf, columnCount, equalColumnWidths, materialTable, normalizeColumnWidths, removeColumn, removeRow, setCellImage } from '../model/table'
-import type { BodyBlock, Chapter, PhotoPosition, Report, TableBlock, WorkPhotoLayout } from '../model/types'
+import { addColumn, addRow, blankTable, cellPosition, colWidthsOf, columnCount, equalColumnWidths, materialTable, normalizeColumnWidths, removeColumn, removeRow, setCellCrop, setCellImage } from '../model/table'
+import type { BodyBlock, Chapter, PhotoPosition, Report, TableBlock, TableCell, WorkPhotoLayout } from '../model/types'
 import { abstractPasteNotice, stripFigureRefs } from './abstractRefs'
 import { ColumnHandles, type ColumnTarget } from './columnHandles'
 import { ContinueRow, endsPageWithRoom, type ContinueTarget } from './continueRow'
@@ -38,6 +38,8 @@ import { submissionTitle } from '../model/fileName'
 
 /** 作品写真をつかんで動かしている間の状態 */
 interface PhotoDrag {
+  /** 表のセルの画像（切り抜いた生地見本など）を動かすときは、そのセル（作品写真のときはなし） */
+  cellId?: string
   /** 何ページ目の作品写真か（0 から） */
   page: number
   index: number
@@ -69,6 +71,8 @@ export type Selection =
    */
   | { kind: 'photos'; page: number; index?: number }
   | { kind: 'pageBreak'; id: string }
+  /** 表のセルの画像（id はセル。道具に「この画像：差し替え・切り抜く・外す」。依頼者の選択 2026-10-23 案A） */
+  | { kind: 'cellImage'; id: string }
   | null
 
 export interface EditorSnapshot {
@@ -582,7 +586,8 @@ export class ReportEditor {
       this.pointerType = e.pointerType
     })
     scroller.addEventListener('dragstart', (e) => {
-      if ((e.target as HTMLElement).closest?.('[data-photo-slot]')) e.preventDefault()
+      // 作品写真・切り抜いた表の画像：つかんで写る所をずらすので、ブラウザの画像のドラッグは始めない
+      if ((e.target as HTMLElement).closest?.('[data-photo-slot], .data-table img.crop')) e.preventDefault()
     })
     window.addEventListener('pointermove', (e) => this.onPhotoPointerMove(e))
     window.addEventListener('pointerup', (e) => this.onPhotoPointerUp(e))
@@ -2628,6 +2633,12 @@ export class ReportEditor {
       const at = this.renderer.pageView.pageIndexOf(target)
       if (at !== this.page && this.samePair(at, this.page)) this.focusPartner(at)
     }
+    // 表のセルの画像（生地見本など）：選ぶ（道具の「差し替え」「切り抜く」「外す」。切り抜いた画像は、つかんで写る所をずらす）。
+    // 前は、押すとそのセルの文字を書き始め、画像は「外す」しかできなかった（学生の試し：依頼者 2026-10-23）。
+    // スマホの空いたマスの「＋」の印のまわり（markerAt）より先に見る（画像そのものを押したときは、画像を選ぶ）
+    // （紙面では、セルの中身は組版の入れ物 .-vivliostyle-table-cell-container に包まれている）
+    const cellImage = this.template ? null : target.closest<HTMLElement>('.data-table [data-cell-id] img')
+    if (cellImage) return this.select({ kind: 'cellImage', id: cellImage.closest<HTMLElement>('[data-cell-id]')!.dataset.cellId! })
     // スマホ：まだ書いていない欄の「＋」の印（とそのまわり 44px 四方）を押した：その欄を開く（markerAt）
     const marked = touch ? this.markerAt(x, y, target) : null
     if (marked === FIELD_IDS.course) return this.callbacks.onCourseClick(this.renderer.pageView.fragments(marked)[0].getBoundingClientRect())
@@ -2922,6 +2933,7 @@ export class ReportEditor {
     if (s?.kind === 'figure') this.viewport.querySelector(`figure[data-figure-id="${CSS.escape(s.id)}"]`)?.classList.add('is-selected')
     if (s?.kind === 'table') this.renderer.pageView.fragments(s.id)[0]?.closest('.data-table')?.classList.add('is-selected')
     if (s?.kind === 'pageBreak') this.renderer.pageView.fragments(s.id)[0]?.classList.add('is-selected')
+    if (s?.kind === 'cellImage') this.viewport.querySelector(`.page-viewport.front [data-cell-id="${CSS.escape(s.id)}"] img`)?.classList.add('is-selected')
     // 選んだ作品写真（写真が入っている枠だけ）
     if (s?.kind === 'photos' && s.index !== undefined) {
       const slot = this.viewport.querySelector<HTMLElement>(photoSlotSelector(s.page, s.index))
@@ -3530,6 +3542,7 @@ export class ReportEditor {
 
   removeSelected(): void {
     const s = this.selection
+    if (s?.kind === 'cellImage') return this.removeCellImageAt(s.id)
     if (!s || s.kind === 'photos' || this.removed.size > 0) return
     this.selection = null
     // 図・表を消すときは、本文のその図・表への参照も一緒に消す（文の中の参照は「図?」になり、チェックで指摘される）
@@ -3718,6 +3731,53 @@ export class ReportEditor {
   removeCellImage(tableId: string): void {
     const at = this.currentCell(tableId)
     if (at?.cellId) this.changeTable(tableId, (t) => setCellImage(t, at.cellId, null), at.cellId)
+  }
+
+  // ---- 選んだ表の画像（「この画像」の道具。依頼者の選択 2026-10-23 案A：必要なときだけ切り抜く） ----
+
+  /** セルの画像を変える（選んだまま。画像がなくなったら選ぶのをやめる） */
+  private changeCellImage(cellId: string, fn: (table: TableBlock) => TableBlock): void {
+    const tableId = this.tableIdOf(cellId)
+    if (!tableId) return
+    this.update((r) => ops.updateTable(r, tableId, fn))
+    this.select(this.cellOf(cellId)?.imageId ? { kind: 'cellImage', id: cellId } : null)
+  }
+
+  /** セル（表の中の） */
+  private cellOf(cellId: string): TableCell | undefined {
+    const tableId = this.tableIdOf(cellId)
+    return tableId ? ops.findTable(this.report, tableId)?.rows.flatMap((r) => r.cells).find((c) => c.id === cellId) : undefined
+  }
+
+  /** セルの画像があり、切り抜いているか */
+  cellImageState(cellId: string): { image: boolean; crop: boolean } {
+    const cell = this.cellOf(cellId)
+    return { image: !!cell?.imageId, crop: !!cell?.crop }
+  }
+
+  /** 選んだセルの画像を差し替える（新しい画像は、全体を入れる） */
+  async replaceCellImageAt(cellId: string): Promise<void> {
+    const imageId = await this.importImage('swatch')
+    if (imageId) this.changeCellImage(cellId, (t) => setCellImage(t, cellId, imageId))
+  }
+
+  /** 選んだセルの画像を外す（画面の下に「表の画像を外しました［戻す］」） */
+  removeCellImageAt(cellId: string): void {
+    if (!this.cellImageState(cellId).image) return
+    this.changeCellImage(cellId, (t) => setCellImage(t, cellId, null))
+    this.noticeRemoved('表の画像')
+  }
+
+  /** 選んだセルの画像を切り抜く（マスいっぱい。まず中央）・全体に戻す。切り抜いたら、ずらし方を画面の下に知らせる */
+  setCellCropOn(cellId: string, on: boolean): void {
+    this.changeCellImage(cellId, (t) => setCellCrop(t, cellId, on ? { x: 50, y: 50 } : null))
+    if (on) this.noticeInfo(this.phone ? '指でずらすと、写る所が変わります' : 'マウスでずらすと、写る所が変わります')
+  }
+
+  /** 切り抜いたセルの画像の、見える位置を変える */
+  setCellCropPosition(cellId: string, position: PhotoPosition): void {
+    if (!this.cellImageState(cellId).crop) return
+    this.changeCellImage(cellId, (t) => setCellCrop(t, cellId, position))
   }
 
   /**
@@ -4223,6 +4283,7 @@ export class ReportEditor {
   private suppressClick = false
 
   private onPhotoPointerDown(e: PointerEvent): void {
+    if (this.onCellImagePointerDown(e)) return
     const img = (e.target as HTMLElement).closest?.<HTMLImageElement>('[data-photo-slot] img')
     if (!img || e.button !== 0 || !img.naturalWidth) return
     const slot = img.closest<HTMLElement>('[data-photo-slot]')!
@@ -4252,6 +4313,36 @@ export class ReportEditor {
     }
   }
 
+  /**
+   * 切り抜いた表の画像をつかむ（作品写真と同じく、つかんで動かすと写る所が変わる。つかまずに離したらクリック＝画像を選ぶ）。
+   * スマホは、押して選んだ画像だけ（選んでいない画像の上で、はらうとページを送る）。つかんだら true
+   */
+  private onCellImagePointerDown(e: PointerEvent): boolean {
+    const img = (e.target as HTMLElement).closest?.<HTMLImageElement>('.data-table [data-cell-id] img.crop')
+    if (!img || e.button !== 0 || !img.naturalWidth || this.template) return false
+    const cellId = img.closest<HTMLElement>('[data-cell-id]')!.dataset.cellId!
+    const crop = this.cellOf(cellId)?.crop
+    if (!crop) return false
+    if (this.phone && !(this.selection?.kind === 'cellImage' && this.selection.id === cellId)) return false
+    if (this.pinchZoom.active) return true
+    const box = img.getBoundingClientRect()
+    const k = Math.max(box.width / img.naturalWidth, box.height / img.naturalHeight)
+    this.photoDrag = {
+      cellId,
+      page: -1,
+      index: -1,
+      img,
+      pointerId: e.pointerId,
+      startX: e.clientX,
+      startY: e.clientY,
+      from: crop,
+      spanX: img.naturalWidth * k - box.width,
+      spanY: img.naturalHeight * k - box.height,
+      moved: false,
+    }
+    return true
+  }
+
   private onPhotoPointerMove(e: PointerEvent): void {
     const d = this.photoDrag
     if (!d || e.pointerId !== d.pointerId) return
@@ -4278,7 +4369,9 @@ export class ReportEditor {
     // 離した後に届くクリックを無視する（届かなかったときのため、すぐ後に戻す）
     this.suppressClick = true
     setTimeout(() => (this.suppressClick = false), 0)
-    this.setPhotoPosition(d.page, d.index, this.photoDragPosition(d, e.clientX - d.startX, e.clientY - d.startY))
+    const position = this.photoDragPosition(d, e.clientX - d.startX, e.clientY - d.startY)
+    if (d.cellId) this.setCellCropPosition(d.cellId, position)
+    else this.setPhotoPosition(d.page, d.index, position)
   }
 
   private cancelPhotoDrag(): void {

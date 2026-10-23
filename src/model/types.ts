@@ -142,6 +142,11 @@ export interface TableCell {
   text: string
   /** セルの画像（生地見本など）。文字の上に置く */
   imageId: string | null
+  /**
+   * 画像を「切り抜く」：マスいっぱいに広げて、見える位置（x・y は %。50 が中央）を選ぶ。
+   * なし（ふつう）は、画像の全体をマスに入る大きさに縮めて入れる（依頼者の選択 2026-10-23 案A：必要なときだけ切り抜く）
+   */
+  crop?: PhotoPosition
 }
 
 export type Reference = BookReference | WebReference

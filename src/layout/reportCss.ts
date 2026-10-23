@@ -249,4 +249,14 @@ figcaption,
 .data-table table.heights-photo td img {
   max-height: ${PHOTO_IMAGE_MM}mm;
 }
+
+/* セルの画像を「切り抜く」：マスの幅いっぱい・写真が入る高さに広げ、選んだ位置を見せる（object-position は bodyHtml.ts） */
+.data-table td img.crop,
+.data-table th img.crop {
+  width: 100%;
+  max-width: none;
+  height: ${PHOTO_IMAGE_MM}mm;
+  max-height: none;
+  object-fit: cover;
+}
 `

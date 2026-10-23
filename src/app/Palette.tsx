@@ -368,6 +368,24 @@ export function SelectionTools({ editor, snap, phone, template }: SelectionTools
     )
   }
 
+  // 表のセルの画像（依頼者の選択 2026-10-23 案A：必要なときだけ切り抜く）
+  if (selection?.kind === 'cellImage') {
+    const cellId = selection.id
+    const { crop } = editor.cellImageState(cellId)
+    return (
+      <div className="group ctx">
+        <div className="ctx-label">この画像</div>
+        <Tool label="差し替え" icon={Icon.replace} title="この画像を選び直す" onClick={() => void editor.replaceCellImageAt(cellId)} />
+        {crop ? (
+          <Tool label="全体に戻す" icon={Icon.whole} title="切り抜くのをやめて、画像の全体を入れる" onClick={() => editor.setCellCropOn(cellId, false)} />
+        ) : (
+          <Tool label="切り抜く" icon={Icon.crop} title="マスいっぱいに広げて、写る所をずらして選べるようにする" onClick={() => editor.setCellCropOn(cellId, true)} />
+        )}
+        <Tool label="外す" icon={Icon.remove} danger title="この画像を外す（マスの文字は残ります）" onClick={() => editor.removeCellImageAt(cellId)} />
+      </div>
+    )
+  }
+
   if (selection?.kind === 'pageBreak') {
     return (
       <div className="group ctx">

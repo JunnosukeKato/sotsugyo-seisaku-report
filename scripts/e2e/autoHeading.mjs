@@ -186,11 +186,12 @@ export async function autoHeadingPc(browser, check) {
   await ready()
   await wait(200)
   await page.screenshot({ path: `${OUT}/pc-3-after-undo.png` })
-  const i = undone.blocks[1].indexOf('r3')
+  // 段落の終わりで Enter を押すと、Word と同じく、すぐ下（図3の上）に段落ができる（依頼者の選択 2026-10-23）。見出しにすると図3の後ろに置き、戻すと打った所に戻る
+  const i = undone.blocks[1].indexOf(typedId)
   check(
-    '「戻す」で、打ったままの段落「Ⅴ．仕上げと確認」に戻る（図3の下、p9 の前。分けた章も元の1つに戻る）。知らせは「見出しにする前に戻しました」',
-    undone.blocks[1][i + 1] === typedId && undone.texts[1][i + 1] === 'Ⅴ．仕上げと確認' && undone.blocks[1][i + 2] === 'p9' && undoneToast.includes('見出しにする前に戻しました'),
-    JSON.stringify({ after: undone.texts[1].slice(i, i + 3), undoneToast }),
+    '「戻す」で、打ったままの段落「Ⅴ．仕上げと確認」に戻る（打った所：p8 のすぐ下・図3の上。分けた章も元の1つに戻る）。知らせは「見出しにする前に戻しました」',
+    i > 0 && undone.blocks[1][i - 1] === 'p8' && undone.texts[1][i] === 'Ⅴ．仕上げと確認' && undone.blocks[1][i + 1] === 'r3' && undoneToast.includes('見出しにする前に戻しました'),
+    JSON.stringify({ around: undone.blocks[1].slice(i - 1, i + 2), undoneToast }),
   )
   const kept = await machineFindings(page, typedId)
   check('「戻す」で段落のままにした「Ⅴ．仕上げと確認」には、今までどおり「機種依存文字を使わない」が出る（PDF に Ⅴ が残るため）', kept.join('') === 'Ⅴ', JSON.stringify(kept))

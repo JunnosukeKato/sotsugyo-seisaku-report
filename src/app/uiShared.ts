@@ -154,11 +154,11 @@ export function useSwipe(target: React.RefObject<HTMLElement | null>, editor: Re
     // 置いている指（2本になったら、離し終えるまで、はらいとみなさない）
     const fingers = new Set<number>()
     let multi = false
-    // 押して選んだ作品写真をつかんで動かすときは、ページを送らない（選んでいない写真・「全体を入れる（切らない）」の写真の上で、はらうとページを送る）
+    // 押して選んだ作品写真・切り抜いた表の画像をつかんで動かすときは、ページを送らない（選んでいない写真・「全体を入れる（切らない）」の写真の上で、はらうとページを送る）
     const down = (e: PointerEvent) => {
       if (e.pointerType !== 'mouse') fingers.add(e.pointerId)
       if (fingers.size >= 2) multi = true
-      start.current = e.pointerType === 'mouse' || multi || (e.target as HTMLElement).closest?.('[data-photo-slot].is-selected:not(.whole) img') ? null : { x: e.clientX, y: e.clientY }
+      start.current = e.pointerType === 'mouse' || multi || (e.target as HTMLElement).closest?.('[data-photo-slot].is-selected:not(.whole) img, .data-table img.crop.is-selected') ? null : { x: e.clientX, y: e.clientY }
     }
     const release = (e: PointerEvent) => {
       fingers.delete(e.pointerId)

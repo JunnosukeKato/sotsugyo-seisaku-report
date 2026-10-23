@@ -17,6 +17,7 @@ import {
   removeColumn,
   removeColumnWidth,
   removeRow,
+  setCellCrop,
   setCellImage,
   swatchColumn,
   TABLE_SIZE,
@@ -75,6 +76,26 @@ describe('表', () => {
     const id = t.rows[1].cells[1].id
     expect(setCellImage(t, id, 'img1').rows[1].cells[1].imageId).toBe('img1')
     expect(setCellImage(setCellImage(t, id, 'img1'), id, null).rows[1].cells[1].imageId).toBeNull()
+  })
+
+  it('セルの画像を切り抜く（見える位置は 0〜100%）・全体に戻す。差し替えると全体に戻る。画像のないセルは切り抜かない（依頼者の選択 2026-10-23 案A）', () => {
+    const t = blankTable('t', newId)
+    const id = t.rows[1].cells[1].id
+    const withImage = setCellImage(t, id, 'img1')
+    const cropped = setCellCrop(withImage, id, { x: 130, y: 20 })
+    expect(cropped.rows[1].cells[1]).toMatchObject({ imageId: 'img1', crop: { x: 100, y: 20 } })
+    expect(setCellCrop(cropped, id, null).rows[1].cells[1]).not.toHaveProperty('crop')
+    expect(setCellImage(cropped, id, 'img2').rows[1].cells[1]).toEqual({ id, text: '', imageId: 'img2' })
+    expect(setCellCrop(t, id, { x: 50, y: 50 }).rows[1].cells[1]).not.toHaveProperty('crop')
+    // 前の版のデータを読み直しても、切り抜く位置は残る（数でないものは捨てる）
+    const report = demoReport()
+    const body = [{ ...report.body[0], blocks: [cropped, setCellCrop(withImage, id, null)] }]
+    const read = migrateReport(JSON.parse(JSON.stringify({ ...report, body })))
+    const [a, b] = read.body[0].blocks as TableBlock[]
+    expect(a.rows[1].cells[1].crop).toEqual({ x: 100, y: 20 })
+    expect(b.rows[1].cells[1]).not.toHaveProperty('crop')
+    const bad = migrateReport(JSON.parse(JSON.stringify({ ...report, body: [{ ...report.body[0], blocks: [{ ...cropped, rows: cropped.rows.map((r) => ({ ...r, cells: r.cells.map((c) => ({ ...c, crop: { x: 'a', y: 1 } })) })) }] }] })))
+    expect((bad.body[0].blocks[0] as TableBlock).rows[1].cells[1]).not.toHaveProperty('crop')
   })
 
   it('新しい表・素材表・前の版の素材表は、行の高さ「中身に合わせる」・左端の列「ほかとそろえる」（今までどおり）', () => {

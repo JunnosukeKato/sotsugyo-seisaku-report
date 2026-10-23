@@ -413,8 +413,12 @@ export function paragraphToHeading(report: Report, id: string, heading: { level:
   const title = heading.title.replace(/[\r\n]/g, '')
   const nextId = rest === undefined ? null : newId('p')
   const next: BodyBlock[] = nextId === null ? [] : [paragraph(nextId, rest ?? '', numbering(report), old.hint)]
-  const before = chapter.blocks.slice(0, i)
-  const after = chapter.blocks.slice(i + 1)
+  // 段落と、その下の図・表の間で見出しの形を打ったときは、見出しを図・表の後ろに置く（図・表を、説明の段落から離さない）。
+  // 段落の終わりで改行すると、Word と同じく図・表の上に新しい段落ができるため（依頼者の選択 2026-10-23）
+  let end = i + 1
+  if (chapter.blocks[i - 1]?.type === 'paragraph') while (end < chapter.blocks.length && isAttachment(chapter.blocks[end])) end++
+  const before = [...chapter.blocks.slice(0, i), ...chapter.blocks.slice(i + 1, end)]
+  const after = chapter.blocks.slice(end)
   if (heading.level === 2) {
     const headingId = newId('s')
     const blocks: BodyBlock[] = [...before, { type: 'subheading', id: headingId, title }, ...next, ...after]

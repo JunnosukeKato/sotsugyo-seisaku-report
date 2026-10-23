@@ -1,4 +1,5 @@
-import type { TableBlock, TableCell, TableRow } from './types'
+import { clampPercent } from './photos'
+import type { PhotoPosition, TableBlock, TableCell, TableRow } from './types'
 
 /**
  * 表（mockups/v16 案A）。1行目は見出しの行。行と列は自由に足せ、セルには文字と画像（生地見本など）を入れられる。
@@ -201,8 +202,18 @@ export function removeColumnWidth(ws: number[], at: number): number[] {
   return tidyWidths(next.filter((_, i) => i !== at))
 }
 
+/** セルの画像を入れる・差し替える・外す。切り抜きはやめる（新しい画像は、まず全体を入れる） */
 export function setCellImage(table: TableBlock, cellId: string, imageId: string | null): TableBlock {
-  return { ...table, rows: table.rows.map((r) => ({ ...r, cells: r.cells.map((c) => (c.id === cellId ? { ...c, imageId } : c)) })) }
+  return mapCell(table, cellId, (c) => ({ id: c.id, text: c.text, imageId }))
+}
+
+/** セルの画像を切り抜く（マスいっぱい。position は見える位置）・全体に戻す（null） */
+export function setCellCrop(table: TableBlock, cellId: string, position: PhotoPosition | null): TableBlock {
+  return mapCell(table, cellId, (c) => (position && c.imageId ? { ...c, crop: { x: clampPercent(position.x), y: clampPercent(position.y) } } : { id: c.id, text: c.text, imageId: c.imageId }))
+}
+
+function mapCell(table: TableBlock, cellId: string, fn: (cell: TableCell) => TableCell): TableBlock {
+  return { ...table, rows: table.rows.map((r) => ({ ...r, cells: r.cells.map((c) => (c.id === cellId ? fn(c) : c)) })) }
 }
 
 export function setCellText(table: TableBlock, cellId: string, text: string): TableBlock {

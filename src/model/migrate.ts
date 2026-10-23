@@ -55,13 +55,19 @@ function migrateBlock(b: Raw): BodyBlock | null {
         // 行の高さ・左端の列：前の版の原稿にはないので、今までどおり（中身に合わせる・ほかの列とそろえる）
         heights: b.heights === 'equal' || b.heights === 'photo' ? b.heights : 'auto',
         ...(b.labelColumn === true ? { labelColumn: true } : {}),
-        rows: list(b.rows).map((r) => ({ id: idOf(r, 'r'), cells: list(r.cells).map((c) => ({ id: idOf(c, 'c'), text: str(c.text), imageId: typeof c.imageId === 'string' ? c.imageId : null })) })),
+        rows: list(b.rows).map((r) => ({ id: idOf(r, 'r'), cells: list(r.cells).map((c) => ({ id: idOf(c, 'c'), text: str(c.text), imageId: typeof c.imageId === 'string' ? c.imageId : null, ...cellCrop(c.crop) })) })),
       }
     case 'materialTable':
       return migrateBlock(fromMaterialTable({ ...b, id: idOf(b, 't'), rows: list(b.rows).map((r) => ({ ...r, id: idOf(r, 'r') })) } as Parameters<typeof fromMaterialTable>[0]) as unknown as Raw)
     default:
       return null
   }
+}
+
+/** セルの画像の切り抜く位置（数でなければ、切り抜かない） */
+function cellCrop(raw: unknown): { crop?: { x: number; y: number } } {
+  const q = raw as { x?: unknown; y?: unknown } | null | undefined
+  return q && typeof q.x === 'number' && typeof q.y === 'number' && Number.isFinite(q.x) && Number.isFinite(q.y) ? { crop: { x: clampPercent(q.x), y: clampPercent(q.y) } } : {}
 }
 
 function migrateBody(chapters: Raw[]): Report['body'] {

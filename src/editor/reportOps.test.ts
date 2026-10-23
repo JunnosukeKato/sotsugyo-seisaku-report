@@ -580,6 +580,16 @@ describe('段落に打った見出し（paragraphToHeading・headingLabel）', (
     expect(result.report.body).toHaveLength(3)
   })
 
+  it('段落と、その下の図・表の間で打った見出しは、図・表の後ろに置く（図・表を説明の段落から離さない。2026-10-23）', () => {
+    const r = demoReport()
+    // c1：… s2, p2, r1, s3, p3, t1。p2 と図 r1 の間に、見出しの形の段落を打った
+    const typed: Report = { ...r, body: r.body.map((c) => (c.id === 'c1' ? { ...c, blocks: c.blocks.flatMap((b) => (b.id === 'p2' ? [b, { type: 'paragraph' as const, id: 'px', content: [{ type: 'text' as const, text: 'ⅲ．スカート' }] }] : [b])) } : c)) }
+    const sub = ops.paragraphToHeading(typed, 'px', { level: 2, title: 'スカート' }, '')!
+    expect(ids(sub.report)[0]).toBe(`c1:s1,p1,s2,p2,r1,${sub.headingId},${sub.nextId},s3,p3,t1`)
+    const chapter = ops.paragraphToHeading(typed, 'px', { level: 1, title: '仕上げ' }, '')!
+    expect(ids(chapter.report).slice(0, 2)).toEqual(['c1:s1,p1,s2,p2,r1', `${chapter.headingId}:${chapter.nextId},s3,p3,t1`])
+  })
+
   it('本文の段落でなければ（抄録・見出し・図・表）null', () => {
     const r = demoReport()
     for (const id of ['a1', 's1', 'c1', 'f1', 't1', 'nothing']) expect(ops.paragraphToHeading(r, id, { level: 1, title: 'x' }), id).toBeNull()

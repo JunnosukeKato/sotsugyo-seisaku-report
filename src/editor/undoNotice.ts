@@ -12,7 +12,7 @@ import type { BodyBlock, Report, WorkPhotoPage } from '../model/types'
  * 削除したもの（知らせの言葉に使う）。下書き：コースを変えて、本文の下書きをそのコースのひな形に入れ替えた。
  * 選んだ文：紙面をなぞって選んだ範囲を Delete・Backspace で消した／切り取り：選んだ範囲を Ctrl+X で切り取った（editor/rangeOps.ts）
  */
-export type RemovedWhat = '段落' | '小見出し' | '大見出し（章）' | '図' | '表' | '表の行' | '表の列' | '改ページ' | '作品写真' | '作品写真のページ' | '下書き' | '選んだ文' | '切り取り'
+export type RemovedWhat = '段落' | '小見出し' | '大見出し（章）' | '図' | '表' | '表の行' | '表の列' | '改ページ' | '作品写真' | '作品写真のページ' | '表の画像' | '下書き' | '選んだ文' | '切り取り'
 
 /**
  * 画面の下に出す知らせの中身。
@@ -63,7 +63,7 @@ export function noticeText(notice: NoticeBody): string {
       if (notice.what === '作品写真のページ') return `作品写真のページを消しました${note}`
       // 表の行・列：道具の「行を消す」「列を消す」と同じ「消しました」
       if (notice.what === '表の行' || notice.what === '表の列') return `${notice.what}を消しました${note}`
-      return notice.what === '作品写真' ? '作品写真を外しました' : `${notice.what}を削除しました${note}`
+      return notice.what === '作品写真' || notice.what === '表の画像' ? `${notice.what}を外しました` : `${notice.what}を削除しました${note}`
     }
     case 'started':
       return '抄録を書き始めました'

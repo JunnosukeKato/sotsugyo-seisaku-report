@@ -90,6 +90,34 @@ describe('buildBodyDocument', () => {
     expect(text(html)).toContain('表1.使用素材表')
   })
 
+  it('表のセルの画像：ふつうは全体を入れ、切り抜いた画像は印（crop）と見える位置を付ける（依頼者の選択 2026-10-23 案A）', () => {
+    const doc = buildBodyDocument(
+      [
+        {
+          id: 'c',
+          title: '企画',
+          blocks: [
+            {
+              type: 'table',
+              id: 't',
+              caption: '使用素材表',
+              widths: 'equal',
+              heights: 'photo',
+              rows: [
+                { id: 'h', cells: [{ id: 'h1', text: '生地見本', imageId: null }] },
+                { id: 'r1', cells: [{ id: 'a', text: '', imageId: 'sw1' }] },
+                { id: 'r2', cells: [{ id: 'b', text: '', imageId: 'sw2', crop: { x: 20, y: 75 } }] },
+              ],
+            },
+          ],
+        },
+      ],
+      options,
+    )
+    expect(doc).toContain('<td data-cell-id="a"><img src="img/sw1" alt="">')
+    expect(doc).toContain('<td data-cell-id="b"><img src="img/sw2" class="crop" style="object-position:20% 75%" alt="">')
+  })
+
   it('入力の HTML 特殊文字はエスケープする', () => {
     const doc = buildBodyDocument(
       [{ id: 'c', title: 'A&B', blocks: [{ type: 'paragraph', id: 'p', content: [{ type: 'text', text: '<b>x</b>' }] }] }],

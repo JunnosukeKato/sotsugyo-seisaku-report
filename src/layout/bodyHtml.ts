@@ -139,7 +139,9 @@ function renderTable(block: TableBlock, number: number, options: BodyRenderOptio
   const limit = block.widths === 'auto' ? noWrapLimit(Math.max(1, ...block.rows.map((r) => r.cells.length))) : 0
   const cellHtml = (cell: TableCell, header: boolean) => {
     const tag = header ? 'th' : 'td'
-    const img = cell.imageId ? `<img src="${escapeHtml(options.imageSrc(cell.imageId))}" alt="">` : ''
+    // 切り抜いた画像は、マスいっぱいに広げて、選んだ位置を見せる（.crop。reportCss.ts）
+    const crop = cell.imageId && cell.crop ? ` class="crop" style="object-position:${cell.crop.x}% ${cell.crop.y}%"` : ''
+    const img = cell.imageId ? `<img src="${escapeHtml(options.imageSrc(cell.imageId))}"${crop} alt="">` : ''
     const placeholder = header ? '（見出し）' : '（クリックして入力）'
     const nw = limit > 0 && shortText(cell.text, limit) ? ' class="nw"' : ''
     return `<${tag} data-cell-id="${escapeHtml(cell.id)}"${nw}>${img}<span data-block-id="${escapeHtml(cell.id)}" data-placeholder="${placeholder}">${escapeHtml(cell.text)}</span></${tag}>`
