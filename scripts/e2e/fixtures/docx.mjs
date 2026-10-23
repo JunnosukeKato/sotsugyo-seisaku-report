@@ -93,23 +93,23 @@ export function textBox(lines, { x = 1324610, y = 3418923, cx = 2749550, cy = 54
   )
 }
 
-/** 表のセル。文字、または { text, images: [画像の関係の ID], span, vMerge } */
+/** 表のセル。文字、または { text, images: [画像の関係の ID], span, vMerge, runs }。runs：1つ目の段落の後ろに足す XML（浮かせた画像など） */
 function cell(c) {
   const spec = typeof c === 'string' ? { text: c } : c
   const tcPr = `<w:tcPr>${spec.span ? `<w:gridSpan w:val="${spec.span}"/>` : ''}${spec.vMerge ? `<w:vMerge${spec.vMerge === 'restart' ? ' w:val="restart"' : ''}/>` : ''}</w:tcPr>`
   const lines = String(spec.text ?? '').split('\n')
-  const images = (spec.images ?? []).map((id) => inlineImage(id, { cx: 900000, cy: 900000 })).join('')
+  const images = (spec.images ?? []).map((id) => inlineImage(id, { cx: 900000, cy: 900000 })).join('') + (spec.runs ?? '')
   return `<w:tc>${tcPr}${lines.map((l, i) => p(...(l ? [l] : []), ...(i === 0 ? [images] : []).filter(Boolean))).join('')}</w:tc>`
 }
 
 /** 表。rows は行ごとのセルの並び（1行目は見出しの行） */
-export function table(rows, { heights = [], hRule } = {}) {
+export function table(rows, { heights = [], hRule, widths = [] } = {}) {
   const columns = Math.max(...rows.map((r) => r.reduce((n, c) => n + (typeof c === 'object' && c.span ? c.span : 1), 0)))
-  // heights：行ごとの高さ（twip。w:trHeight。null・ない行は書かない）。hRule：高さの決め方（ないときは書かない＝「最小値」）
+  // heights：行ごとの高さ（twip。w:trHeight。null・ない行は書かない）。hRule：高さの決め方（ないときは書かない＝「最小値」）。widths：列の幅（twip。ないときは 2900）
   const trPr = (i) => (heights[i] ? `<w:trPr><w:trHeight w:val="${heights[i]}"${hRule ? ` w:hRule="${hRule}"` : ''}/></w:trPr>` : '')
   return (
     `<w:tbl><w:tblPr><w:tblW w:w="0" w:type="auto"/><w:tblLook w:val="04A0"/></w:tblPr>` +
-    `<w:tblGrid>${'<w:gridCol w:w="2900"/>'.repeat(columns)}</w:tblGrid>` +
+    `<w:tblGrid>${Array.from({ length: columns }, (_, i) => `<w:gridCol w:w="${widths[i] ?? 2900}"/>`).join('')}</w:tblGrid>` +
     rows.map((r, i) => `<w:tr>${trPr(i)}${r.map(cell).join('')}</w:tr>`).join('') +
     `</w:tbl>`
   )

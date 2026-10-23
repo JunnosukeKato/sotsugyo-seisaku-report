@@ -656,6 +656,70 @@ describe.each(CONFIGS)('仮の文字だけの章（%s）', (_, ctx) => {
   })
 })
 
+describe('使用素材表の生地見本（浮かせた画像）', () => {
+  // 学科のひな形（04_本文.docx）の使用材料表と同じ列の幅・行の高さ（twip）と、用紙・余白
+  const WIDTHS = [2934, 2934, 2936]
+  const HEIGHTS = [345, 1904, 2062, 1957, 1957, 1957, 1957]
+  const PAGE = '<w:pgSz w:w="11906" w:h="16838"/><w:pgMar w:top="1418" w:right="1418" w:bottom="1418" w:left="1985" w:header="851" w:footer="624" w:gutter="0"/>'
+  const EMU = 635
+  const SIZE = 1100000
+  /** 生地見本の列（3列目）の左の端から 300000 EMU の位置（余白から） */
+  const SWATCH_X = (WIDTHS[0] + WIDTHS[1]) * EMU + 300000
+  const rowTop = (r: number) => HEIGHTS.slice(0, r).reduce((s, h) => s + h * EMU, 0)
+  const total = rowTop(HEIGHTS.length)
+  const LINE = 368 * EMU
+  const swatch = (n: number, options: Parameters<typeof floatingImage>[1]) => floatingImage(rid(`s${n}.png`), { cx: SIZE, cy: SIZE, ...options })
+
+  it('学生がドラッグで動かして、別のセルや表の前後の段落に属している画像も、Word で見えている位置のセルに入れる', async () => {
+    const media: Record<string, Uint8Array> = { 'big.png': DESIGN }
+    for (let i = 1; i <= 6; i++) media[`s${i}.png`] = png(40, 40, { draw: () => [40 * i, 30, 30] })
+    const result = await read(
+      makeDocx({
+        sectPr: PAGE,
+        media,
+        body: [
+          p('Ⅰ．企画・立案'),
+          p('ⅲ．使用素材'),
+          p('　表1に使用した素材をまとめる。'),
+          // 5行目の生地見本：表のすぐ前の段落（表のタイトル）に属している
+          p('表1　使用材料表', swatch(4, { x: SWATCH_X, y: rowTop(5) + 600000 + LINE - SIZE / 2 })),
+          table(
+            [
+              ['名称', '使用箇所', '生地見本'],
+              // 1行目の生地見本：名称のセルに属している（セルからの位置で、生地見本の列に見えている）
+              [{ text: '綿ブロード', runs: swatch(1, { from: 'column', x: SWATCH_X, y: 50000 }) }, '上着', ''],
+              // 2行目のセルに2枚：1枚はこのセル、もう1枚は下の行に見えている
+              ['サテン', '帯', { runs: swatch(2, { from: 'column', x: 300000, y: 50000 }) + swatch(3, { from: 'column', x: 300000, y: HEIGHTS[2] * EMU + 100000 }) }],
+              ['ウール', 'ベスト', ''],
+              // ふつうに置いた画像（過去の卒業生の Word と同じ置き方）は、そのまま
+              ['麻', 'シャツ', { runs: swatch(5, { from: 'column', x: 219710, y: -36195 }) }],
+              ['シルク', 'フリル', ''],
+              ['ベルベット', 'リボン', ''],
+            ],
+            { widths: WIDTHS, heights: HEIGHTS },
+          ),
+          // 6行目の生地見本：表のすぐ後ろの段落に属している。同じ段落の大きな図は、表の下に見えているので図のまま
+          p(swatch(6, { x: SWATCH_X, y: -900000 }), floatingImage(rid('big.png'), { x: 1580515, y: 385445 })),
+          p('図1　デザイン画'),
+        ].join(''),
+      }),
+    )
+    const [t] = tables(result.body)
+    expect(t.caption).toBe('使用材料表')
+    expect(t.rows.map((r) => r.cells.map((c) => (c.imageId ? '画像' : c.text)))).toEqual([
+      ['名称', '使用箇所', '生地見本'],
+      ['綿ブロード', '上着', '画像'],
+      ['サテン', '帯', '画像'],
+      ['ウール', 'ベスト', '画像'],
+      ['麻', 'シャツ', '画像'],
+      ['シルク', 'フリル', '画像'],
+      ['ベルベット', 'リボン', '画像'],
+    ])
+    // 生地見本は図にならない（大きな図だけ）
+    expect(figureRows(result.body).flatMap((r) => r.figures.map((f) => f.caption))).toEqual(['デザイン画'])
+  })
+})
+
 describe('章の並び（Word で書いた章と、ツールのひな形の章）', () => {
   it('同じ名前・同じ番目で組にし、ひな形の順に並べる。組にならない Word の章は、前の章のすぐ後ろ', () => {
     const template = ['企画・立案', '制作過程', 'まとめ']

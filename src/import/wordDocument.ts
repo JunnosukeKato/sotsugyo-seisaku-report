@@ -23,6 +23,24 @@ export interface ImageRef {
   centerX: number | null
   xFrom: string | null
   crop: Crop | null
+  /** 浮かせた図の置き方（表の画像を、見えている位置のセルに入れるのに使う）。行内の図は null・なし */
+  place?: Placement | null
+}
+
+/**
+ * 浮かせた図の置き方（EMU）。表の画像を、Word の画面で見えている位置のセルに入れるのに使う（placeInCells・pullIntoTables）。
+ * x・xAlign・xFrom：横の位置（数か「左・中央・右」）と基準。y・yFrom：縦の位置と基準。cx・cy：大きさ。
+ * inCell：表のセルの中に置く（layoutInCell）。セルの中では、横の基準「段（column）」はセルになる
+ */
+export interface Placement {
+  x: number | null
+  xAlign: string | null
+  xFrom: string | null
+  y: number | null
+  yFrom: string | null
+  cx: number
+  cy: number
+  inCell: boolean
 }
 
 /** 文字の枠（テキストボックス・図形の中の文字） */
@@ -72,6 +90,15 @@ export interface WordTable {
   rows: WordCell[][]
   /** 行ごとの高さ（twip。w:trHeight。決めていない行・「自動」の行は null） */
   rowHeights?: (number | null)[]
+  /** 表の形（列の幅が読めたとき） */
+  geometry?: TableGeometry | null
+}
+
+/** 表の形（EMU）。edges：列の境（表の左の端から）。left：表の左の端（余白の左の端から）。heights：行の高さ（決めていない行は null） */
+export interface TableGeometry {
+  edges: number[]
+  left: number
+  heights: (number | null)[]
 }
 
 export type WordBlock = WordParagraph | WordTable
@@ -477,6 +504,28 @@ function anchorPosition(anchor: Element | null, frame: PageFrame | null | undefi
   return { centerX: left + cx / 2, xFrom }
 }
 
+/** 浮かせた図の置き方を読む（wp:anchor。行内の図は null） */
+function anchorPlacement(anchor: Element | null): Placement | null {
+  if (!anchor || !is(anchor, 'wp', 'anchor')) return null
+  const h = child(anchor, 'wp', 'positionH')
+  const v = child(anchor, 'wp', 'positionV')
+  const ext = child(anchor, 'wp', 'extent')
+  const num = (el: Element | undefined) => {
+    const n = Number(el?.textContent ?? NaN)
+    return el && Number.isFinite(n) ? n : null
+  }
+  return {
+    x: num(child(h, 'wp', 'posOffset')),
+    xAlign: child(h, 'wp', 'align')?.textContent?.trim() ?? null,
+    xFrom: attr(h, 'relativeFrom'),
+    y: num(child(v, 'wp', 'posOffset')),
+    yFrom: attr(v, 'relativeFrom'),
+    cx: Number(attr(ext, 'cx') ?? 0) || 0,
+    cy: Number(attr(ext, 'cy') ?? 0) || 0,
+    inCell: attr(anchor, 'layoutInCell') !== '0',
+  }
+}
+
 /** 図形（w:drawing・w:pict）の中を読む：画像・文字の枠・グラフ */
 function readGraphic(node: Element, out: Collector, ctx: DocumentContext, anchor: Element | null) {
   for (const el of elements(node)) {
@@ -492,7 +541,7 @@ function readGraphic(node: Element, out: Collector, ctx: DocumentContext, anchor
     if (is(el, 'a', 'blip')) {
       const embed = attr(el, 'embed')
       const link = attr(el, 'link')
-      out.images.push({ rid: embed ?? link, linked: !embed && !!link, kind: 'image', ...anchorPosition(here, ctx.frame), crop: cropOf(el) })
+      out.images.push({ rid: embed ?? link, linked: !embed && !!link, kind: 'image', ...anchorPosition(here, ctx.frame), crop: cropOf(el), place: anchorPlacement(here) })
       continue
     }
     if (is(el, 'v', 'imagedata')) {
@@ -635,11 +684,195 @@ function readTable(tbl: Element, ctx: DocumentContext): WordTable {
     const twip = Number(attr(height, 'val'))
     rowHeights.push(height && attr(height, 'hRule') !== 'auto' && Number.isFinite(twip) && twip > 0 ? twip : null)
   }
-  return { type: 'table', rows, rowHeights }
+  const geometry = tableGeometry(tbl, rowHeights, ctx.frame)
+  if (geometry) placeInCells(rows, geometry, ctx.frame)
+  return { type: 'table', rows, rowHeights, geometry }
+}
+
+// ---- 表の画像を、Word の画面で見えている位置のセルに入れる ----
+// 浮かせた画像（文字の前面・背面など）は、Word の中では、どこかの段落に属している（アンカー）。学生がドラッグで動かすと、
+// 見えている位置と、属している段落（セル・表の前後の段落）が違うことがある。前は属している所に入れていたため、
+// 使用素材表の生地見本の画像が、別のセルや表の外（図）に入ることがあった（学生の試し：依頼者 2026-10-23）
+
+/** 本文の1行の高さ（twip）の目安。ひな形（A4・上下 25mm・38行）の行送り */
+const LINE = 368 * TWIP
+/** 列・行の境のそば（2mm）は、どちらとも決めない */
+const NEAR_EDGE = 72000
+
+/** 表の列の幅（w:tblGrid）・左の端（w:tblInd・w:jc）・行の高さから、表の形を求める（列の幅が読めなければ null） */
+function tableGeometry(tbl: Element, rowHeights: (number | null)[], frame: PageFrame | null | undefined): TableGeometry | null {
+  const grid = child(tbl, 'w', 'tblGrid')
+  const widths = grid ? elements(grid).filter((e) => is(e, 'w', 'gridCol')).map((e) => Number(attr(e, 'w')) * TWIP) : []
+  if (!widths.length || widths.some((w) => !Number.isFinite(w) || w <= 0)) return null
+  const edges = [0]
+  for (const w of widths) edges.push(edges[edges.length - 1] + w)
+  const tblPr = child(tbl, 'w', 'tblPr')
+  const ind = child(tblPr, 'w', 'tblInd')
+  const indent = Number(attr(ind, 'w') ?? 0)
+  let left = (attr(ind, 'type') ?? 'dxa') === 'dxa' && Number.isFinite(indent) ? indent * TWIP : 0
+  const jc = attr(child(tblPr, 'w', 'jc'), 'val')
+  const width = edges[edges.length - 1]
+  if (frame && jc === 'center') left = (frame.textWidth - width) / 2
+  else if (frame && (jc === 'right' || jc === 'end')) left = frame.textWidth - width
+  return { edges, left, heights: rowHeights.map((h) => (h === null ? null : h * TWIP)) }
+}
+
+/** 「左・中央・右」で置いた図の、左の端（幅は基準の幅） */
+function alignedLeft(align: string | null, width: number | null, cx: number): number | null {
+  if (width === null) return null
+  if (align === 'left' || align === 'inside') return 0
+  if (align === 'right' || align === 'outside') return width - cx
+  if (align === 'center') return (width - cx) / 2
+  return null
+}
+
+/** 図の横の中心の、表の左の端からの位置。cell：属しているセルの左の端と幅（表の外の段落なら null） */
+function centerInTable(place: Placement, g: TableGeometry, frame: PageFrame | null | undefined, cell: { left: number; width: number } | null): number | null {
+  let base: number
+  let width: number | null
+  if (cell && place.inCell && (place.xFrom === 'column' || place.xFrom === 'character')) {
+    base = cell.left
+    width = cell.width
+  } else if (place.xFrom === 'margin' || place.xFrom === 'column') {
+    base = -g.left
+    width = frame?.textWidth ?? null
+  } else if (place.xFrom === 'page' && frame) {
+    base = -g.left - frame.marginLeft
+    width = frame.pageWidth
+  } else return null
+  const left = place.x ?? alignedLeft(place.xAlign, width, place.cx)
+  return left === null ? null : base + left + place.cx / 2
+}
+
+/** 横の位置が入る列（境のそば・表の外は null） */
+function columnAt(g: TableGeometry, x: number): number | null {
+  for (let i = 0; i < g.edges.length - 1; i++) if (x >= g.edges[i] + NEAR_EDGE && x < g.edges[i + 1] - NEAR_EDGE) return i
+  return null
+}
+
+/** row の行の上の端から offset の位置が入る行（高さの分からない行を通る・境のそば・表の外は null） */
+function rowAt(g: TableGeometry, row: number, offset: number): number | null {
+  let r = row
+  let y = offset
+  while (y < 0) {
+    r--
+    const h = r >= 0 ? g.heights[r] : null
+    if (h == null) return null
+    y += h
+  }
+  for (;;) {
+    const h = g.heights[r]
+    if (h == null) return null
+    if (y < h) return y < NEAR_EDGE || y > h - NEAR_EDGE ? null : r
+    y -= h
+    r++
+    if (r >= g.heights.length) return null
+  }
+}
+
+/** 段落の上の端から図の縦の中心まで（段落・行からの位置で置いた図だけ） */
+const centerBelowParagraph = (place: Placement): number | null =>
+  place.y !== null && (place.yFrom === 'paragraph' || place.yFrom === 'line') ? place.y + place.cy / 2 : null
+
+/** 行の、列 col を含むセル（縦につなげたセルの続きなら、つなげ始めのセル） */
+function cellAtColumn(rows: WordCell[][], row: number, col: number): { cell: WordCell; row: number } | null {
+  for (let r = row; r >= 0; r--) {
+    let start = 0
+    const cell = rows[r]?.find((c) => {
+      const hit = col >= start && col < start + c.span
+      start += c.span
+      return hit
+    })
+    if (!cell) return null
+    if (!cell.mergedUp) return { cell, row: r }
+  }
+  return null
+}
+
+/** セルの中の浮かせた画像を、見えている位置のセルに移す（同じ表の中） */
+function placeInCells(rows: WordCell[][], g: TableGeometry, frame: PageFrame | null | undefined) {
+  const moves: { image: ImageRef; from: WordCell; to: WordCell }[] = []
+  const edge = (i: number) => g.edges[Math.min(i, g.edges.length - 1)]
+  rows.forEach((row, r) => {
+    let start = 0
+    for (const cell of row) {
+      const own = { left: edge(start), width: edge(start + cell.span) - edge(start) }
+      const ownColumn = start
+      start += cell.span
+      let lines = 0
+      for (const b of cell.blocks) {
+        if (b.type !== 'paragraph') continue
+        for (const image of b.images) {
+          if (!image.place) continue
+          const x = centerInTable(image.place, g, frame, own)
+          const col = x === null ? null : columnAt(g, x)
+          const below = centerBelowParagraph(image.place)
+          const target = below === null ? null : rowAt(g, r, lines * LINE + below)
+          // 見出しの行（1行目）には移さない
+          const toRow = target === null || (target === 0 && r !== 0) ? r : target
+          const to = cellAtColumn(rows, toRow, col ?? ownColumn)?.cell
+          if (to && to !== cell) moves.push({ image, from: cell, to })
+        }
+        lines += b.text.split('\n').length
+      }
+    }
+  })
+  for (const { image, from, to } of moves) {
+    from.images = from.images.filter((i) => i !== image)
+    to.images.push(image)
+  }
+}
+
+/** 段落の高さ（行の数。1行 38字の目安） */
+const paragraphLines = (p: WordParagraph) => p.text.split('\n').reduce((n, l) => n + Math.max(1, Math.ceil(l.length / 38)), 0)
+
+/**
+ * 表のすぐ前（2つまで）・すぐ後ろの段落に属している浮かせた画像で、見えている位置が表の中（見出しの行より下）のものを、そのセルに移す。
+ * 図と間違えないよう、セルに入る大きさのものだけ。行の高さが分からない表では移さない
+ */
+function pullIntoTables(blocks: WordBlock[], frame: PageFrame | null | undefined) {
+  blocks.forEach((table, t) => {
+    if (table.type !== 'table' || !table.geometry) return
+    const g = table.geometry
+    if (g.heights.some((h) => h == null)) return
+    const height = g.heights.reduce<number>((sum, h) => sum + (h ?? 0), 0)
+    const pull = (p: WordBlock | undefined, top: number) => {
+      if (p?.type !== 'paragraph') return
+      p.images = p.images.filter((image) => {
+        const place = image.place
+        const below = place ? centerBelowParagraph(place) : null
+        if (!place || below === null) return true
+        const x = centerInTable(place, g, frame, null)
+        const col = x === null ? null : columnAt(g, x)
+        const row = col === null ? null : rowAt(g, 0, top + below)
+        if (col === null || row === null || row === 0) return true
+        const found = cellAtColumn(table.rows, row, col)
+        if (!found) return true
+        const fits = place.cx <= (g.edges[col + 1] - g.edges[col]) * 1.1 && place.cy <= (g.heights[found.row] ?? 0) * 1.1
+        if (!fits) return true
+        found.cell.images.push(image)
+        return false
+      })
+    }
+    pull(blocks[t + 1], height)
+    const before = blocks[t - 1]
+    if (before?.type === 'paragraph') {
+      const first = paragraphLines(before) * LINE
+      pull(before, -first)
+      const earlier = blocks[t - 2]
+      if (earlier?.type === 'paragraph') pull(earlier, -first - paragraphLines(earlier) * LINE)
+    }
+  })
 }
 
 /** 本文・セル・文字の枠の中の、段落と表の並びを読む */
 export function readBlocks(container: Element, ctx: DocumentContext): WordBlock[] {
+  const blocks = readBlockList(container, ctx)
+  pullIntoTables(blocks, ctx.frame)
+  return blocks
+}
+
+function readBlockList(container: Element, ctx: DocumentContext): WordBlock[] {
   const blocks: WordBlock[] = []
   for (const el of elements(container)) {
     if (is(el, 'w', 'p')) blocks.push(readParagraph(el, ctx))
