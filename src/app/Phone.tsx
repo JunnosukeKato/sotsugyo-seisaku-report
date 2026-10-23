@@ -6,6 +6,7 @@ import { findEditable, type EditableKind } from '../editor/reportOps'
 import { setWritingZoomOn, writingZoomOn } from '../editor/pinchZoom'
 import { BAND_SIDE_QUERY, forTouch, paragraphHint, photoToolsAtSide } from './bandText'
 import { Icon } from './icons'
+import { useAsk } from './ask'
 import { SelectionTools } from './Palette'
 import { TableSizeSheet } from './TableSize'
 import { ShapeFace, TableShapeSheet } from './tableShape'
@@ -97,6 +98,7 @@ function Sheet({ title, extra, onClose, children }: { title: string; extra?: Rea
  * キーボードを閉じているときは、下のタブ（ページ一覧・追加など）の上に出す（タブを隠さない。index.css の「はじめて使う学生の試し（2回目）」）
  */
 function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: EditorSnapshot; hostRef: React.RefObject<HTMLDivElement | null> }) {
+  const ask = useAsk()
   const id = snap.editingId
   const editable = id ? findEditable(snap.report, id) : undefined
   const hint = id && editable && !editable.text.trim() ? paragraphHint(snap.report, id) : undefined
@@ -196,8 +198,8 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
           <button
             className="danger"
             onMouseDown={keepFocus}
-            onClick={() => {
-              if (snap.editingKind === 'chapter' && !confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（「元に戻す」で戻せます）')) return
+            onClick={async () => {
+              if (snap.editingKind === 'chapter' && !(await ask.confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（「元に戻す」で戻せます）', { ok: '削除する', danger: true }))) return
               editor.removeBlock(id!)
             }}
           >
@@ -295,6 +297,7 @@ function PinchTip() {
 }
 
 function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
+  const ask = useAsk()
   const id = snap.editingId
   const editable = id ? findEditable(snap.report, id) : undefined
   // 空の段落を書き始めるとき：ひな形の「ここに何を書くか」（下の書く欄と同じ）
@@ -385,8 +388,8 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
             <button
               className="danger"
               onMouseDown={keepFocus}
-              onClick={() => {
-                if (snap.editingKind === 'chapter' && !confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（「元に戻す」で戻せます）')) return
+              onClick={async () => {
+                if (snap.editingKind === 'chapter' && !(await ask.confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（「元に戻す」で戻せます）', { ok: '削除する', danger: true }))) return
                 editor.removeBlock(id)
               }}
             >
@@ -558,6 +561,8 @@ interface Props {
   sheetHostRef: React.RefObject<HTMLDivElement | null>
   /** 今年度だけ：メニューの「Word で書いた分を読み込む」の小さなリンク（mockups/v24 ① 案C）。渡したときだけ出す */
   onWordImport?: () => void
+  /** 「ページを読み込み直す」（メニューの中） */
+  onReload?: () => void
   /** 今年度だけ：Word から写したあとの「つぎにすること」（mockups/v24 ④）。チェックの欄のいちばん上に出す。onPick：紙面へ移る前に欄を閉じる */
   wordTodo?: (onPick: () => void) => ReactNode
   /** 増えたら、チェックの欄を開く（Word から写し終えたとき） */
@@ -567,7 +572,7 @@ interface Props {
 }
 
 /** スマホ版の、紙面のまわりの部品（紙面そのものは App の .stage） */
-export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onHelp, sheetHostRef, onWordImport, wordTodo, checkRequest, direct }: Props) {
+export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onHelp, sheetHostRef, onWordImport, onReload, wordTodo, checkRequest, direct }: Props) {
   const [sheet, setSheet] = useState<SheetKind>(null)
   const close = () => setSheet(null)
   // checkRequest が増えたら、チェックの欄を開く（描く途中で合わせる。React の「前の値と比べて state を変える」書き方）
@@ -732,6 +737,19 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
                 onWordImport()
               }}
             />
+          )}
+          {/* 新しい版にする（紙面を下に引っぱると、ページをめくるため。依頼者の選択 2026-10-23） */}
+          {onReload && (
+            <button
+              className="word-link reload-link"
+              onClick={() => {
+                close()
+                onReload()
+              }}
+            >
+              {Icon.reload}
+              ページを読み込み直す
+            </button>
           )}
           <SourceNotice />
         </Sheet>

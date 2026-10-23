@@ -9,6 +9,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync } from 'node:f
 import { resolve } from 'node:path'
 import { stubConfig } from './configStub.mjs'
 import { setupWriting } from './sampleReport.mjs'
+import { answerConfirms } from './confirmUi.mjs'
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'poc-output/v38-impl'
@@ -37,6 +38,8 @@ async function openSample(browser, vp) {
   await stubConfig(page)
   page.on('pageerror', (e) => console.log('pageerror(photo-pages):', e.message))
   page.on('dialog', (d) => d.dismiss())
+  // 学生のツールの確認・知らせは画面の中の窓（src/app/ask.tsx）。前のブラウザの確認と同じく答える
+  await answerConfirms(page, () => false)
   await page.evaluateOnNewDocument(() => {
     try {
       localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')

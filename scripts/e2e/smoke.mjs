@@ -25,6 +25,7 @@ import { closeShape, pickWidth } from './shapeUi.mjs'
 import { waitingPc } from './waiting.mjs'
 import { templateStudentPc } from './templateStudent.mjs'
 import { setupWriting } from './sampleReport.mjs'
+import { answerConfirms } from './confirmUi.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -325,9 +326,11 @@ await withEdge(async (browser) => {
   const menuOpen = await menuState()
   await page.screenshot({ path: `${OUT}/0-side-menu.png` })
   const WORD_ITEM = 'Word で書いた分を読み込む今年度だけ'
+  // いちばん下：新しい版にするときの「ページを読み込み直す」（依頼者の選択 2026-10-23）
+  const RELOAD_ITEM = 'ページを読み込み直す'
   check(
-    '「メニュー」を押すと開き（aria-expanded・role="menu"）、「使い方」がいちばん上、その下に「バックアップ・作り直す」「Word で書いた分を読み込む（今年度だけ）」が出る（幅 262px・字 13.5px）',
-    menuOpen.expanded === 'true' && menuOpen.controls && menuOpen.role === 'menu' && menuOpen.labelled && menuOpen.items.join(',') === `使い方,バックアップ・作り直す,${WORD_ITEM}` && menuOpen.width === 262 && menuOpen.font === '13.5px',
+    '「メニュー」を押すと開き（aria-expanded・role="menu"）、「使い方」がいちばん上、その下に「バックアップ・作り直す」「Word で書いた分を読み込む（今年度だけ）」「ページを読み込み直す」が出る（幅 262px・字 13.5px）',
+    menuOpen.expanded === 'true' && menuOpen.controls && menuOpen.role === 'menu' && menuOpen.labelled && menuOpen.items.join(',') === `使い方,バックアップ・作り直す,${WORD_ITEM},${RELOAD_ITEM}` && menuOpen.width === 262 && menuOpen.font === '13.5px',
     JSON.stringify(menuOpen),
   )
   // ほかの所（「PDFを書き出す」の下のひとこと。セルフチェックの見出しはメニューに隠れることがある）を押すと閉じる
@@ -340,7 +343,7 @@ await withEdge(async (browser) => {
   await page.keyboard.press('Enter')
   await page.waitForSelector('.side .head-menu')
   const menuKeys = [(await menuState()).focus]
-  for (const key of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp', 'Home', 'End', 'ArrowLeft', 'Home', 'Tab']) {
+  for (const key of ['ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowDown', 'ArrowUp', 'Home', 'End', 'ArrowLeft', 'Home', 'Tab']) {
     await page.keyboard.press(key)
     await pause0(60)
     menuKeys.push((await menuState()).focus)
@@ -350,7 +353,7 @@ await withEdge(async (browser) => {
   const menuEsc = await menuState()
   check(
     'キーボード：Enter で開いて「使い方」へ、↓↑ で項目を動き（端で回る）、Home・End、Tab でも次の項目へ（←→ でページは送らない）。Esc で閉じて「メニュー」のボタンに戻る',
-    menuKeys.join('|') === ['使い方', 'バックアップ・作り直す', WORD_ITEM, '使い方', WORD_ITEM, '使い方', WORD_ITEM, WORD_ITEM, '使い方', 'バックアップ・作り直す'].join('|') &&
+    menuKeys.join('|') === ['使い方', 'バックアップ・作り直す', WORD_ITEM, RELOAD_ITEM, '使い方', RELOAD_ITEM, '使い方', RELOAD_ITEM, RELOAD_ITEM, '使い方', 'バックアップ・作り直す'].join('|') &&
       !menuEsc.open &&
       menuEsc.focus === 'button' &&
       menuEsc.expanded === 'false' &&
@@ -370,7 +373,7 @@ await withEdge(async (browser) => {
   const menuTabbedOut = await menuState()
   check(
     'Space でも開き（「使い方」へ）、↑ で開くと最後の項目へ。最後の項目から Tab でメニューの外に出ると閉じる',
-    menuBySpace === '使い方' && menuByUp === WORD_ITEM && !menuTabbedOut.open && menuTabbedOut.focus !== 'button',
+    menuBySpace === '使い方' && menuByUp === RELOAD_ITEM && !menuTabbedOut.open && menuTabbedOut.focus !== 'button',
     JSON.stringify({ menuBySpace, menuByUp, menuTabbedOut }),
   )
   await page.evaluate(() => document.activeElement?.blur())
@@ -2846,6 +2849,8 @@ async function wordImportCheck(browser) {
   await noHotReload(page)
   await stubConfig(page)
   page.on('pageerror', (e) => console.log('pageerror(word):', e.message))
+  // 学生のツールの確認（「読み込む前の原稿に戻す」）は画面の中の窓（src/app/ask.tsx）。OK を押す
+  await answerConfirms(page, () => true)
   await page.setViewport({ width: 1440, height: 900 })
   await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
   const ready = () =>
@@ -3010,7 +3015,6 @@ async function wordImportCheck(browser) {
   check('「つぎにすること」は、読み込み直しても閉じるまで残る（済んだものの ✓ も）', await page.evaluate(() => !!document.querySelector('.side .word-todo li.done')))
 
   // 読み込む前の原稿に戻す（ツールのひな形のままの原稿に戻る）
-  page.once('dialog', (d) => d.accept())
   await clickButton('.side .word-todo .undo', '読み込む前の原稿に戻す')
   await page.waitForFunction(() => !document.querySelector('.side .word-todo'), { timeout: 20000 })
   await pause(300)

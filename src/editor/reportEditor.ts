@@ -150,6 +150,8 @@ export interface EditorCallbacks {
    * done・total：何枚目か（まとめて選んだとき）。終わったら null
    */
   onImageWork?(work: { done: number; total: number } | null): void
+  /** 知らせの窓を出してほしい（画面の中に出す：app/ask.tsx。ないときはブラウザの alert） */
+  onAlert?(text: string): void
 }
 
 /** 編集の中核の動き方 */
@@ -682,6 +684,12 @@ export class ReportEditor {
     }
   }
 
+  /** 知らせの窓（画面の中に出す。前はブラウザの alert で、iPhone の Chrome などで出ないことがあった） */
+  private alert(text: string): void {
+    if (this.callbacks.onAlert) this.callbacks.onAlert(text)
+    else window.alert(text)
+  }
+
   /** 選んだ写真を縮めて、この端末に保存する（読めない・保存できないときは、わけを出して null） */
   private async storeImage(file: File, purpose: 'figure' | 'swatch' | 'photo'): Promise<string | null> {
     let stored: StoredImage
@@ -689,7 +697,7 @@ export class ReportEditor {
       stored = await importImage(file, ops.newId('img'), purpose === 'photo' ? PHOTO_MAX_PX : FIGURE_MAX_PX)
     } catch {
       // 写真として読めない（パソコンで iPhone の HEIC を選んだ、壊れたファイルなど）。黙って何もしないと、押しても動かないように見える
-      alert(
+      this.alert(
         `「${file.name}」を写真として読み込めませんでした。\n` +
           'iPhone の写真（HEIC）は、パソコンでは読めないことがあります。JPEG か PNG にしてから選んでください（iPhone の「設定」→「カメラ」→「フォーマット」で「互換性優先」にすると JPEG で撮れます）。',
       )
@@ -698,7 +706,7 @@ export class ReportEditor {
     try {
       await putImage(stored)
     } catch (e) {
-      alert(`写真をこの端末に保存できませんでした（空き容量が足りない可能性があります）。\n${e instanceof Error ? e.message : String(e)}`)
+      this.alert(`写真をこの端末に保存できませんでした（空き容量が足りない可能性があります）。\n${e instanceof Error ? e.message : String(e)}`)
       return null
     }
     this.addImages([stored])

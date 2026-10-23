@@ -9,6 +9,7 @@ import { mkdirSync } from 'node:fs'
 import { pathToFileURL } from 'node:url'
 import { withEdge } from '../poc/edge.mjs'
 import { stubConfig } from './configStub.mjs'
+import { answerConfirms } from './confirmUi.mjs'
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'poc-output/trial-mode'
@@ -54,6 +55,8 @@ export async function trialModeAdmin(browser, check) {
   // 学科の設定は、配信の窓口を呼ばずに決まった設定で（configStub.mjs）
   await stubConfig(student)
   student.on('dialog', (d) => d.accept())
+  // 学生のツールの確認・知らせは画面の中の窓（src/app/ask.tsx）。前のブラウザの確認と同じく答える
+  await answerConfirms(student, () => true)
   await student.setViewport({ width: 1366, height: 768 })
   await student.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0' })
   await ready(student)
@@ -83,6 +86,11 @@ export async function trialModeAdmin(browser, check) {
   trial.on('dialog', (d) => {
     dialogs.push(d.message())
     d.accept()
+  })
+  // 学生のツールの確認・知らせは画面の中の窓（src/app/ask.tsx）。前のブラウザの確認と同じく答える
+  await answerConfirms(trial, (text) => {
+    dialogs.push(text)
+    return true
   })
   await trial.setViewport({ width: 1366, height: 768 })
   await ready(trial)

@@ -14,6 +14,7 @@ import { busyDone, busyResult, clickBusy, MEASURE, setSlow, slowDown, throttle, 
 import { stubConfig } from './configStub.mjs'
 import { fakeDrive, routeGoogle } from './fakeGoogle.mjs'
 import { setupWriting } from './sampleReport.mjs'
+import { answerConfirms } from './confirmUi.mjs'
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'poc-output/waiting'
@@ -59,6 +60,8 @@ async function openSample(browser, vp) {
   page.on('pageerror', (e) => console.log('pageerror(waiting):', e.message))
   // 「この時点に戻す」「最初から作り直す」などの確かめは、「OK」を押す
   page.on('dialog', (d) => d.accept())
+  // 学生のツールの確認・知らせは画面の中の窓（src/app/ask.tsx）。前のブラウザの確認と同じく答える
+  await answerConfirms(page, () => true)
   await page.evaluateOnNewDocument(() => {
     try {
       localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
@@ -371,6 +374,8 @@ async function driveDevice(browser, drive, vp) {
   await throttle(page)
   page.on('pageerror', (e) => console.log('pageerror(waiting-drive):', e.message))
   page.on('dialog', (d) => d.accept())
+  // 学生のツールの確認・知らせは画面の中の窓（src/app/ask.tsx）。前のブラウザの確認と同じく答える
+  await answerConfirms(page, () => true)
   await page.evaluateOnNewDocument(() => {
     try {
       localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')

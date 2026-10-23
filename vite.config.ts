@@ -68,11 +68,30 @@ function cspPlugin(): Plugin {
   }
 }
 
+/**
+ * 版の印（依頼者の選択 2026-10-23：「新しい版があります」を出す。app/newVersion.tsx）。まとめるたびに印を決めて、プログラムに書き込み（__BUILD_ID__）、
+ * 同じ印を version.json に出す。印は GitHub で公開するときはコミット、手元ではまとめた時刻。開発サーバー・単体テストでは 'dev'（調べない）
+ */
+function versionPlugin(): Plugin {
+  const id = process.env.GITHUB_SHA?.slice(0, 12) || Date.now().toString(36)
+  let build = false
+  return {
+    name: 'sotsugyo-version',
+    config(_, env) {
+      build = env.command === 'build'
+      return { define: { __BUILD_ID__: JSON.stringify(build ? id : 'dev') } }
+    },
+    generateBundle() {
+      if (build) this.emitFile({ type: 'asset', fileName: 'version.json', source: JSON.stringify({ id }) })
+    },
+  }
+}
+
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => ({
   // GitHub Pages などのサブパスや学内サーバーのどこに置いても動くよう相対パスで出力する
   base: './',
-  plugins: [react(), cspPlugin()],
+  plugins: [react(), cspPlugin(), versionPlugin()],
   build: {
     rollupOptions: {
       // 学生用ツールと、提出前チェック（Word のひな形で書いている学生が、確かめて1つの PDF にまとめる）と、

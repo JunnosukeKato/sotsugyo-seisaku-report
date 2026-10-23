@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import { SLOW_MS, useSlow } from './useBusy'
+import { useAsking } from './ask'
 
 /**
  * 待つ間の表示（依頼者の要望 2026-10-20「保存中に何も表示がなく待たされるので不安になる」）。
@@ -18,7 +19,9 @@ export function Spinner({ className }: { className?: string }) {
  * ボタンの中身。busy の間は、回る印と text（例「保存しています…」）に替える（ボタンを押せなくするのは、呼ぶ側の disabled）
  */
 export function BusyLabel({ busy, text, children }: { busy: boolean; text: string; children: ReactNode }) {
-  if (!busy) return <>{children}</>
+  // 確認の窓（「作り直しますか？」など）で聞いている間は、まだ始めていないので、ボタンの名前のまま（app/ask.tsx）
+  const asking = useAsking()
+  if (!busy || asking) return <>{children}</>
   return (
     <>
       <Spinner />

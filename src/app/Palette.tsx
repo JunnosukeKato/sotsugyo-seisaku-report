@@ -5,6 +5,7 @@ import type { TableBlock } from '../model/types'
 import { PHOTO_ARRANGEMENTS, photoGrid, photoPageName } from '../model/photos'
 import { SELECTION_TEXTS } from '../editor/selectionBar'
 import { Icon } from './icons'
+import { useAsk } from './ask'
 import { TableSizeMenu } from './TableSize'
 import { ShapeFace, TableShapeSheet, TableShapeTool } from './tableShape'
 import { keepFocus, PAGE_CONTEXT, TOC_PALETTE_NOTE } from './uiShared'
@@ -233,6 +234,7 @@ interface SelectionToolsProps extends Omit<Props, 'onReferences'> {
 
 /** 書いている物・選んでいる物の道具（削除する・外すと、画面の下に「戻す」の知らせが出る。UndoBar） */
 export function SelectionTools({ editor, snap, phone, template }: SelectionToolsProps) {
+  const ask = useAsk()
   const { editingKind, editingId, selection, report } = snap
   const kind = snap.layout?.kinds[snap.page]
 
@@ -451,8 +453,8 @@ export function SelectionTools({ editor, snap, phone, template }: SelectionTools
   if (!editingId) return null
   // 紙面でコピーしたまとまりがあるときの「貼り付け」（Ctrl+V と同じ。コピーしていないときは出さない）
   const paste = snap.pasteReady && <Tool label={SELECTION_TEXTS.paste.label} icon={Icon.paste} title={SELECTION_TEXTS.paste.title()} onClick={() => editor.pasteFromTool()} />
-  const remove = () => {
-    if (editingKind === 'chapter' && !confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（「元に戻す」で戻せます）')) return
+  const remove = async () => {
+    if (editingKind === 'chapter' && !(await ask.confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（「元に戻す」で戻せます）', { ok: '削除する', danger: true }))) return
     editor.removeBlock(editingId)
   }
   if (editingKind === 'paragraph') {

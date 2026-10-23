@@ -2,6 +2,7 @@
 // 映画・舞台衣装デザイナー コースのひな形の「制作過程」の説明の後ろに、改ページと表（部位・寸法・メモ、中身2行）を入れた設定で、学生がコースを選んで始める。
 // 画面の写真は poc-output/template-mode/ に置く
 import { mkdirSync, readFileSync } from 'node:fs'
+import { answerConfirms } from './confirmUi.mjs'
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'poc-output/template-mode'
@@ -46,6 +47,8 @@ export async function templateStudentPc(browser, check) {
   const page = await context.newPage()
   page.on('pageerror', (e) => console.log('pageerror(template-student):', e.message))
   page.on('dialog', (d) => d.dismiss())
+  // 学生のツールの確認・知らせは画面の中の窓（src/app/ask.tsx）。前のブラウザの確認と同じく答える
+  await answerConfirms(page, () => false)
   await page.evaluateOnNewDocument(hook, configWithTemplate())
   await page.setViewport({ width: 1366, height: 768 })
   await page.goto(`${APP}/?nodrive`, { waitUntil: 'networkidle0', timeout: 90000 })

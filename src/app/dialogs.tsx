@@ -9,6 +9,7 @@ import { BusyLabel, SlowNote, Spinner } from './Busy'
 import { useBusy, useDoneNote } from './useBusy'
 import { Icon } from './icons'
 import { useDialogFocus } from './useDialogFocus'
+import { useAsk } from './ask'
 
 /**
  * 画面の上に出す窓。keepOpen：窓の外を押しても Esc でも閉じない（書きかけの内容が消えないように。閉じるのは「×」とボタンだけ）。
@@ -178,6 +179,7 @@ function Field({
  * 並べ方は、本文を書き始めてからコースを変えるときの窓（CourseChangeDialog）と同じ：戻る方を左、消える方は目立たせず、残す方を濃いボタンに
  */
 export function ReferencesDialog({ report, onSave, onClose }: { report: Report; onSave: (refs: Reference[]) => Promise<void> | void; onClose: () => void }) {
+  const ask = useAsk()
   const [refs, setRefs] = useState<Reference[]>(report.references)
   // 「反映する」：紙面を組み直し終えるまで、窓に「反映しています…」を出してから閉じる（前は、閉じてから紙面が変わるまで何も出なかった）
   const [busy, run] = useBusy<'save'>()
@@ -216,10 +218,11 @@ export function ReferencesDialog({ report, onSave, onClose }: { report: Report; 
               <select
                 value={ref.type}
                 aria-label={`${i + 1}つ目の種類`}
-                onChange={(e) => {
+                onChange={async (e) => {
                   // 書籍とWebサイトでは項目が違うため、入れ替えると書いた内容は消える。書いてあれば確かめる
-                  if (referenceFilled(ref) && !confirm('種類を変えると、この文献に書いた内容は消えます。変えますか？')) return
-                  setRefs(refs.map((r) => (r.id === ref.id ? emptyReference(e.target.value as Reference['type']) : r)))
+                  const type = e.target.value as Reference['type']
+                  if (referenceFilled(ref) && !(await ask.confirm('種類を変えると、この文献に書いた内容は消えます。変えますか？', { ok: '変える', danger: true }))) return
+                  setRefs(refs.map((r) => (r.id === ref.id ? emptyReference(type) : r)))
                 }}
               >
                 <option value="book">書籍</option>
@@ -340,6 +343,7 @@ export function BackupDialog({
   onStartOver: () => Promise<void> | void
   onClose: () => void
 }) {
+  const ask = useAsk()
   const fileRef = useRef<HTMLInputElement>(null)
   const startOverId = useId()
   const [busy, run] = useBusy<BackupBusy>()
@@ -365,7 +369,7 @@ export function BackupDialog({
                 showDone('保存しました（「ダウンロード」のフォルダ）')
               } catch (e) {
                 // 作れなかったわけを出す（前は、何も出ずに終わっていた）
-                alert(`バックアップファイルを保存できませんでした。\n${e instanceof Error ? e.message : String(e)}`)
+                void ask.alert(`バックアップファイルを保存できませんでした。\n${e instanceof Error ? e.message : String(e)}`)
               }
             })
           }

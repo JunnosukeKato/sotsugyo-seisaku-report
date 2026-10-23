@@ -41,6 +41,8 @@ import { usePdfCopy } from './app/usePdfCopy'
 import { useAutosave } from './app/useAutosave'
 import { usePanelWidths } from './app/usePanelWidths'
 import { WordImportDialog, WordTodoCard } from './app/WordImport'
+import { useAsk } from './app/ask'
+import { NewVersionBanner, useNewVersion } from './app/newVersion'
 import { useKeepWritingVisible, writingArea } from './app/writingArea'
 import { useWordTodo, wordImportOffered } from './app/useWordTodo'
 import { HelpView } from './help/HelpView'
@@ -189,6 +191,11 @@ export default function App() {
   const [config, setConfig] = useState<YearConfig>(currentConfig)
   const [editor, setEditor] = useState<ReportEditor | null>(null)
   const [dialog, setDialog] = useState<Dialog>(null)
+  // 確認の窓・知らせの窓（画面の中に出す。前はブラウザの confirm・alert で、iPhone の Chrome などで出ないことがあった：app/ask.tsx）
+  const ask = useAsk()
+  // 新しい版の知らせ（× で閉じたら、この画面では出さない）
+  const newVersion = useNewVersion()
+  const [newVersionClosed, setNewVersionClosed] = useState(false)
   // 目次のページの、行のない所を押した点（目次は自動であることを、その近くに知らせる：mockups/v41 案B。app/TocNotice.tsx）
   const [tocPoint, setTocPoint] = useState<{ x: number; y: number } | null>(null)
   const closeTocNotice = useCallback(() => setTocPoint(null), [])
@@ -240,6 +247,16 @@ export default function App() {
     void drive?.flush()
   })
   const editorRef = useRef<ReportEditor | null>(null)
+  /**
+   * ページを読み込み直す（新しい版にする。依頼者の選択 2026-10-23）：書いている字を原稿に入れ、この端末とドライブに保存してから。
+   * ドライブは、つながらないときに待ち続けないよう、5秒まで待つ（この端末には保存してあり、読み込み直したあとに送る）
+   */
+  const reloadTool = async () => {
+    editorRef.current?.commitEditing()
+    await autosave.flush()
+    if (drive) await Promise.race([drive.flush(), new Promise((r) => setTimeout(r, 5000))])
+    location.reload()
+  }
   // 最後に見ていたページ：開いたときにそのページを見せ（placeOpened）、そのあとは見ているページを覚える（別のタブで開いて書けない間は覚えない）
   const [placeOpened, setPlaceOpened] = useState(false)
   useRememberPlace(editor, snap, placeOpened && !tabLock.locked)
@@ -378,7 +395,7 @@ export default function App() {
             prefillStudentId(ed)
             startGuide(configRef.current, ed.getSnapshot().report, r.kind === 'new')
           }
-          else if (r.kind === 'local' && !r.upload) alert('ドライブの原稿は、この端末の原稿と同じです（最新です）')
+          else if (r.kind === 'local' && !r.upload) void ask.alert('ドライブの原稿は、この端末の原稿と同じです（最新です）')
           return
         }
         case 'remote':
@@ -514,6 +531,7 @@ export default function App() {
           pickImage: pickImageFile,
           pickImages: pickImageFiles,
           onImageWork: (work) => imageWork.set(work),
+          onAlert: (text) => void ask.alert(text),
         })
         ed.addImages(await allImages())
         markOpen('images')
@@ -643,7 +661,7 @@ export default function App() {
       await applyResolution(ed, await drive.compare(ed.getSnapshot().report), false)
     } catch (e) {
       setGate(null)
-      alert(errorText(e))
+      void ask.alert(errorText(e))
     }
   }
 
@@ -752,7 +770,7 @@ export default function App() {
       if (!editor || !snap) return
       try {
         const { report, images, savedAt } = readBackup(await file.text())
-        if (!confirm(`${new Date(savedAt).toLocaleString('ja-JP')} に保存したバックアップで、今の原稿を置き換えますか？${courseChangeNote(configRef.current, snap.report, report)}\n（今の原稿は自動の控えに残します）`)) return
+        if (!(await ask.confirm(`${new Date(savedAt).toLocaleString('ja-JP')} に保存したバックアップで、今の原稿を置き換えますか？${courseChangeNote(configRef.current, snap.report, report)}\n（今の原稿は自動の控えに残します）`, { ok: '置き換える' }))) return
         await keepSnapshot(snap.report)
         await Promise.all(images.map(putImage))
         editor.addImages(images)
@@ -761,7 +779,7 @@ export default function App() {
         setDialog(null)
         editor.showNotice('バックアップファイルから戻しました')
       } catch (e) {
-        alert(e instanceof Error ? e.message : String(e))
+        void ask.alert(e instanceof Error ? e.message : String(e))
       }
     },
     [editor, snap, matchYear],
@@ -822,10 +840,10 @@ export default function App() {
     if (!editor || !at) return
     const kept = (await listSnapshots()).find((s) => s.savedAt === at)
     if (!kept) {
-      alert(`読み込む前の原稿の控えが見つかりませんでした。「バックアップ・作り直す」の「自動の控え」から、「${WORD_SNAPSHOT_LABEL}」の控えを選んで戻してください。`)
+      void ask.alert(`読み込む前の原稿の控えが見つかりませんでした。「バックアップ・作り直す」の「自動の控え」から、「${WORD_SNAPSHOT_LABEL}」の控えを選んで戻してください。`)
       return
     }
-    if (!confirm(`Word から読み込む前の原稿に戻しますか？${courseChangeNote(configRef.current, editor.getSnapshot().report, kept.report)}\n（今の原稿は自動の控えに残します）`)) return
+    if (!(await ask.confirm(`Word から読み込む前の原稿に戻しますか？${courseChangeNote(configRef.current, editor.getSnapshot().report, kept.report)}\n（今の原稿は自動の控えに残します）`, { ok: '戻す' }))) return
     editor.commitEditing()
     await keepSnapshot(editor.getSnapshot().report)
     editor.replace(kept.report)
@@ -836,7 +854,7 @@ export default function App() {
 
   /** お試しの「見本に戻す」：試した内容を消して、最初の見本の原稿にする（確かめてから） */
   const resetTrial = useCallback(async () => {
-    if (!editor || !confirm('見本の原稿に戻しますか？\n（試した内容は消えます）')) return
+    if (!editor || !(await ask.confirm('見本の原稿に戻しますか？\n（試した内容は消えます）', { ok: '見本に戻す', danger: true }))) return
     editor.commitEditing()
     try {
       const sample = await freshSample()
@@ -846,7 +864,7 @@ export default function App() {
       setDialog(null)
       editor.showNotice('見本の原稿に戻しました')
     } catch (e) {
-      alert(errorText(e))
+      void ask.alert(errorText(e))
     }
   }, [editor, setWordTodo])
 
@@ -905,6 +923,7 @@ export default function App() {
 
   const ready = editor && snap
   const wordOffered = wordImportOffered(config)
+  const showNewVersion = newVersion && !newVersionClosed
   // 右の欄（スマホはメニュー）の小さなリンク。写したあとの「つぎにすること」が出ている間は出さない（読み直すときは「読み込む前の原稿に戻す」から）
   const openWord = wordOffered && !wordTodo ? () => setDialog({ kind: 'word' }) : undefined
   const todoCard = (onPick?: () => void) =>
@@ -916,6 +935,8 @@ export default function App() {
     <div className={`app${narrow ? ' phone' : ''}${phoneDirect ? ' phone-direct' : ''}${trialMode ? ' trial' : ''}`} style={narrow ? undefined : panels.style}>
       {/* お試し：画面の上の帯（お試し中であることと「見本に戻す」。依頼者の選択 2026-10-22 案1）。画面はその下に置く（index.css の .app.trial） */}
       {trialMode && <TrialBanner onReset={ready ? () => void resetTrial() : undefined} />}
+      {/* 新しい版が公開されたら、画面の上に知らせる（依頼者の選択 2026-10-23。app/newVersion.tsx） */}
+      {showNewVersion && <NewVersionBanner onReload={() => void reloadTool()} onClose={() => setNewVersionClosed(true)} />}
       {!narrow && (ready ? <PageColumn editor={editor} snap={snap} config={config} /> : <aside className="thumbs-col" />)}
       {/* 左右の欄の境目：つかんで動かすと幅が変わる。ダブルクリックで元の幅 */}
       {!narrow &&
@@ -987,6 +1008,7 @@ export default function App() {
           exporting={exporting}
           onExport={startExport}
           onWordImport={openWord}
+          onReload={() => void reloadTool()}
           wordTodo={wordTodo ? todoCard : undefined}
           checkRequest={checkRequest}
           direct={phoneDirect}
@@ -1007,6 +1029,7 @@ export default function App() {
           exporting={exporting}
           onExport={startExport}
           onWordImport={openWord}
+          onReload={() => void reloadTool()}
           wordTodo={todoCard()}
         />
       ) : (
@@ -1103,7 +1126,7 @@ export default function App() {
           onSaveBackup={saveBackup}
           onRestoreFile={restoreFile}
           onRestoreSnapshot={async (s) => {
-            if (!confirm(`${new Date(s.savedAt).toLocaleString('ja-JP')}${s.label ? `（${s.label}）` : ''} の控えに戻しますか？${courseChangeNote(configRef.current, snap.report, s.report)}`)) return
+            if (!(await ask.confirm(`${new Date(s.savedAt).toLocaleString('ja-JP')}${s.label ? `（${s.label}）` : ''} の控えに戻しますか？${courseChangeNote(configRef.current, snap.report, s.report)}`, { ok: '戻す' }))) return
             await keepSnapshot(snap.report)
             editor.replace(s.report)
             await matchYear(editor, s.report)
@@ -1111,7 +1134,7 @@ export default function App() {
             editor.showNotice(`${new Date(s.savedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })} の控えに戻しました`)
           }}
           onStartOver={async () => {
-            if (!confirm('今の原稿を消して、最初から作り直しますか？\n（今の原稿は自動の控えに残します）')) return
+            if (!(await ask.confirm('今の原稿を消して、最初から作り直しますか？\n（今の原稿は自動の控えに残します）', { ok: '作り直す', danger: true }))) return
             await keepSnapshot(snap.report)
             // 作り直すときは、公開中の年度で作る（前年度の原稿だった学生も、新年度で書き直せる）
             const fresh = createReport(publishedRef.current)
@@ -1163,7 +1186,7 @@ export default function App() {
               }
               editor.showNotice('ドライブの原稿を開きました')
             } catch (e) {
-              alert(errorText(e))
+              void ask.alert(errorText(e))
             } finally {
               setGate(null)
               setConflictBusy(null)
@@ -1187,7 +1210,7 @@ export default function App() {
               }
               if (drive.getState().status.kind === 'saved') editor.showNotice('この端末の原稿をドライブに保存しました')
             } catch (e) {
-              alert(errorText(e))
+              void ask.alert(errorText(e))
             } finally {
               setConflictBusy(null)
             }
@@ -1205,7 +1228,7 @@ export default function App() {
             const report = editor?.getSnapshot().report ?? snap.report
             if (!(await drive.finish(report))) {
               setDriveBusy(false)
-              alert('ドライブに保存できていないため、消せません。インターネットにつながっているか、ログインし直す必要がないかを確かめてください。')
+              void ask.alert('ドライブに保存できていないため、消せません。インターネットにつながっているか、ログインし直す必要がないかを確かめてください。')
               return
             }
             autosave.stop()
@@ -1250,7 +1273,7 @@ export default function App() {
               setDriveDialog(null)
               await applyResolution(editor, await drive.compare(null), true, true)
             } catch (e) {
-              alert(errorText(e))
+              void ask.alert(errorText(e))
             } finally {
               setDriveBusy(false)
             }
@@ -1266,7 +1289,7 @@ export default function App() {
             location.reload()
           }}
           onDiscard={async () => {
-            if (driveDialog.unsynced && !confirm('前の原稿の、ドライブに保存していない変更はなくなります。消して続けますか？')) return
+            if (driveDialog.unsynced && !(await ask.confirm('前の原稿の、ドライブに保存していない変更はなくなります。消して続けますか？', { ok: '消して続ける', danger: true }))) return
             autosave.stop()
             await clearAll()
             setWordTodo(null)

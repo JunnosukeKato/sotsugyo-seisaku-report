@@ -4,6 +4,7 @@ import '@fontsource/biz-udpgothic/400.css'
 import '@fontsource/biz-udpgothic/700.css'
 import './index.css'
 import App from './App.tsx'
+import { AskProvider } from './app/ask'
 import { trialMode } from './model/scope'
 import { startBridge } from './template/bridge'
 import { TEMPLATE_PARAM } from './template/protocol'
@@ -22,4 +23,5 @@ else if (trialMode) startTrialBridge(import.meta.env.DEV || import.meta.env.MODE
 if (import.meta.env.DEV || import.meta.env.MODE === 'e2e') void import('./testImports').then((m) => m.install())
 
 // StrictMode は使わない（組版エンジンを二重に起動しないため）
-createRoot(document.getElementById('root')!).render(templateMode ? <TemplateApp /> : <App />)
+// 確認の窓・知らせの窓は、画面の中に出す（app/ask.tsx）
+createRoot(document.getElementById('root')!).render(<AskProvider>{templateMode ? <TemplateApp /> : <App />}</AskProvider>)

@@ -14,6 +14,7 @@ import { pathToFileURL } from 'node:url'
 import { stubConfig } from './configStub.mjs'
 import { setupWriting } from './sampleReport.mjs'
 import { closeShape, openShape, pickWidth, setCheck, shapeState } from './shapeUi.mjs'
+import { answerConfirms } from './confirmUi.mjs'
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'poc-output/table-heights'
@@ -46,6 +47,8 @@ export async function openSample(browser, phone) {
   const page = await context.newPage()
   page.on('pageerror', (e) => console.log(`pageerror(tableShape${phone ? '-phone' : ''}):`, e.message))
   page.on('dialog', (d) => d.dismiss())
+  // 学生のツールの確認・知らせは画面の中の窓（src/app/ask.tsx）。前のブラウザの確認と同じく答える
+  await answerConfirms(page, () => false)
   await page.evaluateOnNewDocument(() => {
     const Real = window.WebSocket
     window.WebSocket = function (url, protocols) {

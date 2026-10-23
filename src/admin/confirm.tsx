@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useRef, useState, type ReactNode } from 'react'
+import { confirmParts, isList } from '../app/confirmText'
 import { useDialogFocus } from '../app/useDialogFocus'
 
 /**
@@ -18,21 +19,8 @@ export interface ConfirmOptions {
 /** 確かめる（進めるなら true、やめるなら false） */
 export type Confirm = (text: string, options?: ConfirmOptions) => Promise<boolean>
 
-/**
- * 確認の言葉を、窓の題（問いの文）と中身に分ける。問いは「？」で終わる最初の行の、最後の「。」のあと
- * （「保存していない変更があります。破棄して年度を切り替えますか？」→ 題「破棄して年度を切り替えますか？」、中身「保存していない変更があります。」）。
- * 問いがなければ、題は「確認」
- */
-export function confirmParts(text: string): { title: string; body: string } {
-  const lines = text.split('\n')
-  const i = lines.findIndex((l) => l.trim().endsWith('？'))
-  if (i < 0) return { title: '確認', body: text.trim() }
-  const line = lines[i].trim()
-  const cut = line.lastIndexOf('。')
-  const lead = cut >= 0 ? [line.slice(0, cut + 1)] : []
-  const body = [...lines.slice(0, i), ...lead, ...lines.slice(i + 1)].join('\n')
-  return { title: line.slice(cut + 1), body: body.replace(/\n{3,}/g, '\n\n').trim() }
-}
+// 確認の言葉の分け方は、学生のツールの確認の窓（app/ask.tsx）と同じ
+export { confirmParts }
 
 const ConfirmContext = createContext<Confirm>(() => Promise.resolve(false))
 
@@ -72,9 +60,6 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     </ConfirmContext.Provider>
   )
 }
-
-/** 段落のうち、どの行も「・」で始まるもの（変更の一覧など）は、囲んだ一覧にする */
-const isList = (paragraph: string) => paragraph.split('\n').every((l) => l.startsWith('・'))
 
 function ConfirmDialog({ request, onAnswer }: { request: Request; onAnswer: (ok: boolean) => void }) {
   const ref = useRef<HTMLDivElement>(null)

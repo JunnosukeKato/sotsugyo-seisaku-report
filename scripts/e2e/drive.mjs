@@ -5,6 +5,7 @@ import { readFileSync } from 'node:fs'
 import { withEdge } from '../poc/edge.mjs'
 import { fakeDrive, routeGoogle } from './fakeGoogle.mjs'
 import { waitingDrive } from './waiting.mjs'
+import { answerConfirms } from './confirmUi.mjs'
 
 // 開発サーバーの場所（ふだんは http://localhost:5173。APP_URL で変えられる。scripts/e2e/run.mjs はまとめた版の場所を渡す）
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
@@ -28,6 +29,8 @@ async function device(browser, drive, { phone = false } = {}) {
   const page = await context.newPage()
   page.on('pageerror', (e) => console.log('pageerror:', e.message))
   page.on('dialog', (d) => d.accept())
+  // 学生のツールの確認・知らせは画面の中の窓（src/app/ask.tsx）。前のブラウザの確認と同じく答える
+  await answerConfirms(page, () => true)
   if (phone) await page.setViewport({ width: 390, height: 844, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
   else await page.setViewport({ width: 1440, height: 900 })
   await routeGoogle(page, drive, config)

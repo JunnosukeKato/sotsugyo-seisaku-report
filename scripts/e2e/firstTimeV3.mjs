@@ -14,6 +14,7 @@ import { join, resolve } from 'node:path'
 import { stubConfig } from './configStub.mjs'
 import { makeDocx, table } from './fixtures/docx.mjs'
 import { setupWriting } from './sampleReport.mjs'
+import { confirmQueue } from './confirmUi.mjs'
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'poc-output/v3-fix/word'
@@ -53,6 +54,8 @@ async function openPageOnce(browser, { phone = false, downloads } = {}) {
   await noHotReload(page)
   await stubConfig(page)
   page.on('pageerror', (e) => console.log('pageerror(v3):', e.message))
+  // 学生のツールの確認・知らせは画面の中の窓（src/app/ask.tsx）。前のブラウザの確認と同じく答える（1回ずつ答えを決める：acceptNextDialog）
+  asks.set(page, await confirmQueue(page))
   await page.evaluateOnNewDocument(() => {
     try {
       localStorage.setItem('sotsugyo-seisaku-report-tour', 'done')
@@ -151,15 +154,10 @@ async function makePngs(page, count) {
   return paths
 }
 
-/** 確認の窓（confirm）を受け、文を返す */
-const acceptNextDialog = (page) =>
-  new Promise((resolveMessage) =>
-    page.once('dialog', async (d) => {
-      const message = d.message()
-      await d.accept()
-      resolveMessage(message)
-    }),
-  )
+/** ページごとの、確認の窓への答え方（confirmUi.mjs の confirmQueue） */
+const asks = new WeakMap()
+/** 次の確認の窓で「OK」を押し、文を返す */
+const acceptNextDialog = (page) => asks.get(page).next(true)
 
 // =====================================================================
 // パソコン
@@ -275,7 +273,7 @@ export async function firstTimeV3Pc(browser, check) {
   // 同じコースの控え（はじめに残した、いちばん下の控え）なら、コースのことは書かない
   await pickMenu(page, 'バックアップ')
   await page.waitForSelector('.modal .snapshots li')
-  const sameAsked = new Promise((r) => page.once('dialog', async (d) => { r(d.message()); await d.dismiss() }))
+  const sameAsked = asks.get(page).next(false)
   await page.evaluate(() => document.querySelector('.modal .snapshots li:last-child button').click())
   const sameMessage = await sameAsked
   check('同じコースの控えに戻すときは、コースのことは書かない', !sameMessage.includes('コース'), sameMessage)

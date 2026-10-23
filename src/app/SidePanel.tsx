@@ -39,6 +39,8 @@ interface Props {
   onHelp: () => void
   /** 今年度だけ：「メニュー」の「Word で書いた分を読み込む」（mockups/v24 ① 案C・v37 案C）。渡したときだけ出す */
   onWordImport?: () => void
+  /** 「ページを読み込み直す」（メニューの中） */
+  onReload?: () => void
   /** 今年度だけ：Word から写したあとの「つぎにすること」（mockups/v24 ③ 案B）。右の欄の上に出す */
   wordTodo?: ReactNode
 }
@@ -521,7 +523,7 @@ export function Tally({ snap, config }: { snap: EditorSnapshot; config: YearConf
   )
 }
 
-export function SidePanel({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onHelp, onWordImport, wordTodo }: Props) {
+export function SidePanel({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onHelp, onWordImport, onReload, wordTodo }: Props) {
   const exportSlow = useSlow(!!exporting)
   return (
     <aside className="side">
@@ -533,7 +535,7 @@ export function SidePanel({ editor, snap, config, saveState, drive, driveStopped
             <div className="brand-sub">{config.fiscalYear}年度</div>
           </div>
           {/* 使い方・手順書・バックアップと「最初から作り直す」の窓（mockups/v34 案A）・今年度だけ Word の読み込み（mockups/v37 案C） */}
-          <SideMenu handbookUrl={config.handbookUrl} onHelp={onHelp} onBackup={onBackup} onWordImport={onWordImport} />
+          <SideMenu handbookUrl={config.handbookUrl} onHelp={onHelp} onBackup={onBackup} onWordImport={onWordImport} onReload={onReload} />
         </div>
         <div className="meta">
           {drive ? <DriveChipMenu drive={drive} /> : <SaveChip state={saveState} />}

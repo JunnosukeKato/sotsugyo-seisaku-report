@@ -17,6 +17,8 @@ interface Props {
   onBackup: () => void
   /** 今年度だけ：「Word で書いた分を読み込む」。渡したときだけ出す */
   onWordImport?: () => void
+  /** 「ページを読み込み直す」（書いたものを保存してから。新しい版にするとき：app/newVersion.tsx） */
+  onReload?: () => void
 }
 
 /** ボタンに出す説明（マウスを乗せたとき）。中にあるものの名前 */
@@ -24,7 +26,7 @@ function sideMenuTitle({ handbookUrl, onWordImport }: Pick<Props, 'handbookUrl' 
   return ['使い方', handbookUrl && '手順書', 'バックアップ・作り直す', onWordImport && 'Word の読み込み'].filter(Boolean).join('・')
 }
 
-export function SideMenu({ handbookUrl, onHelp, onBackup, onWordImport }: Props) {
+export function SideMenu({ handbookUrl, onHelp, onBackup, onWordImport, onReload }: Props) {
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement>(null)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -143,6 +145,11 @@ export function SideMenu({ handbookUrl, onHelp, onBackup, onWordImport }: Props)
               <span>
                 Word で書いた分を読み込む<small>今年度だけ</small>
               </span>
+            </button>
+          )}
+          {onReload && (
+            <button type="button" role="menuitem" onClick={choose(onReload)}>
+              {Icon.reload}ページを読み込み直す
             </button>
           )}
         </div>

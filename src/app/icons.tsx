@@ -90,6 +90,8 @@ export const Icon = {
   // 右の欄の「メニュー」（横線3本。mockups/v37 案C）
   menu: svg(<path d="M5 7h14M5 12h14M5 17h14" />),
   // 最初から作り直す（ぐるりと戻る矢印。mockups/v34 案A）
+  // 読み込み直す（新しい版にする）
+  reload: svg(<path d="M19.5 12a7.5 7.5 0 1 1-2.2-5.3M19.5 4.5v4.5H15" />),
   restart: svg(<path d="M4.5 12a7.5 7.5 0 1 0 2.3-5.4M4.5 4.8v4.2h4.2" />),
   pdf: svg(<path d="M6 3.5h8l4 4v13H6zM14 3.5v4h4M12 11v6M9.5 14.5L12 17l2.5-2.5" />),
   prev: svg(<path d="M14.5 5l-7 7 7 7" />),
