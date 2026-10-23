@@ -666,7 +666,6 @@ describe('使用素材表の生地見本（浮かせた画像）', () => {
   /** 生地見本の列（3列目）の左の端から 300000 EMU の位置（余白から） */
   const SWATCH_X = (WIDTHS[0] + WIDTHS[1]) * EMU + 300000
   const rowTop = (r: number) => HEIGHTS.slice(0, r).reduce((s, h) => s + h * EMU, 0)
-  const total = rowTop(HEIGHTS.length)
   const LINE = 368 * EMU
   const swatch = (n: number, options: Parameters<typeof floatingImage>[1]) => floatingImage(rid(`s${n}.png`), { cx: SIZE, cy: SIZE, ...options })
 
