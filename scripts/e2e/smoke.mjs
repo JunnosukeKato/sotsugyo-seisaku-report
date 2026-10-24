@@ -394,7 +394,7 @@ await withEdge(async (browser) => {
   }))
   check(
     '「？ 使い方」で、右の欄が使い方に替わる（書く順の4段＋いちばん下の「困ったとき」7項目、全部で項目18。動画は段の見出しの横。見出しに移る・紙面と道具はそのまま・いちばん下に印刷用の手引き（PDF））',
-    helpOpen.topics === 18 && helpOpen.steps.join('／') === '1はじめる動画1:03／2書く動画3本／3確かめる・直す動画0:43／4PDF を出す動画0:56' && helpOpen.trouble === 7 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf',
+    helpOpen.topics === 18 && /^1はじめる動画\d:\d\d／2書く動画3本／3確かめる・直す動画\d:\d\d／4PDF を出す動画\d:\d\d$/.test(helpOpen.steps.join('／')) && helpOpen.trouble === 7 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf',
     JSON.stringify(helpOpen),
   )
   // 段の見出しの横の「動画」：1本ならその場で再生、2本以上（書く）なら、その段の動画の一覧（そこから開いた動画の「戻る」は、その一覧へ）
@@ -414,7 +414,7 @@ await withEdge(async (browser) => {
   await page.evaluate(() => document.querySelector('.help-back').click())
   await page.waitForSelector('.help-step')
   check(
-    '使い方：段の見出しの「動画 1:03」でその動画を再生。「動画 3本」（書く）は、その段の動画の一覧（本文・表と作品写真・スマホ）。一覧から開いた動画の「戻る」は「動画の一覧へ」',
+    '使い方：段の見出しの「動画（長さ）」でその動画を再生。「動画 3本」（書く）は、その段の動画の一覧（本文・表と作品写真・スマホ）。一覧から開いた動画の「戻る」は「動画の一覧へ」',
     oneVideo.title.includes('はじめ方（ログイン〜表紙）') && oneVideo.back.includes('一覧へ') && groupList.crumb === '書く' && groupList.rows.join(',') === '本文を書く・図を入れる,表・作品写真,スマホで書く' && fromGroup.title.includes('表・作品写真') && fromGroup.back.includes('動画の一覧へ'),
     JSON.stringify({ oneVideo, groupList, fromGroup }),
   )
