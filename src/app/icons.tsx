@@ -7,27 +7,20 @@ const svg = (children: ReactNode) => (
   </svg>
 )
 
-const numeral = (x: number, y: number, size: number, text: string) => (
-  <text x={x} y={y} textAnchor="middle" fontSize={size} fontWeight={700} fill="currentColor" stroke="none">
-    {text}
-  </text>
-)
-
 export const Icon = {
   paragraph: svg(<path d="M8.5 6.5H19M5 10.5h14M5 14.5h14M5 18.5h9" />),
-  // 見出しは、報告書の番号の付け方（Ⅰ．ⅰ．）をそのまま絵にする
+  // 見出しは、報告書の番号（大見出し Ⅰ．・小見出し ⅰ．）を、点も付けて大きく絵にする（紙面と同じ明朝体。依頼者の選択 2026-10-24 mockups/v54 案C・点あり。
+  // 前は小さな番号と線の絵で、どちらがどちらか分かりにくかった）
   heading2: svg(
     <>
-      {numeral(7.6, 11.6, 8.5, 'ⅰ')}
-      <path d="M11.5 8.4h7" strokeWidth={2.2} />
-      <path d="M6 14.5h13M6 18.5h9" />
+      <text x={10.2} y={19} textAnchor="middle" fontSize={17} fontWeight={700} fontFamily="'BIZ UDMincho', serif" fill="currentColor" stroke="none">ⅰ</text>
+      <circle cx={16.6} cy={17.9} r={1.5} fill="currentColor" stroke="none" />
     </>,
   ),
   heading1: svg(
     <>
-      {numeral(6.6, 12, 10.5, 'Ⅰ')}
-      <path d="M11 8.2h9" strokeWidth={2.8} />
-      <path d="M4 14.5h16M4 18.5h11" />
+      <text x={9.6} y={19.6} textAnchor="middle" fontSize={20} fontWeight={700} fontFamily="'BIZ UDMincho', serif" fill="currentColor" stroke="none">Ⅰ</text>
+      <circle cx={17.4} cy={18.3} r={1.7} fill="currentColor" stroke="none" />
     </>,
   ),
   figure: svg(
