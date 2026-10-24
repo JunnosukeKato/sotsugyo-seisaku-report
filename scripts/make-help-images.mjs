@@ -438,6 +438,16 @@ async function studentShots(browser) {
   await sleep(300)
 
   // ---- バックアップ（自動の控え） ----
+  // 控えの一覧の見本：開いたときの控え（空の原稿）を見本の原稿の控えにし、その前に札の付いた控え（「Word を読み込む前」・1章目だけ）を入れておく
+  // （札と中身の目安（本文の字数・図の数など）が見えるように。mockups/v53 ④ 案A）
+  await page.evaluate(async () => {
+    const { saveSnapshot, listSnapshots } = await window.__import('model/storage.ts')
+    const report = window.__editor.getSnapshot().report
+    const list = await listSnapshots()
+    for (const s of list) await saveSnapshot(report, s.savedAt)
+    const oldest = list.length ? Date.parse(list[list.length - 1].savedAt) : Date.now()
+    await saveSnapshot({ ...report, body: report.body.slice(0, 1), workPhotos: [{ layout: 1, imageIds: [] }] }, new Date(oldest - 30 * 60000).toISOString(), true, 'Word を読み込む前')
+  })
   // 「バックアップ・作り直す」は右の欄の「メニュー」の中（mockups/v37 案C）
   await page.click('.side .menu-btn')
   await page.waitForSelector('.side .head-menu')
