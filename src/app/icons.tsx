@@ -67,6 +67,9 @@ export const Icon = {
   // 表の画像を切り抜く（トンボ）・全体に戻す（枠）
   crop: svg(<path d="M7 3v14h14M3 7h14v14" />),
   whole: svg(<path d="M4.5 5.5h15v13h-15zM8 9.5h8v5H8z" />),
+  // 図の並びから外す（横の2枚を上下に）・横に並べる（上下の2枚を横に）
+  splitRow: svg(<path d="M3.5 4.5h7v6h-7zM13.5 13.5h7v6h-7zM14.5 7.5h4.5v3M9.5 16.5H5v-3" />),
+  joinRow: svg(<path d="M3.5 8.5h7.5v7H3.5zM13 8.5h7.5v7H13z" />),
   // 図を1つ上へ・1つ下へ（矢印と、動かす図の四角）
   moveUp: svg(<path d="M12 20V9M8 13l4-4 4 4M6 4.5h12" />),
   moveDown: svg(<path d="M12 4v11M8 11l4 4 4-4M6 19.5h12" />),

@@ -95,11 +95,13 @@ export function contentToText(content: InlineNode[], num: Numbering): string {
 /** 文字列中の、存在する図表の番号（「（図1）」「図1」など）。位置と、つながる図表 */
 function refMatches(text: string, num: Numbering): { start: number; end: number; targetId: string; withParens: boolean }[] {
   const found: { start: number; end: number; targetId: string; withParens: boolean }[] = []
-  // 括弧なしの「図1」は、「設計図1枚」のような語の一部を拾わないよう、直前が漢字でないときだけ
-  const re = /[（(]([図表])\s*(\d+)[）)]|(?<![㐀-鿿々])([図表])(\d+)/g
+  // 括弧なしの「図1」は、「設計図1枚」のような語の一部を拾わないよう、直前が漢字でないときだけ。
+  // 番号は全角の数字（「（図４）」。日本語の入力のまま打つと全角になる）でもよい。括弧の内側の空白もよい（依頼者の指摘 2026-10-24：
+  // 手で「（図4）」を打つとき、全角の数字だとつながらず、半角で打ち直すよう指摘されていた）
+  const re = /[（(]\s*([図表])\s*([0-9０-９]+)\s*[）)]|(?<![㐀-鿿々])([図表])([0-9０-９]+)/g
   for (const m of text.matchAll(re)) {
     const kind = m[1] ?? m[3]
-    const n = Number(m[2] ?? m[4])
+    const n = Number((m[2] ?? m[4]).normalize('NFKC'))
     const targetId = (kind === '表' ? num.tableByNumber : num.figureByNumber).get(n)
     if (targetId) found.push({ start: m.index, end: m.index + m[0].length, targetId, withParens: m[1] !== undefined })
   }
@@ -780,6 +782,56 @@ export function moveFigureRow(report: Report, figureId: string, to: FigureMove):
     return { ...chapter, blocks: rest }
   })
   return moved ? { ...report, body } : report
+}
+
+// ---- 図の並び：並びから外す・横に並べる（依頼者の選択 2026-10-24。「上へ」「下へ」は並びごと動かし、分けたいときだけ分ける） ----
+
+/** 図の並びを分けられるか（split：並んでいる）・横に並べられる相手（join：すぐ上・すぐ下の1枚だけの図。上を先に見る） */
+export function figurePairing(report: Report, figureId: string): { split: boolean; join: 'above' | 'below' | null } {
+  for (const chapter of report.body) {
+    const i = chapter.blocks.findIndex((b) => b.type === 'figureRow' && b.figures.some((f) => f.id === figureId))
+    if (i < 0) continue
+    const row = chapter.blocks[i] as Extract<BodyBlock, { type: 'figureRow' }>
+    if (row.figures.length > 1) return { split: true, join: null }
+    const single = (b: BodyBlock | undefined) => b?.type === 'figureRow' && b.figures.length === 1
+    return { split: false, join: single(chapter.blocks[i - 1]) ? 'above' : single(chapter.blocks[i + 1]) ? 'below' : null }
+  }
+  return { split: false, join: null }
+}
+
+/**
+ * 並んでいる図から、その図を外す：図の前の図・その図・後ろの図を、それぞれのまとまりにする（2枚なら、1枚ずつ上下に）。
+ * 図の順番（番号）は変わらない。並んでいなければ同じ原稿
+ */
+export function splitFigureRow(report: Report, figureId: string): Report {
+  let changed = false
+  const body = report.body.map((chapter) => {
+    const i = chapter.blocks.findIndex((b) => b.type === 'figureRow' && b.figures.length > 1 && b.figures.some((f) => f.id === figureId))
+    if (i < 0) return chapter
+    changed = true
+    const row = chapter.blocks[i] as Extract<BodyBlock, { type: 'figureRow' }>
+    const k = row.figures.findIndex((f) => f.id === figureId)
+    const parts = [row.figures.slice(0, k), [row.figures[k]], row.figures.slice(k + 1)].filter((p) => p.length > 0)
+    const rows: BodyBlock[] = parts.map((figures, n) => ({ type: 'figureRow', id: n === 0 ? row.id : newId('r'), figures }))
+    return { ...chapter, blocks: [...chapter.blocks.slice(0, i), ...rows, ...chapter.blocks.slice(i + 1)] }
+  })
+  return changed ? { ...report, body } : report
+}
+
+/** 1枚だけの図を、すぐ上（なければすぐ下）の1枚だけの図と横に並べる（順番はそのまま）。並べられなければ同じ原稿 */
+export function joinFigureRow(report: Report, figureId: string): Report {
+  const side = figurePairing(report, figureId).join
+  if (!side) return report
+  const body = report.body.map((chapter) => {
+    const i = chapter.blocks.findIndex((b) => b.type === 'figureRow' && b.figures.some((f) => f.id === figureId))
+    if (i < 0) return chapter
+    const [a, b] = side === 'above' ? [i - 1, i] : [i, i + 1]
+    const first = chapter.blocks[a] as Extract<BodyBlock, { type: 'figureRow' }>
+    const second = chapter.blocks[b] as Extract<BodyBlock, { type: 'figureRow' }>
+    const merged: BodyBlock = { type: 'figureRow', id: first.id, figures: [...first.figures, ...second.figures] }
+    return { ...chapter, blocks: [...chapter.blocks.slice(0, a), merged, ...chapter.blocks.slice(b + 1)] }
+  })
+  return { ...report, body }
 }
 
 /**

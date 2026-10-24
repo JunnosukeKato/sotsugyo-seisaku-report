@@ -3534,6 +3534,31 @@ export class ReportEditor {
     this.markSelection()
   }
 
+  /** 並んでいる図から、選んでいる図を外す（1枚ずつの図にする）。図は選んだまま。元に戻す1回で戻る */
+  async splitFigure(figureId: string): Promise<void> {
+    const next = ops.splitFigureRow(this.report, figureId)
+    if (next === this.report) return
+    this.update(() => next)
+    await this.reselectFigure(figureId)
+  }
+
+  /** 選んでいる1枚だけの図を、すぐ上（なければすぐ下）の1枚だけの図と横に並べる。図は選んだまま */
+  async joinFigure(figureId: string): Promise<void> {
+    const next = ops.joinFigureRow(this.report, figureId)
+    if (next === this.report) return
+    this.update(() => next)
+    await this.reselectFigure(figureId)
+  }
+
+  /** 図の並びを変えたあと：図を選び直し、別のページへ移っていたら、そのページを見せる */
+  private async reselectFigure(figureId: string): Promise<void> {
+    this.select({ kind: 'figure', id: figureId })
+    await this.whenLaidOut()
+    const page = this.pageOfBlock(figureId)
+    if (page >= 0 && page !== this.page) await this.goToPage(page, 'none')
+    this.select({ kind: 'figure', id: figureId })
+  }
+
   /** 選んでいる図の横に、もう1枚並べる（2枚まで） */
   /** 選んでいる図のすぐ後ろに、もう1枚加える。本文のその図への参照のすぐ後ろにも「（図n）」を足す */
   async addFigureBeside(figureId: string): Promise<void> {

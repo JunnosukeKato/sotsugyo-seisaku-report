@@ -598,7 +598,7 @@ await withEdge(async (browser) => {
           arrowsBelow: rects.length > 0 && document.querySelector('.arrow.prev').getBoundingClientRect().top > rects[0].bottom,
         }
       })
-    check('右下の切り替えは「全体／見開き／拡大」の3つ', (await page.evaluate(() => [...document.querySelectorAll('.zoom button')].map((b) => b.textContent.trim()).join('／'))) === '全体／見開き／拡大')
+    check('右下の切り替えは「1ページ／見開き／拡大」の3つ（前は「全体」。依頼者の選択 2026-10-24）', (await page.evaluate(() => [...document.querySelectorAll('.zoom button')].map((b) => b.textContent.trim()).join('／'))) === '1ページ／見開き／拡大')
     // 確かめのあいだだけ、本文を数ページ足す（本文のページが2つ並ぶ組を作る。あとで元に戻す）
     await page.evaluate(() =>
       window.__editor.update((r) => ({

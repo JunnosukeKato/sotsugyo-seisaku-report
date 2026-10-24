@@ -3,10 +3,12 @@
 // - 新しい版が公開されたら、画面の上に「新しい版があります［新しくする］」（src/app/newVersion.tsx。version.json の印が、いまの版と違うとき）。
 //   「新しくする」で、書いたものを保存してから読み込み直す。メニューにも「ページを読み込み直す」
 // - 段落の書き出しに空白を打っても入れない（1字下げは自動。前は書いている間、2字分空いて見えた。依頼者の指摘 2026-10-24）
+// - 図の道具の「並びから外す」「横に並べる」（依頼者の選択 2026-10-24：帯に1つ足す。360px のスマホでも1列に入る）
 // これだけを流すときは node scripts/e2e/run.mjs askVersion
 import { mkdirSync } from 'node:fs'
 import { withEdge } from '../poc/edge.mjs'
 import { stubConfig } from './configStub.mjs'
+import { setupWriting } from './sampleReport.mjs'
 
 const APP = process.env.APP_URL ?? 'http://localhost:5173'
 const OUT = 'poc-output/ask-version'
@@ -162,6 +164,42 @@ await withEdge(async (browser) => {
     await wait(300)
     const middle = await page.evaluate(() => window.__editor.overlay.text)
     check(`${who}：文の途中の空白は、今までどおり入る`, middle === 'デザインを\u3000考えた。', middle)
+    await context.close()
+  }
+
+  // ---- 図の「並びから外す」「横に並べる」（パソコン・スマホ 360px） ----
+  for (const phone of [false, true]) {
+    const { context, page, ready } = await open(browser, { phone })
+    const who = phone ? 'スマホ' : 'パソコン'
+    if (phone) await page.setViewport({ width: 360, height: 780, deviceScaleFactor: 2, isMobile: true, hasTouch: true })
+    await page.evaluate(setupWriting)
+    await wait(500)
+    await ready()
+    // 図1の横に、もう1枚（見本の画像）を並べる
+    await page.evaluate(() => window.__editor.update((r) => ({ ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 'r1' ? { ...b, figures: [...b.figures, { id: 'f1b', imageId: 'g-mood', caption: '後ろ' }] } : b)) })) })))
+    await wait(400)
+    await ready()
+    await page.evaluate(() => window.__editor.goToPage(window.__editor.pageOfBlock('p3'), 'none'))
+    await ready()
+    await page.evaluate(() => window.__editor.select({ kind: 'figure', id: 'f1b' }))
+    await wait(400)
+    const sel = phone ? '.sel-bar .tb' : '.palette .group.ctx .tb'
+    const tools = () => page.evaluate((sel) => [...document.querySelectorAll(sel)].map((b) => b.textContent.trim()), sel)
+    const rows = () => page.evaluate(() => window.__editor.getSnapshot().report.body[0].blocks.filter((b) => b.type === 'figureRow').map((b) => b.figures.map((f) => f.id).join('+')))
+    const paired = await tools()
+    const fits = phone ? await page.evaluate(() => { const g = document.querySelector('.sel-bar .group.ctx').getBoundingClientRect(); return g.left >= 0 && g.right <= innerWidth }) : true
+    check(`${who}：並んだ図を押すと、道具に「並びから外す」（削除の前）${phone ? '。360px の画面でも1列に入る' : ''}`, paired.includes('並びから外す') && paired.indexOf('並びから外す') === paired.indexOf('削除') - 1 && fits, JSON.stringify({ paired, fits }))
+    await page.evaluate((sel) => [...document.querySelectorAll(sel)].find((b) => b.textContent.includes('並びから')).click(), sel)
+    await wait(600)
+    await ready()
+    const split = await rows()
+    const single = await tools()
+    check(`${who}：「並びから外す」で1枚ずつの図になり（順番はそのまま）、道具は「横に並べる」に`, JSON.stringify(split.slice(0, 2)) === JSON.stringify(['f1', 'f1b']) && single.includes('横に並べる') && !single.includes('並びから外す'), JSON.stringify({ split, single }))
+    await page.evaluate((sel) => [...document.querySelectorAll(sel)].find((b) => b.textContent.includes('並べる')).click(), sel)
+    await wait(600)
+    await ready()
+    const joined = await rows()
+    check(`${who}：「横に並べる」で、すぐ上の図と横に並び直す`, joined[0] === 'f1+f1b', JSON.stringify(joined))
     await context.close()
   }
 

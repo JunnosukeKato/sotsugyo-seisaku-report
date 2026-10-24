@@ -1089,6 +1089,9 @@ body.resizing .page-viewport { pointer-events: none; }
 .app.phone .sel-bar .tb-line { display: block; line-height: 1.25; white-space: nowrap; }
 /* 図の道具（5つ）：名前は1行（「差し替え」「もう1枚」が言葉の途中で折り返していた） */
 .app.phone .sel-bar .group.ctx:has(.tb-move) :is(.tb span, .ctx-label) { white-space: nowrap; }
+/* 「並びから外す」「横に並べる」があるとき（6つ）：ボタンの左右の余白を詰め、狭い画面では「この図」を省く（360px でも1列に入るように） */
+.app.phone .sel-bar .group.ctx:has(.tb-pair) .tb { padding-left: 5px; padding-right: 5px; }
+@media (max-width: 389px) { .app.phone .sel-bar .group.ctx:has(.tb-pair) .ctx-label { display: none; } }
 /* 表の道具の名前は、前と同じく2字ずつで折り返す（「行を／足す」。幅が広がって「行を足／す」にならないように） */
 .app.phone .sel-bar .group.ctx:has(.shape-btn) .tb:not(.shape-btn) { max-width: 50px; }
 .app.phone .sel-bar .shape-btn { color: var(--accent); background: var(--accent-soft); font-weight: 700; }

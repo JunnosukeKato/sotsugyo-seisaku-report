@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react'
 import type { EditorSnapshot, ReportEditor } from '../editor/reportEditor'
-import { figurePlacement } from '../editor/reportOps'
+import { figurePairing, figurePlacement } from '../editor/reportOps'
 import type { TableBlock } from '../model/types'
 import { PHOTO_ARRANGEMENTS, photoGrid, photoPageName } from '../model/photos'
 import { SELECTION_TEXTS } from '../editor/selectionBar'
@@ -171,8 +171,9 @@ export function ViewBar({ editor, snap }: { editor: ReportEditor; snap: EditorSn
     <div className="view-bar">
       <UndoRedo editor={editor} snap={snap} />
       <div className="zoom" role="group" aria-label="表示の大きさ">
-        <button className={!snap.zoomed && !snap.spread ? 'on' : ''} aria-pressed={!snap.zoomed && !snap.spread} title="1ページ全体を表示" onClick={() => editor.setView('fit')}>
-          {Icon.fit}全体
+        <button className={!snap.zoomed && !snap.spread ? 'on' : ''} aria-pressed={!snap.zoomed && !snap.spread} title="1ページずつ、ページ全体を表示" onClick={() => editor.setView('fit')}>
+          {/* 前は「全体」。見開きもページ全体が見えるので、何ページ見えるかの名前にした（依頼者の選択 2026-10-24） */}
+          {Icon.fit}1ページ
         </button>
         {(snap.spreadFits || snap.spread) && (
           <button className={snap.spread ? 'on' : ''} aria-pressed={snap.spread} title="いまのページと次のページを並べて表示（2ページずつめくる）" onClick={() => editor.setView('spread')}>
@@ -340,6 +341,7 @@ export function SelectionTools({ editor, snap, phone, template }: SelectionTools
   const figureId = selection?.kind === 'figure' ? selection.id : editingKind === 'figureCaption' ? editingId : null
   if (figureId) {
     const place = figurePlacement(report, figureId)
+    const pairing = figurePairing(report, figureId)
     return (
       <div className="group ctx">
         <div className="ctx-label">この図</div>
@@ -356,6 +358,11 @@ export function SelectionTools({ editor, snap, phone, template }: SelectionTools
         ) : place.toParagraph ? (
           <Tool label={'段落の下へ\n戻す'} icon={Icon.toParagraph} title="この図を、この図のことを書いた段落のすぐ下へ戻す" onClick={() => void editor.moveFigure(figureId, 'paragraph')} />
         ) : null}
+        {/* 並んでいる図は「並びから外す」、1枚だけの図がすぐ上・下に続くときは「横に並べる」（依頼者の選択 2026-10-24：帯に1つ足す） */}
+        {pairing.split && <Tool label={'並びから\n外す'} className="tb-pair" icon={Icon.splitRow} title="この図を並びから外して、1枚ずつの図にする（図の番号はそのまま）" onClick={() => void editor.splitFigure(figureId)} />}
+        {!pairing.split && pairing.join && (
+          <Tool label={'横に\n並べる'} className="tb-pair" icon={Icon.joinRow} title={pairing.join === 'above' ? 'すぐ上の図と、横に並べる' : 'すぐ下の図と、横に並べる'} onClick={() => void editor.joinFigure(figureId)} />
+        )}
         <Tool
           label="削除"
           icon={Icon.remove}

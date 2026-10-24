@@ -419,7 +419,7 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
             severity: 'error',
             source: 'supplementary',
             title: `${kind}の番号を手で書いている`,
-            detail: `番号を半角の数字で打ち直すと、${kind}${n}とつながります（つながると、${kind}を足したり消したりしても番号が自動でそろいます）`,
+            detail: `「（${kind}${n}）」の形で打ち直すと、${kind}${n}とつながります（つながると、${kind}を足したり消したりしても番号が自動でそろいます）`,
             area: 'body',
             blockId: block.id,
             start: offset + m.index,
@@ -464,8 +464,8 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   // 図表：画像、本文中での参照（リンクになった参照も、手で書いた「表1」も、文字列として数える）
   const referenced = new Set<string>()
   for (const e of list.filter((x) => x.kind === 'paragraph')) {
-    for (const m of e.text.matchAll(/([図表])\s*(\d+)/g)) {
-      const id = (m[1] === '表' ? num.tableByNumber : num.figureByNumber).get(Number(m[2]))
+    for (const m of e.text.matchAll(/([図表])\s*([0-9０-９]+)/g)) {
+      const id = (m[1] === '表' ? num.tableByNumber : num.figureByNumber).get(Number(m[2].normalize('NFKC')))
       if (id) referenced.add(id)
     }
   }
@@ -509,9 +509,9 @@ export function checkReport(report: Report, config: YearConfig, layout?: LayoutI
   }
   // 存在しない図表の番号（削除された図への参照「図?」や、手で書いた「（図9）」）
   for (const e of list.filter((x) => x.kind === 'paragraph')) {
-    for (const m of e.text.matchAll(/[（(]?([図表])\s*(\d+|\?)[）)]?/g)) {
+    for (const m of e.text.matchAll(/[（(]?([図表])\s*([0-9０-９]+|\?)[）)]?/g)) {
       if (/[㐀-鿿々]/.test(e.text[m.index - 1] ?? '') && !m[0].startsWith('（') && !m[0].startsWith('(')) continue
-      const exists = m[2] !== '?' && (m[1] === '表' ? num.tableByNumber : num.figureByNumber).has(Number(m[2]))
+      const exists = m[2] !== '?' && (m[1] === '表' ? num.tableByNumber : num.figureByNumber).has(Number(m[2].normalize('NFKC')))
       if (!exists)
         findings.push(
           guide('reference-missing', 'error', `「${m[0]}」の${m[1]}がない`, 'body', {

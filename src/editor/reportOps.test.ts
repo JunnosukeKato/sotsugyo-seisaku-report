@@ -150,6 +150,18 @@ describe('split / mergeBackward / replaceWithParagraphs', () => {
     expect(text(splitted, newId)).toBe('次の文。')
   })
 
+  it('手で書いた「（図１）」は、全角の数字・括弧の内側の空白でも、図につながる（依頼者の指摘 2026-10-24）', () => {
+    for (const written of ['考えた（図１）。', '考えた（ 図 1 ）。', '考えた(図１)。']) {
+      const r = ops.setText(report, 'p2', written)
+      const b = r.body.flatMap((c) => c.blocks).find((x) => x.id === 'p2')
+      expect(b?.type === 'paragraph' && b.content.some((n) => n.type === 'ref' && n.targetId === 'f1'), written).toBe(true)
+      expect(text(r, 'p2'), written).toBe('考えた（図1）。')
+    }
+    // 「設計図１枚」のような語の一部はつながない
+    const word = ops.setText(report, 'p2', '設計図１枚を描いた。')
+    expect(text(word, 'p2')).toBe('設計図１枚を描いた。')
+  })
+
   it('複数行の貼り付けは行ごとの段落になる', () => {
     const { report: pasted, lastId } = ops.replaceWithParagraphs(report, 'p6', ['一。', '二。', '三。'])
     expect(text(pasted, 'p6')).toBe('一。')
@@ -690,6 +702,28 @@ describe('図の置き場所（「小見出しの終わりへ」「段落の下�
     // 本文に出てこない図とは、どちらの向きにも越える
     const r2 = report([p('p1', 'fa'), row('ra', 'fa'), row('rx', 'fx'), p('p2')])
     expect(ops.figurePlacement(r2, 'fa')).toMatchObject({ down: true })
+  })
+
+  it('並びから外す：並んだ図を1枚ずつにする（順番はそのまま）。横に並べる：すぐ上・下の1枚だけの図と並べる（2026-10-24）', () => {
+    const rows = (r: Report) => r.body[0].blocks.filter((b) => b.type === 'figureRow').map((b) => (b.type === 'figureRow' ? b.figures.map((f) => f.id).join('+') : ''))
+    const r0 = report([p('p1', 'fa'), row('r1', 'fa', 'fb'), p('p2')])
+    expect(ops.figurePairing(r0, 'fb')).toEqual({ split: true, join: null })
+    const split = ops.splitFigureRow(r0, 'fb')
+    expect(rows(split)).toEqual(['fa', 'fb'])
+    expect(split.body[0].blocks[1].id).toBe('r1')
+    expect(ops.splitFigureRow(r0, 'fa')).toMatchObject({ body: [{ blocks: expect.arrayContaining([expect.objectContaining({ id: 'r1', figures: [expect.objectContaining({ id: 'fa' })] })]) }] })
+    // 分けた2枚は、どちらからでも横に並べ直せる（上を先に見る）
+    expect(ops.figurePairing(split, 'fb')).toEqual({ split: false, join: 'above' })
+    expect(ops.figurePairing(split, 'fa')).toEqual({ split: false, join: 'below' })
+    expect(rows(ops.joinFigureRow(split, 'fb'))).toEqual(['fa+fb'])
+    expect(rows(ops.joinFigureRow(split, 'fa'))).toEqual(['fa+fb'])
+    // 3枚並びの真ん中を外すと、前・その図・後ろの3つに分かれる
+    expect(rows(ops.splitFigureRow(report([row('r3', 'f1', 'f2', 'f3')]), 'f2'))).toEqual(['f1', 'f2', 'f3'])
+    // 間に段落がある・相手が2枚並びなら、横に並べない
+    const apart = report([row('ra', 'fa'), p('p1'), row('rb', 'fb')])
+    expect(ops.figurePairing(apart, 'fb').join).toBeNull()
+    expect(ops.joinFigureRow(apart, 'fb')).toBe(apart)
+    expect(ops.figurePairing(report([row('ra', 'fa', 'fx'), row('rb', 'fb')]), 'fb').join).toBeNull()
   })
 
   it('「上へ」「下へ」は、小見出しの境を越えない（小見出しの中だけ。依頼者の選択 2026-10-24）', () => {

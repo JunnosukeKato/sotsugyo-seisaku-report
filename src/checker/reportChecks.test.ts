@@ -219,15 +219,15 @@ describe('改ページ', () => {
 })
 
 describe('手で書いた図表の番号', () => {
-  it('図とつながっていない（図n）はエラー。その番号の図があれば、番号を半角で打ち直すとつながる（直し方を detail に書く）', () => {
-    let r = demoReport()
-    // 全角の数字で書くと、図とつながらずに文字のまま残る
-    r = ops.setText(r, 'p1', '袖を大きくした（図１）。')
+  it('図とつながっていない（図n）はエラー。その番号の図があれば、打ち直すとつながる（直し方を detail に書く）', () => {
+    // 前の版で保存した原稿など、文字のまま残っている（図１）
+    const base = demoReport()
+    const r: Report = { ...base, body: base.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === 'p1' && b.type === 'paragraph' ? { ...b, content: [{ type: 'text' as const, text: '袖を大きくした（図１）。' }] } : b)) })) }
     const f = checkReport(r, currentConfig).find((x) => x.ruleId === 'manual-ref')
     expect(f?.severity).toBe('error')
-    expect(f?.detail).toBe('番号を半角の数字で打ち直すと、図1とつながります（つながると、図を足したり消したりしても番号が自動でそろいます）')
-    // 学生が番号を半角にして書くと、図へのつながりになる
-    const fixed = ops.setText(r, 'p1', '袖を大きくした（図1）。')
+    expect(f?.detail).toBe('「（図1）」の形で打ち直すと、図1とつながります（つながると、図を足したり消したりしても番号が自動でそろいます）')
+    // 書き直すと（全角の数字のままでも）、図へのつながりになる（2026-10-24 から）
+    const fixed = ops.setText(r, 'p1', '袖を大きくした（図１）。')
     expect(fixed.body.flatMap((c) => c.blocks).find((b) => b.id === 'p1')).toMatchObject({ content: expect.arrayContaining([expect.objectContaining({ type: 'ref' })]) })
     expect(checkReport(fixed, currentConfig).some((x) => x.ruleId === 'manual-ref' && x.blockId === 'p1')).toBe(false)
   })
