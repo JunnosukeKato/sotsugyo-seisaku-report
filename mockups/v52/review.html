@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v52：直すところの説明と、要確認の言い方</title>
+<style>
+  :root { --line: #e6e2dc; --ink: #23262b; --muted: #686b72; --accent: #2f3e75; --error: #b5443b; --warn: #8a5e0f; --warn-soft: #f6f0e3; --error-soft: #f7ebe9; --chip-bg: #f1efeb; }
+  body { margin: 0; padding: 26px 30px 34px; background: #f4f2ee; color: #2a2622; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; width: 1400px; box-sizing: border-box; }
+  h1 { margin: 0 0 18px; font-size: 24px; }
+  .card { margin-bottom: 24px; padding: 16px 18px 20px; border-radius: 14px; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08); }
+  .card > h2 { margin: 0 0 4px; font-size: 19px; }
+  .card > .why { margin: 0 0 14px; font-size: 14px; color: #6b655d; line-height: 1.6; word-break: auto-phrase; }
+  .opts { display: flex; gap: 22px; align-items: flex-start; }
+  .opt { width: 310px; }
+  .opt h3 { margin: 0 0 3px; font-size: 15.5px; }
+  .opt p.note { margin: 0 0 9px; font-size: 13px; color: #6b655d; line-height: 1.55; word-break: auto-phrase; min-height: 4.7em; }
+  .tag { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 99px; background: #2f3e75; color: #fff; font-size: 12px; vertical-align: 1px; }
+  .opt.rec .panel { box-shadow: 0 0 0 3px #2f3e75; }
+
+  /* 右の欄の「直すところ」（index.css に近い大きさ） */
+  .panel { padding: 14px 16px 6px; border-radius: 12px; background: #fbfaf8; box-shadow: 0 0 0 1px #ddd8cf; color: var(--ink); font-size: 13px; line-height: 1.6; }
+  .head { display: flex; align-items: center; gap: 8px; font-size: 14px; font-weight: 700; }
+  .count { padding: 0 8px; border-radius: 99px; background: var(--error-soft); color: var(--error); font-size: 12.5px; }
+  .dot { flex: none; width: 16px; height: 16px; margin-top: 2px; border-radius: 50%; background: var(--error); display: grid; place-items: center; color: #fff; font-size: 11px; font-weight: 700; font-style: normal; line-height: 1; }
+  .dot::before { content: '×'; }
+  .dot.w { background: var(--warn); border-radius: 3px; transform: rotate(45deg) scale(0.86); }
+  .dot.w::before { content: '!'; transform: rotate(-45deg); }
+  .legend { display: flex; flex-direction: column; gap: 2px; margin: 8px 0 0; padding: 8px 12px; border-radius: 9px; background: var(--chip-bg); font-size: 12.5px; color: #3f4249; }
+  .legend > span { display: inline-flex; align-items: center; gap: 6px; }
+  .legend .dot { width: 14px; height: 14px; margin: 0; font-size: 10px; }
+  .legend b.e { color: var(--error); }
+  .legend b.w { color: var(--warn); }
+  .nowrap { white-space: nowrap; }
+  .area { display: flex; justify-content: space-between; margin: 14px 0 0; font-size: 13px; font-weight: 700; }
+  .area span { font-weight: 400; color: var(--muted); }
+  .issue { display: grid; grid-template-columns: 16px 1fr; gap: 10px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  .issue:last-child { border-bottom: 0; }
+  .ttl { display: block; font-size: 13px; font-weight: 700; line-height: 1.5; word-break: auto-phrase; }
+  .detail { display: block; margin-top: 2px; font-size: 12.5px; color: var(--muted); line-height: 1.6; word-break: auto-phrase; }
+  .keep { display: block; margin-top: 3px; color: var(--muted); font-size: 12px; text-decoration: underline; text-underline-offset: 3px; }
+
+  /* ① 案A：説明は小さな1行に（囲みなし） */
+  .lineLegend { display: flex; flex-wrap: wrap; gap: 0 12px; margin: 4px 0 0; font-size: 11.5px; color: var(--muted); }
+  .lineLegend > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+  .lineLegend .dot { width: 12px; height: 12px; margin: 0; font-size: 9px; }
+  /* ① 案B：指摘を白いカードに（左に色の帯） */
+  .cards .issue { margin: 8px 0 0; padding: 9px 10px 9px 9px; border: 1px solid var(--line); border-left: 4px solid var(--warn); border-radius: 9px; background: #fff; }
+  .cards .issue.e { border-left-color: var(--error); }
+  /* ① 案C：見出しの横の「印の意味」 */
+  .what { margin-left: auto; padding: 1px 9px; border: 1px solid #d7d3cc; border-radius: 99px; background: #fff; color: var(--accent); font-size: 12px; font-weight: 400; }
+  .pop { position: relative; margin: 8px 0 0; padding: 8px 12px; border-radius: 9px; background: #2b2e36; color: #fff; font-size: 12px; line-height: 1.7; }
+  .pop::before { content: ''; position: absolute; right: 30px; top: -6px; border: 6px solid transparent; border-top: 0; border-bottom-color: #2b2e36; }
+  .pop .dot { display: inline-grid; width: 12px; height: 12px; margin: 0 4px -1px 0; font-size: 9px; vertical-align: -1px; }
+  .popnote { margin: 4px 0 0; font-size: 11.5px; color: var(--muted); }
+
+  /* ② の見本 */
+  .say { width: 310px; }
+  .say .panel { padding-top: 6px; }
+  .foot { margin: 12px 2px 0; font-size: 13.5px; color: #6b655d; line-height: 1.7; word-break: auto-phrase; }
+</style>
+</head>
+<body>
+<h1>直すところ：説明と指摘の見分け・要確認の言い方（案）</h1>
+
+<div class="card">
+  <h2>① 「エラー／要確認」の説明と、指摘の見分け</h2>
+  <p class="why">今は、説明の灰色の囲みと指摘が、同じ印（×の丸・!のひし形）と色の字で、似て見えます。また、幅が狭いと「必要なら直／す」と1字だけ次の行に落ちていました（どの案でも、ことばの切れ目で折り返すように直します）。</p>
+  <div class="opts">
+    <div class="opt">
+      <h3>今</h3>
+      <p class="note">説明は灰色の囲み。指摘は線で区切った行。</p>
+      <div class="panel">
+        <div class="head">直すところ <span class="count">2</span></div>
+        <div class="legend"><span><i class="dot"></i><span><b class="e">エラー</b>：直してから出す</span></span><span><i class="dot w"></i><span><b class="w">要確認</b>：確かめて、必要なら直す</span></span></div>
+        <div class="area">本文<span>2件</span></div>
+        <div class="issue"><i class="dot w"></i><div><span class="ttl">「羽」ではなく「羽根」と書く</span><span class="detail">「羽」→「羽根」（「羽」⇒体から生えているつばさを示す。「羽根」⇒抜け落ちた1本を示す。あっているなら、そのままでよい）</span><span class="keep">このままにする（確認済み）</span></div></div>
+        <div class="issue"><i class="dot"></i><div><span class="ttl">「見頃」ではなく「身頃」と書く</span><span class="detail">「見頃」→「身頃」（服の胴の部分）</span></div></div>
+      </div>
+    </div>
+    <div class="opt rec">
+      <h3>A　説明は小さな1行に<span class="tag">おすすめ</span></h3>
+      <p class="note">囲みをやめ、見出しのすぐ下に小さな灰色の字で。指摘だけが目立ちます。</p>
+      <div class="panel">
+        <div class="head">直すところ <span class="count">2</span></div>
+        <div class="lineLegend"><span><i class="dot"></i>エラー：直してから出す</span><span><i class="dot w"></i>要確認：確かめて、必要なら直す</span></div>
+        <div class="area">本文<span>2件</span></div>
+        <div class="issue"><i class="dot w"></i><div><span class="ttl">「羽」は「羽根」の間違いではないか確かめる</span><span class="detail">「羽」⇒体から生えているつばさを示す。「羽根」⇒抜け落ちた1本を示す。あっているなら、そのままでよい</span><span class="keep">このままにする（確認済み）</span></div></div>
+        <div class="issue"><i class="dot"></i><div><span class="ttl">「見頃」ではなく「身頃」と書く</span><span class="detail">「身頃」＝服の胴の部分</span></div></div>
+      </div>
+    </div>
+    <div class="opt">
+      <h3>B　指摘を白いカードに</h3>
+      <p class="note">説明は灰色の囲みのまま、指摘を1つずつ白いカード（左に色の帯）にします。</p>
+      <div class="panel cards">
+        <div class="head">直すところ <span class="count">2</span></div>
+        <div class="legend"><span><i class="dot"></i><span><b class="e">エラー</b>：直してから出す</span></span><span><i class="dot w"></i><span><b class="w">要確認</b>：<span class="nowrap">確かめて、</span><span class="nowrap">必要なら直す</span></span></span></div>
+        <div class="area">本文<span>2件</span></div>
+        <div class="issue"><i class="dot w"></i><div><span class="ttl">「羽」は「羽根」の間違いではないか確かめる</span><span class="detail">「羽」⇒体から生えているつばさを示す。「羽根」⇒抜け落ちた1本を示す。あっているなら、そのままでよい</span><span class="keep">このままにする（確認済み）</span></div></div>
+        <div class="issue e"><i class="dot"></i><div><span class="ttl">「見頃」ではなく「身頃」と書く</span><span class="detail">「身頃」＝服の胴の部分</span></div></div>
+      </div>
+    </div>
+    <div class="opt">
+      <h3>C　説明は「印の意味」の中に</h3>
+      <p class="note">見出しの横の「印の意味」を押したときだけ説明を出します（ふだんは指摘だけ）。</p>
+      <div class="panel">
+        <div class="head">直すところ <span class="count">2</span><span class="what">印の意味</span></div>
+        <div class="pop"><i class="dot"></i>エラー：直してから出す<br><i class="dot w"></i>要確認：確かめて、必要なら直す</div>
+        <p class="popnote">↑「印の意味」を押したとき</p>
+        <div class="area">本文<span>2件</span></div>
+        <div class="issue"><i class="dot w"></i><div><span class="ttl">「羽」は「羽根」の間違いではないか確かめる</span><span class="detail">「羽」⇒体から生えているつばさを示す。「羽根」⇒抜け落ちた1本を示す。あっているなら、そのままでよい</span><span class="keep">このままにする（確認済み）</span></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>② 「要確認」の語の、題と説明の言い方</h2>
+  <p class="why">「注意」の語（必ずしも間違いではない語）でも「〜ではなく〜と書く」と言い切り、説明でも「羽→羽根」をくり返していました。どの案でも、説明のくり返し（「羽」→「羽根」）はやめ、先生が書いた説明だけを出します。「エラー」の語（見頃→身頃など、いつも間違い）の題は今のままです。</p>
+  <div class="opts">
+    <div class="say opt rec">
+      <h3>あ　「間違いではないか確かめる」<span class="tag">おすすめ</span></h3>
+      <p class="note">書き間違いの疑いがあることを伝え、確かめるよう促します。</p>
+      <div class="panel">
+        <div class="issue"><i class="dot w"></i><div><span class="ttl">「羽」は「羽根」の間違いではないか確かめる</span><span class="detail">「羽」⇒体から生えているつばさを示す。「羽根」⇒抜け落ちた1本を示す。あっているなら、そのままでよい</span><span class="keep">このままにする（確認済み）</span></div></div>
+        <div class="issue"><i class="dot w"></i><div><span class="ttl">「記事」は「生地」の間違いではないか確かめる</span><span class="detail">「生地」＝布のこと。雑誌などの記事のことなら、そのままでよい</span><span class="keep">このままにする（確認済み）</span></div></div>
+      </div>
+    </div>
+    <div class="say opt">
+      <h3>い　「どちらが合うか確かめる」</h3>
+      <p class="note">2つの語を並べ、どちらが合うかを選ぶよう促します（間違いと決めつけない）。</p>
+      <div class="panel">
+        <div class="issue"><i class="dot w"></i><div><span class="ttl">「羽」と「羽根」、どちらが合うか確かめる</span><span class="detail">「羽」⇒体から生えているつばさを示す。「羽根」⇒抜け落ちた1本を示す。あっているなら、そのままでよい</span><span class="keep">このままにする（確認済み）</span></div></div>
+        <div class="issue"><i class="dot w"></i><div><span class="ttl">「記事」と「生地」、どちらが合うか確かめる</span><span class="detail">「生地」＝布のこと。雑誌などの記事のことなら、そのままでよい</span><span class="keep">このままにする（確認済み）</span></div></div>
+      </div>
+    </div>
+    <div class="say opt">
+      <h3>う　「〜の意味なら」と書く</h3>
+      <p class="note">どんなときに直すかを題で言います（説明は今の文のまま）。</p>
+      <div class="panel">
+        <div class="issue"><i class="dot w"></i><div><span class="ttl">「羽根」の意味なら「羽根」と書く</span><span class="detail">「羽」⇒体から生えているつばさを示す。「羽根」⇒抜け落ちた1本を示す。あっているなら、そのままでよい</span><span class="keep">このままにする（確認済み）</span></div></div>
+        <div class="issue"><i class="dot w"></i><div><span class="ttl">「生地」の意味なら「生地」と書く</span><span class="detail">「生地」＝布のこと。雑誌などの記事のことなら、そのままでよい</span><span class="keep">このままにする（確認済み）</span></div></div>
+      </div>
+    </div>
+  </div>
+  <p class="foot">説明に正しい語が出てこないとき（例：「布のこと。…」）は、頭に「生地」＝ を付けて、何の説明かが分かるようにします。先生が説明を空にした語は「意味が合っていれば、そのままでよい」と出します。提出前チェックのページも同じ言い方にそろえます。</p>
+</div>
+</body>
+</html>

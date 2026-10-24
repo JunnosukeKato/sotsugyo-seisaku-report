@@ -21,7 +21,7 @@ export const HELP_VIDEOS: HelpVideo[] = [
   { number: 6, title: 'スマホで書く', file: '6-phone', seconds: 61, phone: true },
 ]
 
-/** 項目に入れた動画（番号の順。使い方のいちばん上の「動画で見る」に並べる：mockups 依頼者の選択 2026-10-22 案1） */
+/** 項目に入れた動画（番号の順） */
 export function videosOf(topics: HelpTopic[]): HelpVideo[] {
   const numbers = new Set(topics.flatMap((t) => t.videos ?? []))
   return HELP_VIDEOS.filter((v) => numbers.has(v.number))
@@ -33,9 +33,18 @@ export const topicOfVideo = (topics: HelpTopic[], number: number): HelpTopic | u
 /** 長さ（1:03 の形） */
 export const lengthText = (seconds: number): string => `${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}`
 
-/** その項目の動画（スマホで開いたときは、スマホの回を先に） */
-export function topicVideos(topic: HelpTopic, device: string): HelpVideo[] {
-  const list = (topic.videos ?? []).map((n) => HELP_VIDEOS.find((v) => v.number === n)).filter((v): v is HelpVideo => !!v)
+/** スマホで開いたときは、スマホの回を先に */
+function phoneFirst(list: HelpVideo[], device: string): HelpVideo[] {
   const phone = device === 'iphone' || device === 'android'
   return phone ? [...list.filter((v) => v.phone), ...list.filter((v) => !v.phone)] : list
+}
+
+/** その項目の動画（スマホで開いたときは、スマホの回を先に） */
+export function topicVideos(topic: HelpTopic, device: string): HelpVideo[] {
+  return phoneFirst((topic.videos ?? []).map((n) => HELP_VIDEOS.find((v) => v.number === n)).filter((v): v is HelpVideo => !!v), device)
+}
+
+/** まとまり（使い方の一覧の、書く順の1段）の項目に入れた動画（番号の順。スマホで開いたときは、スマホの回を先に。mockups/v51 案C） */
+export function groupVideos(topics: HelpTopic[], device: string): HelpVideo[] {
+  return phoneFirst(videosOf(topics), device)
 }

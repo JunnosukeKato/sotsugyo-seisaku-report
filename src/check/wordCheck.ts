@@ -292,8 +292,8 @@ export function wordFindings(reading: WordReading, config: YearConfig, pdf: PdfL
       // 場所を探す文字は、縮める前の指摘した文字で（長い文はページをまたぐこともあるので、文の初めのところでも探す）
       const whole = text.slice(f.start, f.end)
       snippets.push(b + whole + a, whole + a, b + whole, whole, ...(whole !== match ? [b + whole.slice(0, 20)] : []))
-      // 指摘の説明は、直し方だけにする（直す文字は quote に出す）
-      if (quote && f.replacement) detail = `→「${f.replacement}」`
+      // 指摘の説明は、直し方だけにする（直す文字は quote に出す）。書き間違えやすい語は、題に2つの語が出ているので、学生用ツールと同じ説明（textRules の wordDetail）のまま
+      if (quote && f.replacement && !f.ruleId.startsWith('word-')) detail = `→「${f.replacement}」`
     } else if (text?.trim()) {
       snippets.push(text.slice(0, 40))
     } else if (f.blockId && cells.has(f.blockId)) {

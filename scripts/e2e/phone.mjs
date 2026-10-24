@@ -266,7 +266,7 @@ await withEdge(async (browser) => {
     const r = el?.getBoundingClientRect()
     return { text: el?.textContent ?? '', inside: !!r && r.left >= 0 && r.right <= innerWidth, chips: document.querySelectorAll('.sheet .issue .src').length, fontSize: el ? parseFloat(getComputedStyle(el).fontSize) : 0 }
   })
-  check('チェックの欄の一覧の上に「エラー：直してから出す」「要確認：確かめて、必要なら直す」が出て、札（手順書・補助）はない', phoneLegend.text.includes('エラー：直してから出す') && phoneLegend.text.includes('要確認：確かめて、必要なら直す') && phoneLegend.inside && phoneLegend.chips === 0 && phoneLegend.fontSize >= 13, JSON.stringify(phoneLegend))
+  check('チェックの欄の一覧の上に「エラー：直してから出す」「要確認：確かめて、必要なら直す」が出て（囲みなしの小さな字。mockups/v52 ① 案A）、札（手順書・補助）はない', phoneLegend.text.includes('エラー：直してから出す') && phoneLegend.text.includes('要確認：確かめて、必要なら直す') && phoneLegend.inside && phoneLegend.chips === 0 && phoneLegend.fontSize >= 12, JSON.stringify(phoneLegend))
   await page.click('.sheet-close')
 
   // ページ一覧
@@ -548,10 +548,10 @@ await withEdge(async (browser) => {
   await wait(400)
   const helpSheet = await page.evaluate(() => {
     const r = document.querySelector('.help-sheet').getBoundingClientRect()
-    return { top: Math.round(r.top), left: r.left, right: r.right, width: innerWidth, menu: !!document.querySelector('.sheet'), topics: document.querySelectorAll('.help-group:not(.help-videos) .help-list button').length, videos: document.querySelectorAll('.help-videos .help-list button').length, modal: document.querySelector('.help-sheet').getAttribute('aria-modal'), pdf: document.querySelector('.help-foot .help-pdf')?.getAttribute('href') }
+    return { top: Math.round(r.top), left: r.left, right: r.right, width: innerWidth, menu: !!document.querySelector('.sheet'), topics: document.querySelectorAll('.help-group .help-list button').length, steps: document.querySelectorAll('.help-step').length, videos: [...document.querySelectorAll('.help-vid')].map((b) => b.textContent.replace(/\s/g, '')).join(','), trouble: document.querySelectorAll('.help-trouble .help-list button').length, modal: document.querySelector('.help-sheet').getAttribute('aria-modal'), pdf: document.querySelector('.help-foot .help-pdf')?.getAttribute('href') }
   })
   await shot('8a-help')
-  check('メニューの「？ 使い方」で、画面いっぱいの使い方の欄が出る（メニューは閉じる・いちばん上に動画6本・項目18・印刷用の手引き（PDF））', helpSheet.top <= 12 && helpSheet.left === 0 && helpSheet.right === helpSheet.width && !helpSheet.menu && helpSheet.topics === 18 && helpSheet.videos === 6 && helpSheet.modal === 'true' && helpSheet.pdf === './guides/student-guide.pdf', JSON.stringify(helpSheet))
+  check('メニューの「？ 使い方」で、画面いっぱいの使い方の欄が出る（メニューは閉じる・書く順の4段＋困ったとき・項目18・段の見出しの横に動画・印刷用の手引き（PDF））', helpSheet.top <= 12 && helpSheet.left === 0 && helpSheet.right === helpSheet.width && !helpSheet.menu && helpSheet.topics === 18 && helpSheet.steps === 4 && helpSheet.trouble === 7 && helpSheet.videos === '動画1:03,動画3本,動画0:43,動画0:56' && helpSheet.modal === 'true' && helpSheet.pdf === './guides/student-guide.pdf', JSON.stringify(helpSheet))
   await page.type('.help-search input', 'PDF 出ない')
   await wait(300)
   const phoneFound = await page.evaluate(() => ({ titles: [...document.querySelectorAll('.help-results .t')].map((t) => t.textContent).slice(0, 2), marks: document.querySelectorAll('.help-results mark').length }))
@@ -1035,8 +1035,8 @@ async function bandCheck(browser) {
   check('ページ送り・「ページ全体に戻す」・使い方の「引用・参考文献を入れる」は、高さ 44px 以上', pagerH >= 44 && unzoomH >= 44 && refsH >= 44, JSON.stringify({ pagerH, unzoomH, refsH }))
   check('スマホ：「追加」の欄に「＋ 引用・参考文献を入れる」はなく、使い方の「引用・参考文献」のボタンで窓が開く（使い方の欄は閉じる）', !addHasRefs && refsHelpClosed, JSON.stringify({ addHasRefs, refsHelpClosed }))
   check(
-    'スマホのチェックの欄にも「直す」のボタンはなく、直し方を書く。「見頃」（書き間違えやすい語のエラー）は「このままにする」が出ない',
-    phoneIssues.fix === 0 && phoneIssues.fixText === 0 && phoneIssues.mikoro?.error && phoneIssues.mikoro.detail.startsWith('「見頃」→「身頃」') && !phoneIssues.mikoro.keep,
+    'スマホのチェックの欄にも「直す」のボタンはなく、直し方は題に書く（説明で「見頃」→「身頃」とくり返さない。mockups/v52 ②）。「見頃」（書き間違えやすい語のエラー）は「このままにする」が出ない',
+    phoneIssues.fix === 0 && phoneIssues.fixText === 0 && phoneIssues.mikoro?.error && !phoneIssues.mikoro.detail.includes('→') && !phoneIssues.mikoro.keep,
     JSON.stringify(phoneIssues),
   )
 

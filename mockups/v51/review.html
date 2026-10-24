@@ -1,0 +1,189 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v51：使い方の一覧</title>
+<style>
+  :root { --panel-bg: #fbfaf8; --line: #e6e2dc; --ink: #23262b; --muted: #686b72; --accent: #2f3e75; --accent-soft: #e8ebf5; --warn: #8a5e0f; --warn-soft: #f6f0e3; --chip-bg: #f1efeb; }
+  body { margin: 0; padding: 26px 30px 34px; background: #f4f2ee; color: #2a2622; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; width: 1640px; box-sizing: border-box; }
+  h1 { margin: 0 0 6px; font-size: 24px; }
+  .lead { margin: 0 0 18px; font-size: 14.5px; color: #6b655d; line-height: 1.7; word-break: auto-phrase; }
+  .opts { display: flex; gap: 22px; align-items: flex-start; }
+  .opt { width: 380px; }
+  .opt h2 { margin: 0 0 4px; font-size: 17px; }
+  .opt .why { margin: 0 0 10px; font-size: 13.5px; color: #6b655d; line-height: 1.6; word-break: auto-phrase; min-height: 6.4em; }
+  .tag { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 99px; background: #2f3e75; color: #fff; font-size: 12px; vertical-align: 2px; }
+  .opt.rec .frame { box-shadow: 0 0 0 3px #2f3e75; }
+  .now img { display: block; width: 380px; border-radius: 14px; box-shadow: 0 0 0 1px #ddd8cf; }
+  .now .crop { height: 960px; overflow: hidden; border-radius: 14px; }
+
+  /* 使い方の欄（スマホ 390px ほど・パソコンの右の欄とほぼ同じ幅） */
+  .frame { position: relative; width: 380px; height: 960px; overflow: hidden; border-radius: 14px; background: var(--panel-bg); box-shadow: 0 0 0 1px #ddd8cf; font-size: 14px; line-height: 1.6; color: var(--ink); }
+  .top { padding: 16px 18px 12px; border-bottom: 1px solid var(--line); }
+  .top .title { display: flex; align-items: center; gap: 7px; margin-bottom: 10px; font-size: 17px; font-weight: 700; letter-spacing: 0.06em; }
+  .top .title svg { width: 22px; height: 22px; color: var(--accent); }
+  .top .title span { margin-left: auto; font-size: 13px; font-weight: 400; color: var(--accent); letter-spacing: 0; }
+  .search { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border: 1.5px solid var(--line); border-radius: 10px; background: #fff; color: #8c8f96; font-size: 14px; }
+  .search svg { width: 18px; height: 18px; color: var(--muted); }
+  .body { padding: 12px 16px; }
+  svg { flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .chev { width: 16px; height: 16px; color: #a3a6ad; margin-left: auto; }
+  .vid { display: inline-flex; align-items: center; gap: 3px; flex: none; padding: 1px 7px 1px 5px; border-radius: 99px; background: var(--accent-soft); color: var(--accent); font-size: 11.5px; font-weight: 700; }
+  .vid svg { width: 12px; height: 12px; fill: currentColor; stroke: none; }
+
+  /* 案A：まとまりをカードに（並びは今のまま） */
+  .a .card { margin-bottom: 12px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px var(--line); overflow: hidden; }
+  .a .card h3 { display: flex; align-items: center; gap: 8px; margin: 0; padding: 10px 14px 8px; font-size: 14px; color: var(--accent); }
+  .a .card h3 i { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; background: var(--accent-soft); }
+  .a .card h3 svg { width: 16px; height: 16px; }
+  .a .row { display: flex; align-items: center; gap: 8px; padding: 10px 14px; border-top: 1px solid #f0ede8; font-size: 14.5px; }
+  .a .videos { display: flex; gap: 8px; overflow: hidden; padding: 2px 0 12px; }
+  .a .videos .v { flex: none; width: 112px; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px var(--line); overflow: hidden; font-size: 12px; line-height: 1.4; }
+  .a .videos .v b { display: flex; align-items: center; justify-content: center; gap: 4px; height: 52px; background: var(--accent-soft); color: var(--accent); font-size: 20px; }
+  .a .videos .v b svg { width: 18px; height: 18px; fill: currentColor; stroke: none; }
+  .a .videos .v span { display: block; padding: 6px 8px 7px; }
+  .a .videos .v em { display: block; font-style: normal; color: var(--muted); font-size: 11px; }
+  .a .sec { margin: 0 2px 6px; font-size: 12.5px; font-weight: 700; color: var(--muted); }
+
+  /* 案B：入口のボタンから選ぶ */
+  .b .faq { margin: 0 0 14px; }
+  .b .faq p { margin: 0 2px 7px; font-size: 13px; font-weight: 700; color: var(--warn); }
+  .b .chips { display: flex; flex-wrap: wrap; gap: 7px; }
+  .b .chips span { padding: 6px 12px; border-radius: 99px; background: #fff; box-shadow: 0 0 0 1px #e3d6b8; color: var(--ink); font-size: 13.5px; }
+  .b .tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .b .tile { padding: 12px 12px 11px; border-radius: 12px; background: #fff; box-shadow: 0 0 0 1px var(--line); }
+  .b .tile i { display: grid; place-items: center; width: 34px; height: 34px; margin-bottom: 7px; border-radius: 10px; background: var(--accent-soft); color: var(--accent); }
+  .b .tile i svg { width: 20px; height: 20px; }
+  .b .tile b { display: block; font-size: 15px; }
+  .b .tile small { display: block; font-size: 12px; color: var(--muted); line-height: 1.5; word-break: auto-phrase; }
+  .b .tile.video { grid-column: 1 / -1; display: flex; align-items: center; gap: 10px; background: var(--accent); color: #fff; box-shadow: none; }
+  .b .tile.video i { margin: 0; background: rgba(255, 255, 255, 0.16); color: #fff; }
+  .b .tile.video i svg { fill: currentColor; stroke: none; }
+  .b .tile.video small { color: #d9ddef; }
+  .b .tile.video .chev { color: #fff; }
+  .b .next { margin: 14px 0 0; padding: 10px 12px; border-radius: 10px; background: var(--chip-bg); font-size: 12.5px; color: var(--muted); line-height: 1.6; word-break: auto-phrase; }
+
+  /* 案C：書く順のステップ＋困ったとき */
+  .c .step { position: relative; padding: 0 0 12px 40px; }
+  .c .step::before { content: ''; position: absolute; left: 13px; top: 30px; bottom: 0; width: 2px; background: #dfe3f0; }
+  .c .step:last-of-type::before { display: none; }
+  .c .step .n { position: absolute; left: 0; top: 0; display: grid; place-items: center; width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #fff; font-size: 14px; font-weight: 700; }
+  .c .step h3 { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; padding-top: 3px; font-size: 15px; }
+  .c .step h3 .vid { margin-left: auto; }
+  .c .step ul { list-style: none; margin: 0; padding: 0; border-radius: 10px; background: #fff; box-shadow: 0 0 0 1px var(--line); overflow: hidden; }
+  .c .step li { display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-top: 1px solid #f0ede8; font-size: 14.5px; }
+  .c .step li:first-child { border-top: 0; }
+  .c .trouble { margin-top: 4px; border-radius: 12px; background: var(--warn-soft); padding: 10px 12px 6px; }
+  .c .trouble h3 { display: flex; align-items: center; gap: 7px; margin: 0 0 4px; font-size: 15px; color: var(--warn); }
+  .c .trouble h3 svg { width: 19px; height: 19px; }
+  .c .trouble li { display: flex; align-items: center; gap: 8px; padding: 8px 2px; border-top: 1px solid #ebdfc4; font-size: 14.5px; list-style: none; }
+  .c .trouble ul { margin: 0; padding: 0; }
+  .c .trouble li:first-child { border-top: 0; }
+
+  .foot { margin: 18px 2px 0; font-size: 13.5px; color: #6b655d; line-height: 1.7; word-break: auto-phrase; }
+</style>
+</head>
+<body>
+<h1>使い方の一覧（案）</h1>
+<p class="lead">どの案も、上の「言葉で探す」と、項目を押したあとの中身は今のままです。学生用（スマホ・パソコン）と先生用の使い方の両方に使います。</p>
+
+<svg width="0" height="0" style="position:absolute">
+  <defs>
+    <symbol id="i-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.6 9.4a2.5 2.5 0 014.8.9c0 1.7-2.4 2.2-2.4 3.7M12 17h.01"/></symbol>
+    <symbol id="i-search" viewBox="0 0 24 24"><path d="M15.5 15.5L20 20M17 11a6 6 0 11-12 0 6 6 0 0112 0z"/></symbol>
+    <symbol id="i-chev" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+    <symbol id="i-play" viewBox="0 0 24 24"><path d="M8 5.5v13l11-6.5z"/></symbol>
+    <symbol id="i-start" viewBox="0 0 24 24"><path d="M5 12h12M13 7l5 5-5 5"/></symbol>
+    <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20l4-1 11-11-3-3L5 16l-1 4zM14 6l3 3"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-save" viewBox="0 0 24 24"><path d="M7 18a4 4 0 01-.6-8A5.5 5.5 0 0117 8.5 4.5 4.5 0 0117 18z"/></symbol>
+    <symbol id="i-pdf" viewBox="0 0 24 24"><path d="M7 3h7l4 4v14H7zM14 3v4h4M10 13h5M10 16.5h5"/></symbol>
+    <symbol id="i-more" viewBox="0 0 24 24"><circle cx="6" cy="12" r="1.2"/><circle cx="12" cy="12" r="1.2"/><circle cx="18" cy="12" r="1.2"/></symbol>
+    <symbol id="i-sos" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5.5M12 16.5h.01"/></symbol>
+  </defs>
+</svg>
+
+<div class="opts">
+  <div class="opt now">
+    <h2>今</h2>
+    <p class="why">小さな灰色の見出しの下に、題が文字だけで並んでいます。押せる所とまとまりの区切りが分かりにくく、動画の絵も暗くて読めません。</p>
+    <div class="crop"><img src="shots/now.png" alt="今の使い方の一覧"></div>
+  </div>
+
+  <!-- 案A -->
+  <div class="opt a">
+    <h2>A　まとまりをカードに</h2>
+    <p class="why">並びは今のまま、まとまりごとに白いカードにし、絵と色の見出しを付けます。項目には「›」を付けて押せると分かるように。動画は横に並べ、明るい絵に大きく番号を出します。</p>
+    <div class="frame">
+      <div class="top"><div class="title"><svg><use href="#i-help"/></svg>使い方<span>閉じる ×</span></div><div class="search"><svg><use href="#i-search"/></svg>言葉で探す（例：PDF 出ない）</div></div>
+      <div class="body">
+        <p class="sec">動画で見る（6本・音なし・各1分ほど）</p>
+        <div class="videos">
+          <div class="v"><b><svg><use href="#i-play"/></svg>1</b><span>はじめ方<em>1:03</em></span></div>
+          <div class="v"><b><svg><use href="#i-play"/></svg>2</b><span>本文・図<em>1:05</em></span></div>
+          <div class="v"><b><svg><use href="#i-play"/></svg>3</b><span>表・作品写真<em>1:08</em></span></div>
+        </div>
+        <div class="card"><h3><i><svg><use href="#i-start"/></svg></i>はじめる</h3>
+          <div class="row">はじめ方・ログインできない<span class="vid"><svg><use href="#i-play"/></svg>動画</span><svg class="chev"><use href="#i-chev"/></svg></div>
+          <div class="row">スマホのホーム画面に追加する<svg class="chev"><use href="#i-chev"/></svg></div>
+          <div class="row">もう一度ログイン<svg class="chev"><use href="#i-chev"/></svg></div>
+        </div>
+        <div class="card"><h3><i><svg><use href="#i-pen"/></svg></i>書く</h3>
+          <div class="row">書き方（タップして書く）<span class="vid"><svg><use href="#i-play"/></svg>動画</span><svg class="chev"><use href="#i-chev"/></svg></div>
+          <div class="row">図・表の入れ方<span class="vid"><svg><use href="#i-play"/></svg>動画</span><svg class="chev"><use href="#i-chev"/></svg></div>
+          <div class="row">作品写真<span class="vid"><svg><use href="#i-play"/></svg>動画</span><svg class="chev"><use href="#i-chev"/></svg></div>
+          <div class="row">抄録（先生の許可）<svg class="chev"><use href="#i-chev"/></svg></div>
+          <div class="row">Word からの移し方（今年度だけ）<svg class="chev"><use href="#i-chev"/></svg></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 案B -->
+  <div class="opt b">
+    <h2>B　入口のボタンから選ぶ</h2>
+    <p class="why">はじめに、よくある困りごとと、6つのまとまりの大きなボタンだけを出します（ほぼ1画面に収まります）。ボタンを押すと、そのまとまりの項目が出ます（1回多く押す）。</p>
+    <div class="frame">
+      <div class="top"><div class="title"><svg><use href="#i-help"/></svg>使い方<span>閉じる ×</span></div><div class="search"><svg><use href="#i-search"/></svg>言葉で探す（例：PDF 出ない）</div></div>
+      <div class="body">
+        <div class="faq"><p>よくある困りごと</p>
+          <div class="chips"><span>ログインできない</span><span>PDF が出ない</span><span>保存されたか心配</span><span>図を動かしたい</span><span>元に戻したい</span></div>
+        </div>
+        <div class="tiles">
+          <div class="tile video"><i><svg><use href="#i-play"/></svg></i><div><b>動画で見る</b><small>6本・音なし・各1分ほど</small></div><svg class="chev"><use href="#i-chev"/></svg></div>
+          <div class="tile"><i><svg><use href="#i-start"/></svg></i><b>はじめる</b><small>ログイン・ホーム画面</small></div>
+          <div class="tile"><i><svg><use href="#i-pen"/></svg></i><b>書く</b><small>本文・図と表・作品写真など</small></div>
+          <div class="tile"><i><svg><use href="#i-check"/></svg></i><b>確かめる・直す</b><small>セルフチェック・元に戻す</small></div>
+          <div class="tile"><i><svg><use href="#i-save"/></svg></i><b>保存と端末</b><small>自動保存・別の端末</small></div>
+          <div class="tile"><i><svg><use href="#i-pdf"/></svg></i><b>PDF</b><small>出し方（端末ごと）</small></div>
+          <div class="tile"><i><svg><use href="#i-more"/></svg></i><b>そのほか</b><small>画面の案内</small></div>
+        </div>
+        <p class="next">ボタンを押すと、そのまとまりの項目が並びます。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- 案C -->
+  <div class="opt c rec">
+    <h2>C　書く順のステップ＋困ったとき<span class="tag">おすすめ</span></h2>
+    <p class="why">書く順に ①はじめる ②書く ③確かめる ④PDF と番号で並べ、動画はその段の横に置きます。保存・端末・ログインのトラブルは、下の「困ったとき」にまとめます。</p>
+    <div class="frame">
+      <div class="top"><div class="title"><svg><use href="#i-help"/></svg>使い方<span>閉じる ×</span></div><div class="search"><svg><use href="#i-search"/></svg>言葉で探す（例：PDF 出ない）</div></div>
+      <div class="body">
+        <div class="step"><span class="n">1</span><h3>はじめる<span class="vid"><svg><use href="#i-play"/></svg>動画 1:03</span></h3>
+          <ul><li>はじめ方・ログイン<svg class="chev"><use href="#i-chev"/></svg></li><li>スマホのホーム画面に追加する<svg class="chev"><use href="#i-chev"/></svg></li><li>Word からの移し方（今年度だけ）<svg class="chev"><use href="#i-chev"/></svg></li></ul></div>
+        <div class="step"><span class="n">2</span><h3>書く<span class="vid"><svg><use href="#i-play"/></svg>動画 2本</span></h3>
+          <ul><li>書き方（タップして書く）<svg class="chev"><use href="#i-chev"/></svg></li><li>図・表の入れ方<svg class="chev"><use href="#i-chev"/></svg></li><li>作品写真<svg class="chev"><use href="#i-chev"/></svg></li><li>引用・参考文献<svg class="chev"><use href="#i-chev"/></svg></li><li>抄録（先生の許可）<svg class="chev"><use href="#i-chev"/></svg></li></ul></div>
+        <div class="step"><span class="n">3</span><h3>確かめる・直す<span class="vid"><svg><use href="#i-play"/></svg>動画 0:43</span></h3>
+          <ul><li>セルフチェック（まだ・直すところ）<svg class="chev"><use href="#i-chev"/></svg></li><li>原稿を前に戻す（元に戻す など）<svg class="chev"><use href="#i-chev"/></svg></li></ul></div>
+        <div class="step"><span class="n">4</span><h3>PDF を出す<span class="vid"><svg><use href="#i-play"/></svg>動画 0:56</span></h3>
+          <ul><li>PDF の出し方（端末ごと）<svg class="chev"><use href="#i-chev"/></svg></li></ul></div>
+        <div class="trouble"><h3><svg><use href="#i-sos"/></svg>困ったとき</h3>
+          <ul><li>ログインの窓が出た・もう一度ログイン<svg class="chev"><use href="#i-chev"/></svg></li><li>保存されたか心配（自動保存とドライブ）<svg class="chev"><use href="#i-chev"/></svg></li></ul></div>
+      </div>
+    </div>
+  </div>
+</div>
+<p class="foot">C の「困ったとき」には、ほかに「2つのタブ」「別の端末で書いた原稿」「共用のパソコン」「最初から作り直す」「画面の案内をもう一度見る」が続きます（見本は上の部分だけ）。先生用の使い方も、同じ形（先生の仕事の順＋困ったとき）にそろえます。</p>
+</body>
+</html>

@@ -345,8 +345,20 @@ export const TEXT_RULES: TextRule[] = [
 export const DEFAULT_WORD_CHECKS: WordCheck[] = MISCONVERSIONS.map(([wrong, right, note, severity]) => ({ wrong, right, note, severity }))
 
 /**
- * 書き間違えやすい語のルール（正しい語を detail に出し、学生が直す）。
- * 重さが「エラー」の語は「このままにする」にできない（locked。提出の前に直す）。「注意」の語は、正しく使っていれば「このままにする」にできる
+ * 書き間違えやすい語の指摘の説明（mockups/v52 ②。依頼者の選択 2026-10-24）。題に2つの語が出ているので、「「羽」→「羽根」」とくり返さず、先生が書いた説明だけを出す。
+ * 説明に正しい語が出てこない（例：「布のこと。…」）ときは、頭に「「生地」：」を付けて、何の説明かが分かるようにする（見本では「＝」。「仮は書かない」のような説明にも合うよう「：」）。
+ * 説明がない「注意」の語は「意味が合っていれば、そのままでよい」（「エラー」の語は、題だけで分かるので出さない）
+ */
+export function wordDetail(w: WordCheck): string | undefined {
+  const note = w.note?.trim()
+  if (note) return note.includes(w.right) ? note : `「${w.right}」：${note}`
+  return w.severity === 'warning' ? '意味が合っていれば、そのままでよい' : undefined
+}
+
+/**
+ * 書き間違えやすい語のルール（学生が直す）。
+ * 重さが「エラー」の語は「このままにする」にできない（locked。提出の前に直す）。題は「〜ではなく〜と書く」。
+ * 「注意」の語は、正しく使っていれば「このままにする」にできる。必ずしも間違いではないので、題は「〜と〜、どちらが合うか確かめる」（mockups/v52 ② い）
  */
 function wordRules(words: WordCheck[]): TextRule[] {
   return words
@@ -356,13 +368,13 @@ function wordRules(words: WordCheck[]): TextRule[] {
       severity: w.severity,
       source: 'supplementary',
       ...(w.severity === 'error' ? { locked: true as const } : {}),
-      title: `「${w.wrong}」ではなく「${w.right}」と書く`,
+      title: w.severity === 'warning' ? `「${w.wrong}」と「${w.right}」、どちらが合うか確かめる` : `「${w.wrong}」ではなく「${w.right}」と書く`,
       find: (text: string) =>
         matches(text, new RegExp(w.wrong.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g')).map(({ start, end }) => ({
           start,
           end,
           replacement: w.right,
-          detail: `「${w.wrong}」→「${w.right}」${w.note ? `（${w.note}）` : ''}`,
+          ...(wordDetail(w) ? { detail: wordDetail(w) } : {}),
         })),
     }))
 }

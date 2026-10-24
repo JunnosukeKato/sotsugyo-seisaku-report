@@ -47,7 +47,8 @@ describe('言葉で探す：項目を探す', () => {
   })
 
   it('道具のボタンの言葉（改ページ・行を足す・生地見本・字数）でも見つかる（はじめて使う学生の試し 2026-10-21：0件だった）', () => {
-    expect(ids(searchTopics(STUDENT_TOPICS, '改ページ').hits)[0]).toBe('write')
+    // 改ページは「書き方」（道具の改ページ）と「Word からの移し方」（読み込んだあとに見直す）。一覧が書く順になり、Word の項目が先（mockups/v51 案C）
+    expect(ids(searchTopics(STUDENT_TOPICS, '改ページ').hits).slice(0, 2).sort()).toEqual(['word', 'write'])
     for (const q of ['行を足す', '列を消す', '生地見本', '表の幅']) expect(ids(searchTopics(STUDENT_TOPICS, q).hits), q).toContain('figure')
     expect(ids(searchTopics(STUDENT_TOPICS, '字数').hits)).toContain('abstract')
   })

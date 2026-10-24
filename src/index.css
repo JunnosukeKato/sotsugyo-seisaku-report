@@ -303,14 +303,14 @@ body.resizing .page-viewport { pointer-events: none; }
 .issue.warning .dot, .sev-legend .dot.warning { background: var(--warn); border-radius: 3px; transform: rotate(45deg) scale(0.86); }
 .issue.warning .dot::before, .sev-legend .dot.warning::before { content: '!'; transform: rotate(-45deg); }
 /* エラーと要確認の意味（指摘の一覧の上。1つずつの札「手順書」「補助」の代わり。提出前チェックと同じ形。mockups/v31 案1） */
-.sev-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 12px 0 0; padding: 7px 12px; border-radius: 9px; background: var(--chip-bg); font-size: 12px; line-height: 1.6; color: #3f4249; }
-.sev-legend > span { display: inline-flex; align-items: center; gap: 6px; }
-.sev-legend .dot { flex: none; width: 14px; height: 14px; margin: 0; font-size: 10px; }
-.sev-legend b { font-weight: 700; }
-.sev-legend b.e { color: var(--error); }
-.sev-legend b.w { color: var(--warn); }
+/* エラーと要確認の意味：囲みをやめ、見出しのすぐ下に小さな灰色の字で1行に（指摘の行と見分けられるように。mockups/v52 ① 案A。依頼者の選択 2026-10-24）。
+   折り返すのは2つの間だけ（前は狭いと「必要なら直／す」と1字だけ次の行に落ちた） */
+.sev-legend { display: flex; flex-wrap: wrap; gap: 0 12px; margin: 4px 0 0; padding: 0; background: none; font-size: 11.5px; line-height: 1.6; color: var(--muted); }
+.sev-legend > span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.sev-legend .dot { flex: none; width: 12px; height: 12px; margin: 0; font-size: 9px; }
+.sev-legend b { font-weight: 400; color: inherit; }
 /* スマホ（下から出るチェックの欄）では、字を少し大きく */
-.sheet-body .sev-legend { font-size: 13px; }
+.sheet-body .sev-legend { font-size: 12px; }
 /* 題名の部分のボタン（キーボード・読み上げ用）。見た目は前の文字のまま（ボタンの枠や背景は出さない） */
 .issue .go { display: block; min-width: 0; margin: 0; padding: 0; border: 0; background: none; color: inherit; text-align: left; -webkit-appearance: none; appearance: none; }
 .issue .ttl, .issue .detail { display: block; }
@@ -1314,6 +1314,27 @@ button.row { cursor: pointer; }
 /* 開いた直後、ほかの部分を組んでいる間も、並べている隣のページは見せる */
 .page-viewport.front.measuring [data-vivliostyle-page-container].is-pair { visibility: visible !important; }
 @media print { .page-viewport [data-vivliostyle-page-container] { translate: none !important; } }
+/* 見開きのページ送り（mockups/v50 案A。依頼者の選択 2026-10-24）：本のように、とじ目を軸にめくる（editor/reportRenderer.ts の turnSpread）。
+   立ち上がる（sp-lift）・倒れてくる（sp-drop）の2つで 0.6秒（1ページのめくる動きと同じ長さ）。
+   奥行きの中心をとじ目に置き（真横になったページが見えなくなるように）、2ページ分の広さなので1ページのときより浅く傾ける */
+.stage.spread .page-viewport [data-vivliostyle-spread-container] { perspective: 6000px; perspective-origin: calc((793.7px + var(--pair-dx, 807.7px)) / 2) 50%; }
+.page-viewport [data-vivliostyle-page-container]:is(.sp-lift, .sp-drop) { display: block !important; z-index: 3; -webkit-backface-visibility: hidden; backface-visibility: hidden; }
+/* 左のページはとじ目（右の端）を軸にめくる（右のページは、ふだんどおり左の端が軸） */
+.page-viewport [data-vivliostyle-page-container]:is(.sp-lift, .sp-drop):not(.is-right) { transform-origin: right center !important; }
+.page-viewport [data-vivliostyle-page-container].sp-lift { animation: sp-lift-left 0.3s cubic-bezier(0.45, 0, 0.9, 0.55) forwards; }
+.page-viewport [data-vivliostyle-page-container].sp-lift.is-right { animation-name: sp-lift-right; }
+.page-viewport [data-vivliostyle-page-container].sp-drop { animation: sp-drop-left 0.3s cubic-bezier(0.1, 0.45, 0.55, 1) both; }
+.page-viewport [data-vivliostyle-page-container].sp-drop.is-right { animation-name: sp-drop-right; }
+.page-viewport [data-vivliostyle-page-container]:is(.sp-lift, .sp-drop)::after { content: ''; position: absolute; inset: 0; z-index: 10; pointer-events: none; background: linear-gradient(to right, rgba(0, 0, 0, 0.26), rgba(0, 0, 0, 0.03) 60%, rgba(0, 0, 0, 0)); }
+.page-viewport [data-vivliostyle-page-container]:is(.sp-lift, .sp-drop).is-right::after { background: linear-gradient(to left, rgba(0, 0, 0, 0.26), rgba(0, 0, 0, 0.03) 60%, rgba(0, 0, 0, 0)); }
+.page-viewport [data-vivliostyle-page-container].sp-lift::after { animation: shade-out 0.3s ease-in forwards; }
+.page-viewport [data-vivliostyle-page-container].sp-drop::after { animation: shade-in 0.3s ease-out forwards; }
+/* 真横（90度）を少し過ぎたところまで（裏側は隠してあるので、過ぎると見えない） */
+@keyframes sp-lift-left { from { transform: rotateY(0); } to { transform: rotateY(95deg); } }
+@keyframes sp-lift-right { from { transform: rotateY(0); } to { transform: rotateY(-95deg); } }
+@keyframes sp-drop-left { from { transform: rotateY(95deg); } to { transform: rotateY(0); } }
+@keyframes sp-drop-right { from { transform: rotateY(-95deg); } to { transform: rotateY(0); } }
+.page-viewport.front.measuring [data-vivliostyle-page-container]:is(.sp-lift, .sp-drop) { visibility: visible !important; }
 
 /* ---- v35 元に戻す・やり直す（mockups/v35 ④ 案A。道具のいちばん下に2つ並べる。部品は app/Palette.tsx の UndoRedo。スマホは書く欄の「戻す」の横） ---- */
 /* 道具の幅（86px）に2つ並べるので、左右の余白まで広げ、字は少し小さく（読める大きさの 10px） */
@@ -1411,7 +1432,7 @@ button.row { cursor: pointer; }
 .done-fold .sr-only { position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap; border: 0; }
 /* 直すところ：凡例 12.5px、指摘の題 14px・直し方 13px、印 18px */
 .side .check-none { margin-top: 4px; font-size: 14px; }
-.side .sev-legend { margin-top: 6px; padding: 8px 12px; font-size: 12.5px; }
+.side .sev-legend { margin-top: 2px; }
 .side .igroup { margin-top: 14px; }
 .side .ig-h { margin-bottom: 2px; font-size: 12.5px; }
 .side .issue { grid-template-columns: 18px 1fr auto; padding: 11px 4px; }

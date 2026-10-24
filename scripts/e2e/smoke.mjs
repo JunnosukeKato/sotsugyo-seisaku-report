@@ -383,14 +383,41 @@ await withEdge(async (browser) => {
   await page.waitForSelector('.side .help-side')
   await pause0(300)
   const helpOpen = await page.evaluate(() => ({
-    topics: document.querySelectorAll('.help-group:not(.help-videos) .help-list button').length,
-    videos: document.querySelectorAll('.help-videos .help-list button').length,
+    topics: document.querySelectorAll('.help-group .help-list button').length,
+    // 書く順の段（番号の丸）・いちばん下の「困ったとき」・段の見出しの横の「動画」（mockups/v51 案C）
+    steps: [...document.querySelectorAll('.help-step')].map((g) => g.querySelector('.help-n').textContent + g.querySelector('h3').textContent + (g.querySelector('.help-vid')?.textContent.replace(/\s/g, '') ?? '')),
+    trouble: [...document.querySelectorAll('.help-group')].at(-1)?.classList.contains('help-trouble') ? document.querySelectorAll('.help-trouble .help-list button').length : 0,
     check: !!document.querySelector('.side .sec.check'),
     focus: document.activeElement?.classList.contains('help-title') ?? false,
     pdf: document.querySelector('.help-foot .help-pdf')?.getAttribute('href'),
     paper: !!document.querySelector('.palette'),
   }))
-  check('「？ 使い方」で、右の欄が使い方に替わる（いちばん上に動画6本・項目18・見出しに移る・紙面と道具はそのまま・いちばん下に印刷用の手引き（PDF））', helpOpen.topics === 18 && helpOpen.videos === 6 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf', JSON.stringify(helpOpen))
+  check(
+    '「？ 使い方」で、右の欄が使い方に替わる（書く順の4段＋いちばん下の「困ったとき」7項目、全部で項目18。動画は段の見出しの横。見出しに移る・紙面と道具はそのまま・いちばん下に印刷用の手引き（PDF））',
+    helpOpen.topics === 18 && helpOpen.steps.join('／') === '1はじめる動画1:03／2書く動画3本／3確かめる・直す動画0:43／4PDF を出す動画0:56' && helpOpen.trouble === 7 && !helpOpen.check && helpOpen.focus && helpOpen.paper && helpOpen.pdf === './guides/student-guide.pdf',
+    JSON.stringify(helpOpen),
+  )
+  // 段の見出しの横の「動画」：1本ならその場で再生、2本以上（書く）なら、その段の動画の一覧（そこから開いた動画の「戻る」は、その一覧へ）
+  await page.evaluate(() => document.querySelector('.help-step .help-vid').click())
+  await page.waitForSelector('.help-topic .help-video video')
+  const oneVideo = await page.evaluate(() => ({ title: document.querySelector('.help-topic h3').textContent, back: document.querySelector('.help-back').textContent }))
+  await page.evaluate(() => document.querySelector('.help-back').click())
+  await page.waitForSelector('.help-step')
+  await page.evaluate(() => [...document.querySelectorAll('.help-vid')].find((b) => b.textContent.includes('3本')).click())
+  await page.waitForSelector('.help-videos button')
+  const groupList = await page.evaluate(() => ({ crumb: document.querySelector('.help-crumb').textContent, rows: [...document.querySelectorAll('.help-videos .help-vt')].map((x) => x.textContent) }))
+  await page.evaluate(() => document.querySelectorAll('.help-videos button')[1].click())
+  await page.waitForSelector('.help-topic .help-video video')
+  const fromGroup = await page.evaluate(() => ({ title: document.querySelector('.help-topic h3').textContent, back: document.querySelector('.help-back').textContent }))
+  await page.evaluate(() => document.querySelector('.help-back').click())
+  await page.waitForSelector('.help-videos button')
+  await page.evaluate(() => document.querySelector('.help-back').click())
+  await page.waitForSelector('.help-step')
+  check(
+    '使い方：段の見出しの「動画 1:03」でその動画を再生。「動画 3本」（書く）は、その段の動画の一覧（本文・表と作品写真・スマホ）。一覧から開いた動画の「戻る」は「動画の一覧へ」',
+    oneVideo.title.includes('はじめ方（ログイン〜表紙）') && oneVideo.back.includes('一覧へ') && groupList.crumb === '書く' && groupList.rows.join(',') === '本文を書く・図を入れる,表・作品写真,スマホで書く' && fromGroup.title.includes('表・作品写真') && fromGroup.back.includes('動画の一覧へ'),
+    JSON.stringify({ oneVideo, groupList, fromGroup }),
+  )
   await page.type('.help-search input', 'PDF 出ない')
   await pause0(300)
   const found = await page.evaluate(() => ({
@@ -790,8 +817,11 @@ await withEdge(async (browser) => {
     tally: document.querySelector('.side .check-sub.fix')?.textContent.replace(/\s/g, '') ?? '',
     tallyRed: getComputedStyle(document.querySelector('.side .check-sub.fix .count-badge')).color === 'rgb(181, 68, 59)',
     issues: document.querySelectorAll('.side .sec.check .issue').length,
+    // 囲みなしの小さな灰色の字（指摘の行と見分ける。mockups/v52 ① 案A）。折り返すのは2つの間だけ
+    boxless: getComputedStyle(document.querySelector('.side .sev-legend')).backgroundColor === 'rgba(0, 0, 0, 0)',
+    oneLineEach: [...document.querySelectorAll('.side .sev-legend > span')].every((x) => x.getBoundingClientRect().height < parseFloat(getComputedStyle(x).lineHeight) * 1.5),
   }))
-  check('セルフチェックの一覧の上に「× エラー：直してから出す」「! 要確認：確かめて、必要なら直す」が出て、指摘ごとの札（手順書・補助）はない', legend.text.includes('エラー：直してから出す') && legend.text.includes('要確認：確かめて、必要なら直す') && legend.aboveList && legend.icons.join(',') === '"×","!"' && legend.chips === 0 && !legend.chipText, JSON.stringify(legend))
+  check('セルフチェックの一覧の上に「× エラー：直してから出す」「! 要確認：確かめて、必要なら直す」が、囲みなしの1行で出て（それぞれの途中では折り返さない）、指摘ごとの札（手順書・補助）はない', legend.text.includes('エラー：直してから出す') && legend.text.includes('要確認：確かめて、必要なら直す') && legend.aboveList && legend.icons.join(',') === '"×","!"' && legend.chips === 0 && !legend.chipText && legend.boxless && legend.oneLineEach, JSON.stringify(legend))
   check('書いた文の間違いは「直すところ」に出る（凡例も直すところの中。「直すところ」の横の数 N は赤）', legend.inFix && legend.tallyRed && legend.tally === `直すところ${legend.issues}`, JSON.stringify(legend))
   // 直すところがあるときは、まだのところの済んだ（✓）行を、灰色の1行「✓ 表紙・…」にたたむ（mockups/v37 の承認）。まだ・先生の許可のあとの行は、そのまま
   const folded = await page.evaluate(() => {

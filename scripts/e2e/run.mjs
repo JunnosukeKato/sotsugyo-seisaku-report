@@ -3,7 +3,7 @@
 // まとめた版（vite build --mode e2e → dist-e2e）は、公開する版と同じくまとめてあり、テスト用の窓口（window.__editor など）だけ足してある。
 //
 // 使い方: node scripts/e2e/run.mjs smoke phone   … まとめて、手元のサーバー（http://localhost:4173）を立て、テストを流して止める
-//         node scripts/e2e/run.mjs all           … smoke・phone・admin・drive・check・cellImage・askVersion（公開の前に、まとめて1回）
+//         node scripts/e2e/run.mjs all           … smoke・phone・admin・drive・check・cellImage・askVersion・spreadTurn（公開の前に、まとめて1回）
 //         node scripts/e2e/run.mjs phoneDirect   … scripts/e2e の中の、1つだけで動かせるテストも名前で流せる
 //   --no-build：前にまとめた版をそのまま使う（テストの文だけを直したとき）
 //   --dev：まとめずに、開発サーバー（http://localhost:5173。動かしておくこと）で流す（前のやり方）
@@ -16,7 +16,7 @@ import { serveBuilt } from './serveBuilt.mjs'
 
 const args = process.argv.slice(2)
 const flags = new Set(args.filter((a) => a.startsWith('--')))
-const ALL = ['smoke', 'phone', 'admin', 'drive', 'check', 'cellImage', 'askVersion']
+const ALL = ['smoke', 'phone', 'admin', 'drive', 'check', 'cellImage', 'askVersion', 'spreadTurn']
 const names = args.filter((a) => !a.startsWith('--')).flatMap((a) => (a === 'all' ? ALL : [a]))
 if (!names.length) {
   console.log('流すテストの名前を書いてください（例：node scripts/e2e/run.mjs smoke phone、全部なら all）')

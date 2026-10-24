@@ -299,7 +299,8 @@ export async function trialFixesPc(browser, check) {
   await page.waitForSelector('.side .head-menu [role="menuitem"]')
   await page.evaluate(() => [...document.querySelectorAll('.side .head-menu [role="menuitem"]')].find((b) => b.textContent.includes('使い方')).click())
   await page.waitForSelector('.help-list [data-topic="write"]')
-  const marked = await page.evaluate(() => [...document.querySelectorAll('.help-list [data-topic]')].filter((b) => b.querySelector('.help-mark')).map((b) => b.dataset.topic))
+  // 動画は、書く順の段の見出しの横（mockups/v51 案C。前は項目ごとの印）
+  const marked = await page.evaluate(() => [...document.querySelectorAll('.help-step')].filter((g) => g.querySelector('.help-vid')).flatMap((g) => [...g.querySelectorAll('.help-list [data-topic]')].map((b) => b.dataset.topic)))
   await page.evaluate(() => document.querySelector('.help-list [data-topic="write"]').click())
   await page.waitForSelector('.help-topic .help-video video')
   const videos = await page.evaluate(async () => {
@@ -309,8 +310,8 @@ export async function trialFixesPc(browser, check) {
   })
   await page.screenshot({ path: `${OUT}/pc-help-videos.png` })
   check(
-    '使い方：動画のある項目（はじめ方・書き方・図と表・作品写真・セルフチェック・PDF）に印。「書き方」に動画2と動画6（押すまで読み込まない。動画と、はじめの絵のファイルがある）',
-    marked.join(',') === 'login,write,figure,photos,check,pdf' && videos.length === 2 && videos.every((v) => v.preload === 'none' && v.files) && videos[0].cap === '動画 2「本文を書く・図を入れる」（65秒・音なし）' && videos[1].cap.startsWith('動画 6「スマホで書く」'),
+    '使い方：動画は、書く順の4段（はじめる・書く・確かめる・PDF）の見出しの横。「書き方」に動画2と動画6（押すまで読み込まない。動画と、はじめの絵のファイルがある）',
+    marked.join(',') === 'login,home,word,write,figure,photos,references,abstract,check,undo,pdf' && videos.length === 2 && videos.every((v) => v.preload === 'none' && v.files) && videos[0].cap === '動画 2「本文を書く・図を入れる」（65秒・音なし）' && videos[1].cap.startsWith('動画 6「スマホで書く」'),
     JSON.stringify({ marked, videos }),
   )
   await context.close()

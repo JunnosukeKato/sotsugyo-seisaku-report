@@ -57,7 +57,7 @@ const EMPTY_LAYOUT: LayoutInfo = { kinds: [], bodyPages: 0, abstractPages: 1, ab
 const MAX_PASSES = 4
 
 /** ページを送る動きのクラス（終わったら外す） */
-const MOTION_CLASSES = ['is-under', 'is-under-current', 'turn-out', 'turn-in', 'fade-out', 'fade-in']
+const MOTION_CLASSES = ['is-under', 'is-under-current', 'turn-out', 'turn-in', 'fade-out', 'fade-in', 'sp-lift', 'sp-drop']
 
 /** 表示枠の初めの3つの部分（表紙・抄録・目次）の数。そのあとに章ごとの部分、最後に本文の残りから後ろ（layout/document.ts の partList） */
 const FRONT_PARTS = 3
@@ -136,7 +136,7 @@ export class ReportRenderer {
   private finishTurn: (() => void) | null = null
   /**
    * 見開き（mockups/v35 ③ 案A。PC だけ）：表示しているページ（is-current）と同じ組（1–2、3–4…）の隣のページも出す（is-pair）。
-   * 組の右のページには is-right を付け、index.css で右へずらす。組を替えるときは、めくらずに、ふわっと替える
+   * 組の右のページには is-right を付け、index.css で右へずらす。隣の組へは本のようにめくる（turnSpread）
    */
   spread = false
 
@@ -543,24 +543,80 @@ export class ReportRenderer {
 
   /**
    * 見開きのページ送り：同じ組の隣のページへ移るだけなら、紙面はそのまま（印だけ付け替える）。
-   * ほかの組へは、めくらずに、並べた2ページをふわっと出す（1ページの「めくる」動きは、2ページ並べたときには合わないため）
+   * 隣の組へは、本のようにめくる（mockups/v50 案A。依頼者の選択 2026-10-24）：次へは、右のページがとじ目を軸に立ち上がり
+   * （下に、次の組の右のページが見える）、その裏から次の組の左のページが倒れてくる。前へは、左のページから、その逆。
+   * 離れた組へは、めくらずに、並べた2ページをふわっと出す
    */
   private turnSpread(view: PageView, from: number, to: number, effect: PageEffect): Promise<void> {
-    const samePair = from - (from % 2) === to - (to % 2)
-    this.setCurrent(view, to)
-    if (samePair || effect === 'none' || reducedMotion()) return Promise.resolve()
-    fadeIn(this.shownPages(view, to))
+    const pairFrom = from - (from % 2)
+    const pairTo = to - (to % 2)
+    if (pairFrom === pairTo || effect === 'none' || reducedMotion()) {
+      this.setCurrent(view, to)
+      return Promise.resolve()
+    }
+    if (effect === 'fade' || Math.abs(pairTo - pairFrom) !== 2) {
+      this.setCurrent(view, to)
+      fadeIn(this.shownPages(view, to))
+      return new Promise((resolve) => {
+        let finished = false
+        const finish = () => {
+          if (finished) return
+          finished = true
+          if (this.finishTurn === finish) this.finishTurn = null
+          resolve()
+        }
+        this.finishTurn = finish
+        // ふわっと出す動き（index.css の fade-in。0.2秒）が終わるころ
+        setTimeout(finish, 220)
+      })
+    }
+    const pages = view.pages()
+    const forward = pairTo > pairFrom
+    // 立ち上がるページ（次へは右、前へは左）・その下に見える、行き先の組の同じ側のページ・裏から倒れてくる、行き先の組の反対側のページ・動かない側のページ
+    const liftAt = forward ? pairFrom + 1 : pairFrom
+    const dropAt = forward ? pairTo : pairTo + 1
+    const lift = pages[liftAt]
+    const drop = pages[dropAt]
+    if (!lift || !drop) {
+      this.setCurrent(view, to)
+      return Promise.resolve()
+    }
+    const mark = (i: number, motion: string) => {
+      pages[i]?.classList.add(motion)
+      pages[i]?.classList.toggle('is-right', i % 2 === 1)
+    }
+    pages.forEach((p) => p.classList.remove('is-current', 'is-pair', 'is-right', ...MOTION_CLASSES))
+    mark(forward ? pairFrom : pairFrom + 1, 'is-under')
+    mark(forward ? pairTo + 1 : pairTo, 'is-under')
+    mark(liftAt, 'sp-lift')
+    stackParts(view)
     return new Promise((resolve) => {
       let finished = false
+      let moving = lift
       const finish = () => {
         if (finished) return
         finished = true
         if (this.finishTurn === finish) this.finishTurn = null
+        moving.removeEventListener('animationend', onEnd)
+        clearTimeout(timer)
+        this.setCurrent(view, to)
         resolve()
       }
+      // ページの影（::after）の動きの終わりも届くため、ページ本体の動きの終わりだけを見る。
+      // 立ち上がり終えたら、そのページを隠して、裏から倒れてくるページを動かす。倒れ終えたら終わり
+      const onEnd = (e: AnimationEvent) => {
+        if (e.target !== moving || e.pseudoElement) return
+        if (moving === drop) return finish()
+        lift.removeEventListener('animationend', onEnd)
+        lift.classList.remove('sp-lift')
+        moving = drop
+        mark(dropAt, 'sp-drop')
+        stackParts(view)
+        drop.addEventListener('animationend', onEnd)
+      }
       this.finishTurn = finish
-      // ふわっと出す動き（index.css の fade-in。0.2秒）が終わるころ
-      setTimeout(finish, 220)
+      lift.addEventListener('animationend', onEnd)
+      const timer = setTimeout(finish, 1500)
     })
   }
 }
@@ -655,7 +711,7 @@ function stackParts(view: PageView): void {
     const pages = [...part.element.querySelectorAll<HTMLElement>('[data-vivliostyle-page-container]')]
     const level = Math.max(
       0,
-      ...pages.map((p) => (p.matches('.turn-out, .turn-in, .fade-out') ? 3 : p.matches('.is-current, .is-pair') ? 2 : p.matches('.is-under, .is-under-current') ? 1 : 0)),
+      ...pages.map((p) => (p.matches('.turn-out, .turn-in, .fade-out, .sp-lift, .sp-drop') ? 3 : p.matches('.is-current, .is-pair') ? 2 : p.matches('.is-under, .is-under-current') ? 1 : 0)),
     )
     part.element.style.zIndex = String(level)
   }

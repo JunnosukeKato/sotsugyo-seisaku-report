@@ -72,7 +72,7 @@ const CSS_DPI = 96
 const A4_PT = { width: (210 / 25.4) * 72, height: (297 / 25.4) * 72 }
 
 /** 画面でページに付けるクラス（ページ送りの動き・表示中・選んだ印・指摘の印・PDF に入れない印） */
-const SCREEN_CLASSES = ['is-current', 'is-under', 'is-under-current', 'turn-out', 'turn-in', 'fade-out', 'fade-in', 'print-skip', 'is-selected', 'has-issue']
+const SCREEN_CLASSES = ['is-current', 'is-under', 'is-under-current', 'turn-out', 'turn-in', 'fade-out', 'fade-in', 'sp-lift', 'sp-drop', 'print-skip', 'is-selected', 'has-issue']
 
 /**
  * 組版エンジンが紙面の外側の要素に置く CSS の変数（--viv-layoutUnitAdj など）。紙面の文字の大きさなどは

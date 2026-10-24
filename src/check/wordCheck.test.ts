@@ -220,8 +220,10 @@ describe('Word のチェック（学生用ツールのセルフチェックと�
     const body = makeDocx({ body: [p('Ⅰ．企画・立案'), p('　前見頃の記事を選んだ。')].join('') })
     const reading = await readWord({ body: file(body, '04_本文.docx') }, words)
     const { findings } = wordFindings(reading, words, {})
-    expect(by(findings, 'word-見頃')).toEqual([expect.objectContaining({ part: 'body', severity: 'error', detail: '→「身頃」' })])
-    expect(by(findings, 'word-記事')).toEqual([expect.objectContaining({ part: 'body', severity: 'warning', detail: '→「生地」' })])
+    // 題に2つの語が出ているので、説明に「→「身頃」」はくり返さない（説明のない注意の語は「意味が合っていれば、そのままでよい」。mockups/v52 ②）
+    expect(by(findings, 'word-見頃')).toEqual([expect.objectContaining({ part: 'body', severity: 'error', title: '「見頃」ではなく「身頃」と書く' })])
+    expect(by(findings, 'word-見頃')[0].detail).toBeUndefined()
+    expect(by(findings, 'word-記事')).toEqual([expect.objectContaining({ part: 'body', severity: 'warning', title: '「記事」と「生地」、どちらが合うか確かめる', detail: '意味が合っていれば、そのままでよい' })])
   })
 
   it('グラフ・Word の図形の図は、Word に画像があるので「画像が入っていない」と言わない', async () => {

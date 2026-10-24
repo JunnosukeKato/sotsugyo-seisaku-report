@@ -204,7 +204,8 @@ describe('変換を間違えやすい語', () => {
       { wrong: '', right: '空', severity: 'error' as const },
     ]
     const f = checkText('前見頃に芯地(仮)を貼り、ダーツを縫った。', words).filter((x) => x.ruleId.startsWith('word-'))
-    expect(f.map((x) => [x.ruleId, x.severity, x.replacement, x.detail])).toEqual([['word-芯地(仮)', 'warning', '芯地', '「芯地(仮)」→「芯地」（仮は書かない）']])
+    // 題に2つの語が出ているので、説明に「→「芯地」」はくり返さない。説明に正しい語がなければ、頭に「「芯地」：」（mockups/v52 ②）
+    expect(f.map((x) => [x.ruleId, x.severity, x.replacement, x.title, x.detail])).toEqual([['word-芯地(仮)', 'warning', '芯地', '「芯地(仮)」と「芯地」、どちらが合うか確かめる', '「芯地」：仮は書かない']])
     expect(checkText('前見頃を縫った。', []).some((x) => x.ruleId.startsWith('word-'))).toBe(false)
   })
 

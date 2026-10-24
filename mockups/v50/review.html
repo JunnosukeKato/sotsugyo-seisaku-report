@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v50：見開きのページ送り</title>
+<style>
+  body { margin: 0; padding: 26px 30px 34px; background: #f4f2ee; color: #2a2622; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; width: 1040px; box-sizing: border-box; }
+  h1 { margin: 0 0 6px; font-size: 24px; }
+  .lead { margin: 0 0 18px; font-size: 14.5px; color: #6b655d; line-height: 1.7; word-break: auto-phrase; }
+  .opts { display: flex; gap: 18px; align-items: flex-start; }
+  .card { flex: 1; padding: 16px 18px 18px; border-radius: 14px; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08); }
+  .card.rec { box-shadow: 0 0 0 3px #2f3e75; }
+  .card h2 { margin: 0 0 4px; font-size: 18px; }
+  .card .why { margin: 0 0 12px; font-size: 13.5px; color: #6b655d; line-height: 1.6; word-break: auto-phrase; min-height: 4.8em; }
+  .tag { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 99px; background: #2f3e75; color: #fff; font-size: 12px; vertical-align: 2px; }
+  /* 台（紙面のまわり）と、並べた2ページ */
+  .desk { position: relative; height: 250px; border-radius: 10px; background: #e9e5de; overflow: hidden; }
+  .book { position: absolute; left: 50%; top: 22px; width: 296px; height: 207px; margin-left: -148px; perspective: 1100px; perspective-origin: 50% 50%; }
+  .page { position: absolute; top: 0; width: 145px; height: 205px; background: #fff; box-shadow: 0 1px 2px rgba(30, 25, 20, 0.1), 0 8px 22px rgba(30, 25, 20, 0.16); display: none; box-sizing: border-box; padding: 16px 13px; }
+  .page.l { left: 0; transform-origin: right center; }
+  .page.r { left: 151px; transform-origin: left center; }
+  .page.show { display: block; }
+  .page b { display: block; margin-bottom: 9px; font-size: 11px; color: #2a2622; }
+  .page i { display: block; height: 4px; margin: 0 0 6px; border-radius: 2px; background: #d9d4cb; }
+  .page i.s { width: 62%; }
+  .page em { position: absolute; left: 0; right: 0; bottom: 8px; font-style: normal; font-size: 9px; color: #8a847b; text-align: center; }
+  .page i.ph { height: 52px; background: #e4ddd2; }
+  .page::after { content: ''; position: absolute; inset: 0; opacity: 0; pointer-events: none; }
+  .page.l::after { background: linear-gradient(to right, rgba(0, 0, 0, 0.26), rgba(0, 0, 0, 0.03) 60%, rgba(0, 0, 0, 0)); }
+  .page.r::after { background: linear-gradient(to left, rgba(0, 0, 0, 0.26), rgba(0, 0, 0, 0.03) 60%, rgba(0, 0, 0, 0)); }
+  .page.top { z-index: 3; backface-visibility: hidden; }
+  /* ←→（見開きのときと同じ、右下） */
+  .arrows { position: absolute; right: 12px; bottom: 10px; display: flex; gap: 8px; }
+  .arrows button { width: 38px; height: 38px; border: none; border-radius: 50%; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.18); font-size: 17px; color: #2f3e75; cursor: pointer; }
+  .arrows button:disabled { opacity: 0.35; cursor: default; }
+  .play { margin-top: 10px; font-size: 13px; color: #6b655d; text-align: center; }
+  .play button { margin-left: 6px; padding: 5px 14px; border: 1px solid #c9c3b8; border-radius: 99px; background: #fff; font: inherit; color: #2a2622; cursor: pointer; }
+  .foot { margin: 16px 2px 0; font-size: 13.5px; color: #6b655d; line-height: 1.7; word-break: auto-phrase; }
+</style>
+</head>
+<body>
+<h1>見開きのページ送り（案）</h1>
+<p class="lead">右下の → ← を押すと、その案の動きを見られます。どれも 0.6秒ほどで、1ページの表示のめくる動きと同じ長さです。</p>
+<div class="opts">
+  <div class="card rec" data-kind="book">
+    <h2>A　本のようにめくる<span class="tag">おすすめ</span></h2>
+    <p class="why">右のページが、真ん中（とじ目）を軸に左へめくれ、その裏から次の左のページが現れます。前へ戻るときは、左のページが右へめくれます。</p>
+    <div class="desk"><div class="book"></div><div class="arrows"><button class="prev">←</button><button class="next">→</button></div></div>
+    <div class="play">続けて見る<button class="auto">再生</button></div>
+  </div>
+  <div class="card" data-kind="sheet">
+    <h2>B　2ページまとめてめくる</h2>
+    <p class="why">1ページの表示と同じ動きを、2ページまとめて行います（左の端を軸に、左へめくれて次の2ページが見える）。</p>
+    <div class="desk"><div class="book"></div><div class="arrows"><button class="prev">←</button><button class="next">→</button></div></div>
+    <div class="play">続けて見る<button class="auto">再生</button></div>
+  </div>
+  <div class="card" data-kind="fade">
+    <h2>今のまま　ふわっと替える</h2>
+    <p class="why">めくらずに、次の2ページがふわっと現れます（今の動き。比べる用）。</p>
+    <div class="desk"><div class="book"></div><div class="arrows"><button class="prev">←</button><button class="next">→</button></div></div>
+    <div class="play">続けて見る<button class="auto">再生</button></div>
+  </div>
+</div>
+<p class="foot">どの案でも、目次などから離れたページへ移るときは、今と同じく「ふわっと」替えます。画面の動きを減らす設定にしているパソコンでは、動かさずに替えます。</p>
+<script>
+  const PAGES = 7
+  const lines = (n, short) => Array.from({ length: n }, (_, i) => `<i${short && i === n - 1 ? ' class="s"' : ''}></i>`).join('')
+  function pageHtml(i) {
+    if (i === 0) return '<b>表紙</b>' + lines(3, true)
+    const photo = i === 3 || i === 6
+    return `<b>${i === 1 ? '抄録' : i === 2 ? '目次' : '第' + (i - 2) + '章'}</b>${photo ? '<i class="ph"></i><i class="ph"></i>' : ''}${lines(photo ? 6 : 13, true)}<em>${i}</em>`
+  }
+  for (const card of document.querySelectorAll('.card')) {
+    const kind = card.dataset.kind
+    const book = card.querySelector('.book')
+    const pages = Array.from({ length: PAGES }, (_, i) => {
+      const el = document.createElement('div')
+      el.className = 'page ' + (i % 2 ? 'r' : 'l') + (i === 3 || i === 6 ? ' photo' : '')
+      el.innerHTML = pageHtml(i)
+      book.append(el)
+      return el
+    })
+    let at = 0
+    let busy = false
+    const prev = card.querySelector('.prev')
+    const next = card.querySelector('.next')
+    const show = (first) => {
+      pages.forEach((p, i) => {
+        p.className = p.className.replace(/ (show|top)/g, '')
+        p.style.zIndex = ''
+        if (i === first || i === first + 1) p.classList.add('show')
+      })
+      prev.disabled = first === 0
+      next.disabled = first + 2 > PAGES - 1
+    }
+    const anim = (el, frames, ms, easing) => el.animate(frames, { duration: ms, easing, fill: 'forwards' }).finished
+    const shade = (el, from, to, ms, easing) => {
+      const s = document.createElement('div')
+      s.style.cssText = `position:absolute;inset:0;pointer-events:none;background:linear-gradient(to ${el.classList.contains('r') || kind === 'sheet' ? 'left' : 'right'},rgba(0,0,0,.26),rgba(0,0,0,.03) 60%,rgba(0,0,0,0))`
+      el.append(s)
+      return s.animate([{ opacity: from }, { opacity: to }], { duration: ms, easing, fill: 'forwards' }).finished.then(() => s)
+    }
+    async function turn(dir) {
+      const to = at + 2 * dir
+      if (busy || to < 0 || to > PAGES - 1) return
+      busy = true
+      const [l0, r0, l1, r1] = [pages[at], pages[at + 1], pages[to], pages[to + 1]]
+      if (kind === 'fade') {
+        show(to)
+        await Promise.all([l1, r1].filter(Boolean).map((p) => anim(p, [{ opacity: 0.4 }, { opacity: 1 }], 200, 'ease')))
+      } else if (kind === 'book') {
+        const half = 300
+        // 1つめ：めくるページが、とじ目を軸に立ち上がる（下に、次の組の同じ側のページが見える）
+        const lift = dir > 0 ? r0 : l0
+        const under = dir > 0 ? r1 : l1
+        const drop = dir > 0 ? l1 : r1
+        const sign = lift.classList.contains('r') ? -1 : 1
+        if (under) under.classList.add('show')
+        lift.classList.add('top')
+        await Promise.all([anim(lift, [{ transform: 'rotateY(0)' }, { transform: `rotateY(${95 * sign}deg)` }], half, 'cubic-bezier(0.45, 0, 0.9, 0.55)'), shade(lift, 0, 1, half, 'ease-in').then((s) => s.remove())])
+        lift.getAnimations().forEach((a) => a.cancel())
+        lift.classList.remove('show', 'top')
+        // 2つめ：裏から、次の組の反対側のページが倒れてくる
+        if (drop) {
+          drop.classList.add('show', 'top')
+          await Promise.all([anim(drop, [{ transform: `rotateY(${-95 * sign}deg)` }, { transform: 'rotateY(0)' }], half, 'cubic-bezier(0.1, 0.45, 0.55, 1)'), shade(drop, 1, 0, half, 'ease-out').then((s) => s.remove())])
+          drop.getAnimations().forEach((a) => a.cancel())
+        }
+        show(to)
+      } else {
+        // 2ページを1枚の紙として、左の端を軸にめくる
+        const sheet = document.createElement('div')
+        sheet.style.cssText = 'position:absolute;inset:0;transform-origin:left center;z-index:3;backface-visibility:hidden'
+        const moving = dir > 0 ? [l0, r0] : [l1, r1]
+        for (const p of moving.filter(Boolean)) {
+          const c = p.cloneNode(true)
+          c.classList.add('show')
+          sheet.append(c)
+        }
+        book.append(sheet)
+        show(dir > 0 ? to : at)
+        if (dir < 0) pages.forEach((p, i) => p.classList.toggle('show', i === at || i === at + 1))
+        await Promise.all([
+          anim(sheet, dir > 0 ? [{ transform: 'rotateY(0)' }, { transform: 'rotateY(-96deg)' }] : [{ transform: 'rotateY(-96deg)' }, { transform: 'rotateY(0)' }], 600, 'cubic-bezier(0.4, 0, 0.3, 1)'),
+          shade(sheet, dir > 0 ? 0 : 1, dir > 0 ? 1 : 0, 600, 'linear'),
+        ])
+        sheet.remove()
+        show(to)
+      }
+      at = to
+      busy = false
+    }
+    prev.onclick = () => turn(-1)
+    next.onclick = () => turn(1)
+    card.querySelector('.auto').onclick = async () => {
+      for (const d of [1, 1, 1, -1, -1, -1]) {
+        await turn(d)
+        await new Promise((r) => setTimeout(r, 450))
+      }
+    }
+    show(0)
+  }
+</script>
+</body>
+</html>

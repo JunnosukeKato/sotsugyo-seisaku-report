@@ -74,19 +74,20 @@ async function wordErrorCheck(browser, check) {
   await ready()
   const rows = () =>
     page.evaluate(() => {
-      const find = (word) => [...document.querySelectorAll('.side .issue')].find((li) => li.textContent.includes(`「${word}」ではなく`))
+      // エラーの語の題は「「見頃」ではなく…」、注意の語の題は「「記事」と「生地」、どちらが合うか…」（mockups/v52 ②）
+      const find = (word) => [...document.querySelectorAll('.side .issue')].find((li) => li.querySelector('.ttl')?.textContent.startsWith(`「${word}」`))
       const info = (li) => (li ? { error: li.classList.contains('error'), keep: !!li.querySelector('.keep'), fix: !!li.querySelector('.fix'), detail: li.querySelector('.detail')?.textContent ?? '' } : null)
       return { mikoro: info(find('見頃')), kiji: info(find('記事')), acked: document.querySelector('.side details.acked summary')?.textContent ?? '' }
     })
   const before = await rows()
   await page.screenshot({ path: `${OUT}/word-error-no-keep.png` })
   check(
-    '書き間違えやすい語のエラー（見頃）には「このままにする」が出ず、直し方（「見頃」→「身頃」）を書く。注意の語（記事）には「このままにする」が出る',
-    before.mikoro?.error && !before.mikoro.keep && !before.mikoro.fix && before.mikoro.detail.startsWith('「見頃」→「身頃」') && before.kiji && !before.kiji.error && before.kiji.keep,
+    '書き間違えやすい語のエラー（見頃）には「このままにする」が出ず、直し方は題に書く（説明でくり返さない）。注意の語（記事）には「このままにする」が出る',
+    before.mikoro?.error && !before.mikoro.keep && !before.mikoro.fix && !before.mikoro.detail.includes('→') && before.kiji && !before.kiji.error && before.kiji.keep,
     JSON.stringify(before),
   )
   // 注意の語は「このままにする」で確認済みにできる
-  await page.evaluate(() => [...document.querySelectorAll('.side .issue')].find((li) => li.textContent.includes('「記事」ではなく')).querySelector('.keep').click())
+  await page.evaluate(() => [...document.querySelectorAll('.side .issue')].find((li) => li.textContent.includes('「記事」と「生地」、どちらが合うか確かめる')).querySelector('.keep').click())
   await pause(300)
   await ready()
   // 前の版で「確認済み」にした目印（エラーの語）が原稿に残っていても、隠れない
