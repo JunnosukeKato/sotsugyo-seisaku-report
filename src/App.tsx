@@ -928,7 +928,7 @@ export default function App() {
   const openWord = wordOffered && !wordTodo ? () => setDialog({ kind: 'word' }) : undefined
   const todoCard = (onPick?: () => void) =>
     editor && snap && wordTodo ? (
-      <WordTodoCard editor={editor} snap={snap} todo={wordTodo} onUpdate={setWordTodo} onClose={() => setWordTodo(null)} onRestore={restoreBeforeWord} onPick={onPick} />
+      <WordTodoCard editor={editor} snap={snap} config={config} todo={wordTodo} onUpdate={setWordTodo} onClose={() => setWordTodo(null)} onRestore={restoreBeforeWord} onPick={onPick} />
     ) : null
 
   return (
@@ -1012,6 +1012,7 @@ export default function App() {
           wordTodo={wordTodo ? todoCard : undefined}
           checkRequest={checkRequest}
           direct={phoneDirect}
+          guiding={!!guide || tourOn}
         />
       ) : ready && help ? (
         // PC の使い方：右の欄がまるごと使い方に替わる（紙面と道具は、そのまま使える）

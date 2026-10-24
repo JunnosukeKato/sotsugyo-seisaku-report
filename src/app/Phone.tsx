@@ -199,7 +199,7 @@ function EditSheet({ editor, snap, hostRef }: { editor: ReportEditor; snap: Edit
             className="danger"
             onMouseDown={keepFocus}
             onClick={async () => {
-              if (snap.editingKind === 'chapter' && !(await ask.confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（「元に戻す」で戻せます）', { ok: '削除する', danger: true }))) return
+              if (snap.editingKind === 'chapter' && !(await ask.confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（画面の上の「戻す」で戻せます）', { ok: '削除する', danger: true }))) return
               editor.removeBlock(id!)
             }}
           >
@@ -262,21 +262,24 @@ const markPinchTip = () => {
 
 /**
  * 「字を大きくするには／2本の指で広げます」（上の帯のすぐ下）。× で閉じる。書き終えたら、もう出さない（1回だけ）。
- * × を押しても書く欄からカーソルを外さない（キーボードを閉じない）
+ * × を押しても書く欄からカーソルを外さない（キーボードを閉じない）。
+ * hidden：はじめての案内・指差し確認が出ている間は出さない（前は、氏名を入れるときに案内の吹き出しの下に隠れたまま「見た」ことになり、
+ * 本文を書くときにはもう出なかった。学生の試し 2026-10-24）。見えたときだけ「見た」にする
  */
-function PinchTip() {
+function PinchTip({ hidden }: { hidden: boolean }) {
   const [shown, setShown] = useState(() => !pinchTipDone())
   const ref = useRef<HTMLDivElement>(null)
+  const visible = shown && !hidden
   useEffect(() => {
-    if (!shown) return
+    if (!visible) return
     return () => markPinchTip()
-  }, [shown])
+  }, [visible])
   useLayoutEffect(() => {
     const el = ref.current
     const top = document.querySelector('.p-top')?.getBoundingClientRect().bottom ?? 48
     if (el) el.style.top = `${top + 8}px`
   })
-  if (!shown) return null
+  if (!visible) return null
   return (
     <div className="pinch-tip" ref={ref} role="note">
       <b>字を大きくするには</b>
@@ -296,7 +299,7 @@ function PinchTip() {
   )
 }
 
-function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapshot }) {
+function DirectBar({ editor, snap, guiding }: { editor: ReportEditor; snap: EditorSnapshot; guiding: boolean }) {
   const ask = useAsk()
   const id = snap.editingId
   const editable = id ? findEditable(snap.report, id) : undefined
@@ -330,7 +333,7 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
   }
   return (
     <>
-      <PinchTip />
+      <PinchTip hidden={guiding} />
       <div className="direct-bar" role="toolbar" aria-label="書く道具">
         {hint && (
           <p className="db-hint">
@@ -389,7 +392,7 @@ function DirectBar({ editor, snap }: { editor: ReportEditor; snap: EditorSnapsho
               className="danger"
               onMouseDown={keepFocus}
               onClick={async () => {
-                if (snap.editingKind === 'chapter' && !(await ask.confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（「元に戻す」で戻せます）', { ok: '削除する', danger: true }))) return
+                if (snap.editingKind === 'chapter' && !(await ask.confirm('大見出しを削除すると、その中の小見出し・段落・図表もすべて消えます。削除しますか？\n（画面の上の「戻す」で戻せます）', { ok: '削除する', danger: true }))) return
                 editor.removeBlock(id)
               }}
             >
@@ -508,7 +511,7 @@ function AddTools({ editor, snap, onDone, direct }: { editor: ReportEditor; snap
         {tool('改ページ', Icon.pageBreak, () => editor.addPageBreak())}
       </div>
       <p className="sheet-hint">
-        図・表は、文中の入れたい位置をタップして、{direct ? 'キーボードの上' : '書く欄'}の{direct ? '「図」「表」' : '「図を入れる」「表を入れる」'}で入れます（素材表も「表を入れる」から）。
+        図・表は、文中の入れたい位置をタップして、{direct ? 'キーボードの上' : '書く欄'}の{direct ? '「図」「表」' : '「図を入れる」「表を入れる」'}で入れます（素材表も{direct ? '「表」' : '「表を入れる」'}から）。
       </p>
       {/* 引用・参考文献は、使い方の「引用・参考文献」から入れる（mockups/v35 ①。入れた後は、そのページをタップして直す） */}
     </>
@@ -569,10 +572,12 @@ interface Props {
   checkRequest?: number
   /** 紙面に直接書く（スマホのふつう。予備の ?direct=0 の端末では false：下から出る書く欄。app/phoneDirect.ts） */
   direct?: boolean
+  /** はじめての案内・指差し確認が出ている（その間は「字を大きくするには」を出さない） */
+  guiding?: boolean
 }
 
 /** スマホ版の、紙面のまわりの部品（紙面そのものは App の .stage） */
-export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onHelp, sheetHostRef, onWordImport, onReload, wordTodo, checkRequest, direct }: Props) {
+export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopped, onBackup, onExport, exporting, onHelp, sheetHostRef, onWordImport, onReload, wordTodo, checkRequest, direct, guiding = false }: Props) {
   const [sheet, setSheet] = useState<SheetKind>(null)
   const close = () => setSheet(null)
   // checkRequest が増えたら、チェックの欄を開く（描く途中で合わせる。React の「前の値と比べて state を変える」書き方）
@@ -667,7 +672,7 @@ export function PhoneChrome({ editor, snap, config, saveState, drive, driveStopp
       </nav>
 
       <EditSheet editor={editor} snap={snap} hostRef={sheetHostRef} />
-      {snap.editingId && snap.onPaper && <DirectBar editor={editor} snap={snap} />}
+      {snap.editingId && snap.onPaper && <DirectBar editor={editor} snap={snap} guiding={guiding} />}
 
       {sheet === 'pages' && (
         <Sheet title="ページ一覧" extra={<span className="pcount"><b>{snap.page + 1}</b> / {snap.pageCount}</span>} onClose={close}>

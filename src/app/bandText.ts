@@ -3,6 +3,7 @@ import type { EditableKind } from '../editor/reportOps'
 import type { HelpTopic } from '../help/helpTopics'
 import { photoGrid, shownPhotos } from '../model/photos'
 import type { Report, WorkPhotoPage } from '../model/types'
+import { countOf } from '../checker/progress'
 
 /**
  * スマホの紙面の下の帯（mockups/v32 ④ 案A。帯そのものは PageBand.tsx）に出す言葉。
@@ -37,7 +38,7 @@ export function photoBand(photos: WorkPhotoPage): { text: string; index: number 
   if (!empty.length) return null
   if (photos.layout === 1) return { text: '作品写真が、まだ入っていません', index: 0 }
   if (empty.length === 1) return { text: `${photoSlotName(photos, empty[0])}に、まだ写真がありません`, index: empty[0] }
-  return { text: `まだ写真がない枠が${empty.length}つあります（＋の枠）`, index: empty[0] }
+  return { text: `まだ写真がない枠が${countOf(empty.length)}あります（＋の枠）`, index: empty[0] }
 }
 
 /**
@@ -103,7 +104,18 @@ export function forTouch(text: string): string {
  * 「クリック」で探しても見つかるよう、変えた項目は探す言葉に「クリック」を足す
  */
 export function topicsForTouch(topics: HelpTopic[]): HelpTopic[] {
-  const touch = (text: string) => forTouch(text.replace(/クリック[（(]スマホはタップ[）)]/g, 'タップ').replace('「図を入れる」「表を入れる」（スマホは「図」「表」）', '「図」「表」'))
+  // ボタンの名前も、スマホのもの（短い名前）にする（学生の試し 2026-10-24：説明とボタンの名前が食い違っていた）
+  const touch = (text: string) =>
+    forTouch(
+      text
+        .replace(/クリック[（(]スマホはタップ[）)]/g, 'タップ')
+        .replace('「図を入れる」「表を入れる」（スマホは「図」「表」）', '「図」「表」')
+        .replace('右下の「元に戻す」（スマホは画面の上の「戻す」）', '画面の上の「戻す」')
+        .replace(/「画像を入れる」/g, '「画像」')
+        .replace(/「＋ 写真のページを足す」/g, '「ページを足す」')
+        .replace(/「このページを消す」/g, '「ページを消す」')
+        .replace('薄い字は「何を書くか」の説明。書くと消えます。', '「＋」の印は、まだ書いていない段落です（押すと、何を書くかが出ます）。'),
+    )
   return topics.map((t) => {
     const next: HelpTopic = {
       ...t,

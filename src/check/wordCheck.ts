@@ -10,6 +10,7 @@ import type { Report } from '../model/types'
 import { templateFindings } from './docxSettings'
 import { idAndName, type CheckFinding, type PartId } from './parts'
 import { abstractParagraphs, blockLines, bodyHeadings, findCourseId, headingDifference, sniffWordBlocks, sniffWordStrict, tocHeadings } from './wordParts'
+import { countOf } from '../checker/progress'
 
 /**
  * 提出前チェック：Word（学科のひな形で書いたもの）を確かめる。学生用ツールのセルフチェック（checker/reportChecks.ts）と同じ決まり・同じ言い回し。
@@ -155,7 +156,7 @@ export async function readWord(inputs: WordInputs, config: YearConfig): Promise<
   if (packages.toc && packages.body && !errors.body) {
     const diff = headingDifference(tocHeadings(blocksOf(packages.toc)), bodyHeadings(blocksOf(packages.body)))
     if (diff && (diff.onlyToc.length || diff.onlyBody.length)) {
-      const list = (titles: string[]) => titles.slice(0, 3).map((t) => `「${t}」`).join('') + (titles.length > 3 ? `など${titles.length}つ` : '')
+      const list = (titles: string[]) => titles.slice(0, 3).map((t) => `「${t}」`).join('') + (titles.length > 3 ? `など${countOf(titles.length, '件')}` : '')
       extra.push({
         id: 'docx:toc:toc-headings',
         ruleId: 'toc-headings',

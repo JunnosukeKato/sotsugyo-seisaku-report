@@ -1,6 +1,6 @@
 import { chapterLabel, subheadingLabel } from '../layout/bodyHtml'
 import { setCellText } from '../model/table'
-import type { BasicInfo, BodyBlock, Chapter, Figure, InlineNode, ParagraphBlock, Report, SubheadingBlock, TableBlock } from '../model/types'
+import type { BasicInfo, BodyBlock, Chapter, Figure, InlineNode, ParagraphBlock, Report, SubheadingBlock, TableBlock, FigureRowBlock } from '../model/types'
 
 /**
  * 報告書データの操作。いずれも元のデータを変えず、新しいデータを返す（元に戻す機能のため）。
@@ -610,9 +610,13 @@ export function insertRef(report: Report, paragraphId: string, offset: number, t
   return mapBody(report, (b) => (b.id === paragraphId ? { ...paragraph, content } : b))
 }
 
+/** 横に並べられる図の数 */
+export const FIGURES_PER_ROW = 2
+
 /**
- * 段落のすぐ下に図を置く。段落のすぐ下にすでに図のまとまりがあれば、そこに加える。
- * まとまりの中の図は、段落の中で参照している順に並べ直す（参照していない図はそのままの位置）
+ * 段落のすぐ下に図を置く。段落のすぐ下にすでに図のまとまりがあれば、そこに加える（横に2枚まで。いっぱいなら、その下に新しい並び）。
+ * まとまりの中の図は、段落の中で参照している順に並べ直す（参照していない図はそのままの位置。それぞれの並びの枚数はそのまま）。
+ * 前は2枚の並びにも加え、紙面では2枚＋1枚に折り返していた（学生の試し 2026-10-24）
  */
 export function addFigureBelow(report: Report, paragraphId: string, figure: Figure): Report {
   return {
@@ -621,10 +625,21 @@ export function addFigureBelow(report: Report, paragraphId: string, figure: Figu
       const i = chapter.blocks.findIndex((b) => b.id === paragraphId)
       if (i < 0) return chapter
       const paragraph = chapter.blocks[i] as ParagraphBlock
-      const next = chapter.blocks[i + 1]
+      let end = i + 1
+      while (chapter.blocks[end]?.type === 'figureRow') end++
+      const rows = chapter.blocks.slice(i + 1, end) as FigureRowBlock[]
       const blocks = [...chapter.blocks]
-      if (next?.type === 'figureRow') blocks[i + 1] = { ...next, figures: orderByRefs([...next.figures, figure], paragraph) }
-      else blocks.splice(i + 1, 0, { type: 'figureRow', id: newId('r'), figures: [figure] })
+      if (!rows.length) {
+        blocks.splice(i + 1, 0, { type: 'figureRow', id: newId('r'), figures: [figure] })
+        return { ...chapter, blocks }
+      }
+      const sizes = rows.map((r) => r.figures.length)
+      if (sizes[sizes.length - 1] < FIGURES_PER_ROW) sizes[sizes.length - 1]++
+      else sizes.push(1)
+      const ordered = orderByRefs([...rows.flatMap((r) => r.figures), figure], paragraph)
+      let k = 0
+      const filled: BodyBlock[] = sizes.map((n, j) => ({ type: 'figureRow', id: rows[j]?.id ?? newId('r'), figures: ordered.slice(k, (k += n)) }))
+      blocks.splice(i + 1, rows.length, ...filled)
       return { ...chapter, blocks }
     }),
   }
@@ -653,12 +668,21 @@ function isAttachment(b: BodyBlock | undefined): boolean {
 
 /** 図のまとまりの中の、ある図のすぐ後ろに図を加える（「もう1枚」） */
 export function addFigureAfter(report: Report, figureId: string, figure: Figure): Report {
-  return mapBody(report, (b) => {
-    if (b.type !== 'figureRow') return b
-    const i = b.figures.findIndex((f) => f.id === figureId)
-    if (i < 0) return b
-    return { ...b, figures: [...b.figures.slice(0, i + 1), figure, ...b.figures.slice(i + 1)] }
+  const body = report.body.map((chapter) => {
+    const at = chapter.blocks.findIndex((b) => b.type === 'figureRow' && b.figures.some((f) => f.id === figureId))
+    if (at < 0) return chapter
+    const row = chapter.blocks[at] as FigureRowBlock
+    const i = row.figures.findIndex((f) => f.id === figureId)
+    const figures = [...row.figures.slice(0, i + 1), figure, ...row.figures.slice(i + 1)]
+    if (figures.length <= FIGURES_PER_ROW) return { ...chapter, blocks: chapter.blocks.map((b, n) => (n === at ? { ...row, figures } : b)) }
+    // 横に2枚までなので、いっぱいの並びに入れるときは、あふれた後ろの図を、すぐ下の新しい並びにする（順番はそのまま。学生の試し 2026-10-24）
+    const rows: BodyBlock[] = [
+      { ...row, figures: figures.slice(0, FIGURES_PER_ROW) },
+      { type: 'figureRow', id: newId('r'), figures: figures.slice(FIGURES_PER_ROW) },
+    ]
+    return { ...chapter, blocks: [...chapter.blocks.slice(0, at), ...rows, ...chapter.blocks.slice(at + 1)] }
   })
+  return { ...report, body }
 }
 
 /** 段落の中で、ある図表への参照のすぐ後ろに別の参照を入れる。その参照がなければ何もしない */

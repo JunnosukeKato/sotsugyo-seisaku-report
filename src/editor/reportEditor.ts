@@ -2064,7 +2064,11 @@ export class ReportEditor {
     }
     // 表のセル：書く欄は、セルの枠線の内側だけ（細い欄でも広げない。前は 120px より狭くならず、右どなりのセルまで重なって、セルの罫線を隠していた）
     const left = kind === 'cell' ? boxRect.left + 2 * scale : own.left
-    const right = kind === 'cell' ? boxRect.right - 2 * scale : Math.max(boxRect.right, own.left + 120 * scale)
+    // 表紙の氏名：欄の幅は字の幅だけなので、書く欄を下線（name-rule）の右端まで広げる
+    // （前は約4字分で、「文化　花子」が「文化　花／子」と折り返し、下線に重なって見えた。学生の試し 2026-10-24）
+    const rule = box.classList.contains('name-value') ? box.parentElement?.querySelector('.rule.name-rule') : null
+    const ruleRight = rule?.getBoundingClientRect().right ?? 0
+    const right = kind === 'cell' ? boxRect.right - 2 * scale : Math.max(boxRect.right, own.left + 120 * scale, ruleRight)
     return { rect: { left, top: kind === 'cell' ? own.top : boxRect.top, right }, clip, scale, alignOffset: 0 }
   }
 
@@ -3159,7 +3163,8 @@ export class ReportEditor {
   private noticeAutoPeriodOnce(): void {
     if (this.autoPeriodNoticed) return
     this.autoPeriodNoticed = true
-    this.showNotice('段落の終わりに「。」を付けました（すぐ Backspace で取り消せます）')
+    // スマホのキーボードには「Backspace」の字がないので、消すキー（⌫）と言う（学生の試し 2026-10-24）
+    this.showNotice(this.phone ? '段落の終わりに「。」を付けました（すぐキーボードの ⌫ で取り消せます）' : '段落の終わりに「。」を付けました（すぐ Backspace で取り消せます）')
   }
   private autoPeriodNoticed = false
 

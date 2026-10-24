@@ -7,6 +7,8 @@ import type { LostChapter } from '../import/wordImport'
 import { chapterLabel, subheadingLabel } from '../layout/bodyHtml'
 import type { Report } from '../model/types'
 import { BusyLabel, SlowNote } from './Busy'
+import { checkSummary } from './checkSummary'
+import { countOf } from '../checker/progress'
 import { useBusy, useSlow } from './useBusy'
 import { Modal } from './dialogs'
 import { Icon } from './icons'
@@ -419,7 +421,7 @@ function countText(item: OutlineItem, untitled: Set<string>): string {
 
 /** 読み込むと消える、ツールで書いた分（例「3段落・図1枚」） */
 function lostCounts(l: LostChapter): string {
-  return [l.paragraphs > 0 ? `${l.paragraphs}段落` : '', l.figures > 0 ? `図${l.figures}枚` : '', l.tables > 0 ? `表${l.tables}つ` : ''].filter(Boolean).join('・')
+  return [l.paragraphs > 0 ? `${l.paragraphs}段落` : '', l.figures > 0 ? `図${l.figures}枚` : '', l.tables > 0 ? `表${countOf(l.tables, '個')}` : ''].filter(Boolean).join('・')
 }
 
 /**
@@ -590,7 +592,7 @@ function WordConfirm({
       ) : (
         problems.length > 0 && (
           <div className="word-warn">
-            <b>うまく読み取れなかったところが {problems.length}つあります</b>
+            <b>うまく読み取れなかったところが {countOf(problems.length)}あります</b>
             このまま読み込めます。読み込んだあと、ツールで直してください。
             <ul>
               {problems.map((p, i) => (
@@ -736,6 +738,7 @@ function WordConfirm({
 interface TodoProps {
   editor: ReportEditor
   snap: EditorSnapshot
+  config: YearConfig
   todo: WordTodo
   onUpdate: (todo: WordTodo) => void
   onClose: () => void
@@ -749,8 +752,10 @@ interface TodoProps {
  * 写したあとの「つぎにすること」（案B）。右の欄（スマホはチェックの欄）の上に、閉じる（×）まで残す。
  * 済んだものに ✓：エラーが0になった・「図1へ」から図を順に見た・本文を見て改ページの位置を「確かめた」・表紙を見て「確かめた」を押した（表紙のページを開いただけでは済みにしない）
  */
-export function WordTodoCard({ editor, snap, todo, onUpdate, onClose, onRestore, onPick }: TodoProps) {
-  const errors = snap.findings.filter((f) => f.severity === 'error').length
+export function WordTodoCard({ editor, snap, config, todo, onUpdate, onClose, onRestore, onPick }: TodoProps) {
+  // 下の「直すところ」のエラーの数（下の「チェック」の赤い数と同じ）。前はすべてのエラー（本文のページ・抄録・作品写真など、
+  // 「進み具合」の側に出るものも）を数え、「あと6件（下の一覧）」なのに「直すところ 0」と食い違っていた（学生の試し 2026-10-24）
+  const errors = checkSummary(snap, config).errors
   const figures = snap.report.body.flatMap((c) => c.blocks).flatMap((b) => (b.type === 'figureRow' ? b.figures : []))
   const seen = Math.min(todo.figuresSeen, figures.length)
   const figuresDone = seen >= figures.length
@@ -813,7 +818,7 @@ export function WordTodoCard({ editor, snap, todo, onUpdate, onClose, onRestore,
             <small>
               {errors > 0 ? (
                 <>
-                  あと <em>{errors}件</em>（下の一覧）
+                  あと <em>{errors}件</em>（下の「直すところ」）
                 </>
               ) : (
                 'エラーはありません'

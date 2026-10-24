@@ -229,6 +229,35 @@ describe('図を入れる（書いている位置に（図n）、段落の下に
     expect(paraText(r, 'pa')).toBe('袖を大きくした（図1）（図2）。帯を巻いた。')
   })
 
+  it('横に並べるのは2枚まで：2枚の並びに段落から3枚目を入れると、その下の新しい並びになる（参照の順のまま。学生の試し 2026-10-24）', () => {
+    const rowsOf = (r: Report) => r.body[0].blocks.filter((b) => b.type === 'figureRow').map((b) => (b.type === 'figureRow' ? b.figures.map((f) => f.id).join('+') : ''))
+    let r = ops.insertRef(base(), 'pa', 8, 'f1')
+    r = ops.addFigureBelow(r, 'pa', fig('f1'))
+    r = ops.insertRef(r, 'pa', 14, 'f2')
+    r = ops.addFigureBelow(r, 'pa', fig('f2'))
+    expect(rowsOf(r)).toEqual(['f1+f2'])
+    r = ops.insertRef(r, 'pa', 18, 'f3')
+    r = ops.addFigureBelow(r, 'pa', fig('f3'))
+    expect(rowsOf(r)).toEqual(['f1+f2', 'f3'])
+    // 4枚目の参照が前のほうにあれば、参照の順に並べ直す（それぞれの並びの枚数はそのまま）。本文の番号も前から順
+    r = ops.insertRef(r, 'pa', 8, 'f4')
+    r = ops.addFigureBelow(r, 'pa', fig('f4'))
+    expect(rowsOf(r)).toEqual(['f1+f4', 'f2+f3'])
+    expect(paraText(r, 'pa')?.match(/図[0-9]/g)).toEqual(['図1', '図2', '図3', '図4'])
+    expect(r.body[0].blocks.map((b) => b.type)).toEqual(['paragraph', 'figureRow', 'figureRow', 'paragraph'])
+  })
+
+  it('「もう1枚」も2枚まで：2枚の並びで押すと、選んだ図の後ろに入り、あふれた図はすぐ下の新しい並びへ（順番はそのまま）', () => {
+    const rowsOf = (r: Report) => r.body[0].blocks.filter((b) => b.type === 'figureRow').map((b) => (b.type === 'figureRow' ? b.figures.map((f) => f.id).join('+') : ''))
+    let r = ops.addFigureBelow(base(), 'pa', fig('f1'))
+    r = ops.addFigureAfter(r, 'f1', fig('f2'))
+    expect(rowsOf(r)).toEqual(['f1+f2'])
+    r = ops.addFigureAfter(r, 'f1', fig('f3'))
+    expect(rowsOf(r)).toEqual(['f1+f3', 'f2'])
+    r = ops.addFigureAfter(r, 'f2', fig('f4'))
+    expect(rowsOf(r)).toEqual(['f1+f3', 'f2+f4'])
+  })
+
   it('図を消すと、本文のその図への参照も消える', () => {
     let r = ops.insertRef(base(), 'pa', 8, 'f1')
     r = ops.addFigureBelow(r, 'pa', fig('f1'))

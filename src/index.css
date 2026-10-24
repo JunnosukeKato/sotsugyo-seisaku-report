@@ -1989,3 +1989,11 @@ p.busy-line { display: flex; }
 @media (max-width: 760px) { .trial-band .trial-note { display: none; } }
 /* 管理ページから開いていない（見本の原稿を受け取れなかった） */
 .loading.trial-missing { padding: 24px; text-align: center; color: var(--ink); word-break: auto-phrase; }
+
+/* ---- 学生の試し（スマホ 2026-10-24）：画面の文は、ことばの切れ目で折り返す ---- */
+/* 窓・下から出る欄・使い方・知らせ・ログイン・はじめての案内など。1字だけ次の行に落ちたり（「書きま／す。」）、語の途中で切れたり（「報告／書」）しないように。
+   紙面と書く欄（.page-viewport・.overlay-editor・.edit-sheet）は、紙面と同じ組み方のままにするので入れない。Safari には auto-phrase がないので text-wrap: pretty も付ける */
+:is(.modal, .sheet, .help, .notice, .undo-toast, .login-over, .guide, .tour, .word-todo, .pinch-tip, .page-band) { word-break: auto-phrase; text-wrap: pretty; }
+/* 下のタブの名前は折り返さない（360px の画面で「ページ一／覧」になっていた）。狭い画面では字を少し小さく */
+.p-nav button { white-space: nowrap; }
+@media (max-width: 379px) { .p-nav button { font-size: 12px; } }

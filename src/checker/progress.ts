@@ -199,6 +199,11 @@ export function progressRows(findings: ReportFinding[], ctx: ProgressContext, pe
   return rows
 }
 
+/**
+ * 数の言い方：9までは「3つ」、10からは「12か所」など（unit。「16つ」とは言わないため。学生の試し 2026-10-24）
+ */
+export const countOf = (n: number, unit = 'か所'): string => (n < 10 ? `${n}つ` : `${n}${unit}`)
+
 /** まだのところの数（「まだ」の行の数。抄録の「先生の許可のあと」は数えない） */
 export const notYetCount = (rows: ProgressRow[]): number => rows.filter((r) => r.state === 'todo').length
 
@@ -207,9 +212,9 @@ export const notYetCount = (rows: ProgressRow[]): number => rows.filter((r) => r
  * pending：紙面を確かめている途中、abstractWaiting：抄録を先生の許可の前で、まだ書き始めていない（ほかは済んでいる）
  */
 export function exportNote({ fix, notYet, pending, abstractWaiting }: { fix: number; notYet: number; pending: boolean; abstractWaiting: boolean }): string {
-  if (fix > 0 && notYet > 0) return `直すところが${fix}つ、まだのところが${notYet}つあります`
-  if (fix > 0) return `直すところが${fix}つあります`
-  if (notYet > 0) return `まだのところが${notYet}つあります`
+  if (fix > 0 && notYet > 0) return `直すところが${countOf(fix)}、まだのところが${countOf(notYet)}あります`
+  if (fix > 0) return `直すところが${countOf(fix)}あります`
+  if (notYet > 0) return `まだのところが${countOf(notYet)}あります`
   if (pending) return '紙面を確かめています…'
   // 残っているのは、抄録（先生の許可のあと）だけ
   if (abstractWaiting) return 'あとは抄録です（先生の許可のあと）'
