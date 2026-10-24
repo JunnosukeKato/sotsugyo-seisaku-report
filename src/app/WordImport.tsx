@@ -450,6 +450,9 @@ function Outline({ outline, untitled, lost }: { outline: OutlineItem[]; untitled
         // Word で見出しの名前を書いていない（「Ⅰ．」だけ）ときは、名前がないことが分かるように出す
         const title = item.title.trim()
         const gone = item.fromTemplate ? lost.find((l) => l.title.trim() === title) : undefined
+        // Word の章に入れ替わる章でも、ツールで書いた分が消えるなら、その章の行に赤い札を出す
+        // （前は、いちばん下の囲みにしか書いていなかった。学生の試し 2026-10-24。mockups/v53 ⑧）
+        const replaced = !item.fromTemplate && item.level === 1 ? lost.find((l) => l.title.trim() === title) : undefined
         return (
           <li key={i} className={`${item.level === 1 ? 'ch' : 'sh'}${item.fromTemplate ? ' tpl' : ''}${gone ? ' lost' : ''}${item.problem ? ' problem' : ''}`}>
             <span className="ttl">
@@ -466,6 +469,7 @@ function Outline({ outline, untitled, lost }: { outline: OutlineItem[]; untitled
                 </span>
               )
             )}
+            {replaced && <span className="gone">Word の中身に入れ替わり、ツールで書いた{lostCounts(replaced)}は消えます</span>}
           </li>
         )
       })}

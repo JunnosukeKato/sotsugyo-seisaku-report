@@ -20,8 +20,21 @@ describe('段落に打った見出しの形（typedHeading）', () => {
     expect(typedHeading('ｉｉｉ．使用素材')).toEqual({ level: 2, title: '使用素材' })
   })
 
-  it('算用数字の形（「1．」「（1）」「第1章」「①」）は見出しにしない', () => {
-    for (const t of ['1．はじめに', '1. はじめに', '（1）素材', '(2) 素材', '第1章 企画', '①素材', 'A. 素材']) expect(typedHeading(t), t).toBeNull()
+  it('算用数字・丸数字・記号の形も見出しにする（「第4章」は大見出し、ほかは小見出し。番号は除く。依頼者の選択 2026-10-24 mockups/v53 ② 案B）', () => {
+    expect(typedHeading('3．スカート')).toEqual({ level: 2, title: 'スカート' })
+    expect(typedHeading('3.スカート')).toEqual({ level: 2, title: 'スカート' })
+    expect(typedHeading('1. はじめに')).toEqual({ level: 2, title: 'はじめに' })
+    expect(typedHeading('１２）縫製')).toEqual({ level: 2, title: '縫製' })
+    expect(typedHeading('（1）素材について')).toEqual({ level: 2, title: '素材について' })
+    expect(typedHeading('(2) 素材')).toEqual({ level: 2, title: '素材' })
+    expect(typedHeading('①素材')).toEqual({ level: 2, title: '素材' })
+    expect(typedHeading('■まとめ')).toEqual({ level: 2, title: 'まとめ' })
+    expect(typedHeading('第4章　考察')).toEqual({ level: 1, title: '考察' })
+    expect(typedHeading('第十章 考察')).toEqual({ level: 1, title: '考察' })
+  })
+
+  it('算用数字などで始まる文は見出しにしない（長い・「、」がある・文の終わりの形・数字の続き・英字の番号）', () => {
+    for (const t of ['1．袖を大きく膨らませた。', '1．袖を大きく膨らませた', '2.5cm短くした', '3．素材は、綿を使う', `1．${'あ'.repeat(21)}`, '①生地を裁つ', '■布が重いです', 'A. 素材', '10cm短くした', '（1）']) expect(typedHeading(t), t).toBeNull()
   })
 
   it('番号だけ（名前がない）は見出しにしない', () => {

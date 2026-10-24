@@ -167,6 +167,48 @@ export function photoSlots(pages: WorkPhotoPage[], page: number, index: number, 
   return slots.slice(0, count)
 }
 
+/** 写真の枚数に合う並べ方（1枚・2枚は左右・3〜4枚は4枚。まとめて選んだとき。依頼者の選択 mockups/v53 ① 案B） */
+export function fittingArrangement(count: number): { layout: WorkPhotoLayout; columns: number } {
+  return count <= 1 ? { layout: 1, columns: 1 } : count === 2 ? { layout: 2, columns: 2 } : { layout: 4, columns: 2 }
+}
+
+/**
+ * page ページ目の空いている枠に、次のページから写真を詰める（並べ方を、枠の多いものに変えたとき。依頼者の選択 mockups/v53 ① 案A。
+ * 前は、「1枚」で2枚選んで2ページに分かれたあと「2枚 左右」にしても、右の枠が空いたままだった：学生の試し 2026-10-24）。
+ * 次のページの写真を先頭から順に移し（切り抜く位置・全体を入れるもいっしょに）、写真がなくなったページは消す。
+ * moved：詰めた枚数、removed：消したページの数
+ */
+export function packPhotos(pages: WorkPhotoPage[], page: number): { pages: WorkPhotoPage[]; moved: number; removed: number } {
+  const target = pages[page]
+  if (!target) return { pages, moved: 0, removed: 0 }
+  const entries = (p: WorkPhotoPage) => p.imageIds.map((id, i) => ({ id, position: p.positions?.[i] ?? null, whole: p.whole?.[i] === true })).filter((e) => e.id)
+  const build = (p: WorkPhotoPage, list: ReturnType<typeof entries>) => withWhole({ ...p, imageIds: list.map((e) => e.id), positions: list.map((e) => e.position) }, list.map((e) => e.whole))
+  const mine = entries(target)
+  let free = target.layout - mine.length
+  if (free <= 0) return { pages, moved: 0, removed: 0 }
+  const next = [...pages]
+  let moved = 0
+  let removed = 0
+  for (let k = page + 1; k < next.length && free > 0; ) {
+    const theirs = entries(next[k])
+    const take = theirs.slice(0, free)
+    mine.push(...take)
+    moved += take.length
+    free -= take.length
+    const rest = theirs.slice(take.length)
+    if (rest.length === 0) {
+      next.splice(k, 1)
+      removed += 1
+      continue
+    }
+    next[k] = build(next[k], rest)
+    k += 1
+  }
+  if (moved === 0) return { pages, moved: 0, removed: 0 }
+  next[page] = build(target, mine)
+  return { pages: next, moved, removed }
+}
+
 /** 写真を枠に入れる（枠のページがまだなければ、最後のページと同じ並べ方の空のページを後ろに足す） */
 export function placePhotos(pages: WorkPhotoPage[], placed: (PhotoSlot & { imageId: string })[]): WorkPhotoPage[] {
   let next = pages

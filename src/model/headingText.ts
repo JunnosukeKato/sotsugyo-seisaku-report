@@ -2,7 +2,8 @@
  * 見出しの形の行（手順書の番号の形：「Ⅲ．まとめ」「ⅱ．袖の刺繍」「II. 制作過程」など。番号はローマ数字）を見分ける。
  * - Word から読み込むとき・Word のファイルのチェック（import/wordImport.ts・check/）：headingFromText
  * - 段落に見出しの形で打ったとき（Enter・書き終えたとき）と、何行かの文を貼り付けたときに、見出しにする（editor/reportEditor.ts）：typedHeading
- * 算用数字の形（「1．」「（1）」「第1章」）は、どちらも見出しにしない
+ * 算用数字などの形（「3．スカート」「（1）素材」「①素材」「■まとめ」「第4章 考察」）は、段落に打ったときだけ見出しにする（typedHeading の arabicHeading。
+ * 番号はツールの形（ⅲ．など）に替わる。依頼者の選択 2026-10-24 mockups/v53 ② 案B）。Word から読み込むときは、今までどおり見出しにしない
  */
 
 /** 空白（全角も） */
@@ -52,6 +53,31 @@ function romanBeforeJapanese(raw: string): HeadingText | null {
   return { level: numeral === numeral.toUpperCase() ? 1 : 2, title: m[2].trim() }
 }
 
+/**
+ * 算用数字・丸数字・記号で始まる見出しのつもりの行（学生の試し 2026-10-24：「3．スカート」と打つと段落のまま「。」が付き、体言止めの指摘が出ていた）。
+ * 「第4章 考察」は大見出し、ほか（「3．スカート」「3.スカート」「（1）素材」「①素材」「■まとめ」）は小見出し。
+ * 文を見出しにしないよう、名前は 20字まで・数字で始まらない（「2.5cm短くした」）・「、」がない・文の終わりの形（〜た・〜る・〜つ・〜です・〜ます など。ひらがなで終わるもの）でないものだけ
+ */
+function arabicHeading(raw: string): HeadingText | null {
+  const t = raw.replace(/[\n\t]/g, '').trim()
+  const DIGITS = '[0-9０-９]{1,2}'
+  const forms: [RegExp, 1 | 2][] = [
+    [new RegExp(`^第${SP}*[0-9０-９一二三四五六七八九十]{1,3}${SP}*章(?:${HEADING_SEP}|${SP}*)(\\S.*)$`), 1],
+    [new RegExp(`^${DIGITS}${SP}*[．.、，,:：)）]${SP}*(\\S.*)$`), 2],
+    [new RegExp(`^[（(]${SP}*${DIGITS}${SP}*[)）]${SP}*(\\S.*)$`), 2],
+    [new RegExp(`^[①-⑳]${SP}*(\\S.*)$`), 2],
+    [new RegExp(`^[■□●◆◇▼▽★☆▶►]${SP}*(\\S.*)$`), 2],
+  ]
+  for (const [re, level] of forms) {
+    const m = re.exec(t)
+    if (!m) continue
+    const title = m[1].trim()
+    if (title.length > 20 || /^[0-9０-９]/.test(title) || /[、，,]/.test(title) || /(う|く|ぐ|す|つ|ぬ|ぶ|む|る|た|だ|です|ます|ない|ません)$/.test(title)) return null
+    return { level, title }
+  }
+  return null
+}
+
 /** 段落に打った見出しの名前の長さの上限（これより長い行は、文として段落のままにする） */
 const TYPED_TITLE_MAX = 40
 
@@ -62,7 +88,7 @@ const TYPED_TITLE_MAX = 40
  * - 文ではない（「。」「！」「？」で終わらない）。名前は 40字まで
  */
 export function typedHeading(line: string): HeadingText | null {
-  const found = headingFromText(line) ?? romanBeforeJapanese(line)
+  const found = headingFromText(line) ?? romanBeforeJapanese(line) ?? arabicHeading(line)
   if (!found) return null
   const title = found.title
   if (!/[\p{L}\p{Nd}]/u.test(title) || title.length > TYPED_TITLE_MAX || /[。！？!?]$/.test(title)) return null

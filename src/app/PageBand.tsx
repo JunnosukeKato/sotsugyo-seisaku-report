@@ -34,6 +34,8 @@ const Mark = {
 
 /** 押して選んだ作品写真の言葉（帯の幅で1行に収まる長さ。PC の道具の「つかんでずらして、トリミングを調整」と同じ意味。言葉は依頼者の判断） */
 const PHOTO_MOVE_TEXT = '指でずらして、トリミングを調整'
+/** 押して選んだ表のマスの画像（切り抜いている画像）：指でずらすと、写る所を変えられること（学生の試し 2026-10-24：気づかなかった。mockups/v53 ⑧） */
+const CELL_MOVE_TEXT = '指でずらして、写る所を調整'
 
 /** 帯に出すもの */
 type Band =
@@ -42,6 +44,8 @@ type Band =
   | { kind: 'photos'; text: string; page: number; index: number }
   /** 押して選んだ作品写真（切り抜いている写真）：指でずらすと、トリミングを調整できること（選んだ写真だけを動かせる：editor/reportEditor.ts の onPhotoPointerDown） */
   | { kind: 'photoMove' }
+  /** 押して選んだ表のマスの画像（切り抜いている画像）：指でずらすと、写る所を変えられること */
+  | { kind: 'cellMove' }
   | { kind: 'fields'; todo: BandTodo; text: string; sub: string | null; button: string }
 
 /** 紙面と帯の間・帯と下の道具の間（画面の px） */
@@ -63,6 +67,8 @@ function bandOf(editor: ReportEditor, snap: EditorSnapshot): Band | null {
     const photo = photos && photoBand(photos)
     return photo ? { kind: 'photos', page, ...photo } : null
   }
+  // 表のマスの画像を押して選んでいる：切り抜いていれば、指で動かせることを知らせる（全体を入れている画像は動かせない）
+  if (snap.selection?.kind === 'cellImage') return editor.cellImageState(snap.selection.id).crop ? { kind: 'cellMove' } : null
   // まだ書いていない欄（空の欄は、紙面に仮の文字（data-placeholder）を出している）と、写真を入れていない図の枠。紙面の上から順に
   const page = editor.pageElements()[snap.page]
   if (!page) return null
@@ -150,11 +156,11 @@ function BandView({ editor, band, inColumn }: { editor: ReportEditor; band: Band
       </section>
     )
   }
-  if (band.kind === 'photoMove') {
+  if (band.kind === 'photoMove' || band.kind === 'cellMove') {
     return (
       <section className="page-band photo-move-band" aria-label="このページの案内" ref={ref}>
         <div className="t">
-          <span>{PHOTO_MOVE_TEXT}</span>
+          <span>{band.kind === 'photoMove' ? PHOTO_MOVE_TEXT : CELL_MOVE_TEXT}</span>
         </div>
       </section>
     )
@@ -259,7 +265,7 @@ function SideColumn({ children }: { children: ReactNode }) {
 export function PageBand({ editor, snap, hidden }: { editor: ReportEditor; snap: EditorSnapshot; hidden?: boolean }) {
   const side = useBandSide()
   const kind = snap.layout?.kinds[snap.page]
-  const quiet = hidden || !snap.layout || !!snap.editingId || snap.zoomed || (!!snap.selection && kind !== 'photos')
+  const quiet = hidden || !snap.layout || !!snap.editingId || snap.zoomed || (!!snap.selection && kind !== 'photos' && snap.selection.kind !== 'cellImage')
   const band = quiet ? null : bandOf(editor, snap)
   if (photoToolsAtSide(snap, side)) {
     return (

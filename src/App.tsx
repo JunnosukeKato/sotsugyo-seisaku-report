@@ -323,7 +323,12 @@ export default function App() {
   const prefillStudentId = useCallback(
     (ed: ReportEditor) => {
       const id = drive ? studentIdFromEmail(drive.getState().email, configRef.current.studentIdPattern) : null
-      if (id && !ed.getSnapshot().report.basicInfo.studentId.trim()) ed.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: id } }))
+      if (id && !ed.getSnapshot().report.basicInfo.studentId.trim()) {
+        // 自動で入れた学籍番号は「戻す」で消さない（開いたときの、はじめの状態にする。mockups/v53 ⑦ 案A）
+        const fresh = !ed.getSnapshot().canUndo
+        ed.update((r) => ({ ...r, basicInfo: { ...r.basicInfo, studentId: id } }))
+        if (fresh) ed.forgetHistory()
+      }
     },
     [drive],
   )
@@ -347,7 +352,7 @@ export default function App() {
       if (!drive) return
       setGate({ kind: 'loading' })
       const current = ed.getSnapshot().report
-      if (hasContent(current)) await keepSnapshot(current)
+      if (hasContent(current)) await keepSnapshot(current, 'ドライブの原稿に替える前')
       ed.addImages(await drive.downloadImages(remote.report, (done, total) => setGate({ kind: 'loading', done, total })))
       ed.replace(remote.report)
       drive.adopt(remote, ed.getSnapshot().report)
@@ -771,7 +776,7 @@ export default function App() {
       try {
         const { report, images, savedAt } = readBackup(await file.text())
         if (!(await ask.confirm(`${new Date(savedAt).toLocaleString('ja-JP')} に保存したバックアップで、今の原稿を置き換えますか？${courseChangeNote(configRef.current, snap.report, report)}\n（今の原稿は自動の控えに残します）`, { ok: '置き換える' }))) return
-        await keepSnapshot(snap.report)
+        await keepSnapshot(snap.report, 'バックアップで置き換える前')
         await Promise.all(images.map(putImage))
         editor.addImages(images)
         editor.replace(report)
@@ -845,7 +850,7 @@ export default function App() {
     }
     if (!(await ask.confirm(`Word から読み込む前の原稿に戻しますか？${courseChangeNote(configRef.current, editor.getSnapshot().report, kept.report)}\n（今の原稿は自動の控えに残します）`, { ok: '戻す' }))) return
     editor.commitEditing()
-    await keepSnapshot(editor.getSnapshot().report)
+    await keepSnapshot(editor.getSnapshot().report, 'Word の前に戻す前')
     editor.replace(kept.report)
     await matchYear(editor, kept.report)
     setWordTodo(null)
@@ -1073,7 +1078,10 @@ export default function App() {
               setDialog({ kind: 'courseChange', courseId })
               return
             }
+            // はじめての案内で選んだコースは「戻す」で取り消さない（まだ何も書いていなければ、選んだあとを、はじめの状態にする。mockups/v53 ⑦ 案A）
+            const fresh = !editor.getSnapshot().canUndo
             editor.changeCourseWithTemplate(courseId)
+            if (fresh) editor.forgetHistory()
             // 今年度だけ：コースを選んだら、Word で書き始めているかを聞く
             setGuide(wordImportOffered(configRef.current) ? 'word' : editor.getSnapshot().report.basicInfo.studentId.trim() ? 'name' : 'studentId')
           }}
@@ -1128,7 +1136,7 @@ export default function App() {
           onRestoreFile={restoreFile}
           onRestoreSnapshot={async (s) => {
             if (!(await ask.confirm(`${new Date(s.savedAt).toLocaleString('ja-JP')}${s.label ? `（${s.label}）` : ''} の控えに戻しますか？${courseChangeNote(configRef.current, snap.report, s.report)}`, { ok: '戻す' }))) return
-            await keepSnapshot(snap.report)
+            await keepSnapshot(snap.report, '控えに戻す前')
             editor.replace(s.report)
             await matchYear(editor, s.report)
             setDialog(null)
@@ -1136,7 +1144,7 @@ export default function App() {
           }}
           onStartOver={async () => {
             if (!(await ask.confirm('今の原稿を消して、最初から作り直しますか？\n（今の原稿は自動の控えに残します）', { ok: '作り直す', danger: true }))) return
-            await keepSnapshot(snap.report)
+            await keepSnapshot(snap.report, '作り直す前')
             // 作り直すときは、公開中の年度で作る（前年度の原稿だった学生も、新年度で書き直せる）
             const fresh = createReport(publishedRef.current)
             editor.replace(fresh)
@@ -1200,7 +1208,7 @@ export default function App() {
               if (login) await login
               // ドライブの原稿は、写真ごとこの端末の控えに残す（あとで戻せるように）
               await drive.downloadImages(driveDialog.remote.report)
-              await keepSnapshot(driveDialog.remote.report)
+              await keepSnapshot(driveDialog.remote.report, 'ドライブにあった原稿')
               drive.activate()
               // 選ばなかったドライブの原稿のファイルに上書きする（原稿のファイルを2つにしない）
               await drive.overwrite(editor.getSnapshot().report, driveDialog.remote)
@@ -1266,7 +1274,7 @@ export default function App() {
             // ほかの人の原稿：この端末の控えに残し（その人があとで戻せるように）、自分のドライブには送らない。自分の原稿（ドライブ）か、新しい原稿で始める
             setDriveBusy(true)
             try {
-              await keepSnapshot(editor.getSnapshot().report)
+              await keepSnapshot(editor.getSnapshot().report, 'ほかの人の原稿')
               const fresh = createReport(publishedRef.current)
               editor.replace(fresh)
               setWordTodo(null)

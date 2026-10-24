@@ -77,8 +77,8 @@ describe('バックアップと復元の窓', () => {
 })
 
 describe('自動の控えの一覧', () => {
-  it('名前のある控え（Word を読み込む前）は、時刻と並べて名前を出す', () => {
-    const report = {} as never
+  it('名前のある控え（Word を読み込む前）は、時刻と並べて札を出し、どの控えにも中身の目安を出す（mockups/v53 ④ 案A）', () => {
+    const report = { body: [{ id: 'c', title: '企画', blocks: [{ type: 'paragraph', id: 'p', content: [{ type: 'text', text: '袖を大きくした。' }] }] }], workPhotos: [] } as never
     const html = renderToStaticMarkup(
       <BackupDialog
         snapshots={[
@@ -92,7 +92,8 @@ describe('自動の控えの一覧', () => {
         onClose={noop}
       />,
     )
-    expect(html).toContain('（Word を読み込む前）')
-    expect(html.match(/（Word を読み込む前）/g)).toHaveLength(1)
+    expect(html).toContain('<i class="snap-label">Word を読み込む前</i>')
+    expect(html.match(/Word を読み込む前/g)).toHaveLength(1)
+    expect(html.match(/本文 8字/g)).toHaveLength(2)
   })
 })

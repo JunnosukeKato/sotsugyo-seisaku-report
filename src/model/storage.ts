@@ -172,8 +172,8 @@ export async function saveSnapshot(report: Report, savedAt = new Date().toISOStr
   await Promise.all(old.map((x) => promisify(s.delete(x.savedAt))))
 }
 
-/** 入れ替える前の原稿の控え（押し出されない控え）を保存する */
-export const keepSnapshot = (report: Report) => saveSnapshot(report, new Date().toISOString(), true)
+/** 入れ替える前の原稿の控え（押し出されない控え）を保存する。label：控えの一覧に出す名前（例：作り直す前） */
+export const keepSnapshot = (report: Report, label?: string) => saveSnapshot(report, new Date().toISOString(), true, label)
 
 export async function listSnapshots(): Promise<Snapshot[]> {
   const all = (await promisify((await store('snapshots', 'readonly')).getAll())) as Snapshot[]

@@ -129,20 +129,40 @@ export async function photoPagesPc(browser, check) {
   const perPage = await photosOf(page)
   check('並べ方はページごとに選べる（2ページ目を1枚にしても、1ページ目は4枚のまま）', perPage[0].layout === 4 && perPage[1].layout === 1, JSON.stringify(perPage.map((p) => p.layout)))
 
-  // ---- 空いている枠より多く選ぶと、最後のページと同じ並べ方（1枚）のページを足して、全部入れる ----
-  const slot = await page.evaluate(() => { const r = document.querySelector('.page-viewport.front section.photos[data-photo-page="1"] [data-photo-slot="0"]').getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } })
+  // ---- 空のページにまとめて選ぶと、枚数に合う並べ方にする（3枚なら「4枚」。依頼者の選択 2026-10-24 mockups/v53 ① 案B） ----
+  const slotOf = (k, i) => page.evaluate((k, i) => { const r = document.querySelector(`.page-viewport.front section.photos[data-photo-page="${k}"] [data-photo-slot="${i}"]`).getBoundingClientRect(); return { x: r.left + r.width / 2, y: r.top + r.height / 2 } }, k, i)
+  const slot = await slotOf(1, 0)
   const [chooser] = await Promise.all([page.waitForFileChooser(), page.mouse.click(slot.x, slot.y)])
   await chooser.accept(PHOTOS)
-  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos.length === 4, { timeout: 30000 })
+  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos[1]?.imageIds.filter(Boolean).length === 3, { timeout: 30000 })
   await ready()
   await pause(500)
-  const auto = { photos: (await photosOf(page)).map((p) => [p.layout, p.imageIds.filter(Boolean).length]), toast: await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? ''), row: await photoRow('.side')(page) }
+  const fitted = { photos: (await photosOf(page)).map((p) => [p.layout, p.imageIds.filter(Boolean).length]), toast: await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? '') }
   check(
-    '空いている枠（1つ）より多く写真を選ぶ（3枚）と、最後のページと同じ並べ方（1枚）のページを2つ足して全部入れ、「作品写真のページを2つ足して、2枚入れました」と出す（上限なしのときは、入れない写真はない）',
-    JSON.stringify(auto.photos) === '[[4,4],[1,1],[1,1],[1,1]]' && auto.toast.includes('作品写真のページを2つ足して、2枚入れました') && !auto.toast.includes('入れていません'),
+    '空のページ（1枚の並べ方）に写真を3枚まとめて選ぶと、そのページを「4枚」の並べ方にして3枚入れ、「3枚なので「4枚」の並べ方にしました」と出す（ページは足さない）',
+    JSON.stringify(fitted.photos) === '[[4,4],[4,3]]' && fitted.toast.includes('3枚なので「4枚」の並べ方にしました'),
+    JSON.stringify(fitted),
+  )
+
+  // ---- 空いている枠より多く選ぶと、最後のページと同じ並べ方（4枚）のページを足して、全部入れる（空のページでなければ、並べ方は変えない） ----
+  const slot2 = await slotOf(1, 3)
+  const [chooser2] = await Promise.all([page.waitForFileChooser(), page.mouse.click(slot2.x, slot2.y)])
+  await chooser2.accept(PHOTOS)
+  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos.length === 3, { timeout: 30000 })
+  await ready()
+  await pause(500)
+  const auto = { photos: (await photosOf(page)).map((p) => [p.layout, p.imageIds.filter(Boolean).length]), toast: await page.evaluate(() => document.querySelector('.undo-toast')?.textContent ?? '') }
+  check(
+    '空いている枠（1つ）より多く写真を選ぶ（3枚）と、最後のページと同じ並べ方（4枚）のページを足して全部入れ、「作品写真のページを1つ足して、2枚入れました」と出す（上限なしのときは、入れない写真はない）',
+    JSON.stringify(auto.photos) === '[[4,4],[4,4],[4,2]]' && auto.toast.includes('作品写真のページを1つ足して、2枚入れました') && !auto.toast.includes('入れていません'),
     JSON.stringify(auto),
   )
-  check('セルフチェックの「まだのところ」は「7枚（4ページ）」', auto.row === '7枚（4ページ）', auto.row)
+  // このあとの確かめのために、1ページ目は4枚・2〜4ページ目は1枚ずつにしておく（前の確かめと同じ形）
+  await page.evaluate(() => window.__editor.update((r) => { const [p1, p2] = r.workPhotos; return { ...r, workPhotos: [p1, { layout: 1, imageIds: [p2.imageIds[0]] }, { layout: 1, imageIds: [p2.imageIds[1]] }, { layout: 1, imageIds: [p2.imageIds[2]] }] } }))
+  await pause(400)
+  await ready()
+  const row = await photoRow('.side')(page)
+  check('セルフチェックの「まだのところ」は「7枚（4ページ）」', row === '7枚（4ページ）', row)
 
   // ---- 消す → 戻す ----
   await showPhotoPage(page, ready, 3)

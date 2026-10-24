@@ -341,6 +341,8 @@ function DirectBar({ editor, snap, guiding }: { editor: ReportEditor; snap: Edit
             {hint}
           </p>
         )}
+        {/* 大見出しの入る場所（その章のいちばん後ろ）を書いておく（打って作る「Ⅱ．〇〇」はその場で分かれ、入る場所が違うため。依頼者の選択 2026-10-24 mockups/v53 ⑤ 案B） */}
+        {addOpen && <p className="db-hint db-add-note">大見出しは、この章のいちばん後ろに新しい章を足します（小見出し・改ページは、書いている所の後ろ）</p>}
         {addOpen && (
           <div className="db-row db-add" role="group" aria-label="書いている所の後ろに入れる">
             {/* 大きい順（大見出し → 小見出し）。下のタブの「追加」と同じ並び */}
@@ -503,7 +505,7 @@ function AddTools({ editor, snap, onDone, direct }: { editor: ReportEditor; snap
   )
   return (
     <>
-      <p className="sheet-hint">{pageName(snap)}の、最後に触ったところの後ろに入ります。段落は、{direct ? '' : '書く欄で'}改行すると分かれます。</p>
+      <p className="sheet-hint">{pageName(snap)}の、最後に触ったところの後ろに入ります（大見出しは、その章のいちばん後ろに新しい章を足します）。段落は、{direct ? '' : '書く欄で'}改行すると分かれます。</p>
       <div className="add-grid">
         {/* 大きい順（大見出し → 小見出し）に並べる（依頼者の判断 2026-10-21） */}
         {tool('大見出し', Icon.heading1, () => editor.addChapter())}

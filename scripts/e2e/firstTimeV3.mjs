@@ -258,7 +258,7 @@ export async function firstTimeV3Pc(browser, check) {
   await page.waitForSelector('.modal .snapshots li')
   const newest = await page.evaluate(() => document.querySelector('.modal .snapshots li span')?.textContent ?? '')
   await page.screenshot({ path: `${OUT}/01-replace-snapshot.png` })
-  check('「下書きを入れ替える」の前の控えには、「下書きを入れ替える前」と名前が付く（いちばん上）', newest.includes('（下書きを入れ替える前）'), newest)
+  check('「下書きを入れ替える」の前の控えには、「下書きを入れ替える前」の札が付き、中身の目安（本文の字数など）も出る（いちばん上。mockups/v53 ④）', newest.includes('下書きを入れ替える前') && /本文/.test(newest), newest)
   const asked = acceptNextDialog(page)
   await page.evaluate(() => [...document.querySelectorAll('.modal .snapshots li')].find((li) => li.textContent.includes('下書きを入れ替える前')).querySelector('button').click())
   const restoreMessage = await asked
@@ -463,17 +463,24 @@ export async function firstTimeV3Pc(browser, check) {
   let chooser = await clickSlot(0, 0)
   const multiple = chooser.isMultiple()
   await chooser.accept(pngs.slice(0, 3))
-  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos.length === 2, { timeout: 20000 })
+  await page.waitForFunction(() => window.__editor.getSnapshot().report.workPhotos[0].imageIds.filter(Boolean).length === 3, { timeout: 20000 })
   await pause(300)
-  const twoToast = await toastText(page)
+  const fitToast = await toastText(page)
   const placed = await counts()
+  const fitLayout = await page.evaluate(() => window.__editor.getSnapshot().report.workPhotos.map((p) => p.layout).join())
   await ready()
   await page.screenshot({ path: `${OUT}/11-photos-two-frames.png` })
+  // 空のページにまとめて選ぶと、枚数に合う並べ方にする（3枚なら「4枚」。ページは足さない。依頼者の選択 2026-10-24 mockups/v53 ① 案B）。
+  // 枠より多く選んだときにページを足すことは、このあと（上限のある2ページ目）と photoPages.mjs で確かめる
   check(
-    '作品写真の空いている枠を押すと、写真をまとめて選べ、空いている枠に順に入る（枠より多いと、同じ並べ方のページを足して全部入れ、そのことを知らせる）',
-    multiple && placed === '2,1' && twoToast === '作品写真のページを1つ足して、1枚入れました',
-    JSON.stringify({ multiple, placed, twoToast }),
+    '作品写真の空いている枠を押すと、写真をまとめて選べ、空のページなら枚数に合う並べ方（3枚なら「4枚」）にして入れ、そのことを知らせる',
+    multiple && placed === '3' && fitLayout === '4' && fitToast === '3枚なので「4枚」の並べ方にしました',
+    JSON.stringify({ multiple, placed, fitLayout, fitToast }),
   )
+  // このあとの確かめのために、前と同じ形（2枚の並べ方で、1ページ目に2枚・2ページ目に1枚）にしておく
+  await page.evaluate(() => window.__editor.update((r) => { const ids = r.workPhotos[0].imageIds.filter(Boolean); return { ...r, workPhotos: [{ layout: 2, columns: 2, imageIds: ids.slice(0, 2) }, { layout: 2, columns: 2, imageIds: ids.slice(2, 3) }] } }))
+  await pause(400)
+  await ready()
   // 学科の設定でページ数の上限があるとき（2ページ）：上限のページまで入れ、入れなかった枚数とわけを知らせる。「＋ 写真のページを足す」は押せない
   // 年度の設定を入れ替える（ツールの setConfig。ページ数の上限だけ変える）
   await page.evaluate(() => {

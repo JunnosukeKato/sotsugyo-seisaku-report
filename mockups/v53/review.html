@@ -1,0 +1,321 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<title>デザイン案 v53：スマホの試しで見つかったこと</title>
+<style>
+  :root { --line: #e6e2dc; --ink: #23262b; --muted: #686b72; --accent: #2f3e75; --accent-soft: #e8ebf5; --error: #b5443b; --error-soft: #f7ebe9; --warn: #8a5e0f; --warn-soft: #f6f0e3; --chip-bg: #f1efeb; --ok: #3f7a55; }
+  body { margin: 0; padding: 26px 30px 34px; background: #f4f2ee; color: #2a2622; font-family: 'BIZ UDPGothic', 'Yu Gothic UI', sans-serif; width: 1320px; box-sizing: border-box; }
+  h1 { margin: 0 0 6px; font-size: 24px; }
+  .lead { margin: 0 0 18px; font-size: 14.5px; color: #6b655d; line-height: 1.7; word-break: auto-phrase; }
+  .card { margin-bottom: 22px; padding: 16px 18px 18px; border-radius: 14px; background: #fff; box-shadow: 0 1px 3px rgba(30, 25, 20, 0.08); }
+  .card > h2 { margin: 0 0 4px; font-size: 19px; }
+  .card > .why { margin: 0 0 12px; font-size: 14px; color: #6b655d; line-height: 1.6; word-break: auto-phrase; }
+  .opts { display: flex; gap: 18px; align-items: flex-start; flex-wrap: wrap; }
+  .opt { width: 280px; }
+  .opt.wide { width: 380px; }
+  .opt h3 { margin: 0 0 3px; font-size: 15px; }
+  .opt p.note { margin: 0 0 8px; font-size: 13px; color: #6b655d; line-height: 1.55; word-break: auto-phrase; min-height: 4.6em; }
+  .tag { display: inline-block; margin-left: 4px; padding: 1px 8px; border-radius: 99px; background: #2f3e75; color: #fff; font-size: 12px; vertical-align: 1px; }
+  .opt.rec .frame, .opt.rec .board { box-shadow: 0 0 0 3px #2f3e75; }
+  img.now { display: block; width: 100%; border-radius: 12px; box-shadow: 0 0 0 1px #ddd8cf; }
+  .crop { overflow: hidden; border-radius: 12px; box-shadow: 0 0 0 1px #ddd8cf; }
+  .crop img { display: block; width: 100%; }
+
+  /* スマホの枠（簡単な絵） */
+  .frame { position: relative; width: 280px; height: 470px; overflow: hidden; border-radius: 16px; background: #ebe8e3; box-shadow: 0 0 0 1px #ddd8cf; font-size: 12px; color: var(--ink); }
+  .frame .top { height: 34px; display: flex; align-items: center; gap: 6px; padding: 0 10px; background: #fbfaf8; border-bottom: 1px solid var(--line); font-weight: 700; font-size: 12px; }
+  .frame .top small { margin-left: auto; font-weight: 400; color: var(--muted); }
+  .frame .paper { position: absolute; left: 10px; right: 10px; top: 46px; bottom: 60px; background: #fff; padding: 14px 12px; font-family: 'BIZ UDMincho', serif; font-size: 10.5px; line-height: 1.75; }
+  .frame .nav { position: absolute; left: 0; right: 0; bottom: 0; height: 46px; display: grid; grid-template-columns: repeat(5, 1fr); background: #fbfaf8; border-top: 1px solid var(--line); font-size: 10px; color: var(--muted); text-align: center; align-items: center; }
+  .bar { position: absolute; left: 0; right: 0; bottom: 0; background: #fff; border-top: 1px solid var(--line); padding: 7px 8px; display: flex; gap: 6px; align-items: center; font-size: 10.5px; color: var(--muted); }
+  .bar .done { margin-left: auto; padding: 7px 12px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 700; }
+  .kb { position: absolute; left: 0; right: 0; bottom: 0; height: 150px; background: #d6d8e0; display: grid; place-items: center; color: #8c8f96; font-size: 12px; }
+  .toast { position: absolute; left: 10px; right: 10px; border-radius: 12px; background: #2b2e36; color: #fff; padding: 9px 11px; font-size: 11.5px; line-height: 1.5; word-break: auto-phrase; }
+  .toast .acts { display: flex; gap: 6px; margin-top: 6px; }
+  .toast .acts span { padding: 4px 10px; border-radius: 7px; background: #fff; color: var(--ink); font-weight: 700; }
+  .toast .acts span.sub { background: transparent; color: #cfd2da; border: 1px solid #5a5e69; font-weight: 400; }
+  .hl { background: #ffe9a8; }
+  .h2 { font-family: 'BIZ UDMincho', serif; font-weight: 700; }
+  .modal { position: absolute; left: 12px; right: 12px; top: 18px; bottom: 18px; border-radius: 14px; background: #fff; box-shadow: 0 10px 30px rgba(0,0,0,.25); padding: 12px 12px 0; display: flex; flex-direction: column; font-size: 11.5px; line-height: 1.6; word-break: auto-phrase; }
+  .modal h4 { margin: 0 0 6px; font-size: 14px; }
+  .modal .scroll { flex: 1; overflow: hidden; }
+  .modal ul { margin: 2px 0 6px; padding-left: 16px; }
+  .modal li { margin-bottom: 3px; color: var(--accent); text-decoration: underline; text-underline-offset: 2px; }
+  .modal .foot { margin: 0 -12px; padding: 9px 12px 11px; border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; background: #fff; border-radius: 0 0 14px 14px; box-shadow: 0 -6px 12px rgba(0,0,0,.05); }
+  .btn { padding: 7px 12px; border-radius: 8px; border: 1px solid #c9c3b8; background: #fff; font-weight: 700; font-size: 11.5px; }
+  .btn.pri { border-color: var(--accent); background: var(--accent); color: #fff; }
+  .fold { margin: 6px 0; padding: 8px 10px; border-radius: 9px; background: var(--error-soft); color: var(--error); font-weight: 700; display: flex; justify-content: space-between; }
+  .fold span { font-weight: 400; color: var(--accent); text-decoration: underline; }
+
+  /* 板（図のような説明） */
+  .board { padding: 12px; border-radius: 12px; background: #f8f7f4; box-shadow: 0 0 0 1px #e3ded5; font-size: 12.5px; line-height: 1.55; }
+  .step { margin-bottom: 8px; }
+  .step b { display: block; margin-bottom: 4px; font-size: 12px; color: var(--muted); font-weight: 700; }
+  .pages { display: flex; gap: 8px; align-items: flex-end; }
+  .pg { width: 70px; height: 96px; background: #fff; box-shadow: 0 0 0 1px #ddd8cf; display: grid; gap: 2px; padding: 3px; box-sizing: border-box; position: relative; }
+  .pg i { display: block; background: #2f3e75; opacity: .8; }
+  .pg i.b { background: #8a6b3d; }
+  .pg i.empty { background: #fff; border: 1px dashed #b8b2a6; opacity: 1; display: grid; place-items: center; color: #9a948a; font-style: normal; font-size: 14px; }
+  .pg.one { grid-template-columns: 1fr; }
+  .pg.lr { grid-template-columns: 1fr 1fr; }
+  .pg.gone { opacity: .25; }
+  .pg small { position: absolute; bottom: -16px; left: 0; right: 0; text-align: center; font-size: 10px; color: var(--muted); }
+  .arrow { color: var(--muted); font-size: 18px; align-self: center; }
+  .say { margin-top: 20px; padding: 7px 9px; border-radius: 9px; background: #2b2e36; color: #fff; font-size: 11.5px; line-height: 1.5; word-break: auto-phrase; }
+  .say u { color: #c8d0ff; }
+  .chap { padding: 6px 8px; border-radius: 8px; background: #fff; box-shadow: 0 0 0 1px #e3ded5; margin-bottom: 6px; font-size: 12px; }
+  .chap b { display: block; font-family: 'BIZ UDMincho', serif; }
+  .chap span { display: block; margin: 3px 0 0 10px; padding: 2px 6px; border-radius: 5px; background: #f1efeb; }
+  .chap span.cur { background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
+  .chap.new { box-shadow: 0 0 0 2px #d9a441; background: #fffaf0; }
+  .rowx { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 8px 2px; border-bottom: 1px solid var(--line); }
+  .rowx div b { display: block; font-size: 12.5px; }
+  .rowx div small { display: block; color: var(--muted); font-size: 11.5px; }
+  .rowx .lab { display: inline-block; margin-left: 4px; padding: 0 6px; border-radius: 99px; background: var(--warn-soft); color: var(--warn); font-size: 10.5px; font-weight: 700; }
+  .rowx .btn { flex: none; }
+  .hit { outline: 2px dashed #d9a441; outline-offset: 0; background: rgba(217, 164, 65, 0.12); }
+  ul.small { margin: 0; padding-left: 18px; font-size: 13.5px; line-height: 1.8; word-break: auto-phrase; }
+  .foot { margin: 6px 2px 0; font-size: 13.5px; color: #6b655d; line-height: 1.7; word-break: auto-phrase; }
+</style>
+</head>
+<body>
+<h1>スマホの試しで見つかったこと：見た目・動きが変わるもの（案）</h1>
+<p class="lead">それぞれ「今」と案を並べました。おすすめには印を付けています。① から ⑧ まで、それぞれ選んでください。</p>
+
+<!-- ① 作品写真 -->
+<div class="card">
+  <h2>① 作品写真をまとめて選んだとき</h2>
+  <p class="why">「1枚」の並べ方のまま2枚選ぶと、ページが2つに分かれます。あとで「2枚 左右」に変えても、右の枠は空いたまま。</p>
+  <div class="opts">
+    <div class="opt">
+      <h3>今</h3>
+      <p class="note">2枚目は2ページ目へ。並べ方を変えても詰まらない。</p>
+      <div class="board">
+        <div class="step"><b>「1枚」のまま2枚選ぶ</b><div class="pages"><div class="pg one"><i></i><small>1</small></div><div class="pg one"><i class="b"></i><small>2</small></div></div></div>
+        <div class="step" style="margin-top:22px"><b>「2枚 左右」に変える</b><div class="pages"><div class="pg lr"><i></i><i class="empty">＋</i><small>1</small></div><div class="pg one"><i class="b"></i><small>2</small></div></div></div>
+      </div>
+    </div>
+    <div class="opt">
+      <h3>A　並べ方を変えたら詰める</h3>
+      <p class="note">枠が増える並べ方にすると、次のページの写真を詰め、空いたページは消します（「戻す」で戻せる）。</p>
+      <div class="board">
+        <div class="step"><b>「2枚 左右」に変える</b><div class="pages"><div class="pg lr"><i></i><i class="b"></i><small>1</small></div><span class="arrow">←</span><div class="pg one gone"><i class="b"></i><small>2</small></div></div></div>
+        <div class="say">次のページの写真を詰めて、空いたページを消しました <u>［戻す］</u></div>
+      </div>
+    </div>
+    <div class="opt">
+      <h3>B　選んだ枚数で並べ方を決める</h3>
+      <p class="note">空のページにまとめて選ぶと、枚数に合う並べ方にします（2枚→左右、3〜4枚→4枚。5枚からは次のページへ）。</p>
+      <div class="board">
+        <div class="step"><b>空のページで2枚選ぶ</b><div class="pages"><div class="pg lr"><i></i><i class="b"></i><small>1</small></div></div></div>
+        <div class="say">2枚なので「2枚 左右」にしました（並べ方は下の道具で変えられます）</div>
+      </div>
+    </div>
+    <div class="opt rec">
+      <h3>C　A と B の両方<span class="tag">おすすめ</span></h3>
+      <p class="note">まとめて選んだときは枚数に合わせ、あとで並べ方を変えたときも詰めます。どちらの順で操作しても、空いた枠・ページが残りません。</p>
+      <div class="board">
+        <div class="step"><b>空のページで2枚選ぶ</b><div class="pages"><div class="pg lr"><i></i><i class="b"></i><small>1</small></div></div></div>
+        <div class="step" style="margin-top:22px"><b>あとで「1枚」→「2枚」に変えても</b><div class="pages"><div class="pg lr"><i></i><i class="b"></i><small>1</small></div><span class="arrow">←</span><div class="pg one gone"><i class="b"></i><small>2</small></div></div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ② 見出しのつもりの書き方 -->
+<div class="card">
+  <h2>② 見出しのつもりで「3．スカート」「(1)素材」と打ったとき</h2>
+  <p class="why">今は段落のまま「3．スカート。」と「。」が付き、さらに「体言止めを使わない」と出ます。見出しを文に直してしまいかねません（「ⅲ．スカート」「iiiスカート」は、今も小見出しになります）。</p>
+  <div class="opts">
+    <div class="opt">
+      <h3>今</h3>
+      <p class="note">「。」が付き、チェックに「体言止めを使わない」。</p>
+      <div class="frame"><div class="top">本文 1ページ<small>保存 17:32</small></div>
+        <div class="paper"><div class="h2">Ⅰ．企画・立案</div>　本制作では、…目標とした。<br><span class="hl">　3．スカート。</span><br>　スカートは、動きやすさを考えた。</div>
+        <div class="toast" style="bottom:12px;background:#fff;color:var(--ink);box-shadow:0 4px 14px rgba(0,0,0,.15)"><b style="color:var(--error)">× 体言止めを使わない</b><br>文末を「〜である」「〜した」などで終える</div>
+      </div>
+    </div>
+    <div class="opt rec">
+      <h3>A　Enter のときに聞く<span class="tag">おすすめ</span></h3>
+      <p class="note">見出しらしい短い行で Enter を押すと「。」を付けずに聞きます。「小見出しにする」で、ツールの形（ⅲ．スカート）に。</p>
+      <div class="frame"><div class="top">本文 1ページ<small>保存 17:32</small></div>
+        <div class="paper"><div class="h2">Ⅰ．企画・立案</div>　本制作では、…目標とした。<br><span class="hl">　3．スカート</span><br>　|</div>
+        <div class="toast" style="bottom:196px">見出しのつもりですか？<div class="acts"><span>小見出しにする</span><span class="sub">段落のまま</span></div></div>
+        <div class="kb">キーボード</div>
+      </div>
+    </div>
+    <div class="opt">
+      <h3>B　自動で小見出しにする</h3>
+      <p class="note">「3．」「(1)」「第4章」「■」などで始まる短い行は、自動で小見出しに（知らせに［戻す］）。段落の書き出しを誤って直すことも。</p>
+      <div class="frame"><div class="top">本文 1ページ<small>保存 17:32</small></div>
+        <div class="paper"><div class="h2">Ⅰ．企画・立案</div>　本制作では、…目標とした。<br><div class="h2 hl">ⅲ．スカート</div>　|</div>
+        <div class="toast" style="bottom:196px">小見出しにしました（番号はツールの形に） <span style="color:#c8d0ff;text-decoration:underline">［戻す］</span></div>
+        <div class="kb">キーボード</div>
+      </div>
+    </div>
+    <div class="opt">
+      <h3>C　チェックで知らせるだけ</h3>
+      <p class="note">「。」は付けず、チェックの要確認に「見出しのようです。見出しは『追加』→『小見出し』で」と出します。</p>
+      <div class="frame"><div class="top">本文 1ページ<small>保存 17:32</small></div>
+        <div class="paper"><div class="h2">Ⅰ．企画・立案</div>　本制作では、…目標とした。<br><span class="hl">　3．スカート</span><br>　スカートは、動きやすさを考えた。</div>
+        <div class="toast" style="bottom:12px;background:#fff;color:var(--ink);box-shadow:0 4px 14px rgba(0,0,0,.15)"><b style="color:var(--warn)">! 見出しのようです</b><br>見出しは「追加」→「小見出し」で入れます</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ③ 小さい画面の窓 -->
+<div class="card">
+  <h2>③ 小さい画面（360×640 など）で、窓のボタンが下に隠れる</h2>
+  <p class="why">「PDFを書き出す」の窓は、直すところが多いと「PDF を作る」が画面の外に出ます（Word の確認の「読み込む」も同じ）。窓の中を下へずらさないと押せません。</p>
+  <div class="opts">
+    <div class="opt">
+      <h3>今</h3>
+      <p class="note">一覧が長く、ボタンは下へずらすと出てくる。</p>
+      <div class="crop" style="height:470px"><img src="shots/113-pdf-360.png" alt="今の PDF の窓"></div>
+    </div>
+    <div class="opt rec">
+      <h3>A　ボタンを窓の下にいつも出す<span class="tag">おすすめ</span></h3>
+      <p class="note">ボタンの段を窓の下に止め、一覧だけを上下に動かします（PDF・Word の確認・バックアップの窓）。</p>
+      <div class="frame"><div class="top">表紙<small>保存 18:21</small></div>
+        <div class="modal"><h4>PDFを書き出す</h4>
+          <div class="scroll">直すところが16か所、まだのところが1つあります。<br><b>直すところ</b><ul><li>抄録：「です・ます」ではなく「である」調で書く</li><li>抄録：「見頃」ではなく「身頃」と書く</li><li>本文：数字は半角で書く</li><li>本文：数字は半角で書く</li><li>ほか12件</li></ul></div>
+          <div class="foot"><span class="btn">直しに戻る</span><span class="btn pri">PDF を作る</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="opt">
+      <h3>B　一覧をたたむ</h3>
+      <p class="note">直すところは数だけ出し、「一覧を見る」で開きます。ボタンは今の位置のまま。</p>
+      <div class="frame"><div class="top">表紙<small>保存 18:21</small></div>
+        <div class="modal"><h4>PDFを書き出す</h4>
+          <div class="scroll">直すところ・まだのところが残っています。<div class="fold">直すところ 16か所 <span>一覧を見る ▾</span></div><div class="fold" style="background:var(--chip-bg);color:var(--ink)">まだのところ 1つ <span>一覧を見る ▾</span></div>提出の前に直しましょう。このまま書き出すこともできます。</div>
+          <div class="foot" style="box-shadow:none;border-top:0"><span class="btn">直しに戻る</span><span class="btn pri">PDF を作る</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ④ 自動の控え -->
+<div class="card">
+  <h2>④ 自動の控え（「バックアップ・作り直す」の窓）</h2>
+  <p class="why">控えが時刻だけで並ぶので、どれに戻せばよいか分かりません。「最初から作り直す」の直後の控えは空の原稿で、選ぶと空に戻ります。</p>
+  <div class="opts">
+    <div class="opt">
+      <h3>今</h3>
+      <p class="note">時刻と「この時点に戻す」だけ。</p>
+      <div class="crop" style="height:170px"><img src="shots/67-backup.png" alt="今のバックアップの窓" style="margin-top:-292px"></div>
+    </div>
+    <div class="opt wide rec">
+      <h3>A　中身の目安を添える<span class="tag">おすすめ</span></h3>
+      <p class="note">時刻の下に「本文○ページ・図○枚」。作り直す・Word を読み込む・ほかの端末の原稿に替える前の控えには札を付けます。</p>
+      <div class="board" style="background:#fff">
+        <div class="rowx"><div><b>10/24 17:47</b><small>本文 4ページ・図 3枚・表 1つ</small></div><span class="btn">この時点に戻す</span></div>
+        <div class="rowx"><div><b>10/24 17:40<span class="lab">作り直す前</span></b><small>本文 4ページ・図 3枚・表 1つ</small></div><span class="btn">この時点に戻す</span></div>
+        <div class="rowx"><div><b>10/24 17:27<span class="lab">Word を読み込む前</span></b><small>本文 2ページ・図 1枚</small></div><span class="btn">この時点に戻す</span></div>
+      </div>
+    </div>
+    <div class="opt wide">
+      <h3>B　A ＋ いまとの違い</h3>
+      <p class="note">さらに「いまより図が2枚少ない」のように、今の原稿との違いを一言。</p>
+      <div class="board" style="background:#fff">
+        <div class="rowx"><div><b>10/24 17:47</b><small>本文 4ページ・図 3枚（いまと同じ）</small></div><span class="btn">この時点に戻す</span></div>
+        <div class="rowx"><div><b>10/24 17:40<span class="lab">作り直す前</span></b><small>本文 4ページ・図 3枚（いまより本文が4ページ多い）</small></div><span class="btn">この時点に戻す</span></div>
+        <div class="rowx"><div><b>10/24 17:27<span class="lab">Word を読み込む前</span></b><small>本文 2ページ・図 1枚（いまより図が2枚少ない）</small></div><span class="btn">この時点に戻す</span></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑤ 追加→大見出し -->
+<div class="card">
+  <h2>⑤ 「追加」→「大見出し」の入る場所</h2>
+  <p class="why">章の途中の段落を書いているときに「追加」→「大見出し」を押すと、新しい章はその章のいちばん後ろに入ります。「Ⅱ．〇〇」と打って Enter のときは、その場所で章が分かれ、結果が違います。</p>
+  <div class="opts">
+    <div class="opt">
+      <h3>今</h3>
+      <p class="note">2つ目の段落を書いているとき → 章の後ろに新しい章。</p>
+      <div class="board"><div class="chap"><b>Ⅰ．企画・立案</b><span>段落1</span><span class="cur">段落2（書いている）</span><span>段落3</span></div><div class="chap new"><b>Ⅱ．（新しい章）</b></div></div>
+    </div>
+    <div class="opt rec">
+      <h3>A　書いている所で章を分ける<span class="tag">おすすめ</span></h3>
+      <p class="note">打って作るときと同じく、書いている段落のすぐ後ろに新しい章。その後ろの段落は新しい章へ。</p>
+      <div class="board"><div class="chap"><b>Ⅰ．企画・立案</b><span>段落1</span><span class="cur">段落2（書いている）</span></div><div class="chap new"><b>Ⅱ．（新しい章）</b><span>段落3</span></div></div>
+    </div>
+    <div class="opt">
+      <h3>B　今のまま、説明を書く</h3>
+      <p class="note">入る場所は今のまま。「追加」の欄の「大見出し」の下に「この章の後ろに、新しい章を足します」と書きます。</p>
+      <div class="board"><div class="chap"><b>Ⅰ．企画・立案</b><span>段落1</span><span class="cur">段落2（書いている）</span><span>段落3</span></div><div class="chap new"><b>Ⅱ．（新しい章）</b></div></div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑥ 押す所が小さい -->
+<div class="card">
+  <h2>⑥ 押す所が小さい（目次の行・改ページの印・「このままにする」など）</h2>
+  <p class="why">紙面の目次の行は高さ 11px ほど、改ページの印は 12px ほどで、ねらった所を押しにくいです。チェックの欄の「このままにする（確認済み）」も 16px ほど。</p>
+  <div class="opts">
+    <div class="opt">
+      <h3>今</h3>
+      <p class="note">字の大きさの分だけ押せる。</p>
+      <div class="crop" style="height:300px"><img src="shots/59-toc.png" alt="今の目次" style="margin-top:-60px"></div>
+    </div>
+    <div class="opt rec">
+      <h3>A　見た目は同じで、押せる範囲だけ広げる<span class="tag">おすすめ</span></h3>
+      <p class="note">目次の行・改ページの印・「このままにする」・知らせの［戻す］の、押せる範囲を上下に広げます（点線の所。画面の見た目は変わりません）。</p>
+      <div class="board" style="background:#fff;font-family:'BIZ UDMincho',serif;font-size:11.5px;line-height:1.5">
+        目次<br><br>
+        <div class="hit" style="padding:6px 2px;margin-bottom:2px">Ⅰ．企画・立案 ・・・・・・・・ 1</div>
+        <div class="hit" style="padding:6px 2px 6px 14px;margin-bottom:2px">ⅰ．担当衣装のキャラクター</div>
+        <div class="hit" style="padding:6px 2px 6px 14px;margin-bottom:2px">ⅱ．デザイン説明</div>
+        <div class="hit" style="padding:6px 2px;margin-bottom:2px">Ⅱ．制作過程 ・・・・・・・・・ 3</div>
+      </div>
+    </div>
+    <div class="opt">
+      <h3>B　目次は「見出しの一覧」で選ぶ</h3>
+      <p class="note">目次のページの帯に「見出しへ移る」ボタン。押すと、大きなボタンで見出しが並ぶ欄が出ます（ほかは A と同じ）。</p>
+      <div class="frame" style="height:330px"><div class="top">目次<small>保存 17:48</small></div>
+        <div class="modal" style="top:auto;height:250px;bottom:0;left:0;right:0;border-radius:14px 14px 0 0"><h4>見出しへ移る</h4>
+          <div class="btn" style="margin-bottom:5px">Ⅰ．企画・立案</div><div class="btn" style="margin:0 0 5px 12px;font-weight:400">ⅰ．担当衣装のキャラクター</div><div class="btn" style="margin:0 0 5px 12px;font-weight:400">ⅱ．デザイン説明</div><div class="btn" style="margin-bottom:5px">Ⅱ．制作過程</div></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ⑦ 開いてすぐの「戻す」 -->
+<div class="card">
+  <h2>⑦ 開いてすぐの「戻す」</h2>
+  <p class="why">はじめての案内を閉じた直後に、画面の上の「戻す」を押すと、選んだコースが空に、もう1回押すと自動で入った学籍番号が消えます。</p>
+  <div class="opts">
+    <div class="opt">
+      <h3>今</h3>
+      <p class="note">「戻す」1回でコースが空に（「＋」の印）。</p>
+      <div class="crop" style="height:300px"><img src="shots/85-a360-undo1.png" alt="戻したあと" style="margin-top:-150px"></div>
+    </div>
+    <div class="opt rec">
+      <h3>A　案内で入れたものは戻さない<span class="tag">おすすめ</span></h3>
+      <p class="note">コースを選ぶ・学籍番号が自動で入る、までを「はじめの状態」にします。開いた直後は「戻す」が薄く、何か書いてから押せます（コースは表紙から選び直せます）。</p>
+      <div class="board"><b>開いた直後の上の帯</b><div style="display:flex;gap:16px;margin-top:8px;color:#b9b5ae">↶ 戻す　↷ やり直す</div><div style="margin-top:10px">書き始めると「戻す」が押せる</div></div>
+    </div>
+    <div class="opt">
+      <h3>B　今のまま</h3>
+      <p class="note">コースの選び直しも「戻す」で取り消せる（今の動き）。</p>
+    </div>
+  </div>
+</div>
+
+<!-- ⑧ そのほか -->
+<div class="card">
+  <h2>⑧ そのほかの小さな見直し（よいものを選んでください。いくつでも）</h2>
+  <ul class="small">
+    <li><b>表の画像を切り抜いたあと</b>：作品写真と同じく、帯に「指でずらして、写る所を調整」と出す（今は何も出ず、ずらせることに気づかない）</li>
+    <li><b>図の「上へ」「下へ」が押せないとき</b>：スマホでも、押すと「本文の（図1）より上へは動かせません」のように、わけを知らせる（今はパソコンでマウスを乗せたときだけ出る）</li>
+    <li><b>Word の中身の確認</b>：Word で置き換わる章にも「ツールで書いた9段落・図3枚は消えます」と赤い札を付ける（今は、いちばん下の囲みにしか書いていない）</li>
+    <li><b>使い方の動画</b>：スマホでは動画の下に「横向き・全画面にすると大きく見られます」と添える（今は字が小さい）</li>
+  </ul>
+</div>
+<p class="foot">ほかに見つかったこと（下の「チェック」の赤い数はエラーだけで、「直すところ」の数は要確認も数える、など）は、今回は変えません。気になるものがあれば言ってください。</p>
+</body>
+</html>

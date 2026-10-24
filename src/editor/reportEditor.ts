@@ -7,7 +7,7 @@ import { FIGURE_MAX_PX, fitFigureSize, importImage, PHOTO_MAX_PX } from '../mode
 import { putImage, type StoredImage } from '../model/storage'
 import { skippedPages } from '../pdf/exportPages'
 import { applyCourseTemplate, bodyWritten } from '../model/template'
-import { addPhotoPage, canAddPhotoPage, changeArrangement, clampPercent, movePhoto, pageOfPhotoPage, pagePhotoCount, photoPageAt, photoSlots, placePhotos, putPhoto, removePhotoPage, updatePhotoPage, wholePhoto, type PhotoSlot } from '../model/photos'
+import { addPhotoPage, canAddPhotoPage, changeArrangement, clampPercent, movePhoto, pageOfPhotoPage, pagePhotoCount, photoPageAt, photoSlots, placePhotos, putPhoto, removePhotoPage, updatePhotoPage, wholePhoto, type PhotoSlot, packPhotos, fittingArrangement, PHOTOS_PER_PAGE_MAX, photoGrid } from '../model/photos'
 import { addColumn, addRow, blankTable, cellPosition, colWidthsOf, columnCount, equalColumnWidths, materialTable, normalizeColumnWidths, removeColumn, removeRow, setCellCrop, setCellImage } from '../model/table'
 import type { BodyBlock, Chapter, PhotoPosition, Report, TableBlock, TableCell, WorkPhotoLayout } from '../model/types'
 import { abstractPasteNotice, stripFigureRefs } from './abstractRefs'
@@ -1137,11 +1137,13 @@ export class ReportEditor {
   private tocLineNear(x: number, y: number): HTMLElement | null {
     const page = this.renderer.pageView.pages()[this.page]
     let best: { el: HTMLElement; d: number } | null = null
+    const pageRight = page?.getBoundingClientRect().right ?? 0
     for (const el of page?.querySelectorAll<HTMLElement>('[data-toc-target]') ?? []) {
       const r = el.getBoundingClientRect()
-      if (x < r.left - 10 || x > r.right + 10) continue
+      // 行の横いっぱい（短い見出しの行の右も）と、上下 16px まで押せる（目次の行は高さ 11px ほどで押しにくかった。学生の試し 2026-10-24。mockups/v53 ⑥ 案A）
+      if (x < r.left - 10 || x > Math.max(r.right, pageRight) + 10) continue
       const d = y < r.top ? r.top - y : y > r.bottom ? y - r.bottom : 0
-      if (d <= 10 && (!best || d < best.d)) best = { el, d }
+      if (d <= 16 && (!best || d < best.d)) best = { el, d }
     }
     return best?.el ?? null
   }
@@ -3080,6 +3082,17 @@ export class ReportEditor {
     this.notify()
   }
 
+  /**
+   * いまの原稿を「はじめの状態」にする（元に戻す・やり直すの履歴を消す。原稿はそのまま）。
+   * はじめての案内でコースを選んだ・学籍番号を自動で入れたあとに使う（開いてすぐ「戻す」を押すと、コースや学籍番号が消えていた。
+   * 学生の試し 2026-10-24。依頼者の選択 mockups/v53 ⑦ 案A）
+   */
+  forgetHistory(): void {
+    this.history.clear()
+    this.historySeq += 1
+    this.notify()
+  }
+
   /** 報告書を丸ごと入れ替える（復元・新規作成）。履歴は消す */
   replace(report: Report): void {
     this.commitForChange()
@@ -4219,11 +4232,21 @@ export class ReportEditor {
     return canAddPhotoPage(this.report.workPhotos, this.maxPhotoPages)
   }
 
-  /** page ページ目の並べ方を変える（写真は消さずに先頭へ詰める。枚数を減らすと、1枚目から順に載る） */
+  /**
+   * page ページ目の並べ方を変える（写真は消さずに先頭へ詰める。枚数を減らすと、1枚目から順に載る）。
+   * 枠の多い並べ方にして枠が空いたら、次のページの写真を詰め、写真がなくなったページは消す（mockups/v53 ① 案A。［戻す］で戻せる）
+   */
   setPhotoLayout(page: number, layout: WorkPhotoLayout, columns: number): void {
     // 写真の順番が変わることがあるので、選んでいた写真は選び直してもらう
     if (this.selection?.kind === 'photos') this.selection = { kind: 'photos', page }
-    this.update((r) => ({ ...r, workPhotos: updatePhotoPage(r.workPhotos, page, (p) => changeArrangement(p, layout, columns)) }))
+    let packed = { moved: 0, removed: 0 }
+    this.update((r) => {
+      const arranged = updatePhotoPage(r.workPhotos, page, (p) => changeArrangement(p, layout, columns))
+      const result = packPhotos(arranged, page)
+      packed = result
+      return { ...r, workPhotos: result.pages }
+    })
+    if (packed.moved > 0) return this.noticeRemoved('写真を詰めた', packed.removed > 0 ? '（空いたページは消しました）' : undefined)
     // 写真の数より枠の少ない並べ方にした：後ろの写真は消さずに残しているが、ページには出ないことを知らせる
     const filled = this.report.workPhotos[page]?.imageIds.filter(Boolean).length ?? 0
     if (filled > layout) this.noticeInfo(`${layout + 1}枚目からは隠れています（並べ方を戻すと出ます）`)
@@ -4279,7 +4302,11 @@ export class ReportEditor {
     if (files.length === 0) return
     const max = this.maxPhotoPages
     const before = this.report.workPhotos.length
-    const slots = photoSlots(this.report.workPhotos, page, index, files.length, max)
+    // 空のページにまとめて選んだ：そのページを枚数に合う並べ方にする（2枚は左右、3〜4枚は4枚。5枚からは次のページへ。mockups/v53 ① 案B）
+    const empty = pagePhotoCount(this.report.workPhotos[page]) === 0 && this.report.workPhotos[page].imageIds.every((id) => !id)
+    const fit = empty && files.length >= 2 ? fittingArrangement(Math.min(files.length, PHOTOS_PER_PAGE_MAX)) : null
+    const planned = fit ? updatePhotoPage(this.report.workPhotos, page, (p) => changeArrangement(p, fit.layout, fit.columns)) : this.report.workPhotos
+    const slots = photoSlots(planned, page, index, files.length, max)
     const stored: (PhotoSlot & { imageId: string })[] = []
     let tried = 0
     // 縮めて保存する間は、画面に「写真を取り込んでいます…（2 / 5枚）」を出す
@@ -4295,10 +4322,18 @@ export class ReportEditor {
     } finally {
       this.callbacks.onImageWork?.(null)
     }
-    if (stored.length > 0) this.update((r) => ({ ...r, workPhotos: placePhotos(r.workPhotos, stored) }))
+    if (stored.length > 0) {
+      this.update((r) => {
+        let pages = placePhotos(fit ? updatePhotoPage(r.workPhotos, page, (p) => changeArrangement(p, fit.layout, fit.columns)) : r.workPhotos, stored)
+        // 足したページも、入れた枚数に合う並べ方にする（5枚なら、2ページ目は1枚）
+        if (fit) for (let k = before; k < pages.length; k++) pages = updatePhotoPage(pages, k, (p) => { const f = fittingArrangement(pagePhotoCount(p)); return changeArrangement(p, f.layout, f.columns) })
+        return { ...r, workPhotos: pages }
+      })
+    }
     const added = this.report.workPhotos.length - before
     const left = files.length - tried
     const notes = [
+      fit && stored.length >= 2 ? `${Math.min(stored.length, PHOTOS_PER_PAGE_MAX)}枚なので「${photoGrid(fit).label.replace(/（.*）/, '')}${fit.layout === 2 ? ' 左右' : ''}」の並べ方にしました` : '',
       added > 0 ? `作品写真のページを${added}つ足して、${stored.filter((s) => s.page >= before).length}枚入れました` : '',
       left > 0 && max !== null ? `${left}枚は入れていません（作品写真は${max}ページまでです）` : '',
     ].filter(Boolean)

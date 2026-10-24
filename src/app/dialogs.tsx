@@ -10,6 +10,7 @@ import { useBusy, useDoneNote } from './useBusy'
 import { Icon } from './icons'
 import { useDialogFocus } from './useDialogFocus'
 import { useAsk } from './ask'
+import { reportSummary } from '../model/reportSummary'
 
 /**
  * 画面の上に出す窓。keepOpen：窓の外を押しても Esc でも閉じない（書きかけの内容が消えないように。閉じるのは「×」とボタンだけ）。
@@ -428,10 +429,13 @@ export function BackupDialog({
         <ul className="snapshots">
           {snapshots.map((s) => (
             <li key={s.savedAt}>
-              {/* 名前のある控え（「Word を読み込む前」など）は、時刻と並べて名前を出す */}
-              <span>
-                {new Date(s.savedAt).toLocaleString('ja-JP')}
-                {s.label && `（${s.label}）`}
+              {/* 時刻と、名前のある控え（「Word を読み込む前」「作り直す前」など）は札。下に中身の目安（本文の字数・図の数など。mockups/v53 ④ 案A） */}
+              <span className="snap-when">
+                <b>
+                  {new Date(s.savedAt).toLocaleString('ja-JP', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                  {s.label && <i className="snap-label">{s.label}</i>}
+                </b>
+                <small>{reportSummary(s.report)}</small>
               </span>
               <button disabled={off} onClick={() => void run(`snap:${s.savedAt}`, () => onRestoreSnapshot(s), { paintFirst: false })}>
                 <BusyLabel busy={busy === `snap:${s.savedAt}`} text="戻しています…">

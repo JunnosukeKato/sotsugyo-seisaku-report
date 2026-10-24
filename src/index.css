@@ -849,6 +849,8 @@ body.resizing .page-viewport { pointer-events: none; }
 .word-outline li.tpl .cnt { padding: 1px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); }
 /* Word でまだ書いていない章でも、ツールで書いていた章（読み込むと、書いた分が消える） */
 .word-outline li.tpl.lost .cnt { background: var(--error-soft); color: var(--error); font-weight: 700; }
+/* Word の章に入れ替わる章の、ツールで書いて消える分（行の下に赤い札。mockups/v53 ⑧） */
+.word-outline .gone { flex-basis: 100%; margin-top: 2px; padding: 2px 9px; border-radius: 8px; background: var(--error-soft); color: var(--error); font-size: 11.5px; font-weight: 700; word-break: auto-phrase; }
 /* 読み取れなかった所の印（セルフチェックの注意と同じ、! のひし形） */
 .word-dia { display: inline-grid; place-items: center; width: 13px; height: 13px; margin: 0 4px 0 0; vertical-align: -1px; border-radius: 3px; background: var(--warn); color: #fff; font-size: 9px; font-style: normal; font-weight: 700; line-height: 1; transform: rotate(45deg) scale(0.82); }
 .word-dia::before { content: '!'; transform: rotate(-45deg); }
@@ -1997,3 +1999,32 @@ p.busy-line { display: flex; }
 /* 下のタブの名前は折り返さない（360px の画面で「ページ一／覧」になっていた）。狭い画面では字を少し小さく */
 .p-nav button { white-space: nowrap; }
 @media (max-width: 379px) { .p-nav button { font-size: 12px; } }
+/* 「追加」の段の、大見出しの入る場所の一言（mockups/v53 ⑤ 案B） */
+.direct-bar .db-add-note { word-break: auto-phrase; }
+/* 押せないわけを知らせるボタン（スマホの図の「上へ」「下へ」。app/Palette.tsx の Tool の onWhy）：見た目は押せないボタンと同じ */
+.tb.why-off { opacity: 0.4; }
+.tb.why-off:hover { background: none; color: inherit; }
+/* ---- 押す所が小さい：見た目は変えずに、押せる範囲だけ広げる（学生の試し 2026-10-24。依頼者の選択 mockups/v53 ⑥ 案A） ---- */
+/* 改ページの印：印の下（改ページの後ろは、そのページの終わりまで空いている）まで押せる */
+.page-viewport .page-break::before { content: ''; position: absolute; left: 0; right: 0; top: 0; height: 18mm; cursor: pointer; }
+@media print { .page-viewport .page-break::before { content: none; } }
+/* チェックの欄の「このままにする（確認済み）」・「確認済み ○件」・その中の「戻す」：上下に広げる（字の位置は同じ） */
+.issue .keep { position: relative; }
+.issue .keep::after { content: ''; position: absolute; left: -6px; right: -6px; top: -12px; bottom: -12px; }
+.acked summary { margin: -8px -10px; padding: 8px 10px; }
+.acked[open] summary { margin-bottom: 0; }
+.acked li button { position: relative; }
+.acked li button::after { content: ''; position: absolute; inset: -12px -8px; }
+/* ---- スマホ：窓のいちばん下のボタンの段は、窓の下にいつも出す（PDF・Word の確認・バックアップなど。依頼者の選択 mockups/v53 ③ 案A） ---- */
+/* 小さい画面（360×640）で、直すところの一覧が長いと「PDF を作る」が窓の外に出て、下へずらさないと押せなかった（学生の試し 2026-10-24）。
+   窓の中を動かすのは上の文と一覧だけ。段は窓の幅いっぱい・窓の下の端まで（.modal の余白 20px 24px 22px の分を打ち消す） */
+.app.phone .modal > .row-buttons:last-child { position: sticky; bottom: -22px; z-index: 1; margin: 14px -24px -22px; padding: 10px 24px 14px; background: #fff; border-top: 1px solid var(--line); box-shadow: 0 -6px 12px rgba(20, 20, 30, 0.05); }
+/* 止まる位置は、窓の下の余白の分だけ上になるので（ブラウザは余白の内側で止める）、bottom で余白の分を打ち消す。PDF の窓は余白が狭い（600px 以下） */
+@media (max-width: 600px) { .app.phone .modal.pdf-modal > .row-buttons:last-child { bottom: -20px; margin: 14px -18px -20px; padding-left: 18px; padding-right: 18px; } }
+/* 自動の控え：時刻と札、下に中身の目安（mockups/v53 ④ 案A） */
+.snapshots .snap-when { display: grid; gap: 1px; min-width: 0; }
+.snapshots .snap-when b { font-weight: 700; font-size: 13px; }
+.snapshots .snap-label { display: inline-block; margin-left: 6px; padding: 0 7px; border-radius: 999px; background: var(--warn-soft); color: var(--warn); font-size: 11px; font-style: normal; font-weight: 700; vertical-align: 1px; }
+.snapshots .snap-when small { color: var(--muted); font-size: 11.5px; line-height: 1.5; word-break: auto-phrase; }
+.snapshots li { gap: 10px; }
+.snapshots li button { flex: none; }

@@ -6,7 +6,9 @@ import {
   canAddPhotoPage,
   changeArrangement,
   emptyPhotoPages,
+  fittingArrangement,
   movePhoto,
+  packPhotos,
   pageOfPhotoPage,
   photoCount,
   photoGrid,
@@ -225,5 +227,41 @@ describe('作品写真の何ページか（mockups/v38 案A）', () => {
     expect(pageOfPhotoPage(kinds, 2)).toBe(-1)
     expect(photoPageName(0, 1)).toBe('作品写真')
     expect(photoPageName(1, 2)).toBe('作品写真 2')
+  })
+})
+
+describe('作品写真をまとめて選んだとき・並べ方を変えたとき（学生の試し 2026-10-24。mockups/v53 ① 案C）', () => {
+  it('枚数に合う並べ方：1枚・2枚は左右・3〜4枚は4枚', () => {
+    expect(fittingArrangement(1)).toEqual({ layout: 1, columns: 1 })
+    expect(fittingArrangement(2)).toEqual({ layout: 2, columns: 2 })
+    expect(fittingArrangement(3)).toEqual({ layout: 4, columns: 2 })
+    expect(fittingArrangement(4)).toEqual({ layout: 4, columns: 2 })
+  })
+
+  it('枠の多い並べ方にしたら、次のページの写真を詰め、写真がなくなったページは消す（切り抜く位置・全体を入れるもいっしょに）', () => {
+    const pages: WorkPhotoPage[] = [
+      { layout: 2, columns: 2, imageIds: ['a'] },
+      { layout: 1, imageIds: ['b'], positions: [{ x: 30, y: 40 }], whole: [true] },
+      { layout: 1, imageIds: ['c'] },
+    ]
+    const r = packPhotos(pages, 0)
+    expect(r.moved).toBe(1)
+    expect(r.removed).toBe(1)
+    expect(r.pages.map((p) => p.imageIds.join('+'))).toEqual(['a+b', 'c'])
+    expect(r.pages[0].positions?.[1]).toEqual({ x: 30, y: 40 })
+    expect(r.pages[0].whole).toEqual([false, true])
+  })
+
+  it('次のページに残る写真は、そのページの先頭へ。空きがなければ何もしない', () => {
+    const pages: WorkPhotoPage[] = [
+      { layout: 4, columns: 2, imageIds: ['a', 'b'] },
+      { layout: 4, columns: 2, imageIds: ['c', 'd', 'e', 'f'] },
+    ]
+    const r = packPhotos(pages, 0)
+    expect(r.pages.map((p) => p.imageIds.join('+'))).toEqual(['a+b+c+d', 'e+f'])
+    expect(r.removed).toBe(0)
+    const full = packPhotos([{ layout: 1, imageIds: ['a'] }, { layout: 1, imageIds: ['b'] }], 0)
+    expect(full.moved).toBe(0)
+    expect(full.pages.map((p) => p.imageIds.join('+'))).toEqual(['a', 'b'])
   })
 })

@@ -294,14 +294,14 @@ export async function autoHeadingPc(browser, check) {
   check('見出しの形の段落でも、開いて書き換えずに閉じただけなら、見出しにしない', (await state(page)).chapters.length === 3)
   await resetSample(page, ready)
 
-  // ---- 算用数字の形（「1．」）は見出しにしない ----
+  // ---- 算用数字の形（「1．」）も、段落に打つと小見出しにする（番号はツールの形に。依頼者の選択 2026-10-24 mockups/v53 ② 案B） ----
   await openAtEnd(page, ready, 'p14')
   await enterNew(page, 'p14')
   await page.keyboard.type('1．はじめに')
   await page.keyboard.press('Enter')
   await wait(300)
   const arabic = await state(page)
-  check('「1．はじめに」で Enter：見出しにしない（ふつうに段落を分ける。今までどおり「。」が付く）', arabic.chapters.length === 3 && arabic.texts[2].includes('1．はじめに。') && !arabic.texts[2].some((t) => t.startsWith('【')), JSON.stringify(arabic.texts[2]))
+  check('「1．はじめに」で Enter：小見出し「はじめに」にする（番号はツールの形。「。」は付けない）', arabic.chapters.length === 3 && arabic.texts[2].includes('【はじめに】') && !arabic.texts[2].some((t) => t.includes('1．はじめに')), JSON.stringify(arabic.texts[2]))
   // 番号だけ（名前がない）も見出しにしない
   await page.keyboard.type('Ⅲ．')
   await page.keyboard.press('Escape')

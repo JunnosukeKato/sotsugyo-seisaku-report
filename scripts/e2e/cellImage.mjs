@@ -79,6 +79,9 @@ await withEdge(async (browser) => {
     await ready()
     const cropped = await state(page)
     check('「切り抜く」で、マスいっぱいに広がり（印 crop）、選んだまま。道具は「全体に戻す」に。ずらし方を知らせる', cropped.crop?.x === 50 && cropped.crop?.y === 50 && cropped.sel?.kind === 'cellImage' && cropped.imgClass.includes('crop') && cropped.tools.includes('全体に戻す'), JSON.stringify(cropped))
+    // 切り抜いた画像を選んでいる間は、紙面の下の帯に「指でずらして、写る所を調整」（作品写真と同じ。mockups/v53 ⑧）
+    const band = await page.evaluate(() => document.querySelector('.page-band.photo-move-band')?.textContent ?? '')
+    check('スマホ：切り抜いた表の画像を選んでいる間は、帯に「指でずらして、写る所を調整」と出る', band.includes('指でずらして、写る所を調整'), band)
     // 指でずらす（CDP のタッチ）
     const cdp = await page.createCDPSession()
     const p = await imgCenter(page, 1)
