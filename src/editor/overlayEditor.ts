@@ -40,6 +40,13 @@ const TYPESET_DELAY_MS = 250
 
 export type OverlayKind = 'paragraph' | 'line' | 'cell'
 
+/**
+ * 段落の書き出しの空白。1字下げは組版で付けるので、書いている間も入れない（打っても入らない）。
+ * 前は、書いている間は打った空白がそのまま見え、1字下げと合わせて2字分（半角なら1字半）空いていた（依頼者の指摘 2026-10-24。
+ * 書き終えると取り除いていた：reportOps.ts の normalizeParagraph）
+ */
+const LEADING_SPACE = /^[\s\u3000]+/
+
 export interface OverlayCallbacks {
   /** 文字が変わった（日本語の変換中は呼ばない） */
   onInput(blockId: string, text: string): void
@@ -72,6 +79,8 @@ export interface OverlayCallbacks {
    * firstLine：1行の欄（表紙の項目・見出しなど）に複数行を貼り付けたので、1行目だけを入れた／table：表を貼り付けたので、文にした
    */
   onPasteNote?(what: 'firstLine' | 'table'): void
+  /** 段落の書き出しに打った空白を入れなかった（1字下げは自動で付く） */
+  onLeadingSpace?(): void
   /** 表のセルで Tab（Shift+Tab）を押した（隣のセルへ移る） */
   onTab?(blockId: string, text: string, backward: boolean): void
   /** 紙面に重ねた入力欄の大きさが変わった（行が増えた・減った。日本語の変換中も呼ぶ。スマホは、紙面の上の写しを見せているとき） */
@@ -337,6 +346,15 @@ export class OverlayEditor {
       if (this.typeset) {
         if (this.domText() !== this.model) this.syncFromDom({ text: this.model, start: this.selectionOffsets().start, end: this.selectionOffsets().end })
         return
+      }
+      // 下から出る書く欄（スマホの予備）で書く段落も、書き出しの空白は入れない
+      const raw = this.text
+      const lead = this.leadingSpace(raw)
+      if (lead > 0) {
+        const caret = Math.max(0, this.caretInElement() - lead)
+        this.element.textContent = raw.slice(lead)
+        this.setCaret(caret)
+        this.callbacks.onLeadingSpace?.()
       }
       this.emitInput()
     })
@@ -1467,15 +1485,33 @@ export class OverlayEditor {
    * 続けて打った・消した文字は、元に戻す1回分にまとめる
    */
   private edit(start: number, end: number, text: string, kind: 'insert' | 'delete'): void {
+    let next = this.model.slice(0, start) + text + this.model.slice(end)
+    let at = start + text.length
+    // 段落の書き出しの空白は入れない（1字下げは自動）
+    const lead = this.leadingSpace(next)
+    if (lead > 0) {
+      next = next.slice(lead)
+      at = Math.max(0, at - lead)
+      this.callbacks.onLeadingSpace?.()
+    }
+    if (next === this.model) {
+      this.renderText({ start: at, end: at })
+      return
+    }
     const before: TextState = { text: this.model, ...this.selectionOffsets() }
     const last = this.lastEdit
     const continues = !!last && last.kind === kind && (kind === 'insert' ? start === end && start === last.at : start === last.at || end === last.at)
     if (!continues) this.pushUndo(before)
     this.redoStack = []
-    this.model = this.model.slice(0, start) + text + this.model.slice(end)
-    this.lastEdit = { kind, at: start + text.length }
-    this.renderText({ start: start + text.length, end: start + text.length })
+    this.model = next
+    this.lastEdit = { kind, at }
+    this.renderText({ start: at, end: at })
     this.emitInput()
+  }
+
+  /** 段落の書き出しの空白の数（段落でなければ 0） */
+  private leadingSpace(text: string): number {
+    return this.target?.kind === 'paragraph' ? (LEADING_SPACE.exec(text)?.[0].length ?? 0) : 0
   }
 
   private pushUndo(state: TextState): void {
@@ -1510,11 +1546,18 @@ export class OverlayEditor {
 
   /** 日本語の変換を終えた（など、ブラウザが書く欄の中身を変えた）：中身から文字を読み直して、組み直す。before：変わる前（元に戻す1回分） */
   private syncFromDom(before: TextState | null): void {
-    const text = this.domText()
-    const caret = this.selectionOffsets().end
+    let text = this.domText()
+    let caret = this.selectionOffsets().end
+    // 段落の書き出しの空白は入れない（日本語の入力で打った全角の空白など。書く欄の中身から除いて、作り直す）
+    const lead = this.leadingSpace(text)
+    if (lead > 0) {
+      text = text.slice(lead)
+      caret = Math.max(0, caret - lead)
+      this.callbacks.onLeadingSpace?.()
+    }
     // スマホで紙面に直接書く：書く欄の中身は、もう書いた字になっている。日本語の変換を終えるたびに中身を作り直して測ると、
     // スマホでは続けて打つ字が遅れるため、作り直さない。包み方の記録をずらし、打つ手が止まったら測り直す（markTyped）
-    const typed = this.direct && this.renderedText !== null && !!this.plan
+    const typed = lead === 0 && this.direct && this.renderedText !== null && !!this.plan
     if (text === this.model) {
       if (!typed) this.renderText({ start: caret, end: caret })
       return

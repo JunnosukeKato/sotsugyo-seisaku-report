@@ -452,6 +452,8 @@ export class ReportEditor {
         this.reopenAfterRender(last ?? result.lastId, caret, { id, place: 'after' })
         if (headed) this.noticeHeading(headed.step)
       },
+      // 段落の書き出しに打った空白を入れなかった：1字下げは自動で付くことを、開いている間に1回だけ知らせる
+      onLeadingSpace: () => this.noticeLeadingSpaceOnce(),
       // 貼り付けたものを、そのままの形では入れなかった（1行の欄の2行目から・表）：画面の下に知らせる
       onPasteNote: (what) => {
         // 貼り付けた行を見出しにした知らせが出ていれば、その知らせに添える（「戻す」を残す）
@@ -3160,6 +3162,14 @@ export class ReportEditor {
     this.showNotice('段落の終わりに「。」を付けました（すぐ Backspace で取り消せます）')
   }
   private autoPeriodNoticed = false
+
+  /** 段落の書き出しに打った空白を入れなかったことを、開いている間に1回だけ知らせる（依頼者の指摘 2026-10-24） */
+  private noticeLeadingSpaceOnce(): void {
+    if (this.leadingSpaceNoticed) return
+    this.leadingSpaceNoticed = true
+    this.showNotice('段落の書き出しの1字下げは自動で入ります（空白は入れなくて大丈夫です）')
+  }
+  private leadingSpaceNoticed = false
 
   /** 削除した（画面の下に「〜を削除しました［戻す］」を出す） */
   private noticeRemoved(what: RemovedWhat, note?: string): void {

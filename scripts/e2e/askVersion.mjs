@@ -2,6 +2,7 @@
 // - 確認の窓・知らせの窓を画面の中に出す（src/app/ask.tsx。前はブラウザの confirm・alert で、iPhone の Chrome で「読み込む前の原稿に戻す」を押しても何も起きなかった）
 // - 新しい版が公開されたら、画面の上に「新しい版があります［新しくする］」（src/app/newVersion.tsx。version.json の印が、いまの版と違うとき）。
 //   「新しくする」で、書いたものを保存してから読み込み直す。メニューにも「ページを読み込み直す」
+// - 段落の書き出しに空白を打っても入れない（1字下げは自動。前は書いている間、2字分空いて見えた。依頼者の指摘 2026-10-24）
 // これだけを流すときは node scripts/e2e/run.mjs askVersion
 import { mkdirSync } from 'node:fs'
 import { withEdge } from '../poc/edge.mjs'
@@ -128,6 +129,39 @@ await withEdge(async (browser) => {
     await page.tap('.new-version .nv-close')
     await wait(300)
     check('× で閉じると、知らせは消える', !(await page.$('.new-version')))
+    await context.close()
+  }
+
+  // ---- 段落の書き出しに空白を打っても入れない（パソコン・スマホ） ----
+  for (const phone of [false, true]) {
+    const { context, page, ready } = await open(browser, { phone })
+    const who = phone ? 'スマホ' : 'パソコン'
+    // 本文の最初の段落を開き、書き出しにカーソルを置く
+    const id = await page.evaluate(() => window.__editor.getSnapshot().report.body.flatMap((c) => c.blocks).find((b) => b.type === 'paragraph')?.id)
+    await page.evaluate((id) => window.__editor.update((r) => ({ ...r, body: r.body.map((c) => ({ ...c, blocks: c.blocks.map((b) => (b.id === id ? { ...b, content: [{ type: 'text', text: 'デザインを考えた。' }] } : b)) })) })), id)
+    await ready()
+    await page.evaluate((id) => window.__editor.goToPage(window.__editor.pageOfBlock(id), 'none'), id)
+    await ready()
+    await page.evaluate((id) => window.__editor.openEditor(id, 0), id)
+    await page.waitForFunction((id) => window.__editor.getSnapshot().editingId === id, { timeout: 10000 }, id)
+    await wait(300)
+    await page.evaluate(() => window.__editor.overlay.setCaret(0))
+    await page.keyboard.type('\u3000')
+    await wait(150)
+    await page.keyboard.type(' ')
+    await wait(300)
+    const typed = await page.evaluate(() => ({ text: window.__editor.overlay.text, caret: window.__editor.overlay.caret, notice: document.querySelector('.undo-area')?.textContent ?? '' }))
+    check(
+      `${who}：段落の書き出しに全角・半角の空白を打っても入らず（カーソルも書き出しのまま）、「1字下げは自動で入ります」と知らせる`,
+      typed.text === 'デザインを考えた。' && typed.caret === 0 && typed.notice.includes('1字下げは自動で入ります'),
+      JSON.stringify(typed),
+    )
+    // 文の途中の空白は、今までどおり入る
+    await page.evaluate(() => window.__editor.overlay.setCaret(5))
+    await page.keyboard.type('\u3000')
+    await wait(300)
+    const middle = await page.evaluate(() => window.__editor.overlay.text)
+    check(`${who}：文の途中の空白は、今までどおり入る`, middle === 'デザインを\u3000考えた。', middle)
     await context.close()
   }
 
